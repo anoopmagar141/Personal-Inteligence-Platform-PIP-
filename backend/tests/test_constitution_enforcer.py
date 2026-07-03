@@ -9,22 +9,34 @@ def enforcer():
     path = os.path.join(os.path.dirname(__file__), "..", "core", "constitutional.json")
     return ConstitutionEnforcer(path)
 
-def test_immutable_field_hard_reject(enforcer):
-    # Field: name (immutable)
-    # Existing value present -> HARD_REJECT
-    existing = {"name": "Alice"}
+def test_immutable_fields_hard_reject(enforcer):
+    immutable_cases = [
+        ("name", "Alice", "Bob"),
+        ("language_preference", "en", "ne"),
+        ("timezone", "UTC", "Asia/Kathmandu"),
+    ]
+
+    for field, existing_value, proposed_value in immutable_cases:
+        existing = {field: existing_value}
+        candidate: MemoryCandidate = {
+            "field_name": field,
+            "proposed_value": proposed_value,
+            "label": "explicit",
+            "evidence_count": 1,
+            "evidence_text": "User stated a new immutable value."
+        }
+        res = enforcer.validate(candidate, existing, profile_age_weeks=1)
+        assert res.status == "HARD_REJECT"
+        assert res.reason == "immutable_field"
+
+    # No existing value -> APPROVED (during bootstrapping/first write)
     candidate: MemoryCandidate = {
         "field_name": "name",
         "proposed_value": "Bob",
         "label": "explicit",
         "evidence_count": 1,
-        "evidence_text": "I am Bob now."
+        "evidence_text": "I am Bob."
     }
-    res = enforcer.validate(candidate, existing, profile_age_weeks=1)
-    assert res.status == "HARD_REJECT"
-    assert res.reason == "immutable_field"
-
-    # No existing value -> APPROVED (during bootstrapping/first write)
     res_empty = enforcer.validate(candidate, {}, profile_age_weeks=1)
     assert res_empty.status == "APPROVED"
 
@@ -132,27 +144,41 @@ def test_tiered_thresholds(enforcer):
     assert res.status == "APPROVED"
 
 def test_behavioral_override(enforcer):
-    # Stated preference contradicts behavioral inference for 3+ sessions
+    # Stated preference contradicts behavioral inference for 3+ sessions across 14+ days.
     existing = {"session_continuity": "explicit_val"}
     
-    # Under 3 sessions: does not trigger reconciliation yet (gets approved or goes to conflict checks)
+    # Under 3 sessions: does not trigger reconciliation yet.
     candidate_low_sessions: MemoryCandidate = {
         "field_name": "session_continuity",
         "proposed_value": "behavioral_val",
         "label": "inferred",
         "evidence_count": 2,
-        "evidence_text": ""
+        "evidence_text": "",
+        "behavioral_days_observed": 14
     }
     res = enforcer.validate(candidate_low_sessions, existing, profile_age_weeks=1)
     assert res.status != "PROMPT_RECONCILIATION"
 
-    # 3+ sessions: triggers PROMPT_RECONCILIATION
+    # Under 14 days: does not trigger reconciliation yet.
+    candidate_low_days: MemoryCandidate = {
+        "field_name": "session_continuity",
+        "proposed_value": "behavioral_val",
+        "label": "inferred",
+        "evidence_count": 3,
+        "evidence_text": "",
+        "behavioral_days_observed": 13
+    }
+    res = enforcer.validate(candidate_low_days, existing, profile_age_weeks=1)
+    assert res.status != "PROMPT_RECONCILIATION"
+
+    # 3+ sessions and 14+ days: triggers PROMPT_RECONCILIATION.
     candidate_override: MemoryCandidate = {
         "field_name": "session_continuity",
         "proposed_value": "behavioral_val",
         "label": "inferred",
         "evidence_count": 3,
-        "evidence_text": ""
+        "evidence_text": "",
+        "behavioral_days_observed": 14
     }
     res = enforcer.validate(candidate_override, existing, profile_age_weeks=1)
     assert res.status == "PROMPT_RECONCILIATION"
