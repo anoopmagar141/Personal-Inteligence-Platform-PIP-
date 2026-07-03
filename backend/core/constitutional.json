@@ -1,0 +1,116 @@
+{
+  "version": "1.0",
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "2026-06",
+      "reason": "Initial constitution — locked before Observer build"
+    }
+  ],
+  "immutable_fields": {
+    "fields": ["name", "language_preference", "timezone"],
+    "enforcement": "hard_reject"
+  },
+  "gated_fields": {
+    "fields": [
+      "interaction_style",
+      "goals",
+      "active_projects",
+      "skill_level"
+    ],
+    "enforcement": "prompt_confirm"
+  },
+  "observer_may_write": {
+    "fields": [
+      "session_continuity",
+      "topic_interests",
+      "preferred_tools",
+      "document_access_patterns"
+    ]
+  },
+  "forbidden_categories": {
+    "enforcement": "hard_reject",
+    "exception": "onboarding_bootstrap"
+  },
+  "onboarding_bootstrap": {
+    "bypasses": ["observer", "validation"],
+    "permitted_writes": "any_non_forbidden_field",
+    "deactivates": "permanent_after_onboarding_complete"
+  },
+  "memory_types": {
+    "skill_memory": {
+      "validation": "demonstrated_performance"
+    },
+    "preference_memory": {
+      "validation": "explicit_or_behavioral"
+    },
+    "goal_memory": {
+      "validation": "commitment",
+      "decay": true
+    }
+  },
+  "validation_thresholds": {
+    "week_1_2": {
+      "evidence": 1,
+      "requires": "explicit_label"
+    },
+    "week_3_4": {
+      "evidence": 2
+    },
+    "month_2_plus": {
+      "evidence": 3,
+      "confidence": 0.7
+    }
+  },
+  "confidence_model": {
+    "explicit": 0.9,
+    "inferred": 0.4,
+    "formula": "base * min(evidence_count, 5) / 5"
+  },
+  "behavioral_override": {
+    "trigger_sessions": 3,
+    "trigger_days": 14,
+    "action": "prompt_reconciliation"
+  },
+  "decision_log": {
+    "write_path_phase_1": "manual_only",
+    "logic": "OR",
+    "confidence": {
+      "all_three": 1.0,
+      "any_two": 0.7,
+      "any_one": 0.4
+    },
+    "log_threshold_manual": 0.4,
+    "log_threshold_observer": 0.7
+  },
+  "provider_consent": {
+    "scope_values": [
+      "full_inference",
+      "web_search_only",
+      "embedding_only",
+      "none"
+    ],
+    "gate_position": "stage_8_before_network_call",
+    "enforcement": "hard_stop"
+  },
+  "proactive_triggers": {
+    "allowed": [
+      "session_gap_exceeds_48h",
+      "document_decision_conflict_detected",
+      "goal_inactive_14_days"
+    ],
+    "forbidden": [
+      "model_judgment_of_relevance",
+      "model_judgment_of_urgency"
+    ]
+  },
+  "memory_verification": {
+    "frequency_sessions": 30,
+    "fields_sampled": 3,
+    "authority": "overrides_observer_derived"
+  },
+  "amendment_process": {
+    "on_change": "bump version, add changelog entry",
+    "on_startup": "check profile.constitution_version vs current"
+  }
+}

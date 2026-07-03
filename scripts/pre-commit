@@ -1,0 +1,23 @@
+#!/bin/bash
+# Enforce ADR-025 (Clean Architecture / Dependency Rule)
+# No stage file or api/client code can directly import sqlite3, chromadb, or ollama.
+
+errors=0
+
+# Check files under backend/stages/ and backend/api/
+for file in $(git diff --cached --name-only | grep -E '^backend/stages/|^backend/api/'); do
+    if [ -f "$file" ]; then
+        if grep -E 'import[[:space:]]+(sqlite3|chromadb|ollama)' "$file" > /dev/null || \
+           grep -E 'from[[:space:]]+(sqlite3|chromadb|ollama)[[:space:]]+import' "$file" > /dev/null; then
+            echo "ERROR: [ADR-025 Violation] $file directly imports sqlite3, chromadb, or ollama."
+            errors=$((errors + 1))
+        fi
+    fi
+done
+
+if [ $errors -ne 0 ]; then
+    echo "Commit rejected due to dependency violations."
+    exit 1
+fi
+
+exit 0

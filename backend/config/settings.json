@@ -1,0 +1,76 @@
+{
+  "observer": {
+    "idle_timeout_minutes": 10,
+    "model": "phi3:mini",
+    "max_session_tokens": 8000
+  },
+  "rag": {
+    "similarity_threshold": 0.6,
+    "chunk_size_tokens": 500,
+    "chunk_overlap_tokens": 50,
+    "top_k_results": 3,
+    "max_document_size_mb": 50,
+    "supported_extensions": [".pdf", ".md", ".txt", ".py", ".json", ".html"]
+  },
+  "cache": {
+    "ttl_general_knowledge_seconds": 86400,
+    "ttl_technical_explanation_seconds": 86400,
+    "ttl_web_search_seconds": 3600,
+    "ttl_project_question_seconds": 0,
+    "ttl_personal_question_seconds": 0,
+    "ttl_decision_lookup_seconds": 0
+  },
+  "memory": {
+    "goal_decay_inactive_days": 14,
+    "behavioral_override_sessions": 3,
+    "behavioral_override_days": 14,
+    "verification_loop_frequency_sessions": 30,
+    "verification_loop_sample_size": 3
+  },
+  "decision_log": {
+    "log_threshold_manual": 0.4,
+    "log_threshold_observer": 0.7
+  },
+  "pipeline": {
+    "context_token_budget": 6000,
+    "system_instructions_tokens": 150,
+    "user_profile_tokens": 400,
+    "session_snapshot_tokens": 250,
+    "decision_log_tokens": 600,
+    "rag_chunks_tokens": 800,
+    "web_search_tokens": 800,
+    "conversation_history_tokens": 1000,
+    "user_message_tokens": 400,
+    "response_reserved_tokens": 2000
+  },
+  "proactive": {
+    "session_gap_trigger_hours": 48,
+    "goal_inactive_trigger_days": 14
+  },
+  "trace": {
+    "hard_delete_after_days": 90,
+    "db_table": "trace_log"
+  },
+  "web_search": {
+    "provider": "duckduckgo",
+    "result_limit": 3,
+    "timeout_seconds": 10
+  },
+  "database": {
+    "kdf_algorithm": "PBKDF2_HMAC_SHA512",
+    "kdf_iterations": 256000,
+    "fts5_fallback": "LIKE"
+  },
+  "performance_targets": {
+    "stage_0_ms": 10,
+    "stage_1_ms": 30,
+    "stage_2_ms": 15,
+    "stages_3_5_parallel_ms": 80,
+    "stage_7_ms": 50,
+    "observer_max_seconds": 30,
+    "snapshot_load_ms": 5,
+    "cache_hit_ms": 100,
+    "simple_query_total_seconds": 2,
+    "complex_query_total_seconds": 5
+  }
+}
