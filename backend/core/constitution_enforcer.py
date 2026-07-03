@@ -36,7 +36,11 @@ class ConstitutionEnforcer:
         if onboarding_active:
             return ValidationResult.APPROVED()
 
-        # 3. Validation thresholds by profile age
+        # 3. Behavioral override trigger (stated preference vs behavioral contradiction)
+        if self._triggers_behavioral_override(candidate, existing_profile):
+            return ValidationResult.PROMPT_RECONCILIATION("behavioral_override")
+
+        # 4. Validation thresholds by profile age
         thresholds = self.rules["validation_thresholds"]
         evidence_count = candidate.get("evidence_count", 1)
         label = candidate.get("label", "inferred")
@@ -57,20 +61,6 @@ class ConstitutionEnforcer:
             rule = thresholds["month_2_plus"]
             if evidence_count < rule["evidence"] or confidence < rule["confidence"]:
                 return ValidationResult.DISCARD("threshold_violation_month_2_plus")
-
-        # 4. Behavioral override trigger (stated preference vs behavioral contradiction)
-        # Stated preference has explicit/user_verified/user_correction label,
-        # and new candidate has inferred label and contradicts it
-        if field in existing_profile and existing_profile[field] is not None:
-            existing_val = existing_profile[field]
-            proposed_val = candidate.get("proposed_value")
-            
-            # Simple value contradiction check
-            if existing_val != proposed_val:
-                # If we have repeated behavioral evidence (3+ sessions/evidence_count)
-                # and it's inferred contradicting a stated preference
-                if label == "inferred" and evidence_count >= self.rules["behavioral_override"]["trigger_sessions"]:
-                    return ValidationResult.PROMPT_RECONCILIATION("behavioral_override")
 
         # 5. Gated fields check
         if field in self.rules["gated_fields"]["fields"]:
@@ -95,3 +85,26 @@ class ConstitutionEnforcer:
         evidence_count = candidate.get("evidence_count", 1)
         base = 0.9 if label in ("explicit", "user_verified", "user_correction") else 0.4
         return base * min(evidence_count, 5) / 5.0
+
+    def _triggers_behavioral_override(
+        self,
+        candidate: MemoryCandidate,
+        existing_profile: Dict[str, Any]
+    ) -> bool:
+        field = candidate.get("field_name")
+        if field not in existing_profile or existing_profile[field] is None:
+            return False
+
+        if existing_profile[field] == candidate.get("proposed_value"):
+            return False
+
+        if candidate.get("label", "inferred") != "inferred":
+            return False
+
+        override_rule = self.rules["behavioral_override"]
+        sessions = candidate.get("evidence_count", 1)
+        days = candidate.get("behavioral_days_observed", 0)
+        return (
+            sessions >= override_rule["trigger_sessions"]
+            and days >= override_rule["trigger_days"]
+        )
