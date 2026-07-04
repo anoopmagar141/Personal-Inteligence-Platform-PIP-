@@ -132,6 +132,8 @@ CREATE TABLE IF NOT EXISTS decision_candidates_pending (
     signals_found TEXT,
     raw_quote TEXT,
     confidence REAL NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
+    state TEXT DEFAULT 'pending' CHECK (state IN ('pending', 'promoted', 'dismissed')),
+    dismissed_at TEXT,
     created_at TEXT NOT NULL
 );
 
