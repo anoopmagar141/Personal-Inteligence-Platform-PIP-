@@ -38,27 +38,30 @@ def get_db_connection(db_key: str = "testkey"):
 def test_schema_execution():
     # Load and execute schema.sql
     conn = get_db_connection()
-    with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
-        schema_sql = f.read()
-    conn.executescript(schema_sql)
-    
-    # Assert tables exist
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    tables = [row[0] for row in cursor.fetchall()]
-    
-    expected_tables = [
-        "profile_meta", "identity", "skill_memory", "preference_memory",
-        "goal_memory", "interaction_style", "active_projects", "decision_log"
-    ]
-    for table in expected_tables:
-        assert table in tables
+    try:
+        with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+            schema_sql = f.read()
+        conn.executescript(schema_sql)
+        
+        # Assert tables exist
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in cursor.fetchall()]
+        
+        expected_tables = [
+            "profile_meta", "identity", "skill_memory", "preference_memory",
+            "goal_memory", "interaction_style", "active_projects", "decision_log"
+        ]
+        for table in expected_tables:
+            assert table in tables
 
-    # Assert views exist
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='view'")
-    views = [row[0] for row in cursor.fetchall()]
-    assert "active_skills" in views
-    assert "active_preferences" in views
+        # Assert views exist
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='view'")
+        views = [row[0] for row in cursor.fetchall()]
+        assert "active_skills" in views
+        assert "active_preferences" in views
+    finally:
+        conn.close()
 
 def test_wrong_key_behavior():
     if not HAS_SQLCIPHER:
@@ -78,21 +81,24 @@ def test_wrong_key_behavior():
     # Try reading from identity - must fail loudly (throws database error due to encryption mismatch)
     with pytest.raises(Exception):
         conn2.execute("SELECT count(*) FROM sqlite_master").fetchall()
+    conn2.close()
 
 def test_fts5_roundtrip():
     conn = get_db_connection()
-    
-    # Test FTS5 creation
     try:
-        conn.execute("CREATE VIRTUAL TABLE test_fts USING fts5(content, doc_id UNINDEXED)")
-    except sqlite3.OperationalError:
-        pytest.skip("FTS5 extension not available in sqlite3")
+        # Test FTS5 creation
+        try:
+            conn.execute("CREATE VIRTUAL TABLE test_fts USING fts5(content, doc_id UNINDEXED)")
+        except sqlite3.OperationalError:
+            pytest.skip("FTS5 extension not available in sqlite3")
 
-    conn.execute("INSERT INTO test_fts (content, doc_id) VALUES ('ChromaDB is selected for local-first design', 42)")
-    conn.commit()
+        conn.execute("INSERT INTO test_fts (content, doc_id) VALUES ('ChromaDB is selected for local-first design', 42)")
+        conn.commit()
 
-    cursor = conn.cursor()
-    cursor.execute("SELECT doc_id FROM test_fts WHERE test_fts MATCH 'ChromaDB'")
-    res = cursor.fetchall()
-    assert len(res) == 1
-    assert res[0][0] == 42
+        cursor = conn.cursor()
+        cursor.execute("SELECT doc_id FROM test_fts WHERE test_fts MATCH 'ChromaDB'")
+        res = cursor.fetchall()
+        assert len(res) == 1
+        assert res[0][0] == 42
+    finally:
+        conn.close()

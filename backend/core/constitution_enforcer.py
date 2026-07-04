@@ -13,6 +13,7 @@ OBSERVER_WRITABLE_TABLES = {
     "preference_memory",
     "goal_memory",
     "interaction_style",
+    "active_projects",
 }
 
 class ConstitutionEnforcer:

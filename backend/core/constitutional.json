@@ -13,10 +13,10 @@
   },
   "gated_fields": {
     "fields": [
-      "interaction_style",
-      "goals",
-      "active_projects",
-      "skill_level"
+      "interaction_style.*",
+      "goal_memory.*",
+      "active_projects.*",
+      "skill_memory.*.level"
     ],
     "enforcement": "prompt_confirm"
   },
