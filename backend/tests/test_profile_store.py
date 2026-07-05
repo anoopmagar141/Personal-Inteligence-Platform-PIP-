@@ -87,3 +87,44 @@ def test_identity_fields_are_immutable_after_onboarding(conn):
         profile_store.correct_profile_field(conn, "name", "Bruce")
     with pytest.raises(ValueError):
         profile_store.soft_delete_profile_field(conn, "timezone")
+
+
+def test_profile_write_interrupted_before_commit_reopens_with_prewrite_state(tmp_path):
+    db_path = tmp_path / "pip.db"
+    conn = profile_store.get_connection(str(db_path))
+    profile_store.initialize_schema(conn)
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    profile_store.correct_profile_field(conn, "answer_depth", "brief")
+    conn.close()
+
+    raw_conn = profile_store.get_connection(str(db_path))
+
+    class CrashBeforeCommitConnection:
+        def __init__(self, wrapped):
+            self.wrapped = wrapped
+
+        def execute(self, *args, **kwargs):
+            return self.wrapped.execute(*args, **kwargs)
+
+        def commit(self):
+            raise RuntimeError("simulated crash before final commit")
+
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        profile_store.correct_profile_field(
+            CrashBeforeCommitConnection(raw_conn),
+            "answer_depth",
+            "full detail",
+        )
+    raw_conn.close()
+
+    reopened = profile_store.get_connection(str(db_path))
+    try:
+        field = profile_store.get_profile_field(reopened, "answer_depth")
+        assert field["value"] == "brief"
+        assert field["source_label"] == "user_correction"
+        assert reopened.execute(
+            "SELECT COUNT(*) FROM preference_memory WHERE name = ?",
+            ("answer_depth",),
+        ).fetchone()[0] == 1
+    finally:
+        reopened.close()
