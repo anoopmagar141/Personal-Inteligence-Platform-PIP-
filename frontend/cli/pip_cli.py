@@ -48,6 +48,12 @@ def run_command(argv: list[str], *, base_url: str = BASE_URL, opener: Callable =
         return _decisions(args, base_url=base_url, opener=opener)
     if command == "/pending":
         return _pending(args, base_url=base_url, opener=opener)
+    if command == "/providers":
+        return _providers(args, base_url=base_url, opener=opener)
+    if command == "/consent":
+        return _consent(args, base_url=base_url, opener=opener)
+    if command == "/revoke":
+        return _revoke(args, base_url=base_url, opener=opener)
 
     raise ValueError(f"unknown command: {command}")
 
@@ -141,6 +147,43 @@ def _extract_reason(args: list[str]) -> str:
     if args[0] == "--reason" and len(args) >= 2:
         return " ".join(args[1:])
     return " ".join(args)
+
+
+def _providers(args: list[str], *, base_url: str, opener: Callable) -> Any:
+    """Usage: /providers"""
+    return request_json("GET", "/providers", base_url=base_url, opener=opener)
+
+
+def _consent(args: list[str], *, base_url: str, opener: Callable) -> Any:
+    """Usage: /consent PROVIDER_ID [--scope SCOPE]
+
+    Grant consent for PROVIDER_ID. Default scope: full_inference.
+    Example: /consent web_search --scope web_search_only
+    """
+    parser = argparse.ArgumentParser(prog="/consent", add_help=False)
+    parser.add_argument("provider_id")
+    parser.add_argument("--scope", default="full_inference", dest="consent_scope")
+    parsed = parser.parse_args(args)
+    return request_json(
+        "POST",
+        f"/providers/{parsed.provider_id}/consent",
+        {"consent_scope": parsed.consent_scope},
+        base_url=base_url,
+        opener=opener,
+    )
+
+
+def _revoke(args: list[str], *, base_url: str, opener: Callable) -> Any:
+    """Usage: /revoke PROVIDER_ID"""
+    if not args:
+        raise ValueError("usage: /revoke PROVIDER_ID")
+    provider_id = args[0]
+    return request_json(
+        "POST",
+        f"/providers/{provider_id}/revoke",
+        base_url=base_url,
+        opener=opener,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
