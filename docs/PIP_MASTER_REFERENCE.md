@@ -1775,6 +1775,26 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 | Phase 2 decision_text immutability | DONE - `backend/tests/test_decision_log.py::test_decision_text_is_write_once` passing |
 | Phase 2 onboarding encrypted profile | NOT COMPLETE - `backend/tests/test_profile_store.py::test_onboarding_writes_identity_profile_and_completion_flag` verifies profile writes, but encrypted-profile behavior is unverified because `backend/tests/test_schema.py::test_wrong_key_behavior` is skipped without SQLCipher |
 | Phase 2 crash survival | DONE - `backend/tests/test_profile_store.py::test_profile_write_interrupted_before_commit_reopens_with_prewrite_state` passing; interrupted profile write rolls back to pre-write state on reopen |
+| Phase 3 Ticket 1 — BaseLLMProvider ABC | DONE — `backend/providers/base_provider.py`; `ProviderExecutionError`, `ProviderUnavailableError` custom exceptions; tested in `test_base_provider.py` |
+| Phase 3 Ticket 2 — OllamaProvider | DONE — `backend/providers/ollama_provider.py`; urllib-only, no extra deps; HTTPError 404 raises descriptive message; tested in `test_ollama_provider.py` |
+| Phase 3 Ticket 3 — provider_consent.json seed data | DONE — `config/provider_consent.json` restructured as plain seed array (no JSON Schema wrapper); locked by `test_no_schema_key`, `test_no_examples_key`; ADR-030 web_search row exact-match tested |
+| Phase 3 Ticket 4 — seed_provider_consent() + Stage 8 gate | DONE — `memory/profile_store.py::seed_provider_consent()` idempotent; called from `initialize_schema()`; `backend/stages/stage_08_provider_gate.py` fail-closed (unknown provider = hard stop); scope enforcement; revoked overrides consented; 15 tests passing |
+| Phase 3 Ticket 4 — DB migration (pre-Phase-3 DBs) | DONE — `scripts/migrate_seed_provider_consent.py`; local dev DB `data/pip.db` migrated: 0→2 rows confirmed; idempotency confirmed; documented in Phase 3 DB Migration Note section |
+| Phase 3 Ticket 5 — /providers /consent /revoke | DONE — `api_list_providers`, `api_grant_consent` (scope-validated before DB write), `api_revoke_consent` in `backend/api/server.py`; CLI commands `_providers`, `_consent`, `_revoke` in `frontend/cli/pip_cli.py`; 16 tests passing including 2 end-to-end gate tests |
+| Phase 3 full-suite post-merge | PASS — 81 passed, 1 skipped (SQLCipher) on main at `6f1efa5`, tag `v0.3` |
+
+## Phase 3 Release — COMPLETE
+
+| Field | Value |
+|---|---|
+| Tag | `v0.3` |
+| Commit (main) | `6f1efa5` |
+| Full hash | `6f1efa593b66c5f701f44a942cf62cb953903369` |
+| Merge type | Squash merge from `phase-3-provider-layer` into `main` |
+| Audit branch | `phase-3-provider-layer` (retained, ticket-by-ticket history: `6685d00` → `5a2aac0` → `3039300` → `90c67f0`) |
+| Test result at tag | 81 passed, 1 skipped (pre-existing SQLCipher skip), 0 failed |
+| Scope | Provider abstraction layer, OllamaProvider, consent seed data, Stage 8 gate (fail-closed), DB migration script, /providers /consent /revoke CLI+API |
+
 
 ## Decided but Not Yet Written as Files
 
