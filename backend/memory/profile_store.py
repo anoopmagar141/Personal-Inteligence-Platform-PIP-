@@ -13,6 +13,7 @@ except ImportError:  # pragma: no cover - exercised when SQLCipher is installed.
 
 
 SCHEMA_PATH = Path(__file__).parent.parent / "core" / "schema.sql"
+CONSENT_SEED_PATH = Path(__file__).parent.parent.parent / "config" / "provider_consent.json"
 DEFAULT_TIMEZONE = "UTC"
 DEFAULT_INTERACTION_STYLE = "adaptive"
 
@@ -38,6 +39,52 @@ def get_connection(db_path: str, db_key: str | None = None):
 def initialize_schema(conn) -> None:
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
+    conn.commit()
+    seed_provider_consent(conn)
+
+
+def seed_provider_consent(conn, seed_path: Path | None = None) -> None:
+    """Load default provider rows from config/provider_consent.json into the
+    provider_consent table, but ONLY if the table is currently empty.
+
+    Idempotent: calling this on every app startup is safe — it is a no-op
+    when the table already has rows, so it cannot overwrite user-granted
+    consent or duplicate existing rows after an app restart.
+
+    Called from initialize_schema() so the seed runs immediately after the
+    DB schema is created, as part of the single DB-init sequence. This is
+    the correct call site because:
+      - initialize_schema() is the only function that brings the DB from
+        zero to a usable state.
+      - Provider consent rows must exist before Stage 8 can gate any request.
+      - Placing the call here ensures no code path can reach Stage 8 with
+        an empty provider_consent table after a fresh DB creation.
+    """
+    import json  # local import — keep stdlib json out of module-level scope
+
+    path = seed_path if seed_path is not None else CONSENT_SEED_PATH
+    with open(path, "r", encoding="utf-8") as f:
+        seed = json.load(f)
+
+    row_count = conn.execute("SELECT COUNT(*) FROM provider_consent").fetchone()[0]
+    if row_count > 0:
+        return  # already seeded — no-op
+
+    for provider in seed["providers"]:
+        conn.execute(
+            """
+            INSERT INTO provider_consent
+                (provider_id, is_cloud, user_consented, consent_scope, revoked)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                provider["provider_id"],
+                1 if provider["is_cloud"] else 0,
+                provider["user_consented"],
+                provider["consent_scope"],
+                provider["revoked"],
+            ),
+        )
     conn.commit()
 
 

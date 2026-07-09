@@ -1117,6 +1117,8 @@ Observer speculatively.
 
 ## 13.1 BaseLLMProvider Interface
 
+**Sync vs Async Integration Plan**: The `chat()` generator strictly yields synchronously (`Iterator[str]`). When integrated with the asynchronous FastAPI server layer in Stage 9 (Phase 8), calls to `chat()` will be wrapped inside `asyncio.to_thread` or `run_in_threadpool` at the call site. This isolates blocking HTTP calls from the main event loop while retaining a simpler sync interface for local non-server CLI use.
+
 ```python
 from abc import ABC, abstractmethod
 from typing import Iterator, Optional
@@ -1793,6 +1795,25 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 |---|---|
 | ConstitutionEnforcer gated-field helper cleanup | `_matches_gated_field` currently includes a `target_table.field_name` concatenation branch that is dead code once `field_name` is table-qualified per finalized spec. Later cleanup: rely solely on direct `fnmatch(field_name, pattern)`. |
 | SQLCipher-dependent local tests | Current local pytest run skips encryption-layer wrong-key behavior because SQLCipher/sqlcipher3 is not installed in the test environment. Encryption-layer behavior remains unverified locally until SQLCipher is installed. |
+
+## Phase 3 DB Migration Note (one-time, RESOLVED for local dev DB)
+
+**Context:** `seed_provider_consent()` was added to `memory/profile_store.py` in Phase 3 (Ticket 4). Any database initialized before this point (Phase 1/2 work) will have the `provider_consent` table but zero rows, which causes Stage 8 to hard-stop on every request (fail-closed policy).
+
+**Confirmed:** The local dev DB at `data/pip.db` was verified to have 0 rows in `provider_consent` before this migration. The migration was run and confirmed 2 rows inserted (ollama, web_search).
+
+**For any future pre-Phase-3 DB** (e.g. a teammate cloning and using an older DB dump): run the migration script once from the repo root:
+
+```
+python scripts/migrate_seed_provider_consent.py [--db-path PATH]
+```
+
+- Default path: `data/pip.db`
+- Idempotent: safe to run multiple times — no-op if rows already exist
+- Script location: `scripts/migrate_seed_provider_consent.py`
+
+**New DBs** created after Phase 3 are not affected — `initialize_schema()` now calls `seed_provider_consent()` automatically.
+
 ## Genuinely Open (cannot be resolved by architectural reasoning)
 
 | Item | What's needed |

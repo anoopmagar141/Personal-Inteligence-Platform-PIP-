@@ -3,10 +3,14 @@ from pathlib import Path
 from typing import Any
 
 from backend.memory import decision_log, profile_store
+from backend.stages import stage_08_provider_gate as provider_gate
+from backend.stages.stage_08_provider_gate import ProviderConsentError
 
 
 BASE_PREFIX = "/api/v1"
 DEFAULT_DB_PATH = Path(__file__).parent.parent.parent / "data" / "pip.db"
+
+VALID_CONSENT_SCOPES = {"full_inference", "web_search_only", "embedding_only", "none"}
 
 
 def open_app_connection(db_path: str | None = None, db_key: str | None = None):
@@ -125,6 +129,78 @@ def api_activate_project(conn, project_id: str):
     return {"status": "active", "project_id": project_id}
 
 
+def api_list_providers(conn) -> list[dict[str, Any]]:
+    """Return all rows from provider_consent."""
+    rows = conn.execute(
+        "SELECT provider_id, is_cloud, user_consented, consent_scope, revoked "
+        "FROM provider_consent ORDER BY provider_id"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def api_grant_consent(conn, provider_id: str, consent_scope: str) -> dict[str, Any]:
+    """Grant consent to a cloud provider.
+
+    Raises ValueError for:
+      - consent_scope not in the valid enum (validated before any DB write)
+      - unknown provider_id (no row in provider_consent)
+
+    Only updates user_consented, consent_scope, revoked, consent_date.
+    Never touches is_cloud.
+    """
+    if consent_scope not in VALID_CONSENT_SCOPES:
+        raise ValueError(
+            f"Invalid consent_scope '{consent_scope}'. "
+            f"Must be one of: {sorted(VALID_CONSENT_SCOPES)}"
+        )
+    row = conn.execute(
+        "SELECT provider_id FROM provider_consent WHERE provider_id = ?",
+        (provider_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError(
+            f"Unknown provider '{provider_id}'. "
+            "Add it to config/provider_consent.json and re-run the migration script."
+        )
+    conn.execute(
+        """
+        UPDATE provider_consent
+           SET user_consented = 1,
+               consent_scope  = ?,
+               revoked        = 0,
+               consent_date   = datetime('now')
+         WHERE provider_id = ?
+        """,
+        (consent_scope, provider_id),
+    )
+    conn.commit()
+    return {"status": "consented", "provider_id": provider_id, "consent_scope": consent_scope}
+
+
+def api_revoke_consent(conn, provider_id: str) -> dict[str, Any]:
+    """Revoke previously granted consent for a provider.
+
+    Only updates revoked and revoked_date. Never touches is_cloud.
+    """
+    row = conn.execute(
+        "SELECT provider_id FROM provider_consent WHERE provider_id = ?",
+        (provider_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"Unknown provider '{provider_id}'.")
+    conn.execute(
+        """
+        UPDATE provider_consent
+           SET revoked      = 1,
+               revoked_date = datetime('now')
+         WHERE provider_id = ?
+        """,
+        (provider_id,),
+    )
+    conn.commit()
+    return {"status": "revoked", "provider_id": provider_id}
+
+
 try:
     from fastapi import FastAPI
 
@@ -212,6 +288,29 @@ try:
     def activate_project(project_id: str):
         with _conn() as conn:
             return api_activate_project(conn, project_id)
+
+    @app.get(f"{BASE_PREFIX}/providers")
+    def list_providers():
+        with _conn() as conn:
+            return api_list_providers(conn)
+
+    @app.post(f"{BASE_PREFIX}/providers/{{provider_id}}/consent")
+    def grant_consent(provider_id: str, payload: dict[str, Any]):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_grant_consent(conn, provider_id, payload["consent_scope"])
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+
+    @app.post(f"{BASE_PREFIX}/providers/{{provider_id}}/revoke")
+    def revoke_consent(provider_id: str):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_revoke_consent(conn, provider_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
 
 except ImportError:
     app = None

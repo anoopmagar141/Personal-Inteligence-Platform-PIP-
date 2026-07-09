@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "comment": "Seed data only. Loaded into SQLite provider_consent table on first run by memory/profile_store.py. Do not read this file at runtime — query SQLite instead.",
+  "providers": [
+    {
+      "provider_id": "ollama",
+      "is_cloud": false,
+      "user_consented": 1,
+      "consent_scope": "full_inference",
+      "revoked": 0,
+      "notes": "Local model — no network call, consent granted by default."
+    },
+    {
+      "provider_id": "web_search",
+      "is_cloud": true,
+      "user_consented": 0,
+      "consent_scope": "web_search_only",
+      "revoked": 0,
+      "notes": "ADR-030: hard_stop gate at Stage 8. Default off until user explicitly enables."
+    }
+  ]
+}
