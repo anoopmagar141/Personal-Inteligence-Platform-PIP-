@@ -1117,6 +1117,8 @@ Observer speculatively.
 
 ## 13.1 BaseLLMProvider Interface
 
+**Sync vs Async Integration Plan**: The `chat()` generator strictly yields synchronously (`Iterator[str]`). When integrated with the asynchronous FastAPI server layer in Stage 9 (Phase 8), calls to `chat()` will be wrapped inside `asyncio.to_thread` or `run_in_threadpool` at the call site. This isolates blocking HTTP calls from the main event loop while retaining a simpler sync interface for local non-server CLI use.
+
 ```python
 from abc import ABC, abstractmethod
 from typing import Iterator, Optional
