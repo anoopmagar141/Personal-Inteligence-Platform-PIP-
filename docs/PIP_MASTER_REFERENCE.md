@@ -1811,7 +1811,20 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 | Audit branch | `phase-3-provider-layer` (retained, ticket-by-ticket history: `6685d00` → `5a2aac0` → `3039300` → `90c67f0`) |
 | Test result at tag | 81 passed, 1 skipped (pre-existing SQLCipher skip), 0 failed |
 | Scope | Provider abstraction layer, OllamaProvider, consent seed data, Stage 8 gate (fail-closed), DB migration script, /providers /consent /revoke CLI+API |
+| Phase 4 Tickets 1 & 2 — Gap Detector & session_snapshot.json | DONE — `backend/stages/stage_00_gap_detector.py` continuous boundary logic; fail-open confirmed. `backend/memory/session_snapshot.py` schema and load/write logic; fail-open on missing/corrupt confirmed; 5ms load budget tested. |
+| Phase 4 full-suite post-merge | PASS — 97 passed, 1 skipped on main at `2583c4f`, tag `v0.4` |
 
+## Phase 4 Release — COMPLETE
+
+| Field | Value |
+|---|---|
+| Tag | `v0.4` |
+| Commit (main) | `2583c4f` |
+| Full hash | `2583c4f...` |
+| Merge type | Squash merge from `phase-4-gap-detector` into `main` |
+| Audit branch | `phase-4-gap-detector` (retained) |
+| Test result at tag | 97 passed, 1 skipped (pre-existing SQLCipher skip), 0 failed |
+| Scope | Stage 0 Gap Detector, session_snapshot.json read/write helpers, fail-open handling, deterministic continuous boundary resolution |
 
 ## Decided but Not Yet Written as Files
 
