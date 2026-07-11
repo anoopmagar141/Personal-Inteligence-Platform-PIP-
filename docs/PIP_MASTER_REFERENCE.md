@@ -282,14 +282,14 @@ User Message
      |
      v
 [STAGE 0] Gap Detector
-  Input:  session_snapshot.json timestamp
+  Input:  session_snapshot.json timestamp (Orchestrator must parse the ISO string via datetime.fromisoformat() handling 'Z' suffix before calling gap_detector.run())
   Output: warm_start_level (none|brief|summary|full)
           context_depth_modifier (0-3)
   Gap table:
-    Under 1 hour  → none, 0
-    1–24 hours    → brief, 1
-    2–7 days      → summary, 2
-    Over 1 week   → full, 3
+    < 1 hour        → none, 0
+    1 to < 24 hours → brief, 1
+    24h to 7 days   → summary, 2  (continuous at 24h, inclusive of exactly 7 days)
+    > 7 days        → full, 3
   Failure: none/0, logged, never blocks pipeline
      |
      v
@@ -434,6 +434,21 @@ User Message
   All writes go through memory/ modules only
   Failure: retry once, then log and discard, never corrupt
 ```
+
+## 7.0a Pipeline Failure Mode Conventions (Fail-Open vs Fail-Closed)
+
+Two deliberately different failure policies exist in the pipeline. This note records the reasoning so future stages are implemented consistently.
+
+**Stage 0 (Gap Detector) — Fail-Open**
+Returns `warm_start_level=none`, `context_depth_modifier=0`, logs the error, and never blocks the pipeline. Rationale: Stage 0's only output is a context-scaling signal — how much session history to inject into the prompt. If it fails (missing `session_snapshot.json`, corrupt timestamp, filesystem error), the pipeline degrades to a cold-start: the user gets a correct answer with slightly less conversational continuity. No security property, no privacy guarantee, and no data integrity invariant depends on Stage 0 succeeding. Blocking the entire pipeline over a missing warm-start signal would trade a recoverable UX degradation for a hard user-visible failure — a strictly worse outcome in every case.
+
+**Stage 8 (Provider Consent Gate) — Fail-Closed**
+Hard-stops the pipeline if the provider row is missing, `user_consented = 0`, or `revoked = 1`. Rationale: Stage 8 enforces a privacy guarantee — data must not leave the device and reach a cloud provider without the user's explicit, recorded consent. If Stage 8 has any doubt about consent status, the correct answer is never "proceed anyway." The cost of a false positive (user must grant consent before the call proceeds) is a one-time friction event. The cost of a false negative (a cloud call goes out without consent) is a privacy violation that cannot be undone. The asymmetry of consequences mandates fail-closed. The unknown-provider case (no row at all) is treated identically to unconsented: fail-closed, not fail-open, because allowing an unregistered provider through would silently break the guarantee every time a new provider is added before its consent row is seeded.
+
+**Convention for future stages:**
+- A stage's failure mode is **fail-open** if the pipeline can produce a correct, safe result without that stage's output (context, hints, ranking signals, cache hits).
+- A stage's failure mode is **fail-closed** if skipping the stage could violate a privacy guarantee, a data integrity invariant, or a constitutional constraint.
+- Stages 9–13 default to fail-open unless they enforce a constitutional check (e.g. Stage 12 Validation Layer already uses `HARD_REJECT` for immutable field violations — that is fail-closed behaviour within the stage, but the stage itself runs).
 
 ## 7.1 Response Cache
 
@@ -745,20 +760,25 @@ class ConstitutionEnforcer:
     def __init__(self, constitution_path: str):
         self.rules = load_json(constitution_path)
 
+    # Note: override check precedes threshold check — this order is deliberate and was the subject of a fixed Phase 1 defect. Do not reorder.
     def validate(
         self,
         candidate: MemoryCandidate,
-        existing_profile: dict,
+        existing_field: Optional[ExistingFieldState],
         profile_age_weeks: int
     ) -> ValidationResult:
 
-        field = candidate.field_name
+        field = candidate.field_name  # table-qualified, e.g. "preference_memory.x"
 
         if field in self.rules["immutable_fields"]["fields"]:
             return ValidationResult.HARD_REJECT("immutable_field")
 
-        if field not in APPROVED_SCHEMA and not onboarding_active():
+        if not self._is_writable_field(field) and not onboarding_active():
             return ValidationResult.HARD_REJECT("schema_violation")
+
+        # Override check MUST precede threshold check.
+        if self._triggers_override(candidate, existing_field):
+            return ValidationResult.PROMPT_RECONCILIATION
 
         threshold = self._get_threshold(profile_age_weeks)
         confidence = self._compute_confidence(candidate)
@@ -766,13 +786,10 @@ class ConstitutionEnforcer:
         if not threshold.passes(candidate, confidence):
             return ValidationResult.DISCARD
 
-        if field in self.rules["gated_fields"]["fields"]:
+        if self._matches_gated_field(field):
             return ValidationResult.REQUIRES_CONFIRMATION
 
-        if self._triggers_override(candidate, existing_profile):
-            return ValidationResult.PROMPT_RECONCILIATION
-
-        if self._conflicts_with_existing(candidate, existing_profile):
+        if self._conflicts_with_existing(candidate, existing_field):
             return ValidationResult.TIER_2_REQUIRED
 
         return ValidationResult.APPROVED
@@ -1093,7 +1110,7 @@ APPROVED MEMORY FIELDS:
   skill_memory: [python_level, docker_level, ...]
   preference_memory: [preferred_tools, answer_style, ...]
   goal_memory: [active_goals, project_objectives]
-  session_continuity: [topic_interests, last_topic]
+  observer_writable: [topic_interests, preferred_tools, document_access_patterns]  # NOTE: Must exactly match Part 9.1 observer_may_write.fields list
 
 OUTPUT FORMAT:
 {
