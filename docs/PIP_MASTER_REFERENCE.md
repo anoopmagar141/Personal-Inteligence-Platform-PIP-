@@ -266,12 +266,17 @@ KNOWLEDGE LAYER
 ## 6.3 Hardware Constraints [VERIFIED]
 
 - GPU: RTX 4060, 8GB VRAM
-- phi3:mini Q4_K_M: ~2.2–2.4GB VRAM (Observer, Intent Classifier if ML)
-- llama3.1:8b Q4_K_M: ~4.9GB VRAM (main generation model)
-- Combined: ~7.1–7.3GB — CANNOT run simultaneously
-- Sequential model swap required (only swap point: first message after Observer session)
+- llama3.1:8b Q4_K_M: ~4.9GB VRAM — main generation model AND Observer (ADR-033, supersedes B1)
+- phi3:mini Q4_K_M: ~2.2–2.4GB VRAM — retained only as a candidate model for a future ML-based
+  Intent Classifier (B4 currently keeps Intent Classifier as keyword/regex, not generative;
+  phi3:mini is not used anywhere in the pipeline today)
+- No model-swap orchestration between Observer and generation: both roles run the same
+  llama3.1:8b weights, so there is no VRAM-overrun window and no forced cold reload between
+  session-end (Observer) and next-session generation
 - sentence-transformers (RAG embeddings): CPU-only by default to preserve GPU headroom
-- Model-swap benchmark: [OPEN — must run before v0.3 tag, ~1 hour]
+- Model-swap benchmark: RETIRED (ADR-033) — no swap exists to benchmark. See ADR-033
+  A/B test timing instead (phi3:mini 58.05s vs llama3.1:8b 130.92s, cold-load included,
+  n=1 synthetic transcript) for the numbers that replaced it.
 
 ---
 
@@ -372,7 +377,10 @@ User Message
   Streams token by token via BaseLLMProvider.chat()
   stage_hint events sent via WS during processing:
     decision_log_hit, web_search_used, cache_hit, model_loading
-  model_loading: true during phi3:mini ↔ llama3.1:8b swap
+  model_loading: true whenever llama3.1:8b must be cold-loaded (e.g. first
+    message after Ollama's keep_alive has evicted it) — no longer a two-model
+    swap signal post-ADR-033, but still needed: a cold load is still real
+    wall-clock time the user would otherwise perceive as a silent hang
   Failure: try next local provider, never cloud without consent
              |
              v
@@ -385,9 +393,11 @@ User Message
              v
 [STAGE 11] Observer (async thread, session-end only)
   Single-pass analysis of full session transcript
-  Model: phi3:mini (small, local, never main LLM)
+  Model: llama3.1:8b (ADR-033, supersedes B1 — always LOCAL, never inherits
+    the active generation provider; moot while v1.0 is local-only, but the
+    boundary must still be enforced explicitly, not assumed)
   Output (three simultaneously):
-    memory_candidates: [{field_name, proposed_value, label,
+    memory_candidates: [{target_table, field_name, proposed_value, label,
                          evidence_count, evidence_text}]
     decision_candidates: [{decision_text, signals_found, raw_quote}]
     session_snapshot: {topic, open_problems, last_decisions,
@@ -1086,7 +1096,10 @@ ADR-025 pre-commit hook enforces this.
 Rule 1: Labels candidates explicit or inferred. NEVER assigns confidence scores.
 Rule 2: Produces candidates only. NEVER writes to any store directly.
 Rule 3: Runs at session end only (10-min idle OR process exit). NEVER per-message.
-Rule 4: Uses small 1–3B local model (phi3:mini). NEVER main LLM.
+Rule 4: Uses llama3.1:8b, same model as generation (ADR-033, supersedes B1).
+        MUST be pinned to a LOCAL provider — never inherits the active
+        generation provider, even though v1.0 being local-only currently
+        makes this structurally moot.
 Rule 5: Does NOT detect document-decision conflicts. That is Stage 5's job.
 ```
 
@@ -1106,7 +1119,7 @@ RULES:
   - Do NOT include emotional state, mood, or psychological signals.
   - If uncertain, omit. Never guess.
 
-APPROVED MEMORY FIELDS:
+APPROVED MEMORY FIELDS (target_table: [field_name, ...]):
   skill_memory: [python_level, docker_level, ...]
   preference_memory: [preferred_tools, answer_style, ...]
   goal_memory: [active_goals, project_objectives]
@@ -1114,8 +1127,23 @@ APPROVED MEMORY FIELDS:
 
 OUTPUT FORMAT:
 {
-  "memory_candidates": [...],
-  "decision_candidates": [...],
+  "memory_candidates": [
+    {
+      "target_table": "preference_memory",
+      "field_name": "preferred_tools",
+      "proposed_value": "Neovim",
+      "label": "explicit",
+      "evidence_count": 1,
+      "evidence_text": "the exact quote or paraphrase this was drawn from"
+    }
+  ],
+  "decision_candidates": [
+    {
+      "decision_text": "one sentence stating the decision",
+      "signals_found": ["explicit_reasoning_in_conversation", "commitment_language", "alternative_considered"],
+      "raw_quote": "the exact quote this was drawn from"
+    }
+  ],
   "session_snapshot": {
     "topic": "one sentence",
     "open_problems": [],
@@ -1124,6 +1152,8 @@ OUTPUT FORMAT:
   }
 }
 ```
+
+**Found by ADR-033's A/B test, not by inspection:** earlier versions of this spec never told the model to emit `target_table`, matching the exact key names `MemoryCandidate` (Part 9.2/`types.py`) requires. Neither `phi3:mini` nor `llama3.1:8b` produced schema-correct output against the old prompt — `phi3:mini` failed structurally (echoed the field-name list instead of populating candidates), `llama3.1:8b` produced real candidates but with different key names (`field`/`value`/`type` instead of `field_name`/`proposed_value`/`label`). Neither output would have parsed into Stage 12 as written. The `memory_candidates` example above is now explicit about every key Stage 12/13 actually consume.
 
 Refine this prompt after first 50 real sessions with real data. Never fine-tune
 Observer speculatively.
@@ -1191,14 +1221,20 @@ Stage 8 gate logic: `if is_cloud AND (NOT user_consented OR revoked) → HARD ST
 "Never consented" and "consented then revoked" are distinct states — both blocked by
 the gate, but distinguishable in the audit trail and in `/providers` display.
 
-## 13.3 Model-Swap Constraints
+## 13.3 Model Loading (formerly "Model-Swap Constraints" — RETIRED by ADR-033)
 
-- phi3:mini (Observer/classifier) and llama3.1:8b (generation) CANNOT run simultaneously
-- Only swap point in practice: first message of a new session after Observer last used phi3:mini
-- During swap: `model_loading: true` stage_hint sent via WebSocket
-- Without model_loading hint: 9-second silent wait — unacceptable UX
-- [OPEN] Model-swap benchmark: load phi3:mini → swap to llama3.1:8b, time via
-  `ollama ps`/`nvidia-smi`, 5 runs, ~1 hour — must run before v0.3 tag
+Observer and generation both run llama3.1:8b (ADR-033, supersedes B1). There is no
+second model to swap to, no VRAM-overrun window, and no forced cold reload at the
+Observer/generation boundary — both roles share the same resident weights.
+
+- `model_loading: true` stage_hint still applies, but only for a genuine cold load
+  (e.g. Ollama's `keep_alive` evicted the model after enough idle time). Same UX
+  problem as before (a silent wait reads as a hang), narrower cause.
+- Real timing data (ADR-033 A/B test, 2026-08-16, cold-load included, n=1 transcript):
+  phi3:mini 58.05s, llama3.1:8b 130.92s. Both exceed the (never-validated) 30s
+  `observer_max_seconds` target — corrected in settings.json.
+- `pending_observer` crash-safety mechanism (ADR-033 condition 2) is now required
+  before Phase 7 ships: an 8B pass this long cannot block SIGINT/SIGTERM.
 
 ---
 
@@ -1247,7 +1283,7 @@ Event types (server → client):
       "decision_log_hit": bool,
       "web_search_used":  bool,
       "cache_hit":        bool,
-      "model_loading":    bool   ← true during phi3↔llama3.1 swap
+      "model_loading":    bool   ← true when llama3.1:8b needs a cold load (ADR-033)
   }}
   { "type": "error",       "data": "error message string" }
   { "type": "done",        "data": null }
@@ -1486,6 +1522,67 @@ Consequences: (+) One streaming implementation, proven twice (web then Flutter).
 TICKET-012's original 'write-ahead buffer for crash safety' language is superseded. profile_store.py implements no application-level write-ahead buffer. Crash safety is provided by SQLite/SQLCipher transactional atomicity (rollback on interrupted commit) combined with WAL mode, per the locked connection sequence in profile_store.get_connection(). This was proven by test_profile_write_interrupted_before_commit_reopens_with_prewrite_state. Rationale: SQLite's transactional guarantees make an application-level buffer redundant; adding one would be unjustified complexity for a guarantee already provided by the storage engine.
 
 ---
+
+**ADR-033 — Observer Collapses Onto llama3.1:8b (Supersedes B1)**
+
+Decision: Observer uses the same llama3.1:8b model as generation. There is no
+longer a separate small model (phi3:mini) in the pipeline.
+
+Problem: The original two-model design (phi3:mini for Observer, llama3.1:8b for
+generation) required strict sequential VRAM swapping on an 8GB card (combined
+~7.1–7.3GB, cannot coexist), an unmeasured model-swap benchmark sitting on the
+critical path, and — discovered only by actually running it — a real quality
+gap: phi3:mini's extraction output on a real prompt was not just weaker but
+structurally broken (it echoed the approved-fields schema back as if it were a
+candidate, producing zero usable memory_candidates and missing a decision with
+two extractable signals that should have auto-logged per Part 8.7's OR-logic).
+
+Chosen: Single local llama3.1:8b for both roles.
+
+Reason: A/B test run 2026-08-16 (n=1 synthetic transcript — PIP has no real
+production sessions yet; extraction prompt per Part 12.2, before this ADR's
+prompt-schema fix). phi3:mini: 58.05s, memory_candidates unusable (wrong shape
+entirely), decision_candidates empty (missed an extractable decision).
+llama3.1:8b: 130.92s, 3 correctly-labeled memory_candidates (explicit/inferred
+distinction correct), decision extraction still imperfect (miscategorized a
+goal as a decision candidate) but structurally valid and parseable. The gate
+rule ("if 8B is not clearly better, kill the decision") was met — the gap is
+not marginal. Both timings include cold model load, not isolated inference;
+re-benchmark warm once Phase 7 has real usage.
+
+Two conditions carried over from the original proposal, now locked:
+  1. Observer is pinned to a LOCAL provider — this is now the operative rule
+     ("Observer is always local"), not the retired "Observer is always a small
+     model." Currently structurally moot since v1.0 is confirmed local-only
+     (no cloud generation provider exists in the call path to accidentally
+     inherit), but must still be enforced explicitly at the Stage 8/Observer
+     boundary when implemented, not left as an assumption.
+  2. A `pending_observer` table + drain-on-startup mechanism is required before
+     Phase 7 Observer code ships. An 8B pass (130.92s measured, likely 30-60s+
+     even warm) cannot block SIGINT/SIGTERM that long. Transcript persists to
+     SQLCipher (never a plain file), process exits immediately, drain runs
+     before Stage 0 on next launch. This also closes the existing ADR-003 gap
+     (unexpected process death during the Observer pass loses that session's
+     learning) — a gap that technically existed under the two-model design too,
+     just less urgently.
+
+Consequences: (+) No VRAM-swap orchestration, no swap-window overrun risk on an
+8GB card, no guaranteed cold reload at every session boundary, retires the
+model-swap benchmark entirely. (−) Slower single Observer pass than phi3:mini
+would have been; `observer_max_seconds` raised from an untested 30 to 180
+pending a warm-run re-benchmark; `pending_observer` is new scope that must ship
+before Phase 7. Also surfaced, independent of which model won: Part 12.2's
+extraction prompt never specified the exact `MemoryCandidate` key names
+(`target_table`, `field_name`, `proposed_value`) — fixed in this ADR's pass,
+see Part 12.2.
+
+Supersedes: B1 (Observer = phi3:mini, "always a small model" principle).
+
+Updated by this ADR: Part 6.3, Part 7 Stage 11, Part 12.1 Rule 4, Part 12.2,
+Part 13.3, Part 14.3 WS spec, Part 18 Phase 0 checklist, Part 19 settings.json
+(`observer.model`, `observer_max_seconds`), Glossary `model_loading` entry.
+
+---
 # PART 17 — FOLDER STRUCTURE [FROZEN]
 
 ```
@@ -1608,10 +1705,13 @@ pip/
     MATCH query → assert non-empty result
 [ ] Write SQLCipher wrong-key test:
     wrong key → SELECT count(*) FROM sqlite_master → must fail loudly
-[ ] Verify Ollama running locally, pull phi3:mini and llama3.1:8b
-[ ] requirements.txt committed
-[ ] Model-swap benchmark (phi3:mini ↔ llama3.1:8b, 5 runs,
-    ollama ps + nvidia-smi timing) — [OPEN, needs RTX 4060]
+[x] Verify Ollama running locally, pull phi3:mini and llama3.1:8b — done during
+    Phase 5 environment recovery + ADR-033 A/B test (2026-08-16)
+[x] requirements.txt committed — done during Phase 5 environment recovery
+    (see commit c558893; sqlcipher3-binary is gone from PyPI, corrected to sqlcipher3)
+[x] Model-swap benchmark — RETIRED by ADR-033. No swap exists to benchmark since
+    Observer and generation now share llama3.1:8b. See ADR-033 for the A/B timing
+    data that replaced this item (58.05s vs 130.92s, cold-load included).
 [ ] First commit: v0.0 tag (folder skeleton only)
 ```
 
@@ -1656,7 +1756,7 @@ All tunable values. These are NOT ADRs. Change by measurement, not opinion.
 {
   "observer": {
     "idle_timeout_minutes": 10,
-    "model": "phi3:mini",
+    "model": "llama3.1:8b",
     "max_session_tokens": 8000
   },
   "rag": {
@@ -1726,7 +1826,7 @@ All tunable values. These are NOT ADRs. Change by measurement, not opinion.
     "stage_2_ms": 15,
     "stages_3_5_parallel_ms": 80,
     "stage_7_ms": 50,
-    "observer_max_seconds": 30,
+    "observer_max_seconds": 180,
     "snapshot_load_ms": 5,
     "cache_hit_ms": 100,
     "simple_query_total_seconds": 2,
@@ -1734,6 +1834,12 @@ All tunable values. These are NOT ADRs. Change by measurement, not opinion.
   }
 }
 ```
+
+**`observer.model` and `observer_max_seconds` note:** updated by ADR-033 (supersedes B1).
+`observer_max_seconds` was raised from the never-validated 30 to 180, based on a measured
+130.92s llama3.1:8b pass (ADR-033 A/B test, cold-load included, n=1 transcript) plus headroom.
+This should be re-benchmarked warm (model already resident) once Phase 7 has real usage —
+180 is a safe starting ceiling, not a tuned steady-state number.
 
 **config/settings.py canonical loader (single source of truth for all config values):**
 ```python
@@ -2049,8 +2155,10 @@ profile_store.py. Executes 4 mandatory PRAGMAs in order.
 
 **inferred:** Observer label. Observed from behavior, not stated. base_score = 0.4.
 
-**model_loading:** WebSocket stage_hint boolean. True during phi3:mini ↔ llama3.1:8b
-model swap. Without it: silent 9-second wait on first message after gap session.
+**model_loading:** WebSocket stage_hint boolean. True whenever llama3.1:8b needs a
+cold load (e.g. after Ollama's keep_alive evicts it). No longer a two-model swap
+signal (ADR-033 retired the swap entirely) — still needed because a cold load is
+still real wall-clock time the user would otherwise perceive as a silent hang.
 
 **onboarding_bootstrap:** Exception mode, first session only. Direct writes, bypasses all
 validation. Deactivates permanently after onboarding_complete = 1.

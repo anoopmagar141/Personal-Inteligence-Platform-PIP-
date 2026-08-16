@@ -1,7 +1,7 @@
 {
   "observer": {
     "idle_timeout_minutes": 10,
-    "model": "phi3:mini",
+    "model": "llama3.1:8b",
     "max_session_tokens": 8000
   },
   "rag": {
@@ -67,7 +67,7 @@
     "stage_2_ms": 15,
     "stages_3_5_parallel_ms": 80,
     "stage_7_ms": 50,
-    "observer_max_seconds": 30,
+    "observer_max_seconds": 180,
     "snapshot_load_ms": 5,
     "cache_hit_ms": 100,
     "simple_query_total_seconds": 2,
