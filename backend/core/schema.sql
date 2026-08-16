@@ -201,7 +201,27 @@ CREATE TABLE IF NOT EXISTS document_access_patterns (
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'deleted'))
 );
 
--- Note: Table 19 (decision_fts) is created at application level if FTS5 is available
+-- 19. documents Table
+-- SQLite is the source of truth for what's been ingested into ChromaDB (Part 11.1:
+-- ChromaDB is NEVER authoritative). content_hash lets a startup rebuild-on-mismatch
+-- trigger detect drift (file changed on disk since last ingest) without re-reading
+-- every file. chunk_count is stored so a mismatch against the actual ChromaDB
+-- collection count is detectable without querying every chunk's metadata.
+CREATE TABLE IF NOT EXISTS documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT,
+    file_path TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    chunk_count INTEGER NOT NULL CHECK (chunk_count >= 0),
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'removed')),
+    ingested_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES active_projects(project_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_file_path_active
+ON documents(file_path) WHERE status = 'active';
+
+-- Note: Table 20 (decision_fts) is created at application level if FTS5 is available
 -- as virtual table:
 -- CREATE VIRTUAL TABLE IF NOT EXISTS decision_fts USING fts5(decision_text, reasoning, alternatives_considered, decision_id UNINDEXED);
 
@@ -221,8 +241,11 @@ SELECT * FROM topic_interests WHERE status = 'active';
 CREATE VIEW IF NOT EXISTS active_tools AS 
 SELECT * FROM preferred_tools WHERE status = 'active';
 
-CREATE VIEW IF NOT EXISTS active_document_patterns AS 
+CREATE VIEW IF NOT EXISTS active_document_patterns AS
 SELECT * FROM document_access_patterns WHERE status = 'active';
+
+CREATE VIEW IF NOT EXISTS active_documents AS
+SELECT * FROM documents WHERE status = 'active';
 
 -- Immutability Trigger on decision_log decision_text
 CREATE TRIGGER IF NOT EXISTS decision_text_immutable 

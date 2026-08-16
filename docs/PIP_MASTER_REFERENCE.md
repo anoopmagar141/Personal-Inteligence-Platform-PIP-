@@ -1030,13 +1030,14 @@ ADR-025 pre-commit hook enforces this.
 | `trace_log` | `core/trace.py` | All stages (write) |
 | `topic_interests`, `preferred_tools`, `document_access_patterns` | `memory/profile_store.py` | Stage 11 Observer (write, Phase 7+) |
 | ChromaDB | `memory/vector_store.py` | Stage 5 RAG (read), /ingest (write) |
+| `documents` | `memory/vector_store.py` | Stage 5 (indirect, via ChromaDB), /ingest /documents /remove (write); source-of-truth registry for ChromaDB rebuild-on-drift |
 | `session_snapshot.json` | `memory/session_snapshot.py` | Stage 0 (read), Stage 11 (write) |
 | `constitutional.json` | Read-only after creation | ConstitutionEnforcer |
 | `settings.json` | Read-only at runtime | `config/settings.py` canonical loader |
 
 ## 11.3 Complete Schema Summary
 
-19 tables, 6 views, 1 trigger (finalized, validated against real SQLCipher, no further review needed):
+20 tables, 7 views, 1 trigger (validated against real SQLCipher; `documents` added in Phase 6, see below):
 
 **Profile tables:**
 - `profile_meta` — session count, version fields, first/last session dates
@@ -1062,6 +1063,11 @@ ADR-025 pre-commit hook enforces this.
 - `provider_consent` — per-provider flags (user_consented + revoked separate)
 - `trace_log` — status + error_detail columns, 3 indexes
 
+**Knowledge layer:**
+- `documents` (Phase 6) — SQLite source-of-truth registry for what's ingested into
+  ChromaDB: file_path, content_hash (staleness detection), chunk_count, status.
+  Not chunk text — ChromaDB holds that. Unique index on file_path where active.
+
 **Observer-may-write (defined Phase 0, populated Phase 7):**
 - `topic_interests`
 - `preferred_tools`
@@ -1069,7 +1075,7 @@ ADR-025 pre-commit hook enforces this.
 
 **Soft-delete views (query through these, never base tables):**
 - `active_skills`, `active_preferences`, `active_goals`
-- `active_topics`, `active_tools`, `active_document_patterns`
+- `active_topics`, `active_tools`, `active_document_patterns`, `active_documents`
 
 **Critical schema design decisions:**
 
@@ -1085,6 +1091,8 @@ ADR-025 pre-commit hook enforces this.
 | profile_age_weeks NOT stored | profile_meta | Computed from first_session_date at call time |
 | FTS5 fallback = LIKE inside encrypted DB | If FTS5 unavailable | Unencrypted shadow index violates T1 |
 | decision_candidates_pending ORDER BY confidence ASC, created_at ASC | Surface order | Low-evidence oldest = most likely wrong |
+| documents stores metadata only, not chunk text | documents table | ChromaDB is the only place chunk text lives - keeps the split clean (SQLite = registry, Chroma = index) |
+| ingest_document() force= param | vector_store.py | Hash-match shortcut would silently no-op during a rebuild-from-drift, which exists specifically to fix cases where the file didn't change but ChromaDB did |
 
 ---
 
@@ -1941,6 +1949,20 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 | Test result at tag | 121 passed, 0 skipped, 0 failed — first fully-real run against SQLCipher (previous phases' suites ran against a silent plaintext-SQLite fallback; see environment-fix commit `c558893`) |
 | Scope | Stage 12 Validation Layer wired to real DB state; `apply_verified_correction` (verified/corrected writes at max confidence); `memory_candidates_pending` schema fix (added `target_table`, `validation_status`, `state`); Stage 13 write orchestration (APPROVED writes now, gated/conflict/override candidates persist to pending, rejects write nothing) |
 | Environment note | Dev environment had never run real SQLCipher before this phase: no `requirements.txt` existed, `sqlcipher3-binary` is gone from PyPI, and Python 3.14 (previously in use) has no compatible SQLCipher wheel at all. Rebuilt on Python 3.12 with the correctly-named `sqlcipher3` package. Two real bugs surfaced only once encryption actually ran: `sqlite3.Row` cannot wrap a `sqlcipher3` cursor, and `get_connection()` silently fell back to plaintext SQLite instead of failing loudly when SQLCipher was unavailable. Both fixed. |
+
+## Phase 6 — IN PROGRESS (RAG + Parallel Retrieval)
+
+| Item | Status |
+|---|---|
+| `documents` table (schema.sql) | DONE — SQLite source-of-truth registry for ChromaDB ingestion |
+| `memory/vector_store.py` | DONE — ingest/query/delete/list/rebuild-from-drift, real ChromaDB + sentence-transformers (`all-MiniLM-L6-v2`, CPU-only), `.pdf`/`.md`/`.txt`/`.py`/`.json`/`.html` extraction, `max_document_size_mb` enforced |
+| `backend/stages/stage_05_rag_retrieval.py` | DONE — threshold-filtered retrieval + lexical conflict-check heuristic against active Decision Log (fail-open per Part 7.4) |
+| Known tradeoff | `all-MiniLM-L6-v2` max_seq_length is 256 tokens; `chunk_size_tokens` is 500. Chunks past ~256 tokens are truncated for embedding purposes only — full text is still stored/returned, only mid-chunk semantic search quality degrades. Same class of imprecision as `similarity_threshold` (already documented as "calibrate from real usage") |
+| Conflict-check heuristic | Lexical overlap-coefficient between chunk and active decision keywords, not semantic contradiction detection — no LLM call in this stage. Flags "worth a human double-check," not a proven contradiction. Threshold (0.3) needs real-usage calibration same as `similarity_threshold` |
+| Test coverage | 16 tests (`test_vector_store.py`, `test_stage_05_rag_retrieval.py`), all against real ChromaDB + real embedding model, not mocks |
+| `/ingest`, `/documents`, `/remove` CLI commands | NOT DONE |
+| `POST /rag/ingest`, `/rag/query`, `GET /rag/documents`, `DELETE /rag/documents/{ref}` REST endpoints | NOT DONE |
+| Router (Stage 2) wiring to actually call Stage 5 | NOT DONE — full pipeline integration is Phase 8 per the roadmap |
 
 ## Decided but Not Yet Written as Files
 
