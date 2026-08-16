@@ -684,12 +684,12 @@ Pending candidate 60-day aging:
     "enforcement": "hard_reject"
   },
   "gated_fields": {
-    "fields": ["interaction_style", "goals",
-               "active_projects", "skill_level"],
+    "fields": ["interaction_style.*", "goal_memory.*",
+               "active_projects.*", "skill_memory.*.level"],
     "enforcement": "prompt_confirm"
   },
   "observer_may_write": {
-    "fields": ["session_continuity", "topic_interests",
+    "fields": ["topic_interests",
                "preferred_tools", "document_access_patterns"]
   },
   "forbidden_categories": {
@@ -1825,6 +1825,16 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 | Audit branch | `phase-4-gap-detector` (retained) |
 | Test result at tag | 97 passed, 1 skipped (pre-existing SQLCipher skip), 0 failed |
 | Scope | Stage 0 Gap Detector, session_snapshot.json read/write helpers, fail-open handling, deterministic continuous boundary resolution |
+
+## Phase 5 Release — COMPLETE
+
+| Field | Value |
+|---|---|
+| Tag | `v0.5` (academic minimum) |
+| Commit (main) | `b2fc6df` |
+| Test result at tag | 121 passed, 0 skipped, 0 failed — first fully-real run against SQLCipher (previous phases' suites ran against a silent plaintext-SQLite fallback; see environment-fix commit `c558893`) |
+| Scope | Stage 12 Validation Layer wired to real DB state; `apply_verified_correction` (verified/corrected writes at max confidence); `memory_candidates_pending` schema fix (added `target_table`, `validation_status`, `state`); Stage 13 write orchestration (APPROVED writes now, gated/conflict/override candidates persist to pending, rejects write nothing) |
+| Environment note | Dev environment had never run real SQLCipher before this phase: no `requirements.txt` existed, `sqlcipher3-binary` is gone from PyPI, and Python 3.14 (previously in use) has no compatible SQLCipher wheel at all. Rebuilt on Python 3.12 with the correctly-named `sqlcipher3` package. Two real bugs surfaced only once encryption actually ran: `sqlite3.Row` cannot wrap a `sqlcipher3` cursor, and `get_connection()` silently fell back to plaintext SQLite instead of failing loudly when SQLCipher was unavailable. Both fixed. |
 
 ## Decided but Not Yet Written as Files
 
