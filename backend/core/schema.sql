@@ -140,11 +140,15 @@ CREATE TABLE IF NOT EXISTS decision_candidates_pending (
 -- 13. memory_candidates_pending Table
 CREATE TABLE IF NOT EXISTS memory_candidates_pending (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_table TEXT NOT NULL,
     field_name TEXT NOT NULL,
     proposed_value TEXT NOT NULL,
     label TEXT NOT NULL CHECK (label IN ('explicit', 'inferred', 'user_verified', 'user_correction')),
     evidence_count INTEGER DEFAULT 1 CHECK (evidence_count >= 1),
     evidence_text TEXT,
+    validation_status TEXT NOT NULL CHECK (validation_status IN ('REQUIRES_CONFIRMATION', 'TIER_2_REQUIRED', 'PROMPT_RECONCILIATION')),
+    state TEXT DEFAULT 'pending' CHECK (state IN ('pending', 'resolved', 'dismissed')),
+    resolved_at TEXT,
     created_at TEXT NOT NULL
 );
 

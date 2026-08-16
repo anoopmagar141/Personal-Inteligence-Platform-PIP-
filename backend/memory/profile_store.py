@@ -514,3 +514,99 @@ def apply_verified_correction(
         raise ValueError(f"Unsupported target_table for correction: {target_table}")
 
     conn.commit()
+
+
+def write_approved_candidate(conn: sqlite3.Connection, candidate: MemoryCandidate) -> None:
+    """
+    Writes a Stage 12 APPROVED candidate at its own label/evidence_count
+    (not forced to maximum confidence - that's apply_verified_correction's job).
+    Never called for identity: immutable fields are HARD_REJECTed before
+    a candidate can reach APPROVED, so this path is unreachable for identity
+    and intentionally not implemented here.
+    """
+    target_table = candidate.get("target_table")
+    field = candidate.get("field_name")
+    value = candidate.get("proposed_value")
+    label = candidate.get("label")
+    evidence_count = candidate.get("evidence_count")
+
+    if target_table == "preference_memory":
+        conn.execute(
+            """
+            INSERT INTO preference_memory (name, value, evidence_count, source_label, status)
+            VALUES (?, ?, ?, ?, 'active')
+            ON CONFLICT(name) DO UPDATE SET
+                value = excluded.value,
+                evidence_count = excluded.evidence_count,
+                source_label = excluded.source_label,
+                status = 'active'
+            """,
+            (field, value, evidence_count, label),
+        )
+
+    elif target_table == "skill_memory":
+        conn.execute(
+            """
+            INSERT INTO skill_memory (name, level, evidence_count, source_label, status)
+            VALUES (?, ?, ?, ?, 'active')
+            ON CONFLICT(name) DO UPDATE SET
+                level = excluded.level,
+                evidence_count = excluded.evidence_count,
+                source_label = excluded.source_label,
+                status = 'active'
+            """,
+            (field, value, evidence_count, label),
+        )
+
+    elif target_table == "goal_memory":
+        if not field.startswith("goal:"):
+            raise ValueError(f"Invalid goal field name: {field}")
+        goal_id = field.split(":", 1)[1]
+        base = 0.9 if label in ("explicit", "user_verified", "user_correction") else 0.4
+        confidence = base * min(evidence_count, 5) / 5.0
+        cur = conn.execute(
+            """
+            UPDATE goal_memory
+            SET goal_text = ?, confidence = ?, evidence_count = ?, decay_flag = 0, status = 'active'
+            WHERE id = ?
+            """,
+            (value, confidence, evidence_count, goal_id),
+        )
+        if cur.rowcount == 0:
+            conn.execute(
+                "INSERT INTO goal_memory (goal_text, evidence_count, confidence, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (value, evidence_count, confidence, now_utc(), now_utc()),
+            )
+
+    elif target_table == "active_projects":
+        cur = conn.execute(
+            "UPDATE active_projects SET description = ?, status = 'active', last_active = ? WHERE name = ?",
+            (value, now_utc(), field),
+        )
+        if cur.rowcount == 0:
+            conn.execute(
+                "INSERT INTO active_projects (project_id, name, description, status, last_active) VALUES (?, ?, ?, 'active', ?)",
+                (str(uuid.uuid4()), field, value, now_utc()),
+            )
+
+    elif target_table == "interaction_style":
+        conn.execute(
+            """
+            INSERT INTO interaction_style (id, value, evidence_count, source_label)
+            VALUES (1, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                value = excluded.value,
+                evidence_count = excluded.evidence_count,
+                source_label = excluded.source_label
+            """,
+            (value, evidence_count, label),
+        )
+        conn.execute(
+            "INSERT INTO interaction_style_history (value, changed_at) VALUES (?, ?)",
+            (value, now_utc()),
+        )
+
+    else:
+        raise ValueError(f"Unsupported target_table for approved write: {target_table}")
+
+    conn.commit()

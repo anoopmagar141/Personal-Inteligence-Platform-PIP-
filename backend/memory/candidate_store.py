@@ -76,3 +76,74 @@ def _candidate_row(row) -> dict[str, Any]:
     data = dict(row)
     data["signals_found"] = json.loads(data["signals_found"] or "[]")
     return data
+
+
+def create_memory_candidate(
+    conn,
+    *,
+    target_table: str,
+    field_name: str,
+    proposed_value: str,
+    label: str,
+    evidence_count: int,
+    evidence_text: str,
+    validation_status: str,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO memory_candidates_pending (
+            target_table, field_name, proposed_value, label,
+            evidence_count, evidence_text, validation_status, state, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        """,
+        (
+            target_table,
+            field_name,
+            proposed_value,
+            label,
+            evidence_count,
+            evidence_text,
+            validation_status,
+            now_utc(),
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_memory_candidates(conn, *, limit: int | None = None) -> list[dict[str, Any]]:
+    sql = """
+        SELECT * FROM memory_candidates_pending
+        WHERE state = 'pending'
+        ORDER BY created_at ASC
+    """
+    params: tuple[Any, ...] = ()
+    if limit is not None:
+        sql += " LIMIT ?"
+        params = (limit,)
+    return [dict(row) for row in conn.execute(sql, params)]
+
+
+def get_memory_candidate(conn, candidate_id: int) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT * FROM memory_candidates_pending WHERE id = ?",
+        (candidate_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def mark_memory_candidate_resolved(conn, candidate_id: int) -> None:
+    conn.execute(
+        "UPDATE memory_candidates_pending SET state = 'resolved', resolved_at = ? WHERE id = ?",
+        (now_utc(), candidate_id),
+    )
+    conn.commit()
+
+
+def dismiss_memory_candidate(conn, candidate_id: int) -> None:
+    conn.execute(
+        "UPDATE memory_candidates_pending SET state = 'dismissed', resolved_at = ? WHERE id = ?",
+        (now_utc(), candidate_id),
+    )
+    conn.commit()
