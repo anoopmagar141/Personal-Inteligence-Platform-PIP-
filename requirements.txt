@@ -1,0 +1,7 @@
+sqlcipher3
+chromadb
+sentence-transformers
+ollama
+fastapi
+uvicorn
+pytest

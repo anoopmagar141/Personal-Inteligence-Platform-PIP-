@@ -22,14 +22,19 @@ def get_connection(db_path: str, db_key: str | None = None):
     if db_key is not None:
         assert re.fullmatch(r"[0-9a-fA-F]+", db_key), "db_key must be hex-encoded"
 
-    if sqlcipher3 is not None:
-        assert db_key is not None, "db_key is required when SQLCipher is available"
+    if db_key is not None:
+        if sqlcipher3 is None:
+            raise RuntimeError(
+                "db_key was provided but the sqlcipher3 package is not installed. "
+                "Refusing to silently fall back to an unencrypted SQLite database."
+            )
         conn = sqlcipher3.connect(db_path)
         conn.execute(f"PRAGMA key = \"x'{db_key}'\"")
+        conn.row_factory = sqlcipher3.dbapi2.Row
     else:
         conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
 
-    conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -374,3 +379,138 @@ def _profile_row(
         "source_label": source_label,
         "status": status,
     }
+
+from backend.core.types import MemoryCandidate, ValidationResult
+
+def apply_verified_correction(
+    conn: sqlite3.Connection,
+    candidate: MemoryCandidate,
+    validation_result: ValidationResult
+) -> None:
+    """
+    Applies a verified correction (either a user_verified gated field or a user_correction override).
+    Forces confidence to maximum limits (1.0 for goals, 0.9 via evidence_count=5 for GENERATED columns)
+    and clears stale behavioral history.
+    """
+    status = validation_result.status
+    if status == "REQUIRES_CONFIRMATION":
+        source_label = "user_verified"
+    elif status == "PROMPT_RECONCILIATION":
+        source_label = "user_correction"
+    else:
+        raise ValueError(f"Invalid validation status for verified correction: {status}")
+
+    target_table = candidate.get("target_table")
+    field = candidate.get("field_name")
+    value = candidate.get("proposed_value")
+
+    if target_table == "identity":
+        if field in {"name", "language_preference", "timezone"}:
+            raise ValueError("immutable identity fields cannot be edited after onboarding")
+        
+        # In case other identity fields exist in the future, whitelist against actual schema columns
+        allowed_columns = {row["name"] for row in conn.execute("PRAGMA table_info(identity)")}
+        if field not in allowed_columns:
+            raise ValueError(f"Unknown identity field: {field}")
+            
+        conn.execute(f"UPDATE identity SET {field} = ? WHERE id = 1", (value,))
+
+    elif target_table == "preference_memory":
+        conn.execute(
+            """
+            INSERT INTO preference_memory (name, value, evidence_count, source_label, status, behavioral_signal_count)
+            VALUES (?, ?, 5, ?, 'active', 0)
+            ON CONFLICT(name) DO UPDATE SET
+                value = excluded.value,
+                evidence_count = 5,
+                source_label = excluded.source_label,
+                status = 'active',
+                behavioral_signal_count = 0
+            """,
+            (field, value, source_label),
+        )
+        conn.execute(
+            "DELETE FROM preference_contradiction_log WHERE preference_id = (SELECT id FROM preference_memory WHERE name = ?)",
+            (field,)
+        )
+
+    elif target_table == "skill_memory":
+        conn.execute(
+            """
+            INSERT INTO skill_memory (name, level, evidence_count, source_label, status)
+            VALUES (?, ?, 5, ?, 'active')
+            ON CONFLICT(name) DO UPDATE SET
+                level = excluded.level,
+                evidence_count = 5,
+                source_label = excluded.source_label,
+                status = 'active'
+            """,
+            (field, value, source_label),
+        )
+        conn.execute(
+            "DELETE FROM skill_contradiction_log WHERE skill_id = (SELECT id FROM skill_memory WHERE name = ?)",
+            (field,)
+        )
+
+    elif target_table == "interaction_style":
+        timestamp = now_utc()
+        conn.execute(
+            """
+            INSERT INTO interaction_style (id, value, evidence_count, source_label)
+            VALUES (1, ?, 5, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                value = excluded.value,
+                evidence_count = 5,
+                source_label = excluded.source_label
+            """,
+            (value, source_label),
+        )
+        conn.execute(
+            "INSERT INTO interaction_style_history (value, changed_at) VALUES (?, ?)",
+            (value, timestamp),
+        )
+
+    elif target_table == "goal_memory":
+        if field.startswith("goal:"):
+            goal_id = field.split(":", 1)[1]
+            cur = conn.execute(
+                """
+                UPDATE goal_memory 
+                SET goal_text = ?, confidence = 1.0, evidence_count = 5, decay_flag = 0, status = 'active'
+                WHERE id = ?
+                """,
+                (value, goal_id),
+            )
+            if cur.rowcount == 0:
+                try:
+                    conn.execute(
+                        "INSERT INTO goal_memory (id, goal_text, evidence_count, confidence, created_at, updated_at) VALUES (?, ?, 5, 1.0, ?, ?)",
+                        (int(goal_id), value, now_utc(), now_utc())
+                    )
+                except ValueError:
+                    conn.execute(
+                        "INSERT INTO goal_memory (goal_text, evidence_count, confidence, created_at, updated_at) VALUES (?, 5, 1.0, ?, ?)",
+                        (value, now_utc(), now_utc())
+                    )
+        else:
+            raise ValueError(f"Invalid goal field name: {field}")
+
+    elif target_table == "active_projects":
+        cur = conn.execute(
+            """
+            UPDATE active_projects 
+            SET description = ?, status = 'active', last_active = ?
+            WHERE name = ?
+            """,
+            (value, now_utc(), field),
+        )
+        if cur.rowcount == 0:
+            import uuid
+            conn.execute(
+                "INSERT INTO active_projects (project_id, name, description, status, last_active) VALUES (?, ?, ?, 'active', ?)",
+                (str(uuid.uuid4()), field, value, now_utc())
+            )
+    else:
+        raise ValueError(f"Unsupported target_table for correction: {target_table}")
+
+    conn.commit()
