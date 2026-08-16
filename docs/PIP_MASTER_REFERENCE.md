@@ -519,7 +519,7 @@ GOAL MEMORY
   What:    Stated objectives and intentions
   Updates: Conversational commitment language
   Decay:   Automatic — decay_flag=true after 14 days inactive
-  Schema:  goal_memory table
+  Schema:  goal_memory table (NOTE: when reading/writing via candidate APIs, field_name uses the convention "goal:<id>")
   Confidence: STORED MANUALLY (decay adjusts it independently of evidence_count)
 ```
 

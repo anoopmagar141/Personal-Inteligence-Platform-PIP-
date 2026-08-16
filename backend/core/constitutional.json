@@ -22,7 +22,6 @@
   },
   "observer_may_write": {
     "fields": [
-      "session_continuity",
       "topic_interests",
       "preferred_tools",
       "document_access_patterns"

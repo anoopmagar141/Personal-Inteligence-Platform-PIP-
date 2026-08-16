@@ -8,6 +8,7 @@ def now_utc() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime(TIMESTAMP_FORMAT)
 
 class MemoryCandidate(TypedDict):
+    target_table: str
     field_name: str
     proposed_value: str
     label: Literal["explicit", "inferred", "user_verified", "user_correction"]

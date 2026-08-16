@@ -80,8 +80,8 @@ def test_gated_fields_require_confirmation(enforcer):
 def test_tiered_thresholds(enforcer):
     # Week 1-2: evidence >= 1, requires explicit label
     candidate_week1_explicit: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "val",
         "label": "explicit",
         "evidence_count": 1,
@@ -91,8 +91,8 @@ def test_tiered_thresholds(enforcer):
     assert res.status == "APPROVED"
 
     candidate_week1_inferred: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "val",
         "label": "inferred",
         "evidence_count": 1,
@@ -103,8 +103,8 @@ def test_tiered_thresholds(enforcer):
 
     # Week 3-4: evidence >= 2 (regardless of label)
     candidate_week3_low_ev: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "val",
         "label": "explicit",
         "evidence_count": 1,
@@ -114,8 +114,8 @@ def test_tiered_thresholds(enforcer):
     assert res.status == "DISCARD"
 
     candidate_week3_pass: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "val",
         "label": "explicit",
         "evidence_count": 2,
@@ -128,8 +128,8 @@ def test_tiered_thresholds(enforcer):
     # For explicit, evidence_count = 3 -> base 0.9 * 3/5 = 0.54 (fails confidence threshold of 0.7)
     # For explicit, evidence_count = 4 -> base 0.9 * 4/5 = 0.72 (passes confidence threshold)
     candidate_month2_low_ev: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "val",
         "label": "explicit",
         "evidence_count": 2,
@@ -139,8 +139,8 @@ def test_tiered_thresholds(enforcer):
     assert res.status == "DISCARD"
 
     candidate_month2_low_conf: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "val",
         "label": "explicit",
         "evidence_count": 3,
@@ -150,12 +150,12 @@ def test_tiered_thresholds(enforcer):
     assert res.status == "DISCARD"
 
     candidate_month2_pass: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "val",
         "label": "explicit",
         "evidence_count": 4,
-        "evidence_text": ""
+        "evidence_text": "",
     }
     res = enforcer.validate(candidate_month2_pass, None, profile_age_weeks=8)
     assert res.status == "APPROVED"
@@ -183,8 +183,8 @@ def test_behavioral_override(enforcer):
     
     # Under 3 sessions: does not trigger reconciliation yet.
     candidate_low_sessions: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "behavioral_val",
         "label": "inferred",
         "evidence_count": 2,
@@ -196,8 +196,8 @@ def test_behavioral_override(enforcer):
 
     # Under 14 days: does not trigger reconciliation yet.
     candidate_low_days: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "behavioral_val",
         "label": "inferred",
         "evidence_count": 3,
@@ -216,8 +216,8 @@ def test_behavioral_override(enforcer):
 
     # 3+ sessions and 14+ days: triggers PROMPT_RECONCILIATION.
     candidate_override: MemoryCandidate = {
-        "target_table": "session_continuity",
-        "field_name": "session_continuity",
+        "target_table": "preference_memory",
+        "field_name": "preference_name",
         "proposed_value": "behavioral_val",
         "label": "inferred",
         "evidence_count": 3,

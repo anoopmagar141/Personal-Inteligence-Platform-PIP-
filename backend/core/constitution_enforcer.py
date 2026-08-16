@@ -5,7 +5,6 @@ from typing import Any
 from backend.core.types import MemoryCandidate, ValidationResult
 
 OBSERVER_WRITABLE_TABLES = {
-    "session_continuity",
     "topic_interests",
     "preferred_tools",
     "document_access_patterns",
