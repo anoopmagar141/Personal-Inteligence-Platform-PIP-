@@ -2,6 +2,7 @@ sqlcipher3
 chromadb
 sentence-transformers
 pypdf
+ddgs
 ollama
 fastapi
 uvicorn
