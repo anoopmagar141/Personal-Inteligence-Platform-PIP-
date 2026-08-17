@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from backend.core.types import MemoryCandidate
 from backend.core.constitution_enforcer import ConstitutionEnforcer
-from backend.stages.stage_12_validation_layer import run
+from backend.stages.stage_12_validation_layer import run, reinforce_evidence
 from backend.memory.profile_store import get_connection, initialize_schema
 
 @pytest.fixture
@@ -143,3 +143,103 @@ def test_unhandled_observer_writable_table_logs_warning_and_fails_open(db_conn, 
     # Fails open -> handled as no prior state -> APPROVED due to explicit and evidence 5
     assert result.status == "APPROVED"
     assert "Unhandled target_table" in caplog.text
+
+
+def test_reinforce_evidence_no_prior_state_leaves_candidate_unchanged(db_conn):
+    candidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "vim",
+        "label": "explicit",
+        "evidence_count": 1,
+        "evidence_text": ""
+    }
+    reinforced = reinforce_evidence(db_conn, candidate)
+    assert reinforced["evidence_count"] == 1
+    assert reinforced is not candidate or reinforced == candidate  # unchanged either way
+
+
+def test_reinforce_evidence_same_value_increments(db_conn):
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+        "VALUES ('editor', 'vim', 2, 'explicit', 'active')"
+    )
+    db_conn.commit()
+
+    candidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "vim",  # same value as stored -> repeat observation
+        "label": "explicit",
+        "evidence_count": 1,  # this session's own observation count
+        "evidence_text": "still using vim"
+    }
+    reinforced = reinforce_evidence(db_conn, candidate)
+    assert reinforced["evidence_count"] == 3  # existing 2 + 1, not the candidate's own 1
+
+
+def test_reinforce_evidence_different_value_does_not_reinforce(db_conn):
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+        "VALUES ('editor', 'vim', 4, 'explicit', 'active')"
+    )
+    db_conn.commit()
+
+    candidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "emacs",  # different value -> conflict, not reinforcement
+        "label": "explicit",
+        "evidence_count": 1,
+        "evidence_text": "switched to emacs"
+    }
+    reinforced = reinforce_evidence(db_conn, candidate)
+    assert reinforced["evidence_count"] == 1  # left as the candidate's own count
+
+
+def test_reinforce_evidence_skips_tables_without_evidence_count_column(db_conn):
+    db_conn.execute("INSERT INTO identity (id, name, language_preference, timezone) VALUES (1, 'Alice', 'en-US', 'UTC')")
+    db_conn.commit()
+
+    candidate = {
+        "target_table": "identity",
+        "field_name": "name",
+        "proposed_value": "Alice",
+        "label": "explicit",
+        "evidence_count": 1,
+        "evidence_text": ""
+    }
+    reinforced = reinforce_evidence(db_conn, candidate)
+    assert reinforced["evidence_count"] == 1
+
+
+def test_reinforced_evidence_flows_through_to_approval_across_simulated_sessions(db_conn, enforcer):
+    # Week 3-4 threshold requires evidence_count >= 2 (profile_age_weeks <= 2 is
+    # week_1_2, which only requires evidence >= 1 - push the fixture's profile past
+    # that boundary so this test actually exercises week_3_4, not week_1_2).
+    db_conn.execute(
+        "UPDATE profile_meta SET first_session_date = ? WHERE id = 1",
+        ((datetime.now(timezone.utc) - timedelta(weeks=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),)
+    )
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+        "VALUES ('editor', 'vim', 1, 'explicit', 'active')"
+    )
+    db_conn.commit()
+
+    candidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "vim",
+        "label": "explicit",
+        "evidence_count": 1,
+        "evidence_text": "still vim"
+    }
+
+    unreinforced_result = run(db_conn, dict(candidate), enforcer)
+    assert unreinforced_result.status == "DISCARD"
+
+    reinforced = reinforce_evidence(db_conn, candidate)
+    assert reinforced["evidence_count"] == 2
+    reinforced_result = run(db_conn, reinforced, enforcer)
+    assert reinforced_result.status == "APPROVED"

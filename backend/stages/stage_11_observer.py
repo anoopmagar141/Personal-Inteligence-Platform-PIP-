@@ -254,10 +254,11 @@ def run_session_end(
     snapshot_path: str = SESSION_SNAPSHOT_PATH,
 ) -> dict[str, Any]:
     """
-    Full Observer session-end flow: extract -> write snapshot immediately -> route
-    memory_candidates through Stage 12 (validate) + Stage 13 (write) -> route
-    decision_candidates through decision_log.route_observer_decision (Part 8.7
-    OR-logic, log_threshold_observer).
+    Full Observer session-end flow: extract -> write snapshot immediately -> reinforce
+    evidence_count for repeat observations (Part 8.6) -> route memory_candidates
+    through Stage 12 (validate) + Stage 13 (write) -> route decision_candidates
+    through decision_log.route_observer_decision (Part 8.7 OR-logic,
+    log_threshold_observer).
 
     Does NOT handle idle-timeout/SIGINT triggering or pending_observer draining -
     those are process-lifecycle concerns that need a running server (Phase 8). This
@@ -270,6 +271,11 @@ def run_session_end(
     enforcer = ConstitutionEnforcer(CONSTITUTION_PATH)
     memory_results = []
     for candidate in output["memory_candidates"]:
+        # Reinforcement must happen before validation and be visible to the write:
+        # a single-pass extraction can only ever produce evidence_count=1 on its
+        # own, so without this, repeat observations across sessions would never
+        # accumulate and would keep failing Stage 12's tiered thresholds forever.
+        candidate = stage_12.reinforce_evidence(conn, candidate)
         validation_result = stage_12.run(conn, candidate, enforcer)
         outcome = stage_13.run(conn, candidate, validation_result)
         memory_results.append({

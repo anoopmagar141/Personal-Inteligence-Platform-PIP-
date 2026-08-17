@@ -27,52 +27,54 @@ def _fetch_existing_state(conn: sqlite3.Connection, candidate: MemoryCandidate) 
     try:
         if target_table == "preference_memory":
             row = conn.execute(
-                "SELECT id, value, source_label, confidence, behavioral_signal_count "
-                "FROM preference_memory WHERE name = ?", 
+                "SELECT id, value, source_label, confidence, evidence_count, behavioral_signal_count "
+                "FROM preference_memory WHERE name = ?",
                 (field_name,)
             ).fetchone()
-            
+
             if not row:
                 return None
-                
+
             c_row = conn.execute(
                 "SELECT MIN(created_at) as created_at "
-                "FROM preference_contradiction_log WHERE preference_id = ?", 
+                "FROM preference_contradiction_log WHERE preference_id = ?",
                 (row["id"],)
             ).fetchone()
-            
+
             return {
                 "current_value": row["value"],
                 "source_label": row["source_label"],
                 "confidence": row["confidence"],
+                "evidence_count": row["evidence_count"],
                 "behavioral_signal_count": row["behavioral_signal_count"],
                 "first_contradiction_date": c_row["created_at"] if c_row else None
             }
-            
+
         elif target_table == "skill_memory":
             row = conn.execute(
-                "SELECT id, level, source_label, confidence "
-                "FROM skill_memory WHERE name = ?", 
+                "SELECT id, level, source_label, confidence, evidence_count "
+                "FROM skill_memory WHERE name = ?",
                 (field_name,)
             ).fetchone()
-            
+
             if not row:
                 return None
-                
+
             c_row = conn.execute(
                 "SELECT MIN(created_at) as created_at "
-                "FROM skill_contradiction_log WHERE skill_id = ?", 
+                "FROM skill_contradiction_log WHERE skill_id = ?",
                 (row["id"],)
             ).fetchone()
-            
+
             return {
                 "current_value": row["level"],
                 "source_label": row["source_label"],
                 "confidence": row["confidence"],
+                "evidence_count": row["evidence_count"],
                 "behavioral_signal_count": 0,
                 "first_contradiction_date": c_row["created_at"] if c_row else None
             }
-            
+
         elif target_table == "identity":
             row = conn.execute("SELECT * FROM identity WHERE id = 1").fetchone()
             if not row or field_name not in ["name", "language_preference", "timezone"]:
@@ -81,34 +83,37 @@ def _fetch_existing_state(conn: sqlite3.Connection, candidate: MemoryCandidate) 
                 "current_value": row[field_name],
                 "source_label": "explicit",
                 "confidence": 1.0,
+                "evidence_count": None,  # no evidence_count column - immutable, never reinforced
                 "behavioral_signal_count": 0,
                 "first_contradiction_date": None
             }
-            
+
         elif target_table == "interaction_style":
-            row = conn.execute("SELECT value, source_label, confidence FROM interaction_style WHERE id = 1").fetchone()
+            row = conn.execute("SELECT value, source_label, confidence, evidence_count FROM interaction_style WHERE id = 1").fetchone()
             if not row:
                 return None
             return {
                 "current_value": row["value"],
                 "source_label": row["source_label"],
                 "confidence": row["confidence"],
+                "evidence_count": row["evidence_count"],
                 "behavioral_signal_count": 0,
                 "first_contradiction_date": None
             }
-            
+
         elif target_table == "goal_memory":
-            row = conn.execute("SELECT goal_text, confidence FROM goal_memory WHERE id = ?", (field_name.replace("goal:", ""),)).fetchone()
+            row = conn.execute("SELECT goal_text, confidence, evidence_count FROM goal_memory WHERE id = ?", (field_name.replace("goal:", ""),)).fetchone()
             if not row:
                 return None
             return {
                 "current_value": row["goal_text"],
                 "source_label": "explicit",
                 "confidence": row["confidence"],
+                "evidence_count": row["evidence_count"],
                 "behavioral_signal_count": 0,
                 "first_contradiction_date": None
             }
-            
+
         elif target_table == "active_projects":
             row = conn.execute("SELECT description FROM active_projects WHERE name = ?", (field_name,)).fetchone()
             if not row:
@@ -117,6 +122,7 @@ def _fetch_existing_state(conn: sqlite3.Connection, candidate: MemoryCandidate) 
                 "current_value": row["description"],
                 "source_label": "explicit",
                 "confidence": 1.0,
+                "evidence_count": None,  # no evidence_count column - not a confidence-scored field
                 "behavioral_signal_count": 0,
                 "first_contradiction_date": None
             }
@@ -133,6 +139,38 @@ def _fetch_existing_state(conn: sqlite3.Connection, candidate: MemoryCandidate) 
         logger = logging.getLogger(__name__)
         logger.error(f"Database error in _fetch_existing_state querying table '{target_table}': {e}")
         return None
+
+def reinforce_evidence(conn: sqlite3.Connection, candidate: MemoryCandidate) -> MemoryCandidate:
+    """
+    Part 8.6's REINFORCEMENT step: if the existing stored value for this field
+    matches the candidate's proposed_value, this is a repeat observation of the
+    same signal, not a fresh one - bump evidence_count to existing + 1 rather than
+    leaving it at whatever the caller (e.g. a single Observer pass, which can only
+    ever attest evidence_count=1 - one transcript is one observation) provided.
+
+    Deliberately does NOT reinforce when the proposed_value differs from the
+    existing value: that's a conflicting observation, not a repeat one, and is
+    already handled by the existing behavioral-override/TIER_2_REQUIRED paths in
+    ConstitutionEnforcer.validate() - reinforcing evidence_count there too would
+    let a single contradicting session look more confident, not less.
+
+    Call this BEFORE enforcer.validate(), and pass the (possibly reinforced)
+    returned candidate to both stage_12.run() and stage_13.run() - reinforcement
+    must be visible to both the confidence/threshold check and the actual write,
+    or the reinforced count is computed but never persisted.
+
+    Tables with no evidence_count column (identity, active_projects) are returned
+    unchanged - there's nothing to reinforce.
+    """
+    existing = _fetch_existing_state(conn, candidate)
+    if existing is None or existing.get("evidence_count") is None:
+        return candidate
+    if existing["current_value"] != candidate.get("proposed_value"):
+        return candidate
+
+    reinforced = dict(candidate)
+    reinforced["evidence_count"] = existing["evidence_count"] + 1
+    return reinforced
 
 def run(conn: sqlite3.Connection, candidate: MemoryCandidate, enforcer: ConstitutionEnforcer) -> ValidationResult:
     """

@@ -201,3 +201,42 @@ def test_run_session_end_single_signal_decision_goes_to_pending(db_conn, tmp_pat
     assert result["decision_results"][0]["status"] == "pending"
     assert db_conn.execute("SELECT COUNT(*) FROM decision_log").fetchone()[0] == 0
     assert db_conn.execute("SELECT COUNT(*) FROM decision_candidates_pending").fetchone()[0] == 1
+
+
+def test_run_session_end_reinforces_evidence_across_simulated_sessions(db_conn, tmp_path):
+    # Push the profile past week_1_2 (profile_age_weeks <= 2, evidence >= 1) into
+    # week_3_4 (evidence >= 2), where a single session's evidence_count=1 candidate
+    # discards on its own but should pass once reinforced against a prior session's
+    # stored observation of the same value.
+    from datetime import datetime, timedelta, timezone
+    db_conn.execute(
+        "INSERT INTO profile_meta (id, schema_version, constitution_version, first_session_date) VALUES (1, '1.0', '1.0', ?)",
+        ((datetime.now(timezone.utc) - timedelta(weeks=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),)
+    )
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+        "VALUES ('preferred_tools', 'Neovim', 1, 'explicit', 'active')"
+    )
+    db_conn.commit()
+
+    response = {
+        "memory_candidates": [
+            {
+                "target_table": "preference_memory",
+                "field_name": "preferred_tools",
+                "proposed_value": "Neovim",  # same value as the "prior session" row above
+                "label": "explicit",
+                "evidence_text": "still using Neovim",
+            }
+        ],
+        "decision_candidates": [],
+        "session_snapshot": {},
+    }
+    provider = FakeProvider(response_text=json.dumps(response))
+    result = observer.run_session_end(db_conn, "transcript", provider, snapshot_path=str(tmp_path / "s.json"))
+
+    assert result["memory_results"][0]["validation_status"] == "APPROVED"
+    assert result["memory_results"][0]["candidate"]["evidence_count"] == 2
+
+    row = db_conn.execute("SELECT evidence_count FROM preference_memory WHERE name = 'preferred_tools'").fetchone()
+    assert row["evidence_count"] == 2  # written value reflects reinforcement, not just the check
