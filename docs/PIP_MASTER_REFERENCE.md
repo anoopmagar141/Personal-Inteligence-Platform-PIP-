@@ -1950,19 +1950,20 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 | Scope | Stage 12 Validation Layer wired to real DB state; `apply_verified_correction` (verified/corrected writes at max confidence); `memory_candidates_pending` schema fix (added `target_table`, `validation_status`, `state`); Stage 13 write orchestration (APPROVED writes now, gated/conflict/override candidates persist to pending, rejects write nothing) |
 | Environment note | Dev environment had never run real SQLCipher before this phase: no `requirements.txt` existed, `sqlcipher3-binary` is gone from PyPI, and Python 3.14 (previously in use) has no compatible SQLCipher wheel at all. Rebuilt on Python 3.12 with the correctly-named `sqlcipher3` package. Two real bugs surfaced only once encryption actually ran: `sqlite3.Row` cannot wrap a `sqlcipher3` cursor, and `get_connection()` silently fell back to plaintext SQLite instead of failing loudly when SQLCipher was unavailable. Both fixed. |
 
-## Phase 6 — IN PROGRESS (RAG + Parallel Retrieval)
+## Phase 6 — NEARLY COMPLETE (RAG + Parallel Retrieval)
 
 | Item | Status |
 |---|---|
 | `documents` table (schema.sql) | DONE — SQLite source-of-truth registry for ChromaDB ingestion |
 | `memory/vector_store.py` | DONE — ingest/query/delete/list/rebuild-from-drift, real ChromaDB + sentence-transformers (`all-MiniLM-L6-v2`, CPU-only), `.pdf`/`.md`/`.txt`/`.py`/`.json`/`.html` extraction, `max_document_size_mb` enforced |
 | `backend/stages/stage_05_rag_retrieval.py` | DONE — threshold-filtered retrieval + lexical conflict-check heuristic against active Decision Log (fail-open per Part 7.4) |
+| `/ingest`, `/documents`, `/remove` CLI commands | DONE — `frontend/cli/pip_cli.py` |
+| `POST /rag/ingest`, `/rag/query`, `GET /rag/documents`, `DELETE /rag/documents/{ref}` REST endpoints | DONE — `backend/api/server.py`, confirmed registered on the real FastAPI app, not just business-logic functions in isolation |
 | Known tradeoff | `all-MiniLM-L6-v2` max_seq_length is 256 tokens; `chunk_size_tokens` is 500. Chunks past ~256 tokens are truncated for embedding purposes only — full text is still stored/returned, only mid-chunk semantic search quality degrades. Same class of imprecision as `similarity_threshold` (already documented as "calibrate from real usage") |
 | Conflict-check heuristic | Lexical overlap-coefficient between chunk and active decision keywords, not semantic contradiction detection — no LLM call in this stage. Flags "worth a human double-check," not a proven contradiction. Threshold (0.3) needs real-usage calibration same as `similarity_threshold` |
-| Test coverage | 16 tests (`test_vector_store.py`, `test_stage_05_rag_retrieval.py`), all against real ChromaDB + real embedding model, not mocks |
-| `/ingest`, `/documents`, `/remove` CLI commands | NOT DONE |
-| `POST /rag/ingest`, `/rag/query`, `GET /rag/documents`, `DELETE /rag/documents/{ref}` REST endpoints | NOT DONE |
-| Router (Stage 2) wiring to actually call Stage 5 | NOT DONE — full pipeline integration is Phase 8 per the roadmap |
+| `/remove`'s REST identifier | file_path itself (percent-encoded), not a separate document id — there is no document id in this schema |
+| Test coverage | 21 tests (`test_vector_store.py`, `test_stage_05_rag_retrieval.py`, plus additions to `test_api_server.py`/`test_cli.py`), core engine tested against real ChromaDB + real embedding model, not mocks |
+| Router (Stage 2) wiring to actually call Stage 5 during a live pipeline run | NOT DONE — full pipeline integration is Phase 8 per the roadmap, correctly out of scope here |
 
 ## Decided but Not Yet Written as Files
 
