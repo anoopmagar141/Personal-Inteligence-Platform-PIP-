@@ -221,7 +221,29 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_file_path_active
 ON documents(file_path) WHERE status = 'active';
 
--- Note: Table 20 (decision_fts) is created at application level if FTS5 is available
+-- 21. pending_observer Table
+-- ADR-033 condition 2. An Observer pass (llama3.1:8b, ~130s cold / an unmeasured but
+-- likely still substantial warm time per the ADR-033 A/B test) cannot block
+-- SIGINT/SIGTERM that long. When the pipeline must exit before Observer completes,
+-- the session transcript is persisted here (SQLCipher-encrypted, never a plain file)
+-- instead of being lost, and drained before Stage 0 on next launch. Also closes the
+-- pre-existing ADR-003 gap: unexpected process death during the Observer pass no
+-- longer loses that session's learning.
+-- 'processing' rows are included in drain queries, not just 'pending': a row left in
+-- 'processing' means a previous drain attempt was itself interrupted mid-run, which is
+-- exactly the crash case this table exists to survive - it must be retried, not ignored.
+CREATE TABLE IF NOT EXISTS pending_observer (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_transcript TEXT NOT NULL,
+    session_started_at TEXT,
+    session_ended_at TEXT NOT NULL,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    error_detail TEXT,
+    created_at TEXT NOT NULL,
+    processed_at TEXT
+);
+
+-- Note: Table 22 (decision_fts) is created at application level if FTS5 is available
 -- as virtual table:
 -- CREATE VIRTUAL TABLE IF NOT EXISTS decision_fts USING fts5(decision_text, reasoning, alternatives_considered, decision_id UNINDEXED);
 

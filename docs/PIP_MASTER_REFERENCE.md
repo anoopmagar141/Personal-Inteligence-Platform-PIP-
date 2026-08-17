@@ -1031,13 +1031,14 @@ ADR-025 pre-commit hook enforces this.
 | `topic_interests`, `preferred_tools`, `document_access_patterns` | `memory/profile_store.py` | Stage 11 Observer (write, Phase 7+) |
 | ChromaDB | `memory/vector_store.py` | Stage 5 RAG (read), /ingest (write) |
 | `documents` | `memory/vector_store.py` | Stage 5 (indirect, via ChromaDB), /ingest /documents /remove (write); source-of-truth registry for ChromaDB rebuild-on-drift |
+| `pending_observer` | `memory/pending_observer.py` | Stage 11 Observer (enqueue, Phase 7+), startup drain (before Stage 0) |
 | `session_snapshot.json` | `memory/session_snapshot.py` | Stage 0 (read), Stage 11 (write) |
 | `constitutional.json` | Read-only after creation | ConstitutionEnforcer |
 | `settings.json` | Read-only at runtime | `config/settings.py` canonical loader |
 
 ## 11.3 Complete Schema Summary
 
-20 tables, 7 views, 1 trigger (validated against real SQLCipher; `documents` added in Phase 6, see below):
+21 tables, 7 views, 1 trigger (validated against real SQLCipher; `documents` added in Phase 6, `pending_observer` added by ADR-033, see below):
 
 **Profile tables:**
 - `profile_meta` — session count, version fields, first/last session dates
@@ -1062,6 +1063,11 @@ ADR-025 pre-commit hook enforces this.
 **System tables:**
 - `provider_consent` — per-provider flags (user_consented + revoked separate)
 - `trace_log` — status + error_detail columns, 3 indexes
+- `pending_observer` (ADR-033) — crash-safety queue for Observer passes that can't
+  finish before process exit. status: pending → processing → completed/failed.
+  Drain query includes 'processing' rows, not just 'pending' — a row stuck in
+  'processing' means a previous drain itself crashed, which must be retried, not
+  ignored. Never hard-deleted (ADR-024).
 
 **Knowledge layer:**
 - `documents` (Phase 6) — SQLite source-of-truth registry for what's ingested into
@@ -1965,18 +1971,31 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 | Test coverage | 21 tests (`test_vector_store.py`, `test_stage_05_rag_retrieval.py`, plus additions to `test_api_server.py`/`test_cli.py`), core engine tested against real ChromaDB + real embedding model, not mocks |
 | Router (Stage 2) wiring to actually call Stage 5 during a live pipeline run | NOT DONE — full pipeline integration is Phase 8 per the roadmap, correctly out of scope here |
 
+## Phase 7 Prerequisite — DONE (ADR-033 condition 2)
+
+| Item | Status |
+|---|---|
+| `pending_observer` table (schema.sql, table 21) | DONE — crash-safety queue, status: pending → processing → completed/failed, never hard-deleted |
+| `memory/pending_observer.py` | DONE — `enqueue`, `list_pending`, `mark_processing/completed/failed`, `drain(conn, observer_runner)`. `drain()` takes the extraction function as a parameter since Stage 11 doesn't exist yet (Phase 7 hasn't started) — this lets the queue be built and fully tested now, ready for Stage 11 to plug into later |
+| Crash-recovery detail | `drain()` retries rows stuck in `'processing'`, not just `'pending'` — a stuck `'processing'` row means a previous drain itself crashed mid-run, which is exactly the case this table exists to survive |
+| Test coverage | 8 tests, including one-failure-doesn't-block-the-rest and stale-processing-row recovery |
+| Not built yet, correctly deferred | Actual SIGINT/SIGTERM signal handling and the "call drain() before Stage 0 at startup" wiring — both need a running server/process lifecycle that doesn't exist until Phase 8. This module is the tested primitive Phase 8 will call, not the process-lifecycle integration itself |
+
 ## Decided but Not Yet Written as Files
 
 | Item | What's missing |
 |---|---|
 | pre-commit hook | Script drafted, not deployed (needs git init first) |
-| SQLCipher test environment | SQLCipher-dependent wrong-key behavior is unverified in the current local pytest environment until SQLCipher/sqlcipher3 is installed |
-| Threat Model T1/T4 (master architecture doc) | Still describes Fernet — factually wrong |
-| PRD 1.6 (non-goals vs deferred) | Tool Execution Layer distinction not written |
-| PRD 1.8 (tiered success statements) | v0.5/v1.0 claims not in PRD |
-| Volume 11.4 backup export | Still describes old Fernet-wrapped export |
-| Volume 11.6 pending sort | Still says "oldest first" (should be confidence ASC) |
-| Shared WS message spec | model_loading field not yet in shared/ws_spec.py |
+| PRD 1.6 (non-goals vs deferred) | Tool Execution Layer distinction not written (external PRD doc, not this file) |
+| PRD 1.8 (tiered success statements) | v0.5/v1.0 claims not in PRD (external PRD doc, not this file) |
+| Shared WS message spec | `shared/ws_spec.py` doesn't exist yet at all — planned for Phase 8 per Part 17 folder structure, correctly not started |
+
+**Resolved, removed from this table (verified against the current doc text, not re-claimed as still open):**
+SQLCipher test environment (Phase 5 environment-fix commit `c558893` — `sqlcipher3` installed,
+wrong-key test passes for real); Threat Model T1/T4 and backup export (Part 10 has described
+SQLCipher, not Fernet, since before this session — this table just never got updated to say so);
+pending-candidate sort order (Part 8.7/9.2/24 have all said `confidence ASC, created_at ASC`
+since before this session, same stale-tracking issue).
 
 ## Tracked Technical Debt (not urgent fixes)
 
@@ -2007,8 +2026,9 @@ python scripts/migrate_seed_provider_consent.py [--db-path PATH]
 
 | Item | What's needed |
 |---|---|
-| Submission deadline | Calendar date — only BatMan has this |
-| Model-swap benchmark | Requires RTX 4060 hardware — 1 hour |
+| Submission deadline | Exact calendar date still unset — confirmed as "3+ months, flexible" as of 2026-08-17, so scope decisions aren't currently being made blind, but no hard date exists yet |
+
+**Resolved, removed from this table:** Model-swap benchmark — retired by ADR-033 (no swap exists to benchmark; Observer and generation share llama3.1:8b).
 
 ---
 
