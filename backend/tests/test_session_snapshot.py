@@ -10,10 +10,11 @@ def temp_snapshot_file(tmp_path):
 
 def test_load_and_write_success(temp_snapshot_file):
     snapshot: SessionSnapshot = {
-        "last_topic": "pytest fixtures",
+        "topic": "pytest fixtures",
         "open_problems": ["need to test performance"],
+        "last_decisions": ["use pytest fixtures for setup"],
         "suggested_next_step": "write the performance test",
-        "last_session_timestamp": "2026-07-11T14:30:00Z"
+        "snapshot_date": "2026-07-11T14:30:00Z"
     }
     write_snapshot(temp_snapshot_file, snapshot)
     
@@ -49,10 +50,11 @@ def test_missing_keys_fails_open(temp_snapshot_file, caplog):
 
 def test_load_under_5ms(temp_snapshot_file):
     snapshot: SessionSnapshot = {
-        "last_topic": "pytest fixtures",
+        "topic": "pytest fixtures",
         "open_problems": ["need to test performance"],
+        "last_decisions": ["use pytest fixtures for setup"],
         "suggested_next_step": "write the performance test",
-        "last_session_timestamp": "2026-07-11T14:30:00Z"
+        "snapshot_date": "2026-07-11T14:30:00Z"
     }
     write_snapshot(temp_snapshot_file, snapshot)
     

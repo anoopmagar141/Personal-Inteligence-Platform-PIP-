@@ -6,10 +6,11 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 class SessionSnapshot(TypedDict):
-    last_topic: str
+    topic: str
     open_problems: List[str]
+    last_decisions: List[str]
     suggested_next_step: str
-    last_session_timestamp: str
+    snapshot_date: str
 
 def load_snapshot(filepath: str) -> Optional[SessionSnapshot]:
     """
@@ -25,7 +26,7 @@ def load_snapshot(filepath: str) -> Optional[SessionSnapshot]:
             data = json.load(f)
             
         # Basic schema validation
-        required_keys = ("last_topic", "open_problems", "suggested_next_step", "last_session_timestamp")
+        required_keys = ("topic", "open_problems", "last_decisions", "suggested_next_step", "snapshot_date")
         if not all(key in data for key in required_keys):
             logger.warning("session_snapshot.json is missing required keys. Failing open to None.")
             return None

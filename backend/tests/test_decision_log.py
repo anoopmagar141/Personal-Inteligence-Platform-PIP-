@@ -124,3 +124,44 @@ def test_decision_text_is_write_once(conn):
             "UPDATE decision_log SET decision_text = 'mutated' WHERE id = ?",
             (result["decision_id"],),
         )
+
+
+def test_route_observer_decision_two_signals_auto_logs(conn):
+    result = decision_log.route_observer_decision(
+        conn,
+        text="Chose FastAPI over Flask",
+        signals_found=["alternative_considered", "commitment_language"],
+        raw_quote="I'm going with FastAPI",
+    )
+    assert result["status"] == "logged"
+    assert result["confidence"] == 0.7
+    assert decision_log.list_decisions(conn)[0]["decision_text"] == "Chose FastAPI over Flask"
+
+
+def test_route_observer_decision_one_signal_goes_to_pending_not_manual_threshold(conn):
+    # log_threshold_observer (0.7) is stricter than log_threshold_manual (0.4) -
+    # a single signal (confidence 0.4) must NOT auto-log via the Observer path,
+    # even though create_decision() would auto-log it via the manual path.
+    result = decision_log.route_observer_decision(
+        conn,
+        text="Maybe use Redis for caching",
+        signals_found=["commitment_language"],
+        raw_quote="I'll probably use Redis",
+    )
+    assert result["status"] == "pending"
+    assert result["confidence"] == 0.4
+    assert decision_log.list_decisions(conn) == []
+    assert len(decision_log.list_pending(conn)) == 1
+
+
+def test_route_observer_decision_drops_unknown_signal_names(conn):
+    # A hallucinated signal name must not be able to inflate confidence past what
+    # the two real, known signals would produce on their own.
+    result = decision_log.route_observer_decision(
+        conn,
+        text="Chose FastAPI over Flask",
+        signals_found=["alternative_considered", "commitment_language", "made_up_signal"],
+        raw_quote="I'm going with FastAPI",
+    )
+    assert result["signals"] == ["alternative_considered", "commitment_language"]
+    assert result["confidence"] == 0.7

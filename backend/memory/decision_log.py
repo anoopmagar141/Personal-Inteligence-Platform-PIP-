@@ -5,6 +5,12 @@ from backend.core.types import now_utc
 from backend.memory import candidate_store
 
 
+KNOWN_DECISION_SIGNALS = {
+    "explicit_reasoning_in_conversation",
+    "commitment_language",
+    "alternative_considered",
+}
+
 COMMITMENT_TERMS = (
     "decide",
     "decided",
@@ -44,6 +50,54 @@ def create_decision(
         text=text,
         reasoning=reasoning,
         alternatives=alternatives,
+        project_id=project_id,
+        confidence=confidence,
+    )
+    return {"status": "logged", "decision_id": decision_id, "confidence": confidence, "signals": signals}
+
+
+def route_observer_decision(
+    conn,
+    *,
+    text: str,
+    signals_found: list[str],
+    raw_quote: str,
+    project_id: str | None = None,
+) -> dict[str, Any]:
+    """
+    Routes an Observer-sourced decision candidate using log_threshold_observer
+    (Part 8.7: two-plus signals auto-log; a single signal goes to
+    decision_candidates_pending rather than auto-logging, to avoid noise from
+    casual commitment language in Observer output).
+
+    Unlike create_decision() (the manual /decide path), signals come from
+    Observer's own reading of the full conversation, not keyword matching over
+    separate reasoning/alternatives text - that's the value Phase 7 adds over
+    Phase 1's manual path (B4 keeps other classifiers keyword/regex-based;
+    Observer is the one stage that's deliberately a full LLM). Confidence is
+    still always computed deterministically via score_confidence(), never
+    assigned by the model itself (ADR-005) - unknown signal strings are
+    dropped before scoring so a hallucinated signal name can't inflate it.
+    """
+    signals = [s for s in signals_found if s in KNOWN_DECISION_SIGNALS]
+    confidence = score_confidence(signals)
+    threshold = get_settings()["decision_log"]["log_threshold_observer"]
+
+    if confidence < threshold:
+        candidate_id = candidate_store.create_decision_candidate(
+            conn,
+            decision_text=text,
+            signals_found=signals,
+            raw_quote=raw_quote,
+            confidence=confidence,
+        )
+        return {"status": "pending", "candidate_id": candidate_id, "confidence": confidence, "signals": signals}
+
+    decision_id = insert_decision(
+        conn,
+        text=text,
+        reasoning=None,
+        alternatives=None,
         project_id=project_id,
         confidence=confidence,
     )
