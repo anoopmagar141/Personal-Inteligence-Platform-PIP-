@@ -355,7 +355,23 @@ User Message
     Conversation history:  1000 (rolling window)
     User message:          400
     Reserved for response: 2000
-  Overflow priority (what gets dropped first):
+  NOTE (resolved during implementation): the per-source lines above sum to 4400
+    (+2000 reserved = 6400), not the stated 6000 - a real inconsistency, also baked
+    into settings.json's "pipeline" section, not just this prose. Resolution: these
+    are per-source MAXIMUM ceilings, not guaranteed fixed reservations. Not every
+    source is maxed simultaneously in practice (e.g. RAG contributes 0 tokens when
+    nothing matched). When the worst case does happen, the overflow priority below
+    is exactly the mechanism that reconciles 4400 down to the true 4000 available
+    for content (6000 total - 2000 reserved). If every trimmable section is fully
+    dropped, what remains is system_instructions + user_message - which is
+    word-for-word the documented failure-mode floor below, confirming this reading.
+  Overflow priority (what gets dropped first) - READ AS PRIORITY RANK (1 = most
+    protected/dropped last, 7 = least protected/dropped first), NOT a literal
+    top-to-bottom drop sequence: rank 1 is annotated "(never drop)", which is
+    self-contradictory if the list were read as sequential drop order starting at
+    the top. This is the same rank convention already used for ADR-023's Cache
+    Authority Hierarchy and Stage 2 Router's default retrieval priority elsewhere
+    in this doc - implemented consistently with those, not invented fresh here.
     1. User message (never drop)
     2. Decision Log entries
     3. Profile fields
@@ -2011,7 +2027,11 @@ stages that had no dependencies left to satisfy, in pipeline order.
 | `stage_04_memory_lookup.py` | Part 7.3's "relevant profile fields only, NEVER full profile dump" needed a selective query `profile_store.py` didn't have (only `get_profile()` = everything, or `get_profile_field()` = one named field). Fetches the full profile via `profile_store.py` (the only allowed access path per spec) and filters to a category→table map before anything leaves the function, so a full dump is never actually returned. Unmapped categories fall back to `interaction_style` alone (how to respond is broadly useful; still far short of a full dump). |
 | Test coverage | 33 new tests across the four stages (13 Stage 1, 7 Stage 2, 5 Stage 3, 5 Stage 4), all fast (no LLM calls involved in these four stages) |
 | `stage_06_web_search.py` | DONE — `settings.json` already locked the provider (`duckduckgo`); implemented via `ddgs` (new dependency — the actively-maintained successor to `duckduckgo-search`, which is years behind on releases). `search_fn` is injectable, same pattern as Stage 11's provider and `pending_observer`'s `observer_runner` — the stage's own logic (TTL cache, trigger detection, fail-open) is fully testable without a network call. Trigger keywords are imported from Stage 1's `EXTERNAL_INFO_KEYWORDS`, not duplicated. Verified against the real DuckDuckGo API, not just a fake — `title`/`href`/`body` response keys matched what the code assumed on the first live call, no fix needed. Stage-local 3600s TTL cache (in-process dict) is separate from Part 7.1's broader Response Cache, which still doesn't exist. |
-| **Not built yet** | Stage 7 (Context Assembly — needs the token-budget logic from Part 7), Stage 9 (LLM Streaming — needs WebSocket wiring), Stage 10 (Response Delivery), the broader Response Cache (`core/response_cache.py`), `core/pipeline.py` (the actual 14-stage orchestrator), the `/ws/chat` WebSocket endpoint, and all process-lifecycle wiring (idle-timeout Observer triggering, SIGINT handling, `pending_observer.drain()` before Stage 0 at startup) |
+| `stage_07_context_assembly.py` | DONE — resolved a real arithmetic inconsistency in Part 7's own spec before implementing (see the NOTE added to the Stage 7 spec block above): the per-source budget lines sum to 6400, not the stated 6000, in both the doc prose and `settings.json`. Resolved as per-source *maximum ceilings* reconciled by overflow trimming, not fixed guaranteed reservations — confirmed self-consistent because the documented failure-mode floor (system + message only) is exactly what remains if every trimmable section gets dropped. Also resolved the overflow-priority list's self-contradictory numbering ("1. User message (never drop)" as the first item in a "what gets dropped first" list) by reading it as priority *rank* (1 = most protected), the same convention already used for ADR-023 and Stage 2's default retrieval priority. |
+| Output shape | `{"context": str, "messages": list[dict]}`, matching `BaseLLMProvider.chat(messages, context)`'s existing two-parameter split (`OllamaProvider` already prepends `context` as a system message) rather than inventing a new prompt format — Stage 7 was built to fit the interface that already existed, not the other way around. |
+| Per-source truncation + rolling window | Each source is capped to its own budgeted max before the overflow pass runs; conversation history keeps the most recent messages and drops whole messages from the oldest end (not mid-message truncation — a single message larger than the entire history budget is dropped as a unit, which is why the overflow test needed several smaller messages rather than one huge one to actually exercise cross-section trimming) |
+| Test coverage | 8 tests: full-inclusion under budget, per-source truncation, rolling-window ordering, overflow trimming in the correct priority order, the worst-case floor, and the fail-open fallback |
+| **Not built yet** | Stage 9 (LLM Streaming — needs WebSocket wiring), Stage 10 (Response Delivery), the broader Response Cache (`core/response_cache.py`), `core/pipeline.py` (the actual 14-stage orchestrator), the `/ws/chat` WebSocket endpoint, and all process-lifecycle wiring (idle-timeout Observer triggering, SIGINT handling, `pending_observer.drain()` before Stage 0 at startup) |
 
 ## Decided but Not Yet Written as Files
 
