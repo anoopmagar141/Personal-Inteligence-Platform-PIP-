@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from backend.memory import decision_log, profile_store
+from backend.memory import decision_log, profile_store, vector_store
 from backend.stages import stage_08_provider_gate as provider_gate
 from backend.stages.stage_08_provider_gate import ProviderConsentError
 
@@ -201,6 +201,36 @@ def api_revoke_consent(conn, provider_id: str) -> dict[str, Any]:
     return {"status": "revoked", "provider_id": provider_id}
 
 
+def api_ingest_document(conn, payload: dict[str, Any]) -> dict[str, Any]:
+    file_path = payload.get("file_path")
+    if not file_path:
+        raise ValueError("file_path is required")
+    return vector_store.ingest_document(conn, file_path, payload.get("project_id"))
+
+
+def api_query_rag(conn, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    query_text = payload.get("query")
+    if not query_text:
+        raise ValueError("query is required")
+    return vector_store.query(
+        conn,
+        query_text,
+        project_id=payload.get("project_id"),
+        threshold=payload.get("threshold", 0.6),
+    )
+
+
+def api_list_documents(conn) -> list[dict[str, Any]]:
+    return vector_store.list_documents(conn)
+
+
+def api_delete_document(conn, file_path: str) -> dict[str, Any]:
+    deleted = vector_store.delete_document(conn, file_path)
+    if not deleted:
+        raise ValueError(f"No active document at '{file_path}'.")
+    return {"status": "removed", "file_path": file_path}
+
+
 try:
     from fastapi import FastAPI
 
@@ -309,6 +339,38 @@ try:
         with _conn() as conn:
             try:
                 return api_revoke_consent(conn, provider_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post(f"{BASE_PREFIX}/rag/ingest")
+    def ingest_document(payload: dict[str, Any]):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_ingest_document(conn, payload)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+
+    @app.post(f"{BASE_PREFIX}/rag/query")
+    def query_rag(payload: dict[str, Any]):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_query_rag(conn, payload)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+
+    @app.get(f"{BASE_PREFIX}/rag/documents")
+    def list_documents():
+        with _conn() as conn:
+            return api_list_documents(conn)
+
+    @app.delete(f"{BASE_PREFIX}/rag/documents/{{ref}}")
+    def delete_document(ref: str):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_delete_document(conn, ref)
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail=str(exc))
 

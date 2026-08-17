@@ -90,3 +90,24 @@ def test_pending_commands_call_rest_api():
     assert opener.requests[0]["url"].endswith("/decision/pending")
     assert opener.requests[2]["url"].endswith("/decision/pending/7/promote")
     assert opener.requests[3]["url"].endswith("/decision/pending/7/dismiss")
+
+
+def test_rag_commands_call_rest_api():
+    opener = FakeOpener()
+    opener.queue({"status": "ingested", "file_path": "C:\\docs\\notes.txt", "chunk_count": 3})
+    opener.queue([{"file_path": "C:\\docs\\notes.txt"}])
+    opener.queue({"status": "removed", "file_path": "C:\\docs\\notes.txt"})
+
+    ingested = pip_cli.run_command(["/ingest", "C:\\docs\\notes.txt"], opener=opener)
+    assert ingested["status"] == "ingested"
+    docs = pip_cli.run_command(["/documents"], opener=opener)
+    assert docs[0]["file_path"] == "C:\\docs\\notes.txt"
+    removed = pip_cli.run_command(["/remove", "C:\\docs\\notes.txt"], opener=opener)
+    assert removed["status"] == "removed"
+
+    assert opener.requests[0]["url"].endswith("/rag/ingest")
+    assert opener.requests[0]["body"] == {"file_path": "C:\\docs\\notes.txt", "project_id": None}
+    assert opener.requests[1]["url"].endswith("/rag/documents")
+    assert opener.requests[2]["method"] == "DELETE"
+    # Path separators must survive percent-encoding as a single path segment.
+    assert "%5C" in opener.requests[2]["url"] or "docs" in opener.requests[2]["url"]

@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 
 from backend.api import server
-from backend.memory import profile_store
+from backend.memory import profile_store, vector_store
 
 
 @pytest.fixture
@@ -14,6 +14,14 @@ def conn(tmp_path):
     profile_store.initialize_schema(connection)
     yield connection
     connection.close()
+
+
+@pytest.fixture(autouse=True)
+def isolated_chroma(tmp_path, monkeypatch):
+    monkeypatch.setattr(vector_store, "CHROMA_DB_PATH", str(tmp_path / "chroma"))
+    monkeypatch.setattr(vector_store, "_client", None)
+    monkeypatch.setattr(vector_store, "_collection", None)
+    yield
 
 
 def test_status_and_onboarding_api(conn):
@@ -78,3 +86,37 @@ def test_project_api(conn):
     assert projects[0]["project_id"] == project["project_id"]
     assert server.api_update_project_status(conn, project["project_id"], {"status": "archived"})["status"] == "updated"
     assert server.api_activate_project(conn, project["project_id"])["status"] == "active"
+
+
+def test_rag_api(conn, tmp_path):
+    doc = tmp_path / "notes.txt"
+    doc.write_text("PIP uses SQLCipher for encrypted storage.", encoding="utf-8")
+
+    ingested = server.api_ingest_document(conn, {"file_path": str(doc)})
+    assert ingested["status"] == "ingested"
+
+    docs = server.api_list_documents(conn)
+    assert len(docs) == 1
+    assert docs[0]["file_path"] == str(doc)
+
+    matches = server.api_query_rag(conn, {"query": "encrypted storage", "threshold": 0.1})
+    assert len(matches) >= 1
+
+    removed = server.api_delete_document(conn, str(doc))
+    assert removed["status"] == "removed"
+    assert server.api_list_documents(conn) == []
+
+
+def test_rag_api_missing_file_path_raises(conn):
+    with pytest.raises(ValueError):
+        server.api_ingest_document(conn, {})
+
+
+def test_rag_api_missing_query_raises(conn):
+    with pytest.raises(ValueError):
+        server.api_query_rag(conn, {})
+
+
+def test_rag_api_delete_nonexistent_raises(conn):
+    with pytest.raises(ValueError):
+        server.api_delete_document(conn, "/no/such/file.txt")

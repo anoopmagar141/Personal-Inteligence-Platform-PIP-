@@ -54,6 +54,12 @@ def run_command(argv: list[str], *, base_url: str = BASE_URL, opener: Callable =
         return _consent(args, base_url=base_url, opener=opener)
     if command == "/revoke":
         return _revoke(args, base_url=base_url, opener=opener)
+    if command == "/ingest":
+        return _ingest(args, base_url=base_url, opener=opener)
+    if command == "/documents":
+        return _documents(args, base_url=base_url, opener=opener)
+    if command == "/remove":
+        return _remove(args, base_url=base_url, opener=opener)
 
     raise ValueError(f"unknown command: {command}")
 
@@ -184,6 +190,40 @@ def _revoke(args: list[str], *, base_url: str, opener: Callable) -> Any:
         base_url=base_url,
         opener=opener,
     )
+
+
+def _ingest(args: list[str], *, base_url: str, opener: Callable) -> Any:
+    """Usage: /ingest FILE_PATH [--project-id ID]"""
+    parser = argparse.ArgumentParser(prog="/ingest", add_help=False)
+    parser.add_argument("file_path")
+    parser.add_argument("--project-id")
+    parsed = parser.parse_args(args)
+    return request_json(
+        "POST",
+        "/rag/ingest",
+        {"file_path": parsed.file_path, "project_id": parsed.project_id},
+        base_url=base_url,
+        opener=opener,
+    )
+
+
+def _documents(args: list[str], *, base_url: str, opener: Callable) -> Any:
+    """Usage: /documents"""
+    return request_json("GET", "/rag/documents", base_url=base_url, opener=opener)
+
+
+def _remove(args: list[str], *, base_url: str, opener: Callable) -> Any:
+    """Usage: /remove FILE_PATH
+
+    NOTE: file_path is used as the document's REST identifier (there is no
+    separate document id). Path separators are percent-encoded with safe=""
+    so a Windows path's backslashes/colons/forward-slashes all survive as a
+    single path segment.
+    """
+    if not args:
+        raise ValueError("usage: /remove FILE_PATH")
+    ref = parse.quote(args[0], safe="")
+    return request_json("DELETE", f"/rag/documents/{ref}", base_url=base_url, opener=opener)
 
 
 def main(argv: list[str] | None = None) -> int:
