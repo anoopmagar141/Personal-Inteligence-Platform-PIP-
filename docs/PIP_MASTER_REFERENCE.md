@@ -2013,15 +2013,15 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 | Idle-timeout / process-exit triggering (Rule 3) | Was NOT enforced at this point (no process-lifecycle context existed yet for a plain function to hook into). **Since resolved** by Phase 8's `session_lifecycle.py` — idle-timeout and disconnect both run Observer synchronously via `run_observer_now()`; whole-server shutdown enqueues instead, per the row above. |
 | Test coverage | 19 new tests total: 13 in the initial Stage 11 pass (`test_stage_11_observer.py`, plus 3 in `test_decision_log.py` for `route_observer_decision`), plus 6 more for reinforcement (5 in `test_stage_12_validation_layer.py`, 1 full-orchestrator integration test in `test_stage_11_observer.py`). All against a fake provider for speed, plus two live smoke-test runs against real `llama3.1:8b` (not part of the permanent suite — too slow to run every time, ~60-130s per call) |
 
-## Phase 8 — BACKEND + WEB CLIENT COMPLETE (Full Pipeline Integration)
+## Phase 8 — COMPLETE (Full Pipeline Integration + Web + Flutter Spike)
 
 Every stage (0–10), the orchestrator, the WebSocket endpoint, process-lifecycle
-wiring, the Response Cache, and now the plain HTML/JS web client are built and
-tested against real infrastructure (real model, real DB, real search, a real
-server process, a real browser). Not overclaiming full Phase 8 completion
-though — the roadmap's Phase 8 scope (Part 18) is "Full Pipeline Integration +
-Web **+ Flutter spike**," and the Flutter spike hasn't been started. What
-follows is the backend work, plus the web client section below it.
+wiring, the Response Cache, the plain HTML/JS web client, and the throwaway
+Flutter spike are all built and tested against real infrastructure (real
+model, real DB, real search, a real server process, a real browser, a real
+Dart WebSocket client). Part 18's Phase 8 scope — "Full Pipeline Integration +
+Web + Flutter spike" — is now fully closed. What follows is the backend work,
+then the web client, then the Flutter spike.
 
 Building in scoped, tested increments rather than all at once. Started with the
 stages that had no dependencies left to satisfy, in pipeline order.
@@ -2108,6 +2108,25 @@ leave a known-bugs list sitting in the doc indefinitely.
 | Full suite re-verified | 265 → 272 tests (7 new: 3 FTS5 fix, 4 context_depth_modifier including the pipeline wiring test), all green, after every change above — see the module docstrings/table rows this session touched for what changed and why. |
 | ConstitutionEnforcer gated-field row (checked, no code change) | See the corrected "Tracked Technical Debt" row below — the doc's own cleanup suggestion there had the two `_matches_gated_field` branches backwards; verified against the real `constitutional.json` patterns and `test_constitution_enforcer.py` before concluding that, not just re-reading the old note. |
 | Pre-commit hook (ADR-025 enforcement) | DEPLOYED — its only listed blocker ("needs git init first") no longer applies, since this repo has been a live git repo with real commit history all session. Copied `scripts/pre-commit` to `.git/hooks/pre-commit` (`chmod +x`); dry-ran it against every file this backend-completeness pass touched before committing — exit 0, no ADR-025 violations. Not tracked by git itself (`.git/hooks/` never is), so a fresh clone still needs this one-time copy step; noted here rather than assumed automatic. |
+
+### Throwaway Flutter spike (`frontend/flutter/`) — DONE, real-async-stream-validated
+
+Part 14.1: "Weeks 3-4: Throwaway Flutter spike (2-3 days). Connects to fake
+echo WebSocket server. Renders streamed tokens in Dart. Tests async stream
+handling. DISCARDED after - de-risks Dart before Phase 8." Built after the web
+client (already proven above), per spec ordering. This is explicitly **not**
+the real Phase 8+ Flutter client — no REST calls, no local storage, no
+connection to the real PIP backend at all.
+
+| Item | Status |
+|---|---|
+| `scripts/fake_echo_server.py` | DONE — a minimal `websockets`-based server, deliberately not the real backend (no pipeline, no DB, no LLM). Speaks the actual Part 14.3 wire shape (`stage_hint` → `token`* → `done`, or → `error`) rather than an arbitrary echo format, so the spike exercises the real shape the eventual Flutter client needs, not a toy protocol. Splits the echoed message into words and streams them back one at a time with a 150ms delay between each — a single "here's your whole reply" frame wouldn't exercise the thing this spike exists to de-risk. |
+| `frontend/flutter/lib/main.dart` | DONE — `flutter create --platforms=web,windows --project-name=pip_flutter_spike`, then a single-screen chat-style UI: connect bar, a scrollable transcript with `token` events appended to the in-progress bubble as they arrive (proving incremental async rendering, not a buffer-then-render-once pattern), a stage-hint chip row, and a send box. `web_socket_channel: ^3.0.1` for the WS client — the standard package for this, not something bespoke. `flutter analyze`: 0 issues. |
+| **Real async-stream validation** — the actual point of the spike | `frontend/flutter/test/echo_stream_test.dart` — not just a widget smoke test. `setUpAll` spawns the real `fake_echo_server.py` as a subprocess (`Process.start`, unbuffered stdout, waits for its "listening" line), connects a real `WebSocketChannel` on the Dart VM (via `flutter test`, no browser involved), sends a message, and asserts on the actual event sequence: `stage_hint` first, one `token` event per word in order with the reassembled text matching exactly, `done` last. Then the test that actually matters for "tests async stream handling": it timestamps each token's arrival and asserts the spread between the first and last token exceeds 300ms — proving the frames arrived spread out over real wall-clock time (matching the server's 150ms-per-word delay), not buffered and delivered in one microtask burst the way a naively-implemented or accidentally-buffering stream consumer would. Ran for real, passed on the first run. |
+| `frontend/flutter/test/widget_test.dart` | DONE — smoke test confirming the UI builds and shows its initial shell (connect bar, Send button, "disconnected" status). Rewritten from `flutter create`'s default counter-app test, which referenced the template's `MyApp` class that no longer exists. |
+| Manual UI validation — a real gap, disclosed not hidden | Started the real app for real (`flutter run -d web-server --web-port=8090`, confirmed serving via a real HTTP 200 and `document.title`/`document.readyState` inspection) and opened it in the Browser pane the same way the HTML/JS web client was validated earlier this session. Screenshots failed in this environment this session ("the Browser pane is not displayed, so the page is not compositing frames") on *every* tab, including the plain-HTML web client tab that had rendered fine earlier in the same session — an environment-level regression, not something caused by Flutter's CanvasKit rendering. Confirmed the app was really running (HTTP 200, correct `document.title`, a real DOM shadow tree under `flt-glass-pane`), and confirmed Flutter's accessibility/semantics activation button existed and responded to a dispatched pointer event, but could not get pixel-level or accessibility-tree confirmation that the chat bubbles/stage-hint chips render exactly as intended. The `echo_stream_test.dart` result above is real proof the underlying mechanism works; the on-screen rendering of that mechanism is unverified by direct observation this session. Flagged rather than claimed as fully checked. |
+| Not built, correctly out of scope | REST calls, local storage, real backend connection, Windows-desktop-build validation (only the web target was run) - none of these are Part 14.1's job for this spike; they belong to the real Phase 8+ Flutter client, which starts from scratch rather than growing out of this throwaway code (spec: "DISCARDED after"). |
+| Disposition | Built, committed, and left in the repo rather than deleted outright — per spec this is meant to be discarded once it's done its job, but deleting code the moment after writing it, before anyone's looked at it, isn't a call to make unilaterally. Flagged for the user to decide: delete now that Dart's async stream handling is proven, or keep it a while longer as a reference. |
 
 ## Decided but Not Yet Written as Files
 
