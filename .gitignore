@@ -6,6 +6,7 @@ data/pip.db
 data/pip.db-shm
 data/pip.db-wal
 data/chroma/
+data/session_snapshot.json
 backend/logs/
 .venv/
 .vs/

@@ -1,12 +1,17 @@
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
-from backend.core import pipeline
+from backend.config.settings import get_settings
+from backend.core import pipeline, session_lifecycle
 from backend.memory import decision_log, profile_store, vector_store
+from backend.providers.ollama_provider import OllamaProvider
 from backend.stages import stage_08_provider_gate as provider_gate
 from backend.stages.stage_08_provider_gate import ProviderConsentError
+
+logger = logging.getLogger(__name__)
 
 
 BASE_PREFIX = "/api/v1"
@@ -285,13 +290,58 @@ async def stream_pipeline_to_websocket(
         await websocket.send_json(event)
 
 
-try:
-    from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+def _default_observer_provider():
+    # ADR-033: Observer uses the same model as generation now. Always local
+    # (stage_11_observer.run() enforces Rule 4 itself - raises if given a
+    # non-local provider - this is just supplying a real local one).
+    return OllamaProvider(model_name="llama3.1:8b")
 
-    app = FastAPI(title="PIP Core API")
+
+def _idle_timeout_seconds() -> float:
+    return get_settings()["observer"]["idle_timeout_minutes"] * 60
+
+
+_session_registry = session_lifecycle.SessionRegistry()
+
+
+try:
+    import concurrent.futures
+    from contextlib import asynccontextmanager
+
+    from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
     def _conn():
         return open_app_connection(os.environ.get("PIP_DB_PATH"), os.environ.get("PIP_DB_KEY"))
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Startup: drain any pending_observer rows a previous shutdown left behind
+        # (Part 7: drain before Stage 0 - there's no live traffic yet to delay).
+        startup_conn = _conn()
+        try:
+            result = session_lifecycle.drain_pending_on_startup(startup_conn, _default_observer_provider())
+            if result["completed"] or result["failed"]:
+                logger.info(f"Startup pending_observer drain: {result}")
+        except Exception as e:
+            # Fail open - a drain problem must never block the app from starting.
+            logger.error(f"Startup pending_observer drain failed, continuing anyway: {e}")
+        finally:
+            startup_conn.close()
+
+        yield
+
+        # Shutdown: too slow to run a ~130s-class Observer pass per open
+        # connection (ADR-033 condition 2) - persist instead, drained for real
+        # on the next startup.
+        _session_registry.shutting_down = True
+        loop = asyncio.get_event_loop()
+        for session in await _session_registry.snapshot():
+            try:
+                await session_lifecycle.enqueue_for_shutdown(loop, session)
+            except Exception as e:
+                logger.error(f"Shutdown: failed to enqueue a session's transcript, it will be lost: {e}")
+
+    app = FastAPI(title="PIP Core API", lifespan=lifespan)
 
     @app.websocket("/ws/chat")
     async def ws_chat(websocket: WebSocket):
@@ -300,8 +350,6 @@ try:
         # for the connection's lifetime, matching pipeline.py's own note that there
         # is no message-history table - the caller owns that state, and here the
         # caller is this connection.
-        import concurrent.futures
-
         await websocket.accept()
         loop = asyncio.get_event_loop()
         # Dedicated single-worker executor: conn is opened here and must only ever
@@ -311,9 +359,27 @@ try:
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         conn = await loop.run_in_executor(executor, _conn)
         conversation_history: list[dict[str, str]] = []
+        session_id = id(websocket)
+        await _session_registry.register(session_id, conn, executor, conversation_history)
+
         try:
             while True:
-                data = await websocket.receive_json()
+                try:
+                    data = await asyncio.wait_for(websocket.receive_json(), timeout=_idle_timeout_seconds())
+                except asyncio.TimeoutError:
+                    # Rule 3: 10-min idle triggers Observer session-end. There's
+                    # time here (nothing else is waiting on this connection), so
+                    # run it now rather than persist-and-defer.
+                    if conversation_history:
+                        try:
+                            await session_lifecycle.run_observer_now(
+                                loop, executor, conn, conversation_history, _default_observer_provider(),
+                            )
+                        except Exception as e:
+                            logger.error(f"Idle-timeout Observer run failed, session transcript discarded: {e}")
+                        conversation_history.clear()
+                    continue
+
                 user_message = (data or {}).get("message", "")
                 project_id = (data or {}).get("project_id")
                 if not user_message:
@@ -336,6 +402,20 @@ try:
         except WebSocketDisconnect:
             pass
         finally:
+            await _session_registry.unregister(session_id)
+            # Normal disconnect, not a shutdown race: there's time, run Observer
+            # now rather than leaving it to a shutdown that may never come. If a
+            # whole-server shutdown is racing this exact disconnect, the shutdown
+            # handler's snapshot() may have already captured (and be enqueuing)
+            # this same session - a best-effort, not a perfectly atomic guarantee,
+            # for a single local process serving one user.
+            if conversation_history and not _session_registry.shutting_down:
+                try:
+                    await session_lifecycle.run_observer_now(
+                        loop, executor, conn, conversation_history, _default_observer_provider(),
+                    )
+                except Exception as e:
+                    logger.error(f"Disconnect Observer run failed, session transcript discarded: {e}")
             await loop.run_in_executor(executor, conn.close)
             executor.shutdown(wait=False)
 

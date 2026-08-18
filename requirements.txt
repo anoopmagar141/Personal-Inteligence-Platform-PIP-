@@ -7,3 +7,4 @@ ollama
 fastapi
 uvicorn
 pytest
+pytest-asyncio
