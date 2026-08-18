@@ -366,6 +366,29 @@ try:
 
     app = FastAPI(title="PIP Core API", lifespan=lifespan)
 
+    # Local-only clients served from a different origin than this server -
+    # e.g. `flutter run -d web-server` on its own port, vs. the HTML/JS web
+    # client, which is same-origin because StaticFiles mounts it onto this
+    # same app below. Browsers block cross-origin fetch() without CORS
+    # headers regardless of how trusted the target is; PIP is entirely
+    # localhost-only (no public deployment, no cookie-based auth to leak), so
+    # this is scoped to localhost/127.0.0.1 on any port rather than a bare
+    # wildcard - permissive enough for any local dev client, not open to the
+    # public internet. Found live: the Flutter web client's GET /status
+    # failed with "ClientException: Failed to fetch" from an actual browser
+    # - a REST client running on the Dart VM (dart:io, no browser involved)
+    # can't hit this, since CORS is a browser-enforced mechanism, not a
+    # server- or VM-side one, which is exactly why this session's earlier
+    # tool/validate_live.dart run passed cleanly despite the bug being real.
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     @app.websocket("/ws/chat")
     async def ws_chat(websocket: WebSocket):
         # Part 15.2: CHAT is WebSocket-only, no REST /chat exists (ADR-028). One

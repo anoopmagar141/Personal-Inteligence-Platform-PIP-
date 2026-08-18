@@ -1,6 +1,7 @@
 import sqlite3
 
 import pytest
+from fastapi.testclient import TestClient
 
 from backend.api import server
 from backend.memory import profile_store, vector_store
@@ -118,6 +119,28 @@ def test_providers_api(conn):
     assert revoked["status"] == "revoked"
     providers = {p["provider_id"]: p for p in server.api_list_providers(conn)}
     assert providers["web_search"]["revoked"] is True
+
+
+def test_cors_allows_local_clients_on_other_ports(tmp_path, monkeypatch):
+    # Regression test: any client served from a different origin than this
+    # server - e.g. `flutter run -d web-server` on its own port, unlike the
+    # HTML/JS web client, which is same-origin via the StaticFiles mount -
+    # needs CORS headers or a real browser's fetch() fails outright with
+    # "Failed to fetch", no matter how trusted the target is. Found live: the
+    # Flutter web client got exactly that error hitting GET /status from a
+    # different port. TestClient simulates a real browser request (sends a
+    # real Origin header, checks the real response headers), unlike
+    # tool/validate_live.dart's Dart-VM-based validation, which passed
+    # cleanly precisely because CORS is a browser-only mechanism the VM
+    # doesn't enforce - this is the missing link for a browser client.
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+
+    client = TestClient(server.app)
+    response = client.get("/api/v1/status", headers={"Origin": "http://127.0.0.1:8091"})
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:8091"
 
 
 def test_rag_api(conn, tmp_path):
