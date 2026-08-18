@@ -5,6 +5,8 @@ __pycache__/
 data/pip.db
 data/pip.db-shm
 data/pip.db-wal
+data/chroma/
+backend/logs/
 .venv/
 .vs/
 .pytest_cache/
