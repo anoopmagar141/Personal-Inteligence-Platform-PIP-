@@ -1,0 +1,254 @@
+# PIP Core - 14-Stage Message Pipeline Orchestrator
+#
+# Wires Stages 0-10 for a single user message. Stages 11-13 (Observer, Validation,
+# Write) are session-end only (Rule 3: never per-message) - triggered separately by
+# whatever process-lifecycle code eventually calls stage_11_observer.run_session_end(),
+# not from here.
+#
+# Known, deliberate simplification: Part 7's spec has Stages 3/4/5 running in
+# parallel via asyncio.gather, and Stage 6 firing in a background thread at Stage 1
+# detection. This orchestrator is synchronous - there is no event loop to gather
+# into yet, because the FastAPI server layer that would own one doesn't exist (that
+# is Phase 8's remaining piece, same boundary noted in Part 13.1 for
+# BaseLLMProvider.chat()). Stages 3/4/5/6 run sequentially here. Parallelizing them
+# is a mechanical follow-up once the async server wrapper exists, not a redesign of
+# this module - the four functions are already independent and side-effect-free
+# with respect to each other.
+#
+# Known, deliberate gap: Stage 0's context_depth_modifier (0-3, scales how much
+# session history to inject) is computed but not yet consumed anywhere - Stage 7
+# doesn't currently vary its session_snapshot budget based on it. Flagged rather
+# than silently wired up as a surprise side effect of building the orchestrator.
+#
+# Conversation history is NOT persisted by this module - there is no message-
+# history table in schema.sql. The caller (eventually the /ws/chat handler) is
+# responsible for accumulating conversation_history across turns and passing it in
+# each call.
+
+import logging
+from pathlib import Path
+from typing import Any, Generator, Optional
+
+from backend.core import trace
+from backend.memory import session_snapshot
+from backend.providers.base_provider import BaseLLMProvider
+from backend.providers.ollama_provider import OllamaProvider
+from backend.stages import stage_00_gap_detector as stage_00
+from backend.stages import stage_01_intent_classifier as stage_01
+from backend.stages import stage_02_router as stage_02
+from backend.stages import stage_03_decision_log_lookup as stage_03
+from backend.stages import stage_04_memory_lookup as stage_04
+from backend.stages import stage_05_rag_retrieval as stage_05
+from backend.stages import stage_06_web_search as stage_06
+from backend.stages import stage_07_context_assembly as stage_07
+from backend.stages import stage_08_provider_gate as stage_08
+from backend.stages import stage_09_llm_streaming as stage_09
+from backend.stages import stage_10_response_delivery as stage_10
+
+logger = logging.getLogger(__name__)
+
+SESSION_SNAPSHOT_PATH = str(Path(__file__).parent.parent.parent / "data" / "session_snapshot.json")
+
+_DEFAULT_PROVIDER_ID = "ollama"
+
+
+def _default_providers() -> list[BaseLLMProvider]:
+    return [OllamaProvider(model_name="llama3.1:8b")]
+
+
+def _load_last_session_timestamp(snapshot_path: str):
+    from datetime import datetime, timezone
+
+    snapshot = session_snapshot.load_snapshot(snapshot_path)
+    if not snapshot or not snapshot.get("snapshot_date"):
+        return None
+    try:
+        dt = datetime.fromisoformat(snapshot["snapshot_date"].replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception as e:
+        logger.warning(f"Pipeline: failed to parse session_snapshot.snapshot_date, treating as first run: {e}")
+        return None
+
+
+def _gate_providers(conn, trace_id: str, providers: list[BaseLLMProvider]) -> list[BaseLLMProvider]:
+    """Stage 8: only providers that pass consent make it into Stage 9's fallback list."""
+    gated = []
+    for provider in providers:
+        provider_id = provider.get_model_info().get("provider_id", _DEFAULT_PROVIDER_ID)
+        try:
+            stage_08.run(conn, provider_id, requested_scope="full_inference")
+            gated.append(provider)
+        except stage_08.ProviderConsentError as e:
+            trace.stage_log(trace_id, "stage_08_provider_gate", "error", f"{provider_id} blocked", error_detail=str(e))
+            logger.warning(f"Pipeline: provider '{provider_id}' blocked by Stage 8: {e}")
+    return gated
+
+
+def run(
+    conn,
+    user_message: str,
+    *,
+    project_id: Optional[str] = None,
+    conversation_history: Optional[list[dict[str, str]]] = None,
+    providers: Optional[list[BaseLLMProvider]] = None,
+    snapshot_path: str = SESSION_SNAPSHOT_PATH,
+    max_tokens: int = 2000,
+    timeout_seconds: int = 30,
+) -> Generator[dict[str, Any], None, None]:
+    """
+    Runs Stages 0-10 for one user message. A generator: yields every Stage 9 event
+    live (for a future WS handler to forward as-is), then yields exactly one final
+    {"type": "pipeline_complete", "data": <Stage 10 result>} sentinel so callers
+    that don't drive a raw generator-return-value dance can just watch for it while
+    iterating normally.
+
+    Each stage call is wrapped defensively even though every stage already fails
+    open internally per its own spec - this is defense in depth against a stage
+    raising something it wasn't supposed to, so one unexpected exception doesn't
+    take down the whole pipeline. Falls back to that stage's documented empty/safe
+    output and logs to trace_log rather than propagating.
+    """
+    trace_id = trace.generate_trace_id()
+    trace.stage_log(trace_id, "pipeline", "ok", f"Starting pipeline for message: {user_message[:80]!r}")
+
+    # Stage 0
+    try:
+        last_session_dt = _load_last_session_timestamp(snapshot_path)
+        gap_result = stage_00.run(last_session_dt)
+    except Exception as e:
+        logger.error(f"Pipeline: Stage 0 raised unexpectedly, failing open: {e}")
+        gap_result = {"warm_start_level": "none", "context_depth_modifier": 0}
+    trace.stage_log(trace_id, "stage_00_gap_detector", "ok", f"warm_start_level={gap_result['warm_start_level']}")
+
+    # Stage 1
+    try:
+        intent_result = stage_01.run(user_message, gap_result["warm_start_level"], conn=conn)
+    except Exception as e:
+        logger.error(f"Pipeline: Stage 1 raised unexpectedly, failing open: {e}")
+        intent_result = {"category": "general_knowledge", "skip_rag": False, "retrieval_hint": ""}
+    trace.stage_log(trace_id, "stage_01_intent_classifier", "ok", f"category={intent_result['category']}")
+
+    # Stage 2
+    try:
+        router_result = stage_02.run(
+            intent_result["category"], intent_result["skip_rag"], intent_result["retrieval_hint"], gap_result["warm_start_level"]
+        )
+    except Exception as e:
+        logger.error(f"Pipeline: Stage 2 raised unexpectedly, defaulting to LLM-only: {e}")
+        router_result = {"retrieval_priority": [], "provider_preference": "local"}
+    trace.stage_log(trace_id, "stage_02_router", "ok", f"priority={router_result['retrieval_priority']}")
+
+    # Stages 3/4/5/6 - sequential here; see module docstring on parallelization.
+    try:
+        decision_entries = stage_03.run(conn, intent_result["retrieval_hint"], project_id)
+    except Exception as e:
+        logger.error(f"Pipeline: Stage 3 raised unexpectedly, returning empty: {e}")
+        decision_entries = []
+    trace.stage_log(trace_id, "stage_03_decision_log_lookup", "ok", f"{len(decision_entries)} entries")
+
+    try:
+        profile_fields = stage_04.run(conn, intent_result["category"], intent_result["retrieval_hint"])
+    except Exception as e:
+        logger.error(f"Pipeline: Stage 4 raised unexpectedly, returning empty: {e}")
+        profile_fields = []
+    trace.stage_log(trace_id, "stage_04_memory_lookup", "ok", f"{len(profile_fields)} fields")
+
+    try:
+        # ADR-002: Stage 5 always runs regardless of skip_rag - the Mechanism 2
+        # safety net this satisfies is a superset of a lightweight pre-check, not a
+        # separate code path (see stage_05's own module docstring).
+        rag_result = stage_05.run(conn, intent_result["retrieval_hint"], project_id)
+    except Exception as e:
+        logger.error(f"Pipeline: Stage 5 raised unexpectedly, returning empty: {e}")
+        rag_result = {"chunks": [], "conflict_flag": False}
+    trace.stage_log(trace_id, "stage_05_rag_retrieval", "ok", f"{len(rag_result['chunks'])} chunks, conflict={rag_result['conflict_flag']}")
+
+    web_results: list[dict[str, Any]] = []
+    try:
+        if stage_06.matches_trigger(user_message):
+            web_results = stage_06.run(intent_result["retrieval_hint"] or user_message)
+    except Exception as e:
+        logger.error(f"Pipeline: Stage 6 raised unexpectedly, returning empty: {e}")
+    trace.stage_log(trace_id, "stage_06_web_search", "ok", f"{len(web_results)} results")
+
+    # Stage 7
+    try:
+        snapshot = session_snapshot.load_snapshot(snapshot_path)
+        assembled = stage_07.run(
+            user_message,
+            profile_fields=profile_fields,
+            session_snapshot=snapshot,
+            decision_log_entries=decision_entries,
+            rag_chunks=rag_result["chunks"],
+            web_results=web_results,
+            conversation_history=conversation_history,
+        )
+    except Exception as e:
+        logger.error(f"Pipeline: Stage 7 raised unexpectedly, falling back to minimal prompt: {e}")
+        assembled = {"context": "", "messages": [{"role": "user", "content": user_message}]}
+    trace.stage_log(trace_id, "stage_07_context_assembly", "ok", "context assembled")
+
+    # Stage 8
+    gated_providers = _gate_providers(conn, trace_id, providers or _default_providers())
+    if not gated_providers:
+        trace.stage_log(trace_id, "stage_08_provider_gate", "error", "no consented providers available")
+        result = stage_10.run(
+            trace_id,
+            {"response_text": "", "status": "error", "error": "No consented provider available", "stage_hints": {}},
+            conn,
+        )
+        yield {"type": "pipeline_complete", "data": result}
+        return
+
+    # Stage 9 - streamed live to the caller.
+    events = stage_09.run(
+        assembled["context"],
+        assembled["messages"],
+        gated_providers,
+        decision_log_hit=bool(decision_entries),
+        web_search_used=bool(web_results),
+        cache_hit=False,  # Response Cache (Part 7.1) not built yet
+        model_loading=False,  # no reliable warm/cold detection without extending BaseLLMProvider
+        max_tokens=max_tokens,
+        timeout_seconds=timeout_seconds,
+    )
+
+    response_text = ""
+    status = "error"
+    error: Optional[str] = None
+    stage_hints: dict[str, Any] = {}
+    for event in events:
+        yield event
+        if event["type"] == "stage_hint":
+            stage_hints = event["data"]
+        elif event["type"] == "token":
+            response_text += event["data"]
+        elif event["type"] == "done":
+            status = "success"
+        elif event["type"] == "error":
+            status = "error"
+            error = event["data"]
+
+    trace.stage_log(trace_id, "stage_09_llm_streaming", "ok" if status == "success" else "error", f"status={status}", error_detail=error or "")
+
+    # Stage 10
+    result = stage_10.run(
+        trace_id,
+        {"response_text": response_text, "status": status, "error": error, "stage_hints": stage_hints},
+        conn,
+    )
+    yield {"type": "pipeline_complete", "data": result}
+
+
+def run_sync(conn, user_message: str, **kwargs) -> dict[str, Any]:
+    """
+    Drains run() and returns just the final Stage 10 result - for callers that
+    don't need live token-by-token forwarding (tests, a CLI, a future non-streaming
+    REST fallback). A live WS caller should iterate run() directly instead.
+    """
+    for event in run(conn, user_message, **kwargs):
+        if event["type"] == "pipeline_complete":
+            return event["data"]
+    raise RuntimeError("pipeline.run() ended without yielding pipeline_complete")
