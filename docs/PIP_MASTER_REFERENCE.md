@@ -2013,14 +2013,15 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 | Idle-timeout / process-exit triggering (Rule 3) | NOT enforced by this code — there's no process-lifecycle context available to a plain function. Phase 8's job, same boundary as `pending_observer`. |
 | Test coverage | 19 new tests total: 13 in the initial Stage 11 pass (`test_stage_11_observer.py`, plus 3 in `test_decision_log.py` for `route_observer_decision`), plus 6 more for reinforcement (5 in `test_stage_12_validation_layer.py`, 1 full-orchestrator integration test in `test_stage_11_observer.py`). All against a fake provider for speed, plus two live smoke-test runs against real `llama3.1:8b` (not part of the permanent suite — too slow to run every time, ~60-130s per call) |
 
-## Phase 8 — BACKEND COMPLETE (Full Pipeline Integration)
+## Phase 8 — BACKEND + WEB CLIENT COMPLETE (Full Pipeline Integration)
 
 Every stage (0–10), the orchestrator, the WebSocket endpoint, process-lifecycle
-wiring, and the Response Cache are built and tested against real infrastructure
-(real model, real DB, real search, a real server process). Not overclaiming this
-as "Phase 8 complete" though — the roadmap's Phase 8 scope (Part 18) is "Full
-Pipeline Integration **+ Web + Flutter spike**," and neither client exists yet.
-What follows is the backend work only.
+wiring, the Response Cache, and now the plain HTML/JS web client are built and
+tested against real infrastructure (real model, real DB, real search, a real
+server process, a real browser). Not overclaiming full Phase 8 completion
+though — the roadmap's Phase 8 scope (Part 18) is "Full Pipeline Integration +
+Web **+ Flutter spike**," and the Flutter spike hasn't been started. What
+follows is the backend work, plus the web client section below it.
 
 Building in scoped, tested increments rather than all at once. Started with the
 stages that had no dependencies left to satisfy, in pipeline order.
@@ -2068,6 +2069,25 @@ stages that had no dependencies left to satisfy, in pipeline order.
 | Cache authority enforced, not just documented | Part 7.1: "Decision Log always overrides." `response_cache.set()` is a no-op whenever `decision_log_hit=True`, regardless of category — a decision-log-influenced answer can never be masked by a stale cached response after the decision is later superseded or abandoned. |
 | Real test-pollution bug found while testing the integration | `response_cache._cache` is a module-level dict shared across the whole pytest process. Several `test_pipeline.py` tests reuse plain messages like `"hello"` — without isolating the cache between tests, a cached response from one test silently served a *later* test: it masked a mid-stream provider failure test's provider never actually being called (served a stale cached "success" instead of the real induced "error"), and broke a trace-log test because Stage 3 never ran on the cache-hit path. Same root cause and same fix pattern as the ChromaDB and `trace_log.json` isolation bugs found earlier this session — module-level shared mutable state needs explicit per-test clearing, every time, not just where it was needed last. |
 | Test coverage | 19 new tests: 16 for `response_cache.py` in isolation (key normalization, TTL-per-category including the three conservative defaults, decision-log-hit bypass, expiry, fail-open on error), 3 pipeline-level integration tests (a cache hit skips Stage 3 and serves the cached text instead of a differently-configured provider's fresh output; `project_question`'s TTL-0 is honored end to end) |
+
+### Web client (`frontend/web/`) — DONE, live-browser-validated
+
+Part 14.1: plain HTML/JS, built and proven before Flutter is touched. Part
+14.4's "frontend has zero intelligence" is enforced structurally — `app.js` is
+a thin renderer: every value it shows came directly from a REST/WS response,
+nothing is computed or inferred client-side beyond which tab is active and the
+in-memory chat transcript.
+
+| Item | Status |
+|---|---|
+| `index.html` / `style.css` | DONE — onboarding form matching `api_complete_onboarding`'s exact payload shape, tabbed app shell (Chat/Profile/Decisions/Projects/Providers), dark theme via CSS custom properties. |
+| `app.js` | DONE — fetch helpers against `/api/v1`; onboarding submit; WS chat (`connectChat()`/`handleChatEvent()`); CRUD load/render for all four REST views; tab switching; auto-reconnect on WS close. |
+| Static file serving | `backend/api/server.py` mounts `StaticFiles(directory="frontend/web", html=True)` at `/`, registered **last** — after every `/api/v1/*` route and `/ws/chat` — so Starlette's registration-order route matching gives the explicit API/WS routes precedence over the catch-all static mount. Verified live: `/api/v1/status` still resolved correctly after the mount was added, not shadowed by it. |
+| Stage-hints rendering | Matches Part 14.3 exactly: `stage_hint` events are buffered (`pendingStageHints`), only rendered into the sidebar on `done`/`error` — a static post-response snapshot, not live per-event animation, per spec ("live animated per-stage updates are optional polish, not budgeted"). |
+| Live validation | Real `uvicorn` server + real `llama3.1:8b` + a real browser (Claude Code's Browser pane), not just unit tests against a fake. Walked through: fresh onboarding (`POST /onboarding/complete`, confirmed field-for-field against the real payload), a clean single-turn WS chat exchange (streamed tokens rendered correctly, stage-hints sidebar populated correctly on `done`), Decision Log create + list refresh, Profile view (rendered real `GET /memory/profile` rows, including the skill/interaction-style rows' `value`/`confidence` split — confirmed that's the backend's real data shape, not a client rendering bug), Projects create + list refresh, and Providers consent grant/revoke (button state and table both updated correctly after each call). |
+| Testing artifact, not a product bug | The first live chat test (driven via simulated clicks/typing) produced a stuck empty assistant bubble alongside a second, garbled reply. Isolated by re-driving the exact same flow through direct DOM/event dispatch (bypassing simulated click/type timing) — a clean single-message exchange rendered correctly with no mixing. Root cause was the browser-automation layer's click/focus timing in this environment, not `app.js`: a `computer` `type` action landed on the wrong tab mid-session (confirmed by unexpected `GET /api/v1/projects` / `/memory/profile` calls in the server log with no corresponding intentional tab switch). Flagging as an automation-environment quirk observed during testing, not a defect in the shipped code. |
+| Known simplification, flagged not hidden | The Providers view's "Grant consent" button always sends `consent_scope: "full_inference"` regardless of provider type — so granting consent to `web_search` (a `web_search_only`-scoped provider) currently requests the broader `full_inference` scope rather than a narrower one. `VALID_CONSENT_SCOPES` on the backend accepts it, so this isn't a broken request, just not the most precise default. A future pass could add a scope selector; not done now since it doesn't affect Stage 8's enforcement correctness. |
+| Not built | No automated frontend test suite (no Playwright/Jest) — validation for this piece is the live manual browser pass documented above, consistent with Part 14.4's "thin renderer" philosophy keeping client-side logic minimal enough that the main risk is wiring, not business logic. |
 
 ## Decided but Not Yet Written as Files
 

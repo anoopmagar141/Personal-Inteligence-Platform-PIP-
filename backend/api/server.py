@@ -554,5 +554,15 @@ try:
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail=str(exc))
 
+    # Part 14.1: plain HTML/JS web client, built and proven before Flutter.
+    # Mounted LAST so it never shadows the /api/v1/* and /ws/chat routes above -
+    # Starlette matches routes in registration order and StaticFiles is a
+    # catch-all.
+    _WEB_CLIENT_DIR = Path(__file__).parent.parent.parent / "frontend" / "web"
+    if _WEB_CLIENT_DIR.is_dir():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/", StaticFiles(directory=str(_WEB_CLIENT_DIR), html=True), name="web")
+
 except ImportError:
     app = None
