@@ -138,12 +138,32 @@ def api_activate_project(conn, project_id: str):
 
 
 def api_list_providers(conn) -> list[dict[str, Any]]:
-    """Return all rows from provider_consent."""
+    """Return all rows from provider_consent.
+
+    is_cloud/user_consented/revoked are stored as SQLite INTEGER (0/1) - SQLite
+    has no native boolean type - so they come back from the driver as Python
+    int, not bool. dict(row) alone would ship raw 0/1 over the wire as JSON
+    numbers, not JSON booleans. config/provider_consent.json's own test suite
+    (test_provider_consent.py) documents "is_cloud is a native JSON boolean in
+    all rows" as a locked contract, but only validates the seed file itself,
+    never this actual API response - the two silently diverged. Found live via
+    the Flutter client: JS's truthy coercion let app.js's `is_cloud ? 'cloud'
+    : 'local'` paper over the int/bool difference, but Dart's strict `== true`
+    correctly does not, which is what surfaced this. Coercing here fixes the
+    contract for every client, not just the strict one that happened to catch it.
+    """
     rows = conn.execute(
         "SELECT provider_id, is_cloud, user_consented, consent_scope, revoked "
         "FROM provider_consent ORDER BY provider_id"
     ).fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        row = dict(r)
+        row["is_cloud"] = bool(row["is_cloud"])
+        row["user_consented"] = bool(row["user_consented"])
+        row["revoked"] = bool(row["revoked"])
+        result.append(row)
+    return result
 
 
 def api_grant_consent(conn, provider_id: str, consent_scope: str) -> dict[str, Any]:

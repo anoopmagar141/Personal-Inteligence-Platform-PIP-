@@ -88,6 +88,38 @@ def test_project_api(conn):
     assert server.api_activate_project(conn, project["project_id"])["status"] == "active"
 
 
+def test_providers_api(conn):
+    providers = {p["provider_id"]: p for p in server.api_list_providers(conn)}
+    assert providers["ollama"]["is_cloud"] is False
+    assert providers["web_search"]["is_cloud"] is True
+
+    # Regression test: is_cloud/user_consented/revoked are stored as SQLite
+    # INTEGER (0/1) - SQLite has no native boolean type - so the driver hands
+    # them back as Python int unless api_list_providers explicitly coerces.
+    # config/provider_consent.json's own test suite (test_provider_consent.py)
+    # locks "is_cloud is a native JSON boolean" as a contract, but only against
+    # the seed file, never against this actual API response - the two had
+    # silently diverged (int 0/1 shipped over the wire as JSON numbers, not
+    # booleans) until a strict client (the Flutter client's `== true` checks,
+    # which JS's truthy coercion in the web client had been masking) caught it
+    # live. `is` (not `==`) here specifically rejects 0/1 masquerading as bool.
+    for provider in providers.values():
+        assert provider["is_cloud"] in (True, False)
+        assert provider["user_consented"] in (True, False)
+        assert provider["revoked"] in (True, False)
+
+    granted = server.api_grant_consent(conn, "web_search", "full_inference")
+    assert granted["status"] == "consented"
+    providers = {p["provider_id"]: p for p in server.api_list_providers(conn)}
+    assert providers["web_search"]["user_consented"] is True
+    assert providers["web_search"]["revoked"] is False
+
+    revoked = server.api_revoke_consent(conn, "web_search")
+    assert revoked["status"] == "revoked"
+    providers = {p["provider_id"]: p for p in server.api_list_providers(conn)}
+    assert providers["web_search"]["revoked"] is True
+
+
 def test_rag_api(conn, tmp_path):
     doc = tmp_path / "notes.txt"
     doc.write_text("PIP uses SQLCipher for encrypted storage.", encoding="utf-8")
