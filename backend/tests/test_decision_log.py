@@ -94,6 +94,23 @@ def test_search_state_update_promote_and_dismiss(conn):
     assert decision_log.list_decisions(conn, state="active") == []
     assert len(decision_log.list_decisions(conn, state="abandoned")) == 1
 
+
+def test_search_decisions_matches_despite_query_punctuation(conn):
+    logged = decision_log.create_decision(
+        conn,
+        text="We decided ChromaDB stays rebuildable.",
+        reasoning="SQLite remains authoritative.",
+    )
+    # Bareword FTS5 syntax treats "?", "-", "(", ")", '"' as query operators, not
+    # literal characters - a raw natural-language question must still match.
+    matches = decision_log.search_decisions(conn, query="What did we decide about ChromaDB?")
+    assert [row["id"] for row in matches] == [logged["decision_id"]]
+
+
+def test_search_decisions_query_with_no_word_tokens_returns_empty(conn):
+    decision_log.create_decision(conn, text="We decided ChromaDB stays rebuildable.")
+    assert decision_log.search_decisions(conn, query="???") == []
+
     promote_id = candidate_store.create_decision_candidate(
         conn,
         decision_text="Promote this candidate",

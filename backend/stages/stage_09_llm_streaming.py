@@ -20,6 +20,7 @@ from backend.providers.base_provider import (
     ProviderExecutionError,
     ProviderUnavailableError,
 )
+from shared.ws_spec import WSChatEvent
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ def run(
     model_loading: bool = False,
     max_tokens: int = 2000,
     timeout_seconds: int = 30,
-) -> Iterator[dict[str, Any]]:
+) -> Iterator[WSChatEvent]:
     """
     Streams a response as an ordered sequence of Part 14.3 WS events:
     stage_hint (always first) -> token* -> done, or stage_hint -> error.
@@ -87,7 +88,7 @@ def run(
     yield {"type": "error", "data": f"All providers failed: {last_error}"}
 
 
-def collect(event_iterator: Iterator[dict[str, Any]]) -> dict[str, Any]:
+def collect(event_iterator: Iterator[WSChatEvent]) -> dict[str, Any]:
     """
     Drains a run() event stream synchronously and returns the aggregated result.
     For callers that don't need live token-by-token forwarding (tests, a CLI,

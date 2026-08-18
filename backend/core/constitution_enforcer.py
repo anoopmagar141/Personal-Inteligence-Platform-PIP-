@@ -124,6 +124,13 @@ class ConstitutionEnforcer:
         )
 
     def _matches_gated_field(self, candidate: MemoryCandidate) -> bool:
+        # field_name (e.g. "goal_text") is never table-qualified on its own -
+        # every gated_fields pattern in constitutional.json IS table-qualified
+        # ("goal_memory.*", "skill_memory.*.level", ...), so field_path is the
+        # branch that actually matches them; the bare field_name check is a
+        # defensive fallback for a future bare (non-table-qualified) pattern,
+        # not dead code to delete - constitutional.json authors gated_fields
+        # patterns, this function shouldn't assume they're always qualified.
         field_path = f"{candidate.get('target_table')}.{candidate.get('field_name')}"
         return any(
             fnmatch(field_path, pattern) or fnmatch(candidate.get("field_name", ""), pattern)

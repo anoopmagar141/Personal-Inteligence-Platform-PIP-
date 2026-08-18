@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 from backend.config.settings import get_settings
 from backend.core import pipeline, session_lifecycle
@@ -10,6 +10,7 @@ from backend.memory import decision_log, profile_store, vector_store
 from backend.providers.ollama_provider import OllamaProvider
 from backend.stages import stage_08_provider_gate as provider_gate
 from backend.stages.stage_08_provider_gate import ProviderConsentError
+from shared.ws_spec import ChatRequest, PipelineCompleteEvent, WSChatEvent
 
 logger = logging.getLogger(__name__)
 
@@ -280,13 +281,15 @@ async def stream_pipeline_to_websocket(
 
     while True:
         try:
-            event = await loop.run_in_executor(executor, next, gen)
+            event: Union[WSChatEvent, PipelineCompleteEvent] = await loop.run_in_executor(executor, next, gen)
         except StopIteration:
             raise RuntimeError("pipeline.run() ended without yielding pipeline_complete")
 
         if event["type"] == "pipeline_complete":
             return event["data"]
 
+        # event is a WSChatEvent here (the pipeline_complete branch above is the
+        # only other member of the union) - forwarded verbatim, Part 14.3.
         await websocket.send_json(event)
 
 
@@ -365,7 +368,7 @@ try:
         try:
             while True:
                 try:
-                    data = await asyncio.wait_for(websocket.receive_json(), timeout=_idle_timeout_seconds())
+                    data: ChatRequest = await asyncio.wait_for(websocket.receive_json(), timeout=_idle_timeout_seconds())
                 except asyncio.TimeoutError:
                     # Rule 3: 10-min idle triggers Observer session-end. There's
                     # time here (nothing else is waiting on this connection), so

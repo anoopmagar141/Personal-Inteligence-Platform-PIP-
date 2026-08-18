@@ -54,3 +54,16 @@ def test_handles_special_characters_that_could_break_fts5_syntax(db_conn):
     # query containing them must not crash the stage, only ever fail open.
     result = stage_03.run(db_conn, 'weird "query" with -- special (chars)')
     assert result == []
+
+
+def test_finds_matches_despite_punctuation_in_the_query(db_conn):
+    # Regression test: punctuation must not just fail to crash (the test above)
+    # but must not silently prevent matching either - "What did I just ask you
+    # about FastAPI?" needs to find the FastAPI decision, not fail open to [].
+    decision_log.insert_decision(
+        db_conn, text="We chose FastAPI for the inventory service", confidence=0.7
+    )
+
+    results = stage_03.run(db_conn, "What did I decide about FastAPI?")
+    assert len(results) == 1
+    assert results[0]["decision_text"] == "We chose FastAPI for the inventory service"

@@ -77,7 +77,7 @@ def _format_profile(fields: list[dict[str, Any]], max_tokens: int) -> str:
 
 
 def _format_snapshot(snapshot: Optional[dict[str, Any]], max_tokens: int) -> str:
-    if not snapshot or not snapshot.get("topic"):
+    if max_tokens <= 0 or not snapshot or not snapshot.get("topic"):
         return ""
     lines = [f"Last session topic: {snapshot['topic']}"]
     if snapshot.get("last_decisions"):
@@ -133,6 +133,7 @@ def run(
     rag_chunks: Optional[list[dict[str, Any]]] = None,
     web_results: Optional[list[dict[str, Any]]] = None,
     conversation_history: Optional[list[dict[str, str]]] = None,
+    context_depth_modifier: int = 2,
 ) -> AssembledContext:
     """
     Assembles a token-budgeted context string and message list, ready for
@@ -141,6 +142,16 @@ def run(
     prepends context as a system message) is exactly what this stage targets, not
     a single flat prompt string.
 
+    context_depth_modifier (0-3) is Stage 0's gap-detector output ("scales
+    session_snapshot allocation" per the glossary) - it scales
+    session_snapshot_tokens by modifier/2, so modifier=2 (the 24h-7d "summary"
+    gap) reproduces the original fixed budget exactly, modifier=0 (<1h "none")
+    drops the snapshot entirely (the live conversation_history already covers
+    that gap, a snapshot recap would be redundant), and modifier=3 (>7d "full")
+    gets 1.5x the base budget for a longer-absence recap. Defaults to 2 so any
+    caller that doesn't pass it (tests, direct callers) keeps the pre-existing
+    fixed-budget behavior unchanged.
+
     Failure mode: any exception during assembly falls back to the documented
     minimal prompt (system instructions + user message only), matching the
     Part 7 Stage 7 spec, and is logged rather than silently swallowed.
@@ -148,8 +159,10 @@ def run(
     try:
         budget = get_settings()["pipeline"]
 
+        snapshot_budget = int(budget["session_snapshot_tokens"] * (context_depth_modifier / 2))
+
         profile_text = _format_profile(profile_fields or [], budget["user_profile_tokens"])
-        snapshot_text = _format_snapshot(session_snapshot, budget["session_snapshot_tokens"])
+        snapshot_text = _format_snapshot(session_snapshot, snapshot_budget)
         decisions_text = _format_decisions(decision_log_entries or [], budget["decision_log_tokens"])
         rag_text = _format_rag_chunks(rag_chunks or [], budget["rag_chunks_tokens"])
         web_text = _format_web_results(web_results or [], budget["web_search_tokens"])

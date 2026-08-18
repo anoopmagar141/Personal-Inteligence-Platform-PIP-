@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from backend.config.settings import get_settings
@@ -266,6 +267,34 @@ def _sync_decision_fts(
     )
 
 
+def _build_fts5_match_query(query: str) -> str | None:
+    """
+    Converts an arbitrary natural-language string into a safe FTS5 MATCH
+    expression. Raw user/retrieval_hint text (question marks, commas, hyphens,
+    parens, quotes) is FTS5 query syntax, not literal content, so passing it
+    through unescaped throws "fts5: syntax error" on ordinary punctuation -
+    e.g. "What did I just ask you about?" never matches anything, silently,
+    because Stage 3 fails open around the exception.
+
+    Tokenizing to bareword characters and re-quoting each token sidesteps the
+    syntax-error problem, but implicit AND (FTS5's default for multiple bareword
+    operands) turns out to be the wrong join for this use case even once it no
+    longer crashes: a natural-language question shares few *exact* words with a
+    terse logged decision ("What did we decide about ChromaDB?" vs "We decided
+    ChromaDB stays rebuildable." - "did"/"decide" isn't literally "decided"), so
+    requiring every query word present made real questions match nothing, just
+    without throwing. OR instead - relevance-ranked by bm25() at the call site,
+    not just created_at - lets a single shared content word (e.g. "chromadb")
+    surface the decision, while common words shared with nearly every entry
+    ("we", "did") get bm25-penalized for low informativeness rather than needing
+    a hand-maintained stopword list.
+    """
+    tokens = re.findall(r"\w+", query, flags=re.UNICODE)
+    if not tokens:
+        return None
+    return " OR ".join(f'"{token}"' for token in tokens)
+
+
 def _search_decisions_fts(
     conn,
     *,
@@ -273,17 +302,23 @@ def _search_decisions_fts(
     state: str,
     project_id: str | None,
 ) -> list[dict[str, Any]]:
+    match_query = _build_fts5_match_query(query)
+    if match_query is None:
+        return []
+
     sql = """
         SELECT d.*
-        FROM decision_fts f
-        JOIN decision_log d ON d.id = f.decision_id
+        FROM decision_fts
+        JOIN decision_log d ON d.id = decision_fts.decision_id
         WHERE decision_fts MATCH ? AND d.state = ?
     """
-    params: list[Any] = [query, state]
+    params: list[Any] = [match_query, state]
     if project_id:
         sql += " AND d.project_id = ?"
         params.append(project_id)
-    sql += " ORDER BY d.created_at DESC, d.id DESC"
+    # bm25() ranks more relevant (rarer, more concentrated) term matches first;
+    # SQLite's bm25 returns lower-is-better scores, and ties fall back to recency.
+    sql += " ORDER BY bm25(decision_fts) ASC, d.created_at DESC, d.id DESC"
     return [dict(row) for row in conn.execute(sql, params)]
 
 

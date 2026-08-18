@@ -94,6 +94,30 @@ def test_empty_session_snapshot_produces_no_section():
     assert "SESSION SNAPSHOT" not in result["context"]
 
 
+def test_context_depth_modifier_zero_drops_snapshot_entirely():
+    snapshot = {"topic": "Building inventory sync", "last_decisions": [], "open_problems": [], "suggested_next_step": ""}
+    result = stage_07.run("q", session_snapshot=snapshot, context_depth_modifier=0)
+    assert "SESSION SNAPSHOT" not in result["context"]
+    assert "Building inventory sync" not in result["context"]
+
+
+def test_context_depth_modifier_two_matches_default_fixed_budget():
+    snapshot = {"topic": "Building inventory sync", "last_decisions": [], "open_problems": [], "suggested_next_step": ""}
+    default_result = stage_07.run("q", session_snapshot=snapshot)
+    modifier_two_result = stage_07.run("q", session_snapshot=snapshot, context_depth_modifier=2)
+    assert default_result["context"] == modifier_two_result["context"]
+
+
+def test_context_depth_modifier_three_allows_a_larger_snapshot_than_default():
+    # A snapshot big enough to get truncated at the default (modifier=2) budget
+    # must survive intact at modifier=3's 1.5x budget.
+    snapshot = {"topic": _words(300), "last_decisions": [], "open_problems": [], "suggested_next_step": ""}
+    default_result = stage_07.run("q", session_snapshot=snapshot, context_depth_modifier=2)
+    full_result = stage_07.run("q", session_snapshot=snapshot, context_depth_modifier=3)
+    assert "..." in default_result["context"]  # truncated at the base 250-token budget
+    assert "..." not in full_result["context"]  # fits whole at the 375-token budget
+
+
 def test_fails_open_to_minimal_prompt_on_error(monkeypatch):
     monkeypatch.setattr(stage_07, "get_settings", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
     result = stage_07.run("hello", system_instructions="SYS")

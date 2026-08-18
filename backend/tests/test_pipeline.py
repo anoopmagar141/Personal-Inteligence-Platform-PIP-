@@ -190,6 +190,26 @@ def test_cache_hit_skips_stages_3_through_9(db_conn, empty_snapshot_path, monkey
     assert second["stage_hints"]["cache_hit"] is True
 
 
+def test_stage_0_context_depth_modifier_is_passed_to_stage_7(db_conn, empty_snapshot_path, monkeypatch):
+    # Stage 0's context_depth_modifier used to be computed and discarded - this
+    # confirms the orchestrator actually forwards it to Stage 7, not just that
+    # Stage 7 knows how to use it in isolation (already covered by
+    # test_stage_07_context_assembly.py).
+    captured = {}
+    real_stage_07_run = pipeline.stage_07.run
+
+    def capturing_stage_07(*args, **kwargs):
+        captured.update(kwargs)
+        return real_stage_07_run(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline.stage_07, "run", capturing_stage_07)
+
+    pipeline.run_sync(db_conn, "hello", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+
+    # empty_snapshot_path -> Stage 0 fails open to a first-run gap -> modifier 0.
+    assert captured["context_depth_modifier"] == 0
+
+
 def test_project_question_is_never_cached(db_conn, empty_snapshot_path):
     db_conn.execute(
         "INSERT INTO active_projects (project_id, name, description, status, last_active) "

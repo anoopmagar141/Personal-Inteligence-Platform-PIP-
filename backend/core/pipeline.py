@@ -7,18 +7,22 @@
 #
 # Known, deliberate simplification: Part 7's spec has Stages 3/4/5 running in
 # parallel via asyncio.gather, and Stage 6 firing in a background thread at Stage 1
-# detection. This orchestrator is synchronous - there is no event loop to gather
-# into yet, because the FastAPI server layer that would own one doesn't exist (that
-# is Phase 8's remaining piece, same boundary noted in Part 13.1 for
-# BaseLLMProvider.chat()). Stages 3/4/5/6 run sequentially here. Parallelizing them
-# is a mechanical follow-up once the async server wrapper exists, not a redesign of
-# this module - the four functions are already independent and side-effect-free
-# with respect to each other.
-#
-# Known, deliberate gap: Stage 0's context_depth_modifier (0-3, scales how much
-# session history to inject) is computed but not yet consumed anywhere - Stage 7
-# doesn't currently vary its session_snapshot budget based on it. Flagged rather
-# than silently wired up as a surprise side effect of building the orchestrator.
+# detection. Stages 3/4/5/6 run sequentially here. The async server layer this was
+# originally waiting on (Phase 8) now exists, but re-checked before attempting the
+# parallelization anyway, since "the async wrapper exists now" turned out not to be
+# the whole story: Stages 3, 4, AND 5 all take the same `conn` and use it for real
+# reads (decision_log FTS lookup, profile_store, vector_store, and Stage 5 ALSO
+# calls decision_log for its conflict check) - the exact SQLite/SQLCipher
+# thread-affinity constraint this same session hit as a live production bug in the
+# WS endpoint (connections can only be used on the thread that created them).
+# Naively `asyncio.gather`-ing three functions that share one connection across
+# different executor threads would reintroduce that bug class, not avoid it. Doing
+# this safely needs either a dedicated connection per stage (extra open/close cost,
+# and WAL-mode concurrent-reader behavior would need verifying) or moving DB access
+# to something actually async - a real design decision, not the "mechanical
+# follow-up" this comment used to claim. Left sequential; the honest cost is Stage
+# 5's embedding query (the only even mildly slow one of the three) blocking Stages 3
+# and 4's fast local DB reads for its duration, not the reverse.
 #
 # Conversation history is NOT persisted by this module - there is no message-
 # history table in schema.sql. The caller (eventually the /ws/chat handler) is
@@ -27,7 +31,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any, Generator, Optional, Union
 
 from backend.core import response_cache, trace
 from backend.memory import session_snapshot
@@ -44,6 +48,7 @@ from backend.stages import stage_07_context_assembly as stage_07
 from backend.stages import stage_08_provider_gate as stage_08
 from backend.stages import stage_09_llm_streaming as stage_09
 from backend.stages import stage_10_response_delivery as stage_10
+from shared.ws_spec import PipelineCompleteEvent, WSChatEvent
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +101,7 @@ def run(
     snapshot_path: str = SESSION_SNAPSHOT_PATH,
     max_tokens: int = 2000,
     timeout_seconds: int = 30,
-) -> Generator[dict[str, Any], None, None]:
+) -> Generator[Union[WSChatEvent, PipelineCompleteEvent], None, None]:
     """
     Runs Stages 0-10 for one user message. A generator: yields every Stage 9 event
     live (for a future WS handler to forward as-is), then yields exactly one final
@@ -203,6 +208,7 @@ def run(
             rag_chunks=rag_result["chunks"],
             web_results=web_results,
             conversation_history=conversation_history,
+            context_depth_modifier=gap_result.get("context_depth_modifier", 2),
         )
     except Exception as e:
         logger.error(f"Pipeline: Stage 7 raised unexpectedly, falling back to minimal prompt: {e}")
