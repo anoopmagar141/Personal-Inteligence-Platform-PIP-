@@ -1,7 +1,9 @@
+import asyncio
 import os
 from pathlib import Path
 from typing import Any
 
+from backend.core import pipeline
 from backend.memory import decision_log, profile_store, vector_store
 from backend.stages import stage_08_provider_gate as provider_gate
 from backend.stages.stage_08_provider_gate import ProviderConsentError
@@ -231,13 +233,111 @@ def api_delete_document(conn, file_path: str) -> dict[str, Any]:
     return {"status": "removed", "file_path": file_path}
 
 
+async def stream_pipeline_to_websocket(
+    websocket,
+    conn,
+    user_message: str,
+    *,
+    conversation_history: list[dict[str, str]],
+    project_id: str | None = None,
+    executor=None,
+) -> dict[str, Any]:
+    """
+    Bridges pipeline.run()'s synchronous generator into the async WebSocket
+    connection without blocking the event loop between yields.
+
+    Part 13.1 already flagged the sync/async tension: BaseLLMProvider.chat()
+    streams synchronously by design, and integrating it with an async server
+    means wrapping the blocking calls, not rewriting the provider interface.
+    `run_in_executor(executor, next, gen)` calls one `next()` at a time off the
+    event loop, so other WebSocket connections aren't starved for the whole
+    duration of one response.
+
+    `executor` MUST be a dedicated single-worker executor, never the default
+    shared pool (found live, not by inspection): sqlite3/sqlcipher3 connections
+    can only be used on the thread that created them. The default pool can
+    dispatch different next() calls to different worker threads, which crashed
+    Stage 8 with "SQLite objects created in a thread can only be used in that
+    same thread" on the very first real end-to-end test - Stage 8 doesn't (and
+    shouldn't) fail open around that, since it's a hard security gate, so it
+    surfaced immediately instead of being silently swallowed like Stage 3/4's
+    fail-open paths absorbed the same underlying issue upstream. The caller
+    (ws_chat) is responsible for opening conn on that same dedicated executor
+    too, and for keeping one executor for the connection's whole lifetime.
+
+    The pipeline_complete sentinel event is consumed here, not forwarded - it's
+    an internal Python convenience (see pipeline.run()'s docstring), not part
+    of the documented WS wire protocol (Part 14.3: token/stage_hint/error/done
+    only).
+    """
+    loop = asyncio.get_event_loop()
+    gen = pipeline.run(conn, user_message, conversation_history=conversation_history, project_id=project_id)
+
+    while True:
+        try:
+            event = await loop.run_in_executor(executor, next, gen)
+        except StopIteration:
+            raise RuntimeError("pipeline.run() ended without yielding pipeline_complete")
+
+        if event["type"] == "pipeline_complete":
+            return event["data"]
+
+        await websocket.send_json(event)
+
+
 try:
-    from fastapi import FastAPI
+    from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
     app = FastAPI(title="PIP Core API")
 
     def _conn():
         return open_app_connection(os.environ.get("PIP_DB_PATH"), os.environ.get("PIP_DB_KEY"))
+
+    @app.websocket("/ws/chat")
+    async def ws_chat(websocket: WebSocket):
+        # Part 15.2: CHAT is WebSocket-only, no REST /chat exists (ADR-028). One
+        # connection = one conversation: conversation_history accumulates in memory
+        # for the connection's lifetime, matching pipeline.py's own note that there
+        # is no message-history table - the caller owns that state, and here the
+        # caller is this connection.
+        import concurrent.futures
+
+        await websocket.accept()
+        loop = asyncio.get_event_loop()
+        # Dedicated single-worker executor: conn is opened here and must only ever
+        # be touched from this one thread for the rest of the connection's
+        # lifetime (see stream_pipeline_to_websocket's docstring for why - found
+        # live, a real crash, not a defensive guess).
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        conn = await loop.run_in_executor(executor, _conn)
+        conversation_history: list[dict[str, str]] = []
+        try:
+            while True:
+                data = await websocket.receive_json()
+                user_message = (data or {}).get("message", "")
+                project_id = (data or {}).get("project_id")
+                if not user_message:
+                    await websocket.send_json({"type": "error", "data": "message is required"})
+                    continue
+
+                # conversation_history holds PRIOR turns only - stage_07 appends
+                # user_message as the final message itself (Part 7 Stage 7). Passing
+                # a history that already includes the current message would
+                # duplicate it in every prompt sent to the LLM.
+                result = await stream_pipeline_to_websocket(
+                    websocket, conn, user_message,
+                    conversation_history=conversation_history,
+                    project_id=project_id,
+                    executor=executor,
+                )
+                conversation_history.append({"role": "user", "content": user_message})
+                if result.get("status") == "success" and result.get("response_text"):
+                    conversation_history.append({"role": "assistant", "content": result["response_text"]})
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await loop.run_in_executor(executor, conn.close)
+            executor.shutdown(wait=False)
 
     @app.get(f"{BASE_PREFIX}/status")
     def status():
