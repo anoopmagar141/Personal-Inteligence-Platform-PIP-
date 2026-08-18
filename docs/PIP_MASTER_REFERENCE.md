@@ -2013,7 +2013,14 @@ All modules call `get_settings()["section"]["key"]`. No module does its own `jso
 | Idle-timeout / process-exit triggering (Rule 3) | NOT enforced by this code — there's no process-lifecycle context available to a plain function. Phase 8's job, same boundary as `pending_observer`. |
 | Test coverage | 19 new tests total: 13 in the initial Stage 11 pass (`test_stage_11_observer.py`, plus 3 in `test_decision_log.py` for `route_observer_decision`), plus 6 more for reinforcement (5 in `test_stage_12_validation_layer.py`, 1 full-orchestrator integration test in `test_stage_11_observer.py`). All against a fake provider for speed, plus two live smoke-test runs against real `llama3.1:8b` (not part of the permanent suite — too slow to run every time, ~60-130s per call) |
 
-## Phase 8 — STARTED (Full Pipeline Integration)
+## Phase 8 — BACKEND COMPLETE (Full Pipeline Integration)
+
+Every stage (0–10), the orchestrator, the WebSocket endpoint, process-lifecycle
+wiring, and the Response Cache are built and tested against real infrastructure
+(real model, real DB, real search, a real server process). Not overclaiming this
+as "Phase 8 complete" though — the roadmap's Phase 8 scope (Part 18) is "Full
+Pipeline Integration **+ Web + Flutter spike**," and neither client exists yet.
+What follows is the backend work only.
 
 Building in scoped, tested increments rather than all at once. Started with the
 stages that had no dependencies left to satisfy, in pipeline order.
