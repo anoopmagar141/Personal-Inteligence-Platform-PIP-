@@ -29,7 +29,7 @@ import logging
 from pathlib import Path
 from typing import Any, Generator, Optional
 
-from backend.core import trace
+from backend.core import response_cache, trace
 from backend.memory import session_snapshot
 from backend.providers.base_provider import BaseLLMProvider
 from backend.providers.ollama_provider import OllamaProvider
@@ -140,6 +140,25 @@ def run(
         router_result = {"retrieval_priority": [], "provider_preference": "local"}
     trace.stage_log(trace_id, "stage_02_router", "ok", f"priority={router_result['retrieval_priority']}")
 
+    # Response Cache (Part 7.1) - positioned here (between Stage 2 and Stage 7)
+    # deliberately: a hit skips Stages 3-9 entirely, not just Stage 9's LLM call.
+    cached = response_cache.get(user_message, project_id)
+    if cached is not None:
+        trace.stage_log(trace_id, "response_cache", "ok", "cache hit, skipping Stages 3-9")
+        cache_hint = dict(cached["stage_hints"])
+        cache_hint["cache_hit"] = True
+        yield {"type": "stage_hint", "data": cache_hint}
+        yield {"type": "token", "data": cached["response_text"]}
+        yield {"type": "done", "data": None}
+        result = stage_10.run(
+            trace_id,
+            {"response_text": cached["response_text"], "status": "success", "error": None, "stage_hints": cache_hint},
+            conn,
+        )
+        yield {"type": "pipeline_complete", "data": result}
+        return
+    trace.stage_log(trace_id, "response_cache", "ok", "cache miss")
+
     # Stages 3/4/5/6 - sequential here; see module docstring on parallelization.
     try:
         decision_entries = stage_03.run(conn, intent_result["retrieval_hint"], project_id)
@@ -209,7 +228,7 @@ def run(
         gated_providers,
         decision_log_hit=bool(decision_entries),
         web_search_used=bool(web_results),
-        cache_hit=False,  # Response Cache (Part 7.1) not built yet
+        cache_hit=False,  # reaching here means the cache check above already missed
         model_loading=False,  # no reliable warm/cold detection without extending BaseLLMProvider
         max_tokens=max_tokens,
         timeout_seconds=timeout_seconds,
@@ -232,6 +251,12 @@ def run(
             error = event["data"]
 
     trace.stage_log(trace_id, "stage_09_llm_streaming", "ok" if status == "success" else "error", f"status={status}", error_detail=error or "")
+
+    if status == "success":
+        response_cache.set(
+            user_message, project_id, intent_result["category"], response_text, stage_hints,
+            decision_log_hit=bool(decision_entries),
+        )
 
     # Stage 10
     result = stage_10.run(

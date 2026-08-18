@@ -3,10 +3,24 @@ from typing import Iterator
 
 import pytest
 
-from backend.core import pipeline, trace
+from backend.core import pipeline, response_cache, trace
 from backend.memory import vector_store
 from backend.memory.profile_store import get_connection, initialize_schema
 from backend.providers.base_provider import BaseLLMProvider
+
+
+@pytest.fixture(autouse=True)
+def isolated_response_cache():
+    # response_cache._cache is a module-level dict shared across the whole
+    # pytest process. Several tests here reuse plain messages like "hello" -
+    # without this, a cached response from one test can silently serve a
+    # LATER test (skipping Stage 3-9 entirely), which is exactly what
+    # happened here live: it masked test_mid_stream_provider_failure's
+    # DyingProvider never actually being called, and made
+    # test_trace_log_records_every_stage fail because Stage 3 never ran.
+    response_cache.clear()
+    yield
+    response_cache.clear()
 
 
 class FakeProvider(BaseLLMProvider):
@@ -146,3 +160,52 @@ def test_mid_stream_provider_failure_still_finalizes_via_stage_10(db_conn, empty
     result = pipeline.run_sync(db_conn, "hello", providers=[DyingProvider()], snapshot_path=empty_snapshot_path)
     assert result["status"] == "error"
     assert result["response_text"] == "partial"  # partial output preserved, not discarded
+
+
+def test_cache_hit_skips_stages_3_through_9(db_conn, empty_snapshot_path, monkeypatch):
+    calls = {"stage_03": 0}
+    real_stage_03_run = pipeline.stage_03.run
+
+    def counting_stage_03(*args, **kwargs):
+        calls["stage_03"] += 1
+        return real_stage_03_run(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline.stage_03, "run", counting_stage_03)
+
+    first = pipeline.run_sync(
+        db_conn, "Explain how caching works", providers=[FakeProvider(tokens=["cached", " answer"])], snapshot_path=empty_snapshot_path,
+    )
+    assert first["status"] == "success"
+    assert calls["stage_03"] == 1
+
+    # Second call, same message, same project_id (None) - should be served
+    # from cache without Stage 3 (or the LLM) running again. A different
+    # provider that would produce different tokens proves the cached text
+    # was served, not freshly generated.
+    second = pipeline.run_sync(
+        db_conn, "Explain how caching works", providers=[FakeProvider(tokens=["should", " not", " appear"])], snapshot_path=empty_snapshot_path,
+    )
+    assert calls["stage_03"] == 1  # not called again
+    assert second["response_text"] == "cached answer"
+    assert second["stage_hints"]["cache_hit"] is True
+
+
+def test_project_question_is_never_cached(db_conn, empty_snapshot_path):
+    db_conn.execute(
+        "INSERT INTO active_projects (project_id, name, description, status, last_active) "
+        "VALUES ('p1', 'InventorySync', 'sync service', 'active', '2026-01-01T00:00:00Z')"
+    )
+    db_conn.commit()
+
+    first = pipeline.run_sync(
+        db_conn, "How is InventorySync going?", providers=[FakeProvider(tokens=["first answer"])], snapshot_path=empty_snapshot_path,
+    )
+    assert first["status"] == "success"
+
+    second = pipeline.run_sync(
+        db_conn, "How is InventorySync going?", providers=[FakeProvider(tokens=["second answer"])], snapshot_path=empty_snapshot_path,
+    )
+    # project_question has TTL 0 (never cache) - the second call must have
+    # actually run again, not served a cached first answer.
+    assert second["response_text"] == "second answer"
+    assert second["stage_hints"]["cache_hit"] is False
