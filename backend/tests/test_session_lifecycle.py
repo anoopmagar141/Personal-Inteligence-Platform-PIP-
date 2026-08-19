@@ -110,28 +110,24 @@ async def test_session_registry_register_and_unregister():
 
 
 @pytest.mark.asyncio
-async def test_run_observer_now_calls_run_session_end(executor_conn, tmp_path):
+async def test_run_observer_now_calls_run_session_end(executor_conn):
     conn, executor = executor_conn
     loop = asyncio.get_event_loop()
 
     history = [{"role": "user", "content": "I prefer Neovim"}]
-    result = await session_lifecycle.run_observer_now(
-        loop, executor, conn, history, FakeProvider(),
-        snapshot_path=str(tmp_path / "session_snapshot.json"),
-    )
+    result = await session_lifecycle.run_observer_now(loop, executor, conn, history, FakeProvider())
     assert "memory_results" in result
     assert "decision_results" in result
 
 
 @pytest.mark.asyncio
-async def test_run_observer_now_rejects_non_local_provider(executor_conn, tmp_path):
+async def test_run_observer_now_rejects_non_local_provider(executor_conn):
     conn, executor = executor_conn
     loop = asyncio.get_event_loop()
 
     with pytest.raises(session_lifecycle.observer.ObserverLocalProviderError):
         await session_lifecycle.run_observer_now(
             loop, executor, conn, [{"role": "user", "content": "hi"}], FakeProvider(is_local=False),
-            snapshot_path=str(tmp_path / "session_snapshot.json"),
         )
 
 
@@ -164,12 +160,10 @@ async def test_enqueue_for_shutdown_noop_on_empty_history(executor_conn):
     assert pending == []
 
 
-def test_drain_pending_on_startup_processes_existing_entries(db_conn, tmp_path):
+def test_drain_pending_on_startup_processes_existing_entries(db_conn):
     pending_observer.enqueue(db_conn, "User: left over from a shutdown\nAssistant: ok")
 
-    result = session_lifecycle.drain_pending_on_startup(
-        db_conn, FakeProvider(), snapshot_path=str(tmp_path / "session_snapshot.json")
-    )
+    result = session_lifecycle.drain_pending_on_startup(db_conn, FakeProvider())
 
     assert len(result["completed"]) == 1
     assert result["failed"] == []

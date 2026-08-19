@@ -1,9 +1,9 @@
 import json
 import logging
-from typing import TypedDict, List, Optional
-from datetime import datetime
+from typing import List, Optional, TypedDict
 
 logger = logging.getLogger(__name__)
+
 
 class SessionSnapshot(TypedDict):
     topic: str
@@ -12,41 +12,68 @@ class SessionSnapshot(TypedDict):
     suggested_next_step: str
     snapshot_date: str
 
-def load_snapshot(filepath: str) -> Optional[SessionSnapshot]:
+
+def load_snapshot(conn) -> Optional[SessionSnapshot]:
     """
-    Loads the session snapshot from JSON.
-    Failure mode: Fail-open. If the file is missing, malformed, or corrupted,
-    it returns None. This is identical to Stage 0's fail-open rationale: missing a
-    session snapshot only degrades conversational continuity, it does not violate a
-    privacy or integrity guarantee. Returning None causes downstream stages to treat
-    it as a first-ever run.
+    Loads the session snapshot from the SQLCipher-encrypted DB (session_snapshot
+    table, singleton row id=1) - moved off a plain data/session_snapshot.json
+    file (security review finding: sensitive extracted context sitting in
+    plaintext outside the SQLCipher boundary).
+
+    Failure mode: fail-open. No row yet (first-ever run, or Observer hasn't
+    completed a session yet) or an unexpected read error both return None -
+    missing a snapshot only degrades conversational continuity, it never
+    violates a privacy or integrity guarantee, same reasoning as Stage 0's own
+    fail-open policy. The old file-based version also fail-opened on a
+    malformed/corrupted file; that failure mode doesn't exist here at all -
+    the table's NOT NULL columns make a shape-invalid row structurally
+    impossible to write in the first place.
     """
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            
-        # Basic schema validation
-        required_keys = ("topic", "open_problems", "last_decisions", "suggested_next_step", "snapshot_date")
-        if not all(key in data for key in required_keys):
-            logger.warning("session_snapshot.json is missing required keys. Failing open to None.")
-            return None
-            
-        return data # type: ignore
-        
-    except FileNotFoundError:
-        logger.info("session_snapshot.json not found. Treating as first run (fail open).")
-        return None
-    except json.JSONDecodeError as e:
-        logger.warning(f"session_snapshot.json is corrupted: {e}. Failing open to None.")
-        return None
+        row = conn.execute(
+            "SELECT topic, open_problems, last_decisions, suggested_next_step, snapshot_date "
+            "FROM session_snapshot WHERE id = 1"
+        ).fetchone()
     except Exception as e:
-        logger.error(f"Unexpected error loading session_snapshot.json: {e}. Failing open to None.")
+        logger.error(f"Unexpected error loading session_snapshot: {e}. Failing open to None.")
         return None
 
-def write_snapshot(filepath: str, snapshot: SessionSnapshot) -> None:
+    if row is None:
+        return None
+
+    return {
+        "topic": row["topic"],
+        "open_problems": json.loads(row["open_problems"]),
+        "last_decisions": json.loads(row["last_decisions"]),
+        "suggested_next_step": row["suggested_next_step"],
+        "snapshot_date": row["snapshot_date"],
+    }
+
+
+def write_snapshot(conn, snapshot: SessionSnapshot) -> None:
     """
-    Writes a new session snapshot to JSON.
-    This will be called by the Observer (Stage 11) at the end of a session.
+    Writes a new session snapshot to the DB. Called by the Observer (Stage 11)
+    at the end of a session. Singleton row - INSERT ... ON CONFLICT(id) DO
+    UPDATE, the same upsert pattern already used for profile_meta/identity/
+    interaction_style.
     """
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(snapshot, f, indent=2)
+    conn.execute(
+        """
+        INSERT INTO session_snapshot (id, topic, open_problems, last_decisions, suggested_next_step, snapshot_date)
+        VALUES (1, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            topic = excluded.topic,
+            open_problems = excluded.open_problems,
+            last_decisions = excluded.last_decisions,
+            suggested_next_step = excluded.suggested_next_step,
+            snapshot_date = excluded.snapshot_date
+        """,
+        (
+            snapshot["topic"],
+            json.dumps(snapshot["open_problems"]),
+            json.dumps(snapshot["last_decisions"]),
+            snapshot["suggested_next_step"],
+            snapshot["snapshot_date"],
+        ),
+    )
+    conn.commit()

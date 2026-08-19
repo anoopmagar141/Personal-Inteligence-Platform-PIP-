@@ -3,6 +3,7 @@ from typing import Iterator
 
 import pytest
 
+from backend.memory import session_snapshot
 from backend.memory.profile_store import get_connection, initialize_schema
 from backend.providers.base_provider import (
     BaseLLMProvider,
@@ -180,15 +181,14 @@ def test_run_drops_candidate_with_missing_keys(db_conn):
     assert result["memory_candidates"] == []
 
 
-def test_run_session_end_writes_snapshot_and_routes_candidates(db_conn, tmp_path):
-    snapshot_path = str(tmp_path / "session_snapshot.json")
+def test_run_session_end_writes_snapshot_and_routes_candidates(db_conn):
     provider = FakeProvider(response_text=json.dumps(VALID_RESPONSE))
 
-    result = observer.run_session_end(db_conn, "transcript", provider, snapshot_path=snapshot_path)
+    result = observer.run_session_end(db_conn, "transcript", provider)
 
-    # snapshot written to disk
-    with open(snapshot_path) as f:
-        written = json.load(f)
+    # snapshot written to the DB (session_snapshot table, security review fix
+    # - it used to be a plain data/session_snapshot.json file)
+    written = session_snapshot.load_snapshot(db_conn)
     assert written["topic"] == "Choosing a web framework"
 
     # memory candidate routed through Stage 12 + 13
@@ -204,7 +204,7 @@ def test_run_session_end_writes_snapshot_and_routes_candidates(db_conn, tmp_path
     assert logged["decision_text"] == "Chose FastAPI over Flask for async support"
 
 
-def test_run_session_end_single_signal_decision_goes_to_pending(db_conn, tmp_path):
+def test_run_session_end_single_signal_decision_goes_to_pending(db_conn):
     response = {
         "memory_candidates": [],
         "decision_candidates": [
@@ -217,14 +217,14 @@ def test_run_session_end_single_signal_decision_goes_to_pending(db_conn, tmp_pat
         "session_snapshot": {},
     }
     provider = FakeProvider(response_text=json.dumps(response))
-    result = observer.run_session_end(db_conn, "transcript", provider, snapshot_path=str(tmp_path / "s.json"))
+    result = observer.run_session_end(db_conn, "transcript", provider)
 
     assert result["decision_results"][0]["status"] == "pending"
     assert db_conn.execute("SELECT COUNT(*) FROM decision_log").fetchone()[0] == 0
     assert db_conn.execute("SELECT COUNT(*) FROM decision_candidates_pending").fetchone()[0] == 1
 
 
-def test_run_session_end_reinforces_evidence_across_simulated_sessions(db_conn, tmp_path):
+def test_run_session_end_reinforces_evidence_across_simulated_sessions(db_conn):
     # Push the profile past week_1_2 (profile_age_weeks <= 2, evidence >= 1) into
     # week_3_4 (evidence >= 2), where a single session's evidence_count=1 candidate
     # discards on its own but should pass once reinforced against a prior session's
@@ -254,7 +254,7 @@ def test_run_session_end_reinforces_evidence_across_simulated_sessions(db_conn, 
         "session_snapshot": {},
     }
     provider = FakeProvider(response_text=json.dumps(response))
-    result = observer.run_session_end(db_conn, "transcript", provider, snapshot_path=str(tmp_path / "s.json"))
+    result = observer.run_session_end(db_conn, "transcript", provider)
 
     assert result["memory_results"][0]["validation_status"] == "APPROVED"
     assert result["memory_results"][0]["candidate"]["evidence_count"] == 2

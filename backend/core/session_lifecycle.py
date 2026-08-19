@@ -77,7 +77,6 @@ async def run_observer_now(
     conversation_history: list[dict[str, str]],
     provider: BaseLLMProvider,
     project_id: Optional[str] = None,
-    snapshot_path: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Runs Stage 11's full session-end flow on the connection's own dedicated
@@ -87,16 +86,16 @@ async def run_observer_now(
     triggers, where there's time to actually run the LLM pass. Never used
     during a whole-server shutdown - see enqueue_for_shutdown().
 
-    snapshot_path is an explicit parameter, not left to run_session_end()'s own
-    default - found live: run_session_end()'s snapshot_path default is bound
-    at function-definition time (a plain Python default-argument gotcha), so
-    monkeypatching stage_11_observer.SESSION_SNAPSHOT_PATH in a test silently
-    does nothing - the call still writes to the real path baked in at import
-    time. Two tests here passed for the wrong reason: the real data/ directory
-    happened to exist, so the write silently succeeded at the wrong location
-    instead of failing loudly. Only surfaced when data/ was cleaned up and the
-    write started raising FileNotFoundError instead of silently polluting
-    production data.
+    The snapshot itself now lives in the same encrypted DB conn already points
+    at (session_snapshot table, security review fix - it used to be a plain
+    data/session_snapshot.json file), which incidentally also retired a real
+    bug this docstring used to warn about: run_session_end()'s old
+    snapshot_path parameter had a default bound at function-definition time (a
+    plain Python default-argument gotcha), so monkeypatching the module
+    constant in a test silently did nothing - the call still wrote to the real
+    path baked in at import time. There's no path default left to bind wrong
+    at all now; conn is the only thing threaded through, and it was already
+    being passed explicitly everywhere this class of bug could have hit.
 
     Logs to trace_log under its own trace_id - Observer session-end runs
     aren't tied to any single message's trace_id, but need their own
@@ -106,10 +105,9 @@ async def run_observer_now(
     trace_id = trace.generate_trace_id()
     trace.stage_log(trace_id, "stage_11_observer", "ok", f"session-end run starting, {len(conversation_history)} messages")
     transcript = format_transcript(conversation_history)
-    kwargs = {"snapshot_path": snapshot_path} if snapshot_path is not None else {}
     try:
         result = await loop.run_in_executor(
-            executor, lambda: observer.run_session_end(conn, transcript, provider, project_id, **kwargs)
+            executor, lambda: observer.run_session_end(conn, transcript, provider, project_id)
         )
     except Exception as e:
         trace.stage_log(trace_id, "stage_11_observer", "error", "session-end run raised", error_detail=str(e))
@@ -137,20 +135,14 @@ async def enqueue_for_shutdown(loop, session: dict[str, Any]) -> None:
     )
 
 
-def drain_pending_on_startup(
-    conn, provider: BaseLLMProvider, snapshot_path: Optional[str] = None
-) -> dict[str, list]:
+def drain_pending_on_startup(conn, provider: BaseLLMProvider) -> dict[str, list]:
     """
     Runs before the app accepts real traffic (Part 7: drain before Stage 0).
     Processes any pending_observer rows a previous shutdown persisted instead
     of losing that session's learning outright.
-
-    snapshot_path is explicit for the same reason run_observer_now() takes it
-    explicitly - see that function's docstring.
     """
-    kwargs = {"snapshot_path": snapshot_path} if snapshot_path is not None else {}
 
     def observer_runner(transcript: str) -> None:
-        observer.run_session_end(conn, transcript, provider, **kwargs)
+        observer.run_session_end(conn, transcript, provider)
 
     return pending_observer.drain(conn, observer_runner)

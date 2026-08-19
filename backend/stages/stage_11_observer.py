@@ -39,7 +39,6 @@ from backend.stages import stage_13_profile_update as stage_13
 logger = logging.getLogger(__name__)
 
 CONSTITUTION_PATH = str(Path(__file__).parent.parent / "core" / "constitutional.json")
-SESSION_SNAPSHOT_PATH = str(Path(__file__).parent.parent.parent / "data" / "session_snapshot.json")
 
 _VALID_LABELS = {"explicit", "inferred"}
 
@@ -271,7 +270,6 @@ def run_session_end(
     transcript: str,
     provider: BaseLLMProvider,
     project_id: Optional[str] = None,
-    snapshot_path: str = SESSION_SNAPSHOT_PATH,
 ) -> dict[str, Any]:
     """
     Full Observer session-end flow: extract -> write snapshot immediately -> reinforce
@@ -286,7 +284,7 @@ def run_session_end(
     """
     output = run(transcript, provider, conn)
 
-    session_snapshot.write_snapshot(snapshot_path, output["session_snapshot"])
+    session_snapshot.write_snapshot(conn, output["session_snapshot"])
 
     enforcer = ConstitutionEnforcer(CONSTITUTION_PATH)
     memory_results = []

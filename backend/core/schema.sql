@@ -221,6 +221,26 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_file_path_active
 ON documents(file_path) WHERE status = 'active';
 
+-- 20. session_snapshot Table
+-- Observer's (Stage 11) end-of-session summary, used to warm-start future
+-- sessions (Stage 0/7). Singleton row (id=1), same pattern as profile_meta/
+-- identity/interaction_style. Previously a plain JSON file at
+-- data/session_snapshot.json - moved into the encrypted DB (security review
+-- finding: topic/decisions/open-problems sat in plaintext outside the
+-- SQLCipher boundary the rest of "structured data" gets, unlike
+-- pending_observer's session_transcript a few tables down, which was always
+-- SQLCipher-encrypted). open_problems/last_decisions are JSON-encoded TEXT -
+-- SQLite has no native array type - same pattern already used for
+-- decision_candidates_pending.signals_found.
+CREATE TABLE IF NOT EXISTS session_snapshot (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    topic TEXT NOT NULL DEFAULT '',
+    open_problems TEXT NOT NULL DEFAULT '[]',
+    last_decisions TEXT NOT NULL DEFAULT '[]',
+    suggested_next_step TEXT NOT NULL DEFAULT '',
+    snapshot_date TEXT
+);
+
 -- 21. pending_observer Table
 -- ADR-033 condition 2. An Observer pass (llama3.1:8b, ~130s cold / an unmeasured but
 -- likely still substantial warm time per the ADR-033 A/B test) cannot block

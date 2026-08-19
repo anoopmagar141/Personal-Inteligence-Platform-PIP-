@@ -30,7 +30,6 @@
 # each call.
 
 import logging
-from pathlib import Path
 from typing import Any, Generator, Optional, Union
 
 from backend.core import response_cache, trace
@@ -52,8 +51,6 @@ from shared.ws_spec import PipelineCompleteEvent, WSChatEvent
 
 logger = logging.getLogger(__name__)
 
-SESSION_SNAPSHOT_PATH = str(Path(__file__).parent.parent.parent / "data" / "session_snapshot.json")
-
 _DEFAULT_PROVIDER_ID = "ollama"
 
 
@@ -61,10 +58,10 @@ def _default_providers() -> list[BaseLLMProvider]:
     return [OllamaProvider(model_name="llama3.1:8b")]
 
 
-def _load_last_session_timestamp(snapshot_path: str):
+def _load_last_session_timestamp(conn):
     from datetime import datetime, timezone
 
-    snapshot = session_snapshot.load_snapshot(snapshot_path)
+    snapshot = session_snapshot.load_snapshot(conn)
     if not snapshot or not snapshot.get("snapshot_date"):
         return None
     try:
@@ -98,7 +95,6 @@ def run(
     project_id: Optional[str] = None,
     conversation_history: Optional[list[dict[str, str]]] = None,
     providers: Optional[list[BaseLLMProvider]] = None,
-    snapshot_path: str = SESSION_SNAPSHOT_PATH,
     max_tokens: int = 2000,
     timeout_seconds: int = 30,
 ) -> Generator[Union[WSChatEvent, PipelineCompleteEvent], None, None]:
@@ -125,7 +121,7 @@ def run(
 
     # Stage 0
     try:
-        last_session_dt = _load_last_session_timestamp(snapshot_path)
+        last_session_dt = _load_last_session_timestamp(conn)
         gap_result = stage_00.run(last_session_dt)
     except Exception as e:
         logger.error(f"Pipeline: Stage 0 raised unexpectedly, failing open: {e}")
@@ -220,7 +216,7 @@ def run(
 
     # Stage 7
     try:
-        snapshot = session_snapshot.load_snapshot(snapshot_path)
+        snapshot = session_snapshot.load_snapshot(conn)
         assembled = stage_07.run(
             user_message,
             profile_fields=profile_fields,

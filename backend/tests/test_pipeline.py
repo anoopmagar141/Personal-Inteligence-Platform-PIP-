@@ -41,6 +41,10 @@ class FakeProvider(BaseLLMProvider):
 
 @pytest.fixture
 def db_conn(tmp_path, db_key):
+    # A fresh DB has no session_snapshot row yet, which is exactly the
+    # "first-ever run" state Stage 0 should fail open to - no separate
+    # empty-snapshot fixture needed now that the snapshot lives in this same
+    # conn instead of a standalone file (security review fix).
     db_path = str(tmp_path / "test.db")
     conn = get_connection(db_path, db_key=db_key)
     initialize_schema(conn)
@@ -66,17 +70,10 @@ def isolated_chroma(tmp_path, monkeypatch):
     yield
 
 
-@pytest.fixture
-def empty_snapshot_path(tmp_path):
-    # No session_snapshot.json on disk - Stage 0 should fail open to a first-run state.
-    return str(tmp_path / "session_snapshot.json")
-
-
-def test_happy_path_yields_tokens_then_pipeline_complete(db_conn, empty_snapshot_path):
+def test_happy_path_yields_tokens_then_pipeline_complete(db_conn):
     events = list(pipeline.run(
         db_conn, "What is a hash table?",
         providers=[FakeProvider(tokens=["A ", "hash ", "table."])],
-        snapshot_path=empty_snapshot_path,
     ))
 
     token_events = [e for e in events if e["type"] == "token"]
@@ -89,22 +86,20 @@ def test_happy_path_yields_tokens_then_pipeline_complete(db_conn, empty_snapshot
     assert "trace_id" in final["data"]
 
 
-def test_run_sync_returns_final_result_only(db_conn, empty_snapshot_path):
+def test_run_sync_returns_final_result_only(db_conn):
     result = pipeline.run_sync(
         db_conn, "Explain how a hash table works",
         providers=[FakeProvider(tokens=["ok"])],
-        snapshot_path=empty_snapshot_path,
     )
     assert result["status"] == "success"
     assert result["response_text"] == "ok"
 
 
-def test_no_consented_providers_short_circuits_before_stage_9(db_conn, empty_snapshot_path):
+def test_no_consented_providers_short_circuits_before_stage_9(db_conn):
     unconsented = FakeProvider(provider_id="some_unseeded_cloud_provider", is_local=False)
     events = list(pipeline.run(
         db_conn, "hello",
         providers=[unconsented],
-        snapshot_path=empty_snapshot_path,
     ))
     # No token/stage_hint events at all - short-circuited before Stage 9 ever ran.
     assert all(e["type"] != "token" for e in events)
@@ -113,18 +108,18 @@ def test_no_consented_providers_short_circuits_before_stage_9(db_conn, empty_sna
     assert "No consented provider" in events[-1]["data"].get("response_text", "") or events[-1]["data"]["status"] == "error"
 
 
-def test_web_search_blocked_without_consent_even_on_trigger_keywords(db_conn, empty_snapshot_path, monkeypatch):
+def test_web_search_blocked_without_consent_even_on_trigger_keywords(db_conn, monkeypatch):
     # Security regression test: config/provider_consent.json seeds web_search
     # with user_consented=0 by default - a trigger-keyword match alone must
     # NOT be enough to fire a real search before consent is granted.
     calls = []
     monkeypatch.setattr(pipeline.stage_06, "run", lambda *a, **kw: calls.append(a) or [{"title": "t", "url": "u", "snippet": "s"}])
 
-    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()])
     assert len(calls) == 0
 
 
-def test_web_search_fires_on_trigger_keywords_once_consented(db_conn, empty_snapshot_path, monkeypatch):
+def test_web_search_fires_on_trigger_keywords_once_consented(db_conn, monkeypatch):
     calls = []
     monkeypatch.setattr(pipeline.stage_06, "run", lambda *a, **kw: calls.append(a) or [{"title": "t", "url": "u", "snippet": "s"}])
     db_conn.execute(
@@ -132,39 +127,39 @@ def test_web_search_fires_on_trigger_keywords_once_consented(db_conn, empty_snap
     )
     db_conn.commit()
 
-    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()])
     assert len(calls) == 1
 
     calls.clear()
-    pipeline.run_sync(db_conn, "Explain how a hash table works", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    pipeline.run_sync(db_conn, "Explain how a hash table works", providers=[FakeProvider()])
     assert len(calls) == 0
 
 
-def test_web_search_blocked_after_consent_revoked(db_conn, empty_snapshot_path, monkeypatch):
+def test_web_search_blocked_after_consent_revoked(db_conn, monkeypatch):
     calls = []
     monkeypatch.setattr(pipeline.stage_06, "run", lambda *a, **kw: calls.append(a) or [{"title": "t", "url": "u", "snippet": "s"}])
     db_conn.execute(
         "UPDATE provider_consent SET user_consented = 1, revoked = 0 WHERE provider_id = 'web_search'"
     )
     db_conn.commit()
-    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()])
     assert len(calls) == 1
 
     calls.clear()
     db_conn.execute("UPDATE provider_consent SET revoked = 1 WHERE provider_id = 'web_search'")
     db_conn.commit()
-    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()])
     assert len(calls) == 0
 
 
-def test_stage_3_exception_does_not_crash_pipeline(db_conn, empty_snapshot_path, monkeypatch):
+def test_stage_3_exception_does_not_crash_pipeline(db_conn, monkeypatch):
     monkeypatch.setattr(pipeline.stage_03, "run", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("simulated Stage 3 crash")))
-    result = pipeline.run_sync(db_conn, "hello", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    result = pipeline.run_sync(db_conn, "hello", providers=[FakeProvider()])
     assert result["status"] == "success"  # pipeline still completes despite Stage 3 failing
 
 
-def test_trace_log_records_every_stage(db_conn, empty_snapshot_path):
-    pipeline.run_sync(db_conn, "hello", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+def test_trace_log_records_every_stage(db_conn):
+    pipeline.run_sync(db_conn, "hello", providers=[FakeProvider()])
     entries = json.loads(trace.TRACE_LOG_PATH.read_text(encoding="utf-8"))
     stages = {e["stage"] for e in entries}
     assert "stage_00_gap_detector" in stages
@@ -181,7 +176,7 @@ def test_trace_log_records_every_stage(db_conn, empty_snapshot_path):
     assert len({e["trace_id"] for e in entries}) == 1
 
 
-def test_mid_stream_provider_failure_still_finalizes_via_stage_10(db_conn, empty_snapshot_path):
+def test_mid_stream_provider_failure_still_finalizes_via_stage_10(db_conn):
     from backend.providers.base_provider import ProviderExecutionError
 
     class DyingProvider(FakeProvider):
@@ -189,12 +184,12 @@ def test_mid_stream_provider_failure_still_finalizes_via_stage_10(db_conn, empty
             yield "partial"
             raise ProviderExecutionError("dropped connection")
 
-    result = pipeline.run_sync(db_conn, "hello", providers=[DyingProvider()], snapshot_path=empty_snapshot_path)
+    result = pipeline.run_sync(db_conn, "hello", providers=[DyingProvider()])
     assert result["status"] == "error"
     assert result["response_text"] == "partial"  # partial output preserved, not discarded
 
 
-def test_cache_hit_skips_stages_3_through_9(db_conn, empty_snapshot_path, monkeypatch):
+def test_cache_hit_skips_stages_3_through_9(db_conn, monkeypatch):
     calls = {"stage_03": 0}
     real_stage_03_run = pipeline.stage_03.run
 
@@ -205,7 +200,7 @@ def test_cache_hit_skips_stages_3_through_9(db_conn, empty_snapshot_path, monkey
     monkeypatch.setattr(pipeline.stage_03, "run", counting_stage_03)
 
     first = pipeline.run_sync(
-        db_conn, "Explain how caching works", providers=[FakeProvider(tokens=["cached", " answer"])], snapshot_path=empty_snapshot_path,
+        db_conn, "Explain how caching works", providers=[FakeProvider(tokens=["cached", " answer"])],
     )
     assert first["status"] == "success"
     assert calls["stage_03"] == 1
@@ -215,14 +210,14 @@ def test_cache_hit_skips_stages_3_through_9(db_conn, empty_snapshot_path, monkey
     # provider that would produce different tokens proves the cached text
     # was served, not freshly generated.
     second = pipeline.run_sync(
-        db_conn, "Explain how caching works", providers=[FakeProvider(tokens=["should", " not", " appear"])], snapshot_path=empty_snapshot_path,
+        db_conn, "Explain how caching works", providers=[FakeProvider(tokens=["should", " not", " appear"])],
     )
     assert calls["stage_03"] == 1  # not called again
     assert second["response_text"] == "cached answer"
     assert second["stage_hints"]["cache_hit"] is True
 
 
-def test_stage_0_context_depth_modifier_is_passed_to_stage_7(db_conn, empty_snapshot_path, monkeypatch):
+def test_stage_0_context_depth_modifier_is_passed_to_stage_7(db_conn, monkeypatch):
     # Stage 0's context_depth_modifier used to be computed and discarded - this
     # confirms the orchestrator actually forwards it to Stage 7, not just that
     # Stage 7 knows how to use it in isolation (already covered by
@@ -236,13 +231,14 @@ def test_stage_0_context_depth_modifier_is_passed_to_stage_7(db_conn, empty_snap
 
     monkeypatch.setattr(pipeline.stage_07, "run", capturing_stage_07)
 
-    pipeline.run_sync(db_conn, "hello", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    pipeline.run_sync(db_conn, "hello", providers=[FakeProvider()])
 
-    # empty_snapshot_path -> Stage 0 fails open to a first-run gap -> modifier 0.
+    # A fresh db_conn has no session_snapshot row -> Stage 0 fails open to a
+    # first-run gap -> modifier 0.
     assert captured["context_depth_modifier"] == 0
 
 
-def test_project_question_is_never_cached(db_conn, empty_snapshot_path):
+def test_project_question_is_never_cached(db_conn):
     db_conn.execute(
         "INSERT INTO active_projects (project_id, name, description, status, last_active) "
         "VALUES ('p1', 'InventorySync', 'sync service', 'active', '2026-01-01T00:00:00Z')"
@@ -250,12 +246,12 @@ def test_project_question_is_never_cached(db_conn, empty_snapshot_path):
     db_conn.commit()
 
     first = pipeline.run_sync(
-        db_conn, "How is InventorySync going?", providers=[FakeProvider(tokens=["first answer"])], snapshot_path=empty_snapshot_path,
+        db_conn, "How is InventorySync going?", providers=[FakeProvider(tokens=["first answer"])],
     )
     assert first["status"] == "success"
 
     second = pipeline.run_sync(
-        db_conn, "How is InventorySync going?", providers=[FakeProvider(tokens=["second answer"])], snapshot_path=empty_snapshot_path,
+        db_conn, "How is InventorySync going?", providers=[FakeProvider(tokens=["second answer"])],
     )
     # project_question has TTL 0 (never cache) - the second call must have
     # actually run again, not served a cached first answer.
