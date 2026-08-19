@@ -190,10 +190,13 @@ def test_ws_chat_connection_closes_db_on_disconnect(monkeypatch, token):
     # The client-side socket closing doesn't guarantee the server's finally:
     # block (an async task reacting to the disconnect) has run yet - under load
     # (e.g. the full suite vs. this test in isolation) that race is real, not
-    # hypothetical: this assertion flaked when the full suite ran concurrently.
-    # Poll briefly instead of asserting immediately.
+    # hypothetical: this assertion flaked at 2.0s under full-suite load (the
+    # suite has grown since that ceiling was picked), reproducing twice in a
+    # row rather than being a one-off. Bumped to 10s - the poll still returns
+    # the instant the flag flips, so this only costs time in the genuine-
+    # failure case, not the normal-pass case.
     import time
-    deadline = time.monotonic() + 2.0
+    deadline = time.monotonic() + 10.0
     while not closed["value"] and time.monotonic() < deadline:
         time.sleep(0.05)
 
