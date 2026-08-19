@@ -399,13 +399,6 @@ try:
     # tool/validate_live.dart run passed cleanly despite the bug being real.
     from fastapi.middleware.cors import CORSMiddleware
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=_ALLOWED_ORIGIN_RE.pattern,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
     # Security fix: every /api/v1/* route was reachable with zero
     # authentication - CORS above stops a cross-origin script from *reading*
     # the response, it does nothing to stop the request from being sent and
@@ -440,6 +433,19 @@ try:
             return await call_next(request)
 
     app.add_middleware(TokenAuthMiddleware)
+
+    # Registered last so it's the OUTERMOST middleware (Starlette wraps in
+    # reverse add order) - it must see the browser's CORS preflight OPTIONS
+    # request before TokenAuthMiddleware does, or the preflight gets 401'd
+    # with no Access-Control-Allow-Origin header and the browser blocks the
+    # real request. Reproduced live: Flutter web client on :5173 against this
+    # backend on :8765 failed with a CORS console error until this reorder.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=_ALLOWED_ORIGIN_RE.pattern,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.websocket("/ws/chat")
     async def ws_chat(websocket: WebSocket):
