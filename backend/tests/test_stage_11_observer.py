@@ -69,19 +69,40 @@ def db_conn(tmp_path, db_key):
     db_path = str(tmp_path / "test.db")
     conn = get_connection(db_path, db_key=db_key)
     initialize_schema(conn)
+    # Rule 4's check now cross-verifies against provider_consent, not just
+    # get_model_info()["is_local"] - FakeProvider's provider_id="fake" has no
+    # seed row in config/provider_consent.json (only ollama/web_search do),
+    # so every test using it needs one here, marked local (is_cloud=0).
+    conn.execute(
+        "INSERT INTO provider_consent (provider_id, is_cloud, user_consented, consent_scope, revoked) "
+        "VALUES ('fake', 0, 1, 'full_inference', 0)"
+    )
+    conn.commit()
     yield conn
     conn.close()
 
 
-def test_run_requires_local_provider():
+def test_run_requires_local_provider(db_conn):
     provider = FakeProvider(is_local=False)
     with pytest.raises(observer.ObserverLocalProviderError):
-        observer.run("transcript", provider)
+        observer.run("transcript", provider, db_conn)
 
 
-def test_run_extracts_and_sanitizes_candidates():
+def test_run_requires_a_provider_consent_row_even_if_self_reported_local(db_conn):
+    # Security regression test: a provider claiming is_local=True is not
+    # enough on its own - if provider_consent has no row for its provider_id
+    # (or marks it as cloud), Observer must still refuse, fail-closed, the
+    # same posture Stage 8 already uses for unknown providers.
+    db_conn.execute("DELETE FROM provider_consent WHERE provider_id = 'fake'")
+    db_conn.commit()
+    provider = FakeProvider(is_local=True)
+    with pytest.raises(observer.ObserverLocalProviderError):
+        observer.run("transcript", provider, db_conn)
+
+
+def test_run_extracts_and_sanitizes_candidates(db_conn):
     provider = FakeProvider(response_text=json.dumps(VALID_RESPONSE))
-    result = observer.run("transcript", provider)
+    result = observer.run("transcript", provider, db_conn)
 
     assert len(result["memory_candidates"]) == 1
     candidate = result["memory_candidates"][0]
@@ -97,36 +118,36 @@ def test_run_extracts_and_sanitizes_candidates():
     assert "snapshot_date" in result["session_snapshot"]
 
 
-def test_run_handles_markdown_fenced_json():
+def test_run_handles_markdown_fenced_json(db_conn):
     fenced = "```json\n" + json.dumps(VALID_RESPONSE) + "\n```"
     provider = FakeProvider(response_text=fenced)
-    result = observer.run("transcript", provider)
+    result = observer.run("transcript", provider, db_conn)
     assert len(result["memory_candidates"]) == 1
 
 
-def test_run_fails_open_on_invalid_json():
+def test_run_fails_open_on_invalid_json(db_conn):
     provider = FakeProvider(response_text="not json at all")
-    result = observer.run("transcript", provider)
+    result = observer.run("transcript", provider, db_conn)
     assert result["memory_candidates"] == []
     assert result["decision_candidates"] == []
     assert result["session_snapshot"]["topic"] == ""
 
 
-def test_run_fails_open_on_provider_unavailable():
+def test_run_fails_open_on_provider_unavailable(db_conn):
     provider = FakeProvider(raise_error=ProviderUnavailableError("ollama down"))
-    result = observer.run("transcript", provider)
+    result = observer.run("transcript", provider, db_conn)
     assert result["memory_candidates"] == []
     assert result["decision_candidates"] == []
     assert result["session_snapshot"]["topic"] == ""
 
 
-def test_run_fails_open_on_provider_execution_error():
+def test_run_fails_open_on_provider_execution_error(db_conn):
     provider = FakeProvider(raise_error=ProviderExecutionError("bad response"))
-    result = observer.run("transcript", provider)
+    result = observer.run("transcript", provider, db_conn)
     assert result["memory_candidates"] == []
 
 
-def test_run_coerces_non_string_snapshot_list_items():
+def test_run_coerces_non_string_snapshot_list_items(db_conn):
     # Found live against real llama3.1:8b: last_decisions sometimes comes back as a
     # list of full decision objects instead of plain strings.
     response = {
@@ -143,19 +164,19 @@ def test_run_coerces_non_string_snapshot_list_items():
         },
     }
     provider = FakeProvider(response_text=json.dumps(response))
-    result = observer.run("transcript", provider)
+    result = observer.run("transcript", provider, db_conn)
     assert result["session_snapshot"]["last_decisions"] == ["Chose FastAPI", "a plain string decision"]
     assert result["session_snapshot"]["open_problems"] == ["a plain string problem"]
 
 
-def test_run_drops_candidate_with_missing_keys():
+def test_run_drops_candidate_with_missing_keys(db_conn):
     response = {
         "memory_candidates": [{"target_table": "preference_memory", "label": "explicit"}],  # missing field_name/proposed_value
         "decision_candidates": [],
         "session_snapshot": {},
     }
     provider = FakeProvider(response_text=json.dumps(response))
-    result = observer.run("transcript", provider)
+    result = observer.run("transcript", provider, db_conn)
     assert result["memory_candidates"] == []
 
 

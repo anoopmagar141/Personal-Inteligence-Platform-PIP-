@@ -113,15 +113,47 @@ def test_no_consented_providers_short_circuits_before_stage_9(db_conn, empty_sna
     assert "No consented provider" in events[-1]["data"].get("response_text", "") or events[-1]["data"]["status"] == "error"
 
 
-def test_web_search_only_fires_on_trigger_keywords(db_conn, empty_snapshot_path, monkeypatch):
+def test_web_search_blocked_without_consent_even_on_trigger_keywords(db_conn, empty_snapshot_path, monkeypatch):
+    # Security regression test: config/provider_consent.json seeds web_search
+    # with user_consented=0 by default - a trigger-keyword match alone must
+    # NOT be enough to fire a real search before consent is granted.
     calls = []
     monkeypatch.setattr(pipeline.stage_06, "run", lambda *a, **kw: calls.append(a) or [{"title": "t", "url": "u", "snippet": "s"}])
+
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    assert len(calls) == 0
+
+
+def test_web_search_fires_on_trigger_keywords_once_consented(db_conn, empty_snapshot_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(pipeline.stage_06, "run", lambda *a, **kw: calls.append(a) or [{"title": "t", "url": "u", "snippet": "s"}])
+    db_conn.execute(
+        "UPDATE provider_consent SET user_consented = 1 WHERE provider_id = 'web_search'"
+    )
+    db_conn.commit()
 
     pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
     assert len(calls) == 1
 
     calls.clear()
     pipeline.run_sync(db_conn, "Explain how a hash table works", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    assert len(calls) == 0
+
+
+def test_web_search_blocked_after_consent_revoked(db_conn, empty_snapshot_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(pipeline.stage_06, "run", lambda *a, **kw: calls.append(a) or [{"title": "t", "url": "u", "snippet": "s"}])
+    db_conn.execute(
+        "UPDATE provider_consent SET user_consented = 1, revoked = 0 WHERE provider_id = 'web_search'"
+    )
+    db_conn.commit()
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
+    assert len(calls) == 1
+
+    calls.clear()
+    db_conn.execute("UPDATE provider_consent SET revoked = 1 WHERE provider_id = 'web_search'")
+    db_conn.commit()
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], snapshot_path=empty_snapshot_path)
     assert len(calls) == 0
 
 

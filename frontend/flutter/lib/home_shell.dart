@@ -33,7 +33,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
-    _chatClient = WsChatClient(_wsUrlFromApiBase(widget.api.baseUrl));
+    _chatClient = WsChatClient(_wsUrlFromApiBase(widget.api.baseUrl), apiToken: widget.api.apiToken);
     _chatClient.status.listen((status) {
       if (mounted) setState(() => _connectionStatus = status);
     });

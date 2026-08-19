@@ -24,11 +24,16 @@ class ApiException implements Exception {
 
 class ApiClient {
   final String baseUrl; // e.g. http://127.0.0.1:8765/api/v1
+  // Security fix: every /api/v1/* route now requires this (see
+  // backend/core/auth.py) - PIP prints a ready-to-use token at startup.
+  final String apiToken;
 
-  ApiClient(this.baseUrl);
+  ApiClient(this.baseUrl, {this.apiToken = ''});
 
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('$baseUrl$path').replace(queryParameters: query);
+
+  Map<String, String> get _authHeaders => {'X-PIP-Token': apiToken};
 
   dynamic _decode(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -39,14 +44,14 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
-    final response = await http.get(_uri(path, query));
+    final response = await http.get(_uri(path, query), headers: _authHeaders);
     return _decode(response);
   }
 
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) async {
     final response = await http.post(
       _uri(path),
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', ..._authHeaders},
       body: jsonEncode(body ?? {}),
     );
     return _decode(response);
@@ -55,14 +60,14 @@ class ApiClient {
   Future<dynamic> patch(String path, [Map<String, dynamic>? body]) async {
     final response = await http.patch(
       _uri(path),
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', ..._authHeaders},
       body: jsonEncode(body ?? {}),
     );
     return _decode(response);
   }
 
   Future<dynamic> delete(String path) async {
-    final response = await http.delete(_uri(path));
+    final response = await http.delete(_uri(path), headers: _authHeaders);
     return _decode(response);
   }
 

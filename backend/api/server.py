@@ -1,11 +1,12 @@
 import asyncio
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Union
 
 from backend.config.settings import get_settings
-from backend.core import pipeline, session_lifecycle
+from backend.core import auth, pipeline, session_lifecycle
 from backend.memory import decision_log, profile_store, vector_store
 from backend.providers.ollama_provider import OllamaProvider
 from backend.stages import stage_08_provider_gate as provider_gate
@@ -19,6 +20,10 @@ BASE_PREFIX = "/api/v1"
 DEFAULT_DB_PATH = Path(__file__).parent.parent.parent / "data" / "pip.db"
 
 VALID_CONSENT_SCOPES = {"full_inference", "web_search_only", "embedding_only", "none"}
+
+# Shared by CORSMiddleware (REST) and ws_chat()'s own manual check (WS upgrades
+# never go through CORSMiddleware at all - it's HTTP-only in Starlette).
+_ALLOWED_ORIGIN_RE = re.compile(r"http://(localhost|127\.0\.0\.1)(:\d+)?")
 
 
 def open_app_connection(db_path: str | None = None, db_key: str | None = None):
@@ -336,6 +341,12 @@ try:
     def _conn():
         return open_app_connection(os.environ.get("PIP_DB_PATH"), os.environ.get("PIP_DB_KEY"))
 
+    def _token_path() -> Path | None:
+        # Test isolation, same pattern as PIP_DB_PATH - unset means "use the
+        # real persisted token in data/api_token" (production behavior).
+        override = os.environ.get("PIP_TOKEN_PATH")
+        return Path(override) if override else None
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Startup: drain any pending_observer rows a previous shutdown left behind
@@ -350,6 +361,13 @@ try:
             logger.error(f"Startup pending_observer drain failed, continuing anyway: {e}")
         finally:
             startup_conn.close()
+
+        token = auth.get_or_create_token(_token_path())
+        logger.info(
+            "PIP is ready. Every /api/v1/* call and /ws/chat connection needs this token "
+            f"(header X-PIP-Token, or ?token= on the WS URL): {token}\n"
+            f"Web client: http://127.0.0.1:8765/?token={token}"
+        )
 
         yield
 
@@ -384,10 +402,35 @@ try:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_origin_regex=_ALLOWED_ORIGIN_RE.pattern,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Security fix: every /api/v1/* route was reachable with zero
+    # authentication - CORS above stops a cross-origin script from *reading*
+    # the response, it does nothing to stop the request from being sent and
+    # having side effects (the classic CSRF gap). A single middleware here
+    # covers every current and future route under BASE_PREFIX uniformly,
+    # rather than adding a Depends() to ~20 individual route functions one at
+    # a time and risking missing one. The WS route is handled separately
+    # inside ws_chat() itself - BaseHTTPMiddleware only sees HTTP requests,
+    # not the WebSocket upgrade. Static file serving (the "/" mount below)
+    # deliberately stays open - it's just the JS/HTML/CSS bundle, not
+    # sensitive, and the client needs to load it before it has anywhere to
+    # read the token from.
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import JSONResponse
+
+    class TokenAuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            if request.url.path.startswith(BASE_PREFIX):
+                provided = request.headers.get("x-pip-token")
+                if not auth.verify_token(provided, _token_path()):
+                    return JSONResponse({"detail": "missing or invalid X-PIP-Token header"}, status_code=401)
+            return await call_next(request)
+
+    app.add_middleware(TokenAuthMiddleware)
 
     @app.websocket("/ws/chat")
     async def ws_chat(websocket: WebSocket):
@@ -396,6 +439,31 @@ try:
         # for the connection's lifetime, matching pipeline.py's own note that there
         # is no message-history table - the caller owns that state, and here the
         # caller is this connection.
+        #
+        # Security fix: TokenAuthMiddleware only sees HTTP requests, not the WS
+        # upgrade, so this connection had zero auth of its own. Browser
+        # WebSocket clients can't set custom headers on connect, so the token
+        # travels as a query param instead (?token=...) - checked, and the
+        # socket refused via close() BEFORE accept(), rather than accepting
+        # and then closing, so an unauthenticated caller never gets a live
+        # connection at all.
+        if not auth.verify_token(websocket.query_params.get("token"), _token_path()):
+            await websocket.close(code=4401, reason="missing or invalid token")
+            return
+
+        # Defense in depth alongside the token check above: CORSMiddleware
+        # never applied to the WS upgrade at all (a separate gap from the
+        # missing-auth one - it's HTTP-only in Starlette), so there was no
+        # origin check here whatsoever. A leaked token (logs, shoulder-surfed
+        # URL, browser history) would otherwise still work from any origin.
+        # No Origin header at all is accepted - non-browser clients
+        # (tool/validate_live.dart's raw WebSocketChannel, a native desktop
+        # build) generally don't send one; only a *present but mismatched*
+        # Origin is rejected.
+        origin = websocket.headers.get("origin")
+        if origin and not _ALLOWED_ORIGIN_RE.match(origin):
+            await websocket.close(code=4403, reason="origin not allowed")
+            return
         await websocket.accept()
         loop = asyncio.get_event_loop()
         # Dedicated single-worker executor: conn is opened here and must only ever

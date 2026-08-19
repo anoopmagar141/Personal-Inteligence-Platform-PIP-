@@ -22,6 +22,10 @@ class ChatEvent {
 
 class WsChatClient {
   final String wsUrl;
+  // Security fix: /ws/chat now requires ?token=... on every connection (see
+  // backend/core/auth.py) - a browser WebSocket client can't set custom
+  // headers on connect, so the token travels as a query param instead.
+  final String apiToken;
   final Duration reconnectDelay;
 
   WebSocketChannel? _channel;
@@ -34,13 +38,14 @@ class WsChatClient {
   Stream<ChatEvent> get events => _eventController.stream;
   Stream<String> get status => _statusController.stream;
 
-  WsChatClient(this.wsUrl, {this.reconnectDelay = const Duration(seconds: 2)});
+  WsChatClient(this.wsUrl, {this.apiToken = '', this.reconnectDelay = const Duration(seconds: 2)});
 
   void connect() {
     if (_disposed) return;
     _statusController.add('connecting');
     try {
-      final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      final uri = Uri.parse(wsUrl).replace(queryParameters: {'token': apiToken});
+      final channel = WebSocketChannel.connect(uri);
       _channel = channel;
       _subscription = channel.stream.listen(
         (raw) {

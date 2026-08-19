@@ -15,6 +15,14 @@ def conn(tmp_path):
     connection.close()
 
 
+def test_get_connection_rejects_non_hex_db_key(tmp_path):
+    # Security regression test: this used to be `assert re.fullmatch(...)`,
+    # which python -O/-OO strip out entirely, silently letting a non-hex
+    # db_key reach the f-string-built PRAGMA key statement unchecked.
+    with pytest.raises(ValueError, match="hex-encoded"):
+        profile_store.get_connection(str(tmp_path / "pip.db"), db_key="not-hex!!")
+
+
 def test_onboarding_writes_identity_profile_and_completion_flag(conn):
     message = profile_store.complete_onboarding(
         conn,

@@ -3,13 +3,17 @@
 // lib/ uses) against a live PIP backend to prove the Flutter client's REST
 // and WS logic actually works end-to-end, not just against a fake.
 //
-// Usage: dart run tool/validate_live.dart
+// Usage: dart run tool/validate_live.dart --define=PIP_API_TOKEN=<token>
+// (or: PIP_API_TOKEN=<token> dart run tool/validate_live.dart, both read the
+// same way since this isn't a `flutter run` invocation with --dart-define).
 // Requires: a real `uvicorn backend.api.server:app` already running and
-// reachable at kApiBase/kWsUrl below.
+// reachable at kApiBase/kWsUrl below. The token is whatever PIP printed at
+// its own startup (backend/core/auth.py) - copy it from the server's log.
 
 // ignore_for_file: avoid_print
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:pip_flutter_client/api_client.dart';
 import 'package:pip_flutter_client/ws_chat_client.dart';
@@ -18,7 +22,12 @@ const apiBase = 'http://127.0.0.1:8765/api/v1';
 const wsUrl = 'ws://127.0.0.1:8765/ws/chat';
 
 Future<void> main() async {
-  final api = ApiClient(apiBase);
+  final apiToken = Platform.environment['PIP_API_TOKEN'] ?? '';
+  if (apiToken.isEmpty) {
+    print('Set PIP_API_TOKEN to the value PIP printed at startup, then re-run.');
+    exit(1);
+  }
+  final api = ApiClient(apiBase, apiToken: apiToken);
   var failures = 0;
 
   Future<void> check(String label, Future<void> Function() body) async {
@@ -114,7 +123,7 @@ Future<void> main() async {
   });
 
   await check('WS chat: real streamed response with stage hints', () async {
-    final client = WsChatClient(wsUrl, reconnectDelay: const Duration(seconds: 999));
+    final client = WsChatClient(wsUrl, apiToken: apiToken, reconnectDelay: const Duration(seconds: 999));
     final connected = Completer<void>();
     final done = Completer<void>();
     final tokens = StringBuffer();

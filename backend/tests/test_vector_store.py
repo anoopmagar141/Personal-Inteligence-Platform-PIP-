@@ -20,9 +20,21 @@ def isolated_chroma(tmp_path, monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def isolated_documents_root(tmp_path, monkeypatch):
+    # ingest_document() now rejects any file_path outside DOCUMENTS_ROOT
+    # (arbitrary-file-read fix) - without this, every test here would need a
+    # file physically inside the real project's data/documents/, and would
+    # fail against the real default root entirely in CI.
+    root = tmp_path / "documents"
+    root.mkdir()
+    monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", root)
+    return root
+
+
 @pytest.fixture
-def sample_doc(tmp_path):
-    doc_path = tmp_path / "notes.txt"
+def sample_doc(isolated_documents_root):
+    doc_path = isolated_documents_root / "notes.txt"
     doc_path.write_text(
         "PIP uses SQLCipher for encrypted storage. "
         "ChromaDB is the vector index for RAG and is never authoritative. "
@@ -56,8 +68,8 @@ def test_reingest_unchanged_file_is_noop(db_conn, sample_doc):
     assert db_conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 1
 
 
-def test_reingest_changed_file_replaces_chunks(db_conn, tmp_path):
-    doc_path = tmp_path / "notes.txt"
+def test_reingest_changed_file_replaces_chunks(db_conn, isolated_documents_root):
+    doc_path = isolated_documents_root / "notes.txt"
     doc_path.write_text("Original content about FastAPI.", encoding="utf-8")
     vector_store.ingest_document(db_conn, str(doc_path))
 
@@ -115,15 +127,47 @@ def test_rebuild_reports_missing_file_as_failed(db_conn, sample_doc, tmp_path):
     assert result["failed"][0]["file_path"] == sample_doc
 
 
-def test_unsupported_extension_raises(db_conn, tmp_path):
-    bad_file = tmp_path / "notes.docx"
+def test_unsupported_extension_raises(db_conn, isolated_documents_root):
+    bad_file = isolated_documents_root / "notes.docx"
     bad_file.write_text("irrelevant", encoding="utf-8")
     with pytest.raises(ValueError):
         vector_store.ingest_document(db_conn, str(bad_file))
 
 
-def test_oversized_document_raises(db_conn, tmp_path):
-    big_file = tmp_path / "big.txt"
+def test_oversized_document_raises(db_conn, isolated_documents_root):
+    big_file = isolated_documents_root / "big.txt"
     big_file.write_text("x", encoding="utf-8")
     with pytest.raises(ValueError, match="exceeds max_document_size_mb"):
         vector_store.ingest_document(db_conn, str(big_file), max_document_size_mb=0)
+
+
+def test_ingest_rejects_file_outside_documents_root(db_conn, tmp_path, isolated_documents_root):
+    # Security regression test: file_path must resolve inside DOCUMENTS_ROOT.
+    # Before this fix, ingest_document() would happily read and embed any
+    # file the process could access, with no auth on the endpoint that calls
+    # it - a full arbitrary local file read chained with exfiltration via
+    # rag/query.
+    outside_file = tmp_path / "outside_root.txt"
+    outside_file.write_text("secret content that should never be embedded", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must resolve inside"):
+        vector_store.ingest_document(db_conn, str(outside_file))
+
+
+def test_ingest_rejects_path_traversal_out_of_documents_root(db_conn, tmp_path, isolated_documents_root):
+    outside_file = tmp_path / "outside_root.txt"
+    outside_file.write_text("secret content", encoding="utf-8")
+    traversal_path = isolated_documents_root / ".." / "outside_root.txt"
+
+    with pytest.raises(ValueError, match="must resolve inside"):
+        vector_store.ingest_document(db_conn, str(traversal_path))
+
+
+def test_ingest_accepts_file_in_documents_root_subdirectory(db_conn, isolated_documents_root):
+    subdir = isolated_documents_root / "project_notes"
+    subdir.mkdir()
+    doc_path = subdir / "notes.txt"
+    doc_path.write_text("Notes about the RAG pipeline and SQLCipher.", encoding="utf-8")
+
+    result = vector_store.ingest_document(db_conn, str(doc_path))
+    assert result["status"] == "ingested"

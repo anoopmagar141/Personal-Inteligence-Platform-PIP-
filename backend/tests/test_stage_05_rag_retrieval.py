@@ -21,13 +21,24 @@ def isolated_chroma(tmp_path, monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def isolated_documents_root(tmp_path, monkeypatch):
+    # ingest_document() rejects any file_path outside DOCUMENTS_ROOT
+    # (arbitrary-file-read fix) - documents ingested by these tests must
+    # actually live inside the (isolated) root.
+    root = tmp_path / "documents"
+    root.mkdir()
+    monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", root)
+    return root
+
+
 def test_run_returns_empty_when_no_documents_ingested(db_conn):
     result = stage_05.run(db_conn, "anything")
     assert result == {"chunks": [], "conflict_flag": False}
 
 
-def test_run_returns_matching_chunks(db_conn, tmp_path):
-    doc = tmp_path / "notes.txt"
+def test_run_returns_matching_chunks(db_conn, isolated_documents_root):
+    doc = isolated_documents_root / "notes.txt"
     doc.write_text("We chose FastAPI over Flask for async support.", encoding="utf-8")
     vector_store.ingest_document(db_conn, str(doc))
 
@@ -35,14 +46,14 @@ def test_run_returns_matching_chunks(db_conn, tmp_path):
     assert len(result["chunks"]) >= 1
 
 
-def test_run_flags_conflict_when_chunk_overlaps_active_decision(db_conn, tmp_path):
+def test_run_flags_conflict_when_chunk_overlaps_active_decision(db_conn, isolated_documents_root):
     db_conn.execute(
         "INSERT INTO decision_log (decision_text, reasoning, confidence, state, created_at) "
         "VALUES ('We chose FastAPI for the inventory service', 'async support needed', 0.7, 'active', '2026-01-01T00:00:00Z')"
     )
     db_conn.commit()
 
-    doc = tmp_path / "notes.txt"
+    doc = isolated_documents_root / "notes.txt"
     doc.write_text("The inventory service actually ended up using Flask instead of FastAPI in production.", encoding="utf-8")
     vector_store.ingest_document(db_conn, str(doc))
 
@@ -50,14 +61,14 @@ def test_run_flags_conflict_when_chunk_overlaps_active_decision(db_conn, tmp_pat
     assert result["conflict_flag"] is True
 
 
-def test_run_no_conflict_when_no_overlap(db_conn, tmp_path):
+def test_run_no_conflict_when_no_overlap(db_conn, isolated_documents_root):
     db_conn.execute(
         "INSERT INTO decision_log (decision_text, reasoning, confidence, state, created_at) "
         "VALUES ('We chose FastAPI for the inventory service', 'async support needed', 0.7, 'active', '2026-01-01T00:00:00Z')"
     )
     db_conn.commit()
 
-    doc = tmp_path / "notes.txt"
+    doc = isolated_documents_root / "notes.txt"
     doc.write_text("Neovim's modal editing took about a week to get used to.", encoding="utf-8")
     vector_store.ingest_document(db_conn, str(doc))
 

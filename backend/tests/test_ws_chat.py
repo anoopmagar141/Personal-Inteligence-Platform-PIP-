@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import server
-from backend.core import trace
+from backend.core import auth, trace
 
 
 @pytest.fixture(autouse=True)
@@ -12,6 +12,19 @@ def isolated_db(tmp_path, monkeypatch):
     monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
     monkeypatch.delenv("PIP_DB_KEY", raising=False)  # plain sqlite for tests, no key needed
     yield
+
+
+@pytest.fixture(autouse=True)
+def token(tmp_path, monkeypatch):
+    # The WS route now requires ?token=... on every connection (security
+    # fix - it used to accept any connection at all). isolated per test, same
+    # pattern as PIP_DB_PATH.
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
+    return auth.get_or_create_token(tmp_path / "api_token")
+
+
+def ws_url(token: str) -> str:
+    return f"/ws/chat?token={token}"
 
 
 @pytest.fixture(autouse=True)
@@ -47,11 +60,53 @@ def _fake_pipeline_events(response_text="Hello there"):
     yield {"type": "pipeline_complete", "data": {"trace_id": "t1", "response_text": response_text + " ", "status": "success", "stage_hints": {}}}
 
 
-def test_ws_chat_streams_events_and_hides_pipeline_complete(monkeypatch):
+def test_ws_chat_rejects_connection_without_token(monkeypatch):
+    # Security regression test: /ws/chat used to accept any connection at
+    # all - no auth on either transport.
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+    client = TestClient(server.app)
+    with pytest.raises(Exception):
+        with client.websocket_connect("/ws/chat"):
+            pass
+
+
+def test_ws_chat_rejects_connection_with_wrong_token(monkeypatch):
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+    client = TestClient(server.app)
+    with pytest.raises(Exception):
+        with client.websocket_connect("/ws/chat?token=wrong-token"):
+            pass
+
+
+def test_ws_chat_rejects_mismatched_origin_even_with_a_valid_token(monkeypatch, token):
+    # Defense in depth alongside the token: CORSMiddleware never covers the WS
+    # upgrade at all (HTTP-only in Starlette), so there was no origin check
+    # here whatsoever before this fix - a leaked token would otherwise still
+    # work from anywhere.
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+    client = TestClient(server.app)
+    with pytest.raises(Exception):
+        with client.websocket_connect(ws_url(token), headers={"origin": "http://evil.example.com"}):
+            pass
+
+
+def test_ws_chat_accepts_connection_with_no_origin_header(monkeypatch, token):
+    # Non-browser clients (a raw WebSocketChannel, tool/validate_live.dart)
+    # generally don't send an Origin header at all - only a present-but-
+    # mismatched Origin should be rejected, not a missing one.
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+    client = TestClient(server.app)
+    with client.websocket_connect(ws_url(token)) as ws:
+        ws.send_json({"message": "hello"})
+        events = [ws.receive_json() for _ in range(4)]
+    assert events[0]["type"] == "stage_hint"
+
+
+def test_ws_chat_streams_events_and_hides_pipeline_complete(monkeypatch, token):
     monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events("Hi there"))
 
     client = TestClient(server.app)
-    with client.websocket_connect("/ws/chat") as ws:
+    with client.websocket_connect(ws_url(token)) as ws:
         ws.send_json({"message": "hello"})
         events = [ws.receive_json() for _ in range(4)]  # stage_hint + 2 tokens + done
 
@@ -60,17 +115,17 @@ def test_ws_chat_streams_events_and_hides_pipeline_complete(monkeypatch):
     assert "pipeline_complete" not in types  # internal sentinel never reaches the client
 
 
-def test_ws_chat_missing_message_sends_error(monkeypatch):
+def test_ws_chat_missing_message_sends_error(monkeypatch, token):
     monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
 
     client = TestClient(server.app)
-    with client.websocket_connect("/ws/chat") as ws:
+    with client.websocket_connect(ws_url(token)) as ws:
         ws.send_json({})
         event = ws.receive_json()
         assert event == {"type": "error", "data": "message is required"}
 
 
-def test_ws_chat_accumulates_conversation_history_across_turns(monkeypatch):
+def test_ws_chat_accumulates_conversation_history_across_turns(monkeypatch, token):
     captured_history = []
 
     def fake_run(conn, user_message, *, conversation_history=None, project_id=None, **kw):
@@ -80,7 +135,7 @@ def test_ws_chat_accumulates_conversation_history_across_turns(monkeypatch):
     monkeypatch.setattr(server.pipeline, "run", fake_run)
 
     client = TestClient(server.app)
-    with client.websocket_connect("/ws/chat") as ws:
+    with client.websocket_connect(ws_url(token)) as ws:
         ws.send_json({"message": "first"})
         for _ in range(4):
             ws.receive_json()
@@ -100,7 +155,7 @@ def test_ws_chat_accumulates_conversation_history_across_turns(monkeypatch):
     assert not any(m["content"] == "second" for m in captured_history[1])
 
 
-def test_ws_chat_connection_closes_db_on_disconnect(monkeypatch):
+def test_ws_chat_connection_closes_db_on_disconnect(monkeypatch, token):
     # sqlite3.Connection's methods are read-only C-extension attributes - can't
     # monkeypatch .close directly onto the instance. Wrap it in a delegating proxy
     # instead, same workaround needed for sqlcipher3.dbapi2.Connection elsewhere
@@ -127,7 +182,7 @@ def test_ws_chat_connection_closes_db_on_disconnect(monkeypatch):
     monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
 
     client = TestClient(server.app)
-    with client.websocket_connect("/ws/chat") as ws:
+    with client.websocket_connect(ws_url(token)) as ws:
         ws.send_json({"message": "hello"})
         for _ in range(4):
             ws.receive_json()
@@ -145,7 +200,7 @@ def test_ws_chat_connection_closes_db_on_disconnect(monkeypatch):
     assert closed["value"] is True
 
 
-def test_idle_timeout_triggers_observer_and_clears_history(monkeypatch):
+def test_idle_timeout_triggers_observer_and_clears_history(monkeypatch, token):
     monkeypatch.setattr(server, "_idle_timeout_seconds", lambda: 0.05)
     monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
 
@@ -158,7 +213,7 @@ def test_idle_timeout_triggers_observer_and_clears_history(monkeypatch):
     monkeypatch.setattr(server.session_lifecycle, "run_observer_now", fake_run_observer_now)
 
     client = TestClient(server.app)
-    with client.websocket_connect("/ws/chat") as ws:
+    with client.websocket_connect(ws_url(token)) as ws:
         ws.send_json({"message": "hello"})
         for _ in range(4):
             ws.receive_json()
@@ -177,7 +232,7 @@ def test_idle_timeout_triggers_observer_and_clears_history(monkeypatch):
     ]
 
 
-def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch):
+def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch, token):
     # session_lifecycle.SessionRegistry's own mechanics (register/unregister/
     # snapshot, enqueue_for_shutdown) are covered in isolation by
     # test_session_lifecycle.py. What's specific to the WS route is that
@@ -202,7 +257,7 @@ def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch):
     monkeypatch.setattr(server._session_registry, "unregister", fake_unregister)
 
     client = TestClient(server.app)
-    with client.websocket_connect("/ws/chat") as ws:
+    with client.websocket_connect(ws_url(token)) as ws:
         ws.send_json({"message": "hello"})
         for _ in range(4):
             ws.receive_json()
@@ -235,12 +290,26 @@ def test_app_startup_drains_pending_observer(monkeypatch, tmp_path):
     db_path = str(tmp_path / "pip.db")
     monkeypatch.setenv("PIP_DB_PATH", db_path)
     monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    # Lifespan startup now also touches auth.get_or_create_token() - without
+    # this, TestClient's __enter__ below would read/write the real production
+    # data/api_token as a side effect of this test.
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
 
     # Seed a leftover pending_observer row (as if a previous shutdown enqueued
     # it) BEFORE the app starts, and patch the observer provider so startup
-    # drain doesn't make a real Ollama call.
+    # drain doesn't make a real Ollama call. FakeLocalProvider's provider_id
+    # "fake" also needs a provider_consent row now - stage_11's Rule 4 check
+    # cross-verifies is_local against it, not just the provider's own
+    # get_model_info() claim (security fix); without this row the drain would
+    # fail via ObserverLocalProviderError, which list_pending()=='' can't tell
+    # apart from a real successful drain (both remove the row from 'pending').
     seed_conn = server.open_app_connection(db_path, None)
     pending_observer.enqueue(seed_conn, "User: left over from last time\nAssistant: ok")
+    seed_conn.execute(
+        "INSERT INTO provider_consent (provider_id, is_cloud, user_consented, consent_scope, revoked) "
+        "VALUES ('fake', 0, 1, 'full_inference', 0)"
+    )
+    seed_conn.commit()
     seed_conn.close()
 
     class FakeLocalProvider:

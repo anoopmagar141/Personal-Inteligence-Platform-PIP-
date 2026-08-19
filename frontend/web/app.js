@@ -15,10 +15,17 @@ let ws = null;
 let currentProjectId = null;
 let pendingStageHints = null; // buffered, not rendered until "done"/"error"
 
+// Security fix: every /api/v1/* route and /ws/chat now require a token
+// (see backend/core/auth.py) - PIP prints a ready-to-use URL at startup,
+// e.g. http://127.0.0.1:8765/?token=<token>. Read once from the URL on
+// load and carried in memory for the rest of the session - never written to
+// localStorage/sessionStorage, so it doesn't outlive the tab.
+const API_TOKEN = new URLSearchParams(location.search).get("token") || "";
+
 // ---------------------------------------------------------------- API helpers
 
 async function apiGet(path) {
-  const res = await fetch(API_BASE + path);
+  const res = await fetch(API_BASE + path, { headers: { "X-PIP-Token": API_TOKEN } });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -26,7 +33,7 @@ async function apiGet(path) {
 async function apiPost(path, body) {
   const res = await fetch(API_BASE + path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-PIP-Token": API_TOKEN },
     body: JSON.stringify(body || {}),
   });
   if (!res.ok) throw new Error(await res.text());
@@ -36,7 +43,7 @@ async function apiPost(path, body) {
 async function apiPatch(path, body) {
   const res = await fetch(API_BASE + path, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-PIP-Token": API_TOKEN },
     body: JSON.stringify(body || {}),
   });
   if (!res.ok) throw new Error(await res.text());
@@ -95,7 +102,7 @@ async function submitOnboarding(event) {
 
 function connectChat() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${proto}//${location.host}/ws/chat`);
+  ws = new WebSocket(`${proto}//${location.host}/ws/chat?token=${encodeURIComponent(API_TOKEN)}`);
   const statusEl = document.getElementById("connection-status");
 
   ws.onopen = () => {

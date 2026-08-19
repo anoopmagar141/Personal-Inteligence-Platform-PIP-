@@ -116,7 +116,12 @@ def run(
     output and logs to trace_log rather than propagating.
     """
     trace_id = trace.generate_trace_id()
-    trace.stage_log(trace_id, "pipeline", "ok", f"Starting pipeline for message: {user_message[:80]!r}")
+    # Security fix: this used to log the first 80 chars of the raw message
+    # text. trace_log.json is a plain JSON file on disk, outside the
+    # SQLCipher boundary the rest of "structured data" gets - message content
+    # (names, anything the user types) doesn't belong there in plaintext.
+    # Length is still useful for debugging without carrying the content.
+    trace.stage_log(trace_id, "pipeline", "ok", f"Starting pipeline for message ({len(user_message)} chars)")
 
     # Stage 0
     try:
@@ -189,10 +194,26 @@ def run(
         rag_result = {"chunks": [], "conflict_flag": False}
     trace.stage_log(trace_id, "stage_05_rag_retrieval", "ok", f"{len(rag_result['chunks'])} chunks, conflict={rag_result['conflict_flag']}")
 
+    # Security fix: Stage 6 used to fire on trigger-keyword match alone, with no
+    # consent check at all - the ONLY gate ever applied was to the LLM provider
+    # list below (Stage 8 -> Stage 9), never to web_search. config/provider_consent.json
+    # documents "ADR-030: hard_stop gate at Stage 8" for web_search right in its
+    # seed comment - the code didn't do it. Default seed state is
+    # user_consented=0, so this fired for real, off a fresh install, before
+    # anyone had granted anything, and revoking consent had zero effect on
+    # whether searches actually happened. Fail-closed, same pattern as
+    # _gate_providers: a blocked/missing consent record means no search fires,
+    # not a degraded one.
     web_results: list[dict[str, Any]] = []
     try:
         if stage_06.matches_trigger(user_message):
-            web_results = stage_06.run(intent_result["retrieval_hint"] or user_message)
+            try:
+                stage_08.run(conn, "web_search", requested_scope="web_search_only")
+            except stage_08.ProviderConsentError as e:
+                trace.stage_log(trace_id, "stage_08_provider_gate", "error", "web_search blocked", error_detail=str(e))
+                logger.warning(f"Pipeline: web_search blocked by Stage 8: {e}")
+            else:
+                web_results = stage_06.run(intent_result["retrieval_hint"] or user_message)
     except Exception as e:
         logger.error(f"Pipeline: Stage 6 raised unexpectedly, returning empty: {e}")
     trace.stage_log(trace_id, "stage_06_web_search", "ok", f"{len(web_results)} results")

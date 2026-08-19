@@ -202,19 +202,39 @@ def _sanitize_snapshot(raw: Any) -> dict[str, Any]:
     }
 
 
-def run(transcript: str, provider: BaseLLMProvider) -> ObserverOutput:
+def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
     """
     Single-pass extraction over a full session transcript.
     Failure mode: fails open (Part 7 Stage 11 spec: "profile unchanged, snapshot not
     updated"). Any LLM/network failure or unparseable output returns an empty result
     rather than raising - the only exception is ObserverLocalProviderError, which is
     a caller programming error (Rule 4 violation), not a runtime failure.
+
+    conn is required for the Rule 4 check below - this used to trust
+    provider.get_model_info()["is_local"] alone, which is whatever the
+    provider CLASS itself self-reports (found in a security review: every
+    other trust decision in this codebase, Stage 8's gate included, anchors
+    is_cloud in the operator-controlled provider_consent DB table, never in
+    the provider object). A future or buggy BaseLLMProvider subclass
+    misreporting is_local=True while actually calling out to a cloud endpoint
+    would have sent the ENTIRE session transcript there, with this being the
+    only thing standing in the way. Now requires BOTH signals to agree the
+    provider is local - the self-report AND the verified DB record - and
+    fails closed (treats it as non-local) if the provider_id has no
+    provider_consent row at all, same fail-closed posture Stage 8 already
+    uses for unknown providers.
     """
     model_info = provider.get_model_info()
-    if not model_info.get("is_local"):
+    provider_id = model_info.get("provider_id")
+    row = conn.execute(
+        "SELECT is_cloud FROM provider_consent WHERE provider_id = ?", (provider_id,)
+    ).fetchone()
+    verified_local = row is not None and not bool(row["is_cloud"])
+    if not model_info.get("is_local") or not verified_local:
         raise ObserverLocalProviderError(
-            f"Observer requires a local provider; got provider_id={model_info.get('provider_id')!r} "
-            f"is_local={model_info.get('is_local')!r}"
+            f"Observer requires a local provider; got provider_id={provider_id!r} "
+            f"is_local={model_info.get('is_local')!r}, "
+            f"provider_consent.is_cloud={(None if row is None else bool(row['is_cloud']))!r}"
         )
 
     try:
@@ -264,7 +284,7 @@ def run_session_end(
     those are process-lifecycle concerns that need a running server (Phase 8). This
     is what a caller invokes once it has already decided the session has ended.
     """
-    output = run(transcript, provider)
+    output = run(transcript, provider, conn)
 
     session_snapshot.write_snapshot(snapshot_path, output["session_snapshot"])
 

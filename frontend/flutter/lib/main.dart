@@ -26,6 +26,11 @@ const String kWsUrl = String.fromEnvironment(
   'PIP_WS_URL',
   defaultValue: 'ws://127.0.0.1:8765/ws/chat',
 );
+// Security fix: every /api/v1/* route and /ws/chat now require this token
+// (see backend/core/auth.py) - PIP prints a ready-to-use value at startup.
+// No default: an empty token simply fails every request with 401/4401,
+// which is the correct behavior for "wasn't configured," not a silent bypass.
+const String kApiToken = String.fromEnvironment('PIP_API_TOKEN');
 
 void main() {
   runApp(const PipApp());
@@ -54,7 +59,7 @@ class AppRoot extends StatefulWidget {
 enum _RootState { loading, onboarding, error, ready }
 
 class _AppRootState extends State<AppRoot> {
-  final ApiClient api = ApiClient(kApiBase);
+  final ApiClient api = ApiClient(kApiBase, apiToken: kApiToken);
   _RootState _state = _RootState.loading;
   String? _errorMessage;
 

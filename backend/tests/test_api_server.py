@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import server
+from backend.core import auth
 from backend.memory import profile_store, vector_store
 
 
@@ -23,6 +24,14 @@ def isolated_chroma(tmp_path, monkeypatch):
     monkeypatch.setattr(vector_store, "_client", None)
     monkeypatch.setattr(vector_store, "_collection", None)
     yield
+
+
+@pytest.fixture(autouse=True)
+def isolated_documents_root(tmp_path, monkeypatch):
+    root = tmp_path / "documents"
+    root.mkdir()
+    monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", root)
+    return root
 
 
 def test_status_and_onboarding_api(conn):
@@ -135,29 +144,76 @@ def test_cors_allows_local_clients_on_other_ports(tmp_path, monkeypatch):
     # doesn't enforce - this is the missing link for a browser client.
     monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
     monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
+    token = auth.get_or_create_token(tmp_path / "api_token")
 
     client = TestClient(server.app)
-    response = client.get("/api/v1/status", headers={"Origin": "http://127.0.0.1:8091"})
+    response = client.get(
+        "/api/v1/status",
+        headers={"Origin": "http://127.0.0.1:8091", "X-PIP-Token": token},
+    )
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:8091"
 
 
-def test_rag_api(conn, tmp_path):
-    doc = tmp_path / "notes.txt"
+def test_rest_rejects_missing_token(tmp_path, monkeypatch):
+    # Security regression test: every /api/v1/* route must require the
+    # local API token - this used to have zero authentication at all.
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
+    auth.get_or_create_token(tmp_path / "api_token")
+
+    client = TestClient(server.app)
+    response = client.get("/api/v1/status")
+    assert response.status_code == 401
+
+
+def test_rest_rejects_wrong_token(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
+    auth.get_or_create_token(tmp_path / "api_token")
+
+    client = TestClient(server.app)
+    response = client.get("/api/v1/status", headers={"X-PIP-Token": "wrong-token"})
+    assert response.status_code == 401
+
+
+def test_rest_accepts_valid_token_on_a_mutating_route(tmp_path, monkeypatch):
+    # POST, not just the GET the other two tests exercise - confirms the
+    # middleware covers write routes too, not just reads.
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
+    token = auth.get_or_create_token(tmp_path / "api_token")
+
+    client = TestClient(server.app)
+    response = client.post(
+        "/api/v1/onboarding/complete",
+        json={"name": "BatMan", "language_preference": "English"},
+        headers={"X-PIP-Token": token},
+    )
+    assert response.status_code == 200
+
+
+def test_rag_api(conn, isolated_documents_root):
+    doc = isolated_documents_root / "notes.txt"
     doc.write_text("PIP uses SQLCipher for encrypted storage.", encoding="utf-8")
+    resolved_doc = str(doc.resolve())
 
     ingested = server.api_ingest_document(conn, {"file_path": str(doc)})
     assert ingested["status"] == "ingested"
 
     docs = server.api_list_documents(conn)
     assert len(docs) == 1
-    assert docs[0]["file_path"] == str(doc)
+    assert docs[0]["file_path"] == resolved_doc
 
     matches = server.api_query_rag(conn, {"query": "encrypted storage", "threshold": 0.1})
     assert len(matches) >= 1
 
-    removed = server.api_delete_document(conn, str(doc))
+    removed = server.api_delete_document(conn, resolved_doc)
     assert removed["status"] == "removed"
     assert server.api_list_documents(conn) == []
 
@@ -175,3 +231,14 @@ def test_rag_api_missing_query_raises(conn):
 def test_rag_api_delete_nonexistent_raises(conn):
     with pytest.raises(ValueError):
         server.api_delete_document(conn, "/no/such/file.txt")
+
+
+def test_rag_api_ingest_rejects_file_outside_documents_root(conn, tmp_path, isolated_documents_root):
+    # Security regression test at the REST-handler layer, not just
+    # vector_store directly - this is the actual unauthenticated endpoint an
+    # attacker would hit.
+    outside_file = tmp_path / "outside_root.txt"
+    outside_file.write_text("secret", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must resolve inside"):
+        server.api_ingest_document(conn, {"file_path": str(outside_file)})

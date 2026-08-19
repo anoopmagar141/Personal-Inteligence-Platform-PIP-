@@ -19,8 +19,12 @@ DEFAULT_INTERACTION_STYLE = "adaptive"
 
 
 def get_connection(db_path: str, db_key: str | None = None):
-    if db_key is not None:
-        assert re.fullmatch(r"[0-9a-fA-F]+", db_key), "db_key must be hex-encoded"
+    # Was `assert re.fullmatch(...)` - assert statements are compiled out
+    # entirely under `python -O`/`-OO` (security review finding), which would
+    # silently drop this validation and let db_key reach the f-string PRAGMA
+    # below unchecked. An explicit raise survives every optimization level.
+    if db_key is not None and not re.fullmatch(r"[0-9a-fA-F]+", db_key):
+        raise ValueError("db_key must be hex-encoded")
 
     if db_key is not None:
         if sqlcipher3 is None:

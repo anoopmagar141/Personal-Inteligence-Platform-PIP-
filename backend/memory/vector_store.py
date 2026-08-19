@@ -40,6 +40,19 @@ COLLECTION_NAME = "documents"
 
 SUPPORTED_EXTENSIONS = {".pdf", ".md", ".txt", ".py", ".json", ".html"}
 
+# Security fix: ingest_document() used to pass file_path straight into
+# Path(file_path).stat()/.read_text()/PdfReader(file_path) with no validation
+# at all - any caller (and this endpoint has no auth - see server.py) could
+# make PIP read and embed an arbitrary file from anywhere the process can
+# access (SSH keys, credential files, source with secrets in it - the
+# SUPPORTED_EXTENSIONS allowlist doesn't meaningfully block this, since .txt/
+# .json/.py cover most of what an attacker would actually want). The embedded
+# content then sits in ChromaDB, retrievable via the equally unauthenticated
+# rag/query endpoint or surfacing on its own in later chat answers. Every
+# ingest now must resolve inside this directory - files the user wants
+# indexed have to actually be placed here first.
+DOCUMENTS_ROOT = Path(__file__).parent.parent.parent / "data" / "documents"
+
 _client = None
 _collection = None
 _model = None
@@ -110,6 +123,24 @@ def _content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _validate_file_path(file_path: str) -> Path:
+    """
+    Resolves file_path and rejects anything outside DOCUMENTS_ROOT - the only
+    thing standing between an ingest call and reading an arbitrary file on
+    disk. Path.resolve() collapses '..' segments and symlinks before the
+    is_relative_to() check, so "data/documents/../../.ssh/id_rsa" is caught
+    the same as an absolute path pointed straight at it.
+    """
+    root = DOCUMENTS_ROOT.resolve()
+    resolved = Path(file_path).resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError(
+            f"file_path must resolve inside {root} (got: {resolved}). "
+            f"Move the file into {root} (subdirectories are fine) and retry."
+        )
+    return resolved
+
+
 def ingest_document(
     conn,
     file_path: str,
@@ -131,7 +162,10 @@ def ingest_document(
     while the on-disk file itself never changed - trusting the hash in that case
     would silently skip the very re-ingestion the rebuild exists to perform.
     """
-    size_mb = Path(file_path).stat().st_size / (1024 * 1024)
+    resolved_path = _validate_file_path(file_path)
+    file_path = str(resolved_path)  # store/key everything by the canonical path from here on
+
+    size_mb = resolved_path.stat().st_size / (1024 * 1024)
     if size_mb > max_document_size_mb:
         raise ValueError(
             f"{file_path} is {size_mb:.1f}MB, exceeds max_document_size_mb ({max_document_size_mb})"

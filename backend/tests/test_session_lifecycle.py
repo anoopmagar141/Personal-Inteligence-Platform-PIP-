@@ -35,11 +35,25 @@ class FakeProvider(BaseLLMProvider):
         return {"provider_id": "fake", "is_local": self._is_local, "model_name": "fake"}
 
 
+def _seed_fake_provider_consent(conn) -> None:
+    # stage_11's Rule 4 check now cross-verifies is_local against
+    # provider_consent, not just get_model_info()'s self-report (security
+    # fix) - FakeProvider's provider_id="fake" has no seed row in
+    # config/provider_consent.json (only ollama/web_search do), so every test
+    # that runs the real Observer flow through it needs one here.
+    conn.execute(
+        "INSERT INTO provider_consent (provider_id, is_cloud, user_consented, consent_scope, revoked) "
+        "VALUES ('fake', 0, 1, 'full_inference', 0)"
+    )
+    conn.commit()
+
+
 @pytest.fixture
 def db_conn(tmp_path, db_key):
     db_path = str(tmp_path / "test.db")
     conn = get_connection(db_path, db_key=db_key)
     initialize_schema(conn)
+    _seed_fake_provider_consent(conn)
     yield conn
     conn.close()
 
@@ -62,6 +76,7 @@ async def executor_conn(tmp_path, db_key):
     def _open():
         c = get_connection(db_path, db_key=db_key)
         initialize_schema(c)
+        _seed_fake_provider_consent(c)
         return c
 
     conn = await loop.run_in_executor(executor, _open)
