@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../theme.dart';
 
 class ProfileView extends StatefulWidget {
   final ApiClient api;
@@ -37,38 +38,44 @@ class _ProfileViewState extends State<ProfileView> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
+    if (_error != null) return Center(child: Text(_error!, style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.danger)));
     if (_fields == null) return const Center(child: CircularProgressIndicator());
 
     return RefreshIndicator(
       onRefresh: _load,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         physics: const AlwaysScrollableScrollPhysics(),
-        child: _fields!.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('No profile fields yet.', style: TextStyle(color: Colors.grey)),
-              )
-            : DataTable(
-                columns: const [
-                  DataColumn(label: Text('Table')),
-                  DataColumn(label: Text('Field')),
-                  DataColumn(label: Text('Value')),
-                  DataColumn(label: Text('Confidence')),
-                  DataColumn(label: Text('Source')),
-                ],
-                rows: [
-                  for (final field in _fields!)
-                    DataRow(cells: [
-                      DataCell(Text('${field['table']}')),
-                      DataCell(Text('${field['field']}')),
-                      DataCell(Text('${field['value']}')),
-                      DataCell(Text(field['confidence'] != null ? (field['confidence'] as num).toStringAsFixed(2) : '-')),
-                      DataCell(Text('${field['source_label'] ?? '-'}')),
-                    ]),
-                ],
-              ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const PageHeader(eyebrow: 'Memory', title: 'Profile', description: 'What PIP has learned about you, and how confident it is.'),
+            _fields!.isEmpty
+                ? const Text('No profile fields yet.', style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textFaint))
+                : SectionCard(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('TABLE')),
+                        DataColumn(label: Text('FIELD')),
+                        DataColumn(label: Text('VALUE')),
+                        DataColumn(label: Text('CONFIDENCE')),
+                        DataColumn(label: Text('SOURCE')),
+                      ],
+                      rows: [
+                        for (final field in _fields!)
+                          DataRow(cells: [
+                            DataCell(Text('${field['table']}')),
+                            DataCell(Text('${field['field']}')),
+                            DataCell(Text('${field['value']}')),
+                            DataCell(Text(field['confidence'] != null ? (field['confidence'] as num).toStringAsFixed(2) : '-')),
+                            DataCell(Text('${field['source_label'] ?? '-'}')),
+                          ]),
+                      ],
+                    ),
+                  ),
+          ],
+        ),
       ),
     );
   }

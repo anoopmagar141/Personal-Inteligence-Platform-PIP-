@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../theme.dart';
 
 class DecisionsView extends StatefulWidget {
   final ApiClient api;
@@ -83,72 +84,85 @@ class _DecisionsViewState extends State<DecisionsView> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Decision Log', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  decoration: const InputDecoration(labelText: 'Search decisions…', border: OutlineInputBorder()),
-                  onSubmitted: (_) => _search(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(onPressed: _search, child: const Text('Search')),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-          if (_decisions != null)
-            if (_decisions!.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('No decisions found.', style: TextStyle(color: Colors.grey)),
-              )
-            else
-              for (final decision in _decisions!)
-                Card(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${decision['decision_text']}'),
-                        const SizedBox(height: 4),
-                        Text(
-                          'confidence ${(decision['confidence'] as num).toStringAsFixed(2)} · ${decision['state']} · ${decision['created_at']}',
-                          style: const TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                      ],
-                    ),
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const PageHeader(eyebrow: 'Memory', title: 'Decision Log', description: 'What PIP has decided on your behalf, and why.'),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 13),
+                    decoration: const InputDecoration(hintText: 'search decisions...'),
+                    onSubmitted: (_) => _search(),
                   ),
                 ),
-          const SizedBox(height: 24),
-          Text('Log a new decision', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          TextField(controller: _textController, decoration: const InputDecoration(labelText: 'Decision')),
-          const SizedBox(height: 8),
-          TextField(controller: _reasoningController, decoration: const InputDecoration(labelText: 'Reasoning')),
-          const SizedBox(height: 8),
-          TextField(controller: _alternativesController, decoration: const InputDecoration(labelText: 'Alternatives considered')),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: _creating ? null : _createDecision,
-            child: _creating
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Log decision'),
-          ),
-          if (_createResult != null) ...[
-            const SizedBox(height: 8),
-            Text(_createResult!, style: const TextStyle(color: Colors.grey)),
+                const SizedBox(width: AppSpacing.sm),
+                FilledButton(onPressed: _search, child: const Text('SEARCH')),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            if (_error != null) Text(_error!, style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.danger)),
+            if (_decisions != null)
+              if (_decisions!.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                  child: Text('No decisions found.', style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textFaint)),
+                )
+              else
+                Column(
+                  children: [
+                    for (final decision in _decisions!)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: SectionCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${decision['decision_text']}', style: const TextStyle(fontSize: 14.5, color: AppColors.text)),
+                              const SizedBox(height: 6),
+                              Text(
+                                'confidence ${(decision['confidence'] as num).toStringAsFixed(2)} · ${decision['state']} · ${decision['created_at']}',
+                                style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.textMuted, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+            const SizedBox(height: AppSpacing.lg),
+            SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const TagLabel('Log a new decision', color: AppColors.text, size: 12),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(controller: _textController, decoration: const InputDecoration(labelText: 'Decision')),
+                  const SizedBox(height: AppSpacing.sm),
+                  TextField(controller: _reasoningController, decoration: const InputDecoration(labelText: 'Reasoning')),
+                  const SizedBox(height: AppSpacing.sm),
+                  TextField(controller: _alternativesController, decoration: const InputDecoration(labelText: 'Alternatives considered')),
+                  const SizedBox(height: AppSpacing.md),
+                  FilledButton(
+                    onPressed: _creating ? null : _createDecision,
+                    child: _creating
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentOn))
+                        : const Text('LOG DECISION'),
+                  ),
+                  if (_createResult != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(_createResult!, style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 11.5, color: AppColors.textMuted)),
+                  ],
+                ],
+              ),
+            ),
           ],
-        ],
+        ),
       ),
     );
   }

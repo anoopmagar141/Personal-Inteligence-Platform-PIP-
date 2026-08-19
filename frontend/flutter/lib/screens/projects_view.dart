@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../theme.dart';
 
 class ProjectsView extends StatefulWidget {
   final ApiClient api;
@@ -68,77 +69,80 @@ class _ProjectsViewState extends State<ProjectsView> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Projects', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 12),
-          if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-          if (_projects != null)
-            if (_projects!.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('No projects yet.', style: TextStyle(color: Colors.grey)),
-              )
-            else
-              for (final project in _projects!)
-                Card(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const PageHeader(eyebrow: 'Context', title: 'Projects', description: 'What you\'re working on right now.'),
+            if (_error != null) Text(_error!, style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.danger)),
+            if (_projects != null)
+              if (_projects!.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                  child: Text('No projects yet.', style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textFaint)),
+                )
+              else
+                Column(
+                  children: [
+                    for (final project in _projects!)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: SectionCard(
+                          child: Row(
                             children: [
-                              Row(
-                                children: [
-                                  Text('${project['name']}'),
-                                  if (project['project_id'] == widget.activeProjectId) ...[
-                                    const SizedBox(width: 8),
-                                    const Chip(label: Text('active'), visualDensity: VisualDensity.compact),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text('${project['name']}', style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: AppColors.text)),
+                                        if (project['project_id'] == widget.activeProjectId) ...[
+                                          const SizedBox(width: AppSpacing.sm),
+                                          const TagLabel('active', color: AppColors.accent),
+                                        ],
+                                      ],
+                                    ),
+                                    if ('${project['description'] ?? ''}'.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text('${project['description']}', style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                                    ],
+                                    const SizedBox(height: 6),
+                                    Text('status: ${project['status']}', style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 11, color: AppColors.textFaint)),
                                   ],
-                                ],
+                                ),
                               ),
-                              if ('${project['description'] ?? ''}'.isNotEmpty)
-                                Text('${project['description']}', style: const TextStyle(color: Colors.grey)),
-                              Text('status: ${project['status']}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                              GhostButton(label: 'Set active', onTap: () => _activate(project['project_id'] as String)),
                             ],
                           ),
                         ),
-                        TextButton(
-                          onPressed: () => _activate(project['project_id'] as String),
-                          child: const Text('Set active'),
-                        ),
-                      ],
-                    ),
+                      ),
+                  ],
+                ),
+            const SizedBox(height: AppSpacing.lg),
+            SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const TagLabel('New project', color: AppColors.text, size: 12),
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Project name'))),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(child: TextField(controller: _descriptionController, decoration: const InputDecoration(labelText: 'Description'))),
+                      const SizedBox(width: AppSpacing.sm),
+                      FilledButton(onPressed: _create, child: const Text('CREATE')),
+                    ],
                   ),
-                ),
-          const SizedBox(height: 24),
-          Text('New project', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Project name'),
-                ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(onPressed: _create, child: const Text('Create')),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

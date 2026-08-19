@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
 import '../ws_chat_client.dart';
 
 class _ChatMessage {
@@ -117,74 +118,109 @@ class _ChatViewState extends State<ChatView> {
               Expanded(
                 child: ListView(
                   controller: _scrollController,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(AppSpacing.lg),
                   children: [
                     for (final message in _transcript) _MessageBubble(message: message),
                     if (_isStreaming) _MessageBubble(message: _ChatMessage('assistant', _streamingText)),
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(12),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
                 child: Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: _controller,
-                        decoration: const InputDecoration(
-                          labelText: 'Ask PIP anything…',
-                          border: OutlineInputBorder(),
-                        ),
+                        style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 13.5, color: AppColors.text),
+                        decoration: const InputDecoration(hintText: '> ask pip anything...'),
                         onSubmitted: (_) => _send(),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton(onPressed: _isStreaming ? null : _send, child: const Text('Send')),
+                    const SizedBox(width: AppSpacing.sm),
+                    _SendButton(enabled: !_isStreaming, onTap: _send),
                   ],
                 ),
               ),
             ],
           ),
         ),
-        SizedBox(
-          width: 220,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Last response', style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 8),
-                    if (_lastStageHint == null)
-                      const Text('No response yet.', style: TextStyle(color: Colors.grey))
-                    else
-                      for (final entry in _lastStageHint!.entries)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(entry.key),
-                              Text(
-                                '${entry.value}',
-                                style: TextStyle(
-                                  color: entry.value == true ? Colors.green : Colors.grey,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                  ],
-                ),
-              ),
-            ),
+        Container(
+          width: 240,
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(left: BorderSide(color: AppColors.border)),
+          ),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const TagLabel('Last response'),
+              const SizedBox(height: AppSpacing.md),
+              if (_lastStageHint == null)
+                const Text('No response yet.', style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textFaint))
+              else
+                for (final entry in _lastStageHint!.entries) _HintRow(label: entry.key, value: entry.value == true),
+            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HintRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  const _HintRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(label, style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 11.5, color: AppColors.textMuted)),
+          ),
+          Text(
+            value ? 'true' : 'false',
+            style: TextStyle(
+              fontFamily: AppTheme.mono,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: value ? AppColors.accent : AppColors.textFaint,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SendButton extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onTap;
+  const _SendButton({required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: enabled ? AppColors.accent : AppColors.surfaceRaised,
+      borderRadius: AppRadius.sm,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: AppRadius.sm,
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          child: Icon(Icons.arrow_forward, size: 18, color: enabled ? AppColors.accentOn : AppColors.textFaint),
+        ),
+      ),
     );
   }
 }
@@ -197,9 +233,12 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     if (message.role == 'system') {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Center(
-          child: Text(message.content, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          child: Text(
+            message.content,
+            style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.danger, fontSize: 12),
+          ),
         ),
       );
     }
@@ -207,14 +246,27 @@ class _MessageBubble extends StatelessWidget {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs + 2),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.6),
-        decoration: BoxDecoration(
-          color: isUser ? Colors.teal.shade100 : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(10),
+        child: Column(
+          crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (!isUser) ...[
+              const TagLabel('PIP', color: AppColors.accent, size: 10),
+              const SizedBox(height: 5),
+            ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+              decoration: isUser
+                  ? BoxDecoration(color: AppColors.surfaceRaised, borderRadius: AppRadius.sm, border: Border.all(color: AppColors.border))
+                  : null,
+              child: Text(
+                message.content,
+                style: const TextStyle(fontSize: 14.5, height: 1.5, color: AppColors.text),
+              ),
+            ),
+          ],
         ),
-        child: Text(message.content),
       ),
     );
   }

@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../theme.dart';
 
 class ProvidersView extends StatefulWidget {
   final ApiClient api;
@@ -48,41 +49,47 @@ class _ProvidersViewState extends State<ProvidersView> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
+    if (_error != null) {
+      return Center(child: Text(_error!, style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.danger)));
+    }
     if (_providers == null) return const Center(child: CircularProgressIndicator());
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Providers', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 4),
-          const Text(
-            'Local providers never need consent. Cloud providers are blocked until you explicitly consent (Stage 8, fail-closed).',
-            style: TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 12),
-          DataTable(
-            columns: const [
-              DataColumn(label: Text('Provider')),
-              DataColumn(label: Text('Type')),
-              DataColumn(label: Text('Consent')),
-              DataColumn(label: Text('Scope')),
-              DataColumn(label: Text('')),
-            ],
-            rows: [
-              for (final provider in _providers!)
-                DataRow(cells: [
-                  DataCell(Text('${provider['provider_id']}')),
-                  DataCell(Text(provider['is_cloud'] == true ? 'cloud' : 'local')),
-                  DataCell(Text(_consentLabel(provider))),
-                  DataCell(Text('${provider['consent_scope'] ?? '-'}')),
-                  DataCell(_actionButton(provider)),
-                ]),
-            ],
-          ),
-        ],
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const PageHeader(
+              eyebrow: 'Trust',
+              title: 'Providers',
+              description: 'Local providers never need consent. Cloud providers are blocked until you explicitly consent (Stage 8, fail-closed).',
+            ),
+            SectionCard(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('PROVIDER')),
+                  DataColumn(label: Text('TYPE')),
+                  DataColumn(label: Text('CONSENT')),
+                  DataColumn(label: Text('SCOPE')),
+                  DataColumn(label: Text('')),
+                ],
+                rows: [
+                  for (final provider in _providers!)
+                    DataRow(cells: [
+                      DataCell(Text('${provider['provider_id']}')),
+                      DataCell(TagLabel(provider['is_cloud'] == true ? 'cloud' : 'local', color: provider['is_cloud'] == true ? AppColors.textMuted : AppColors.accent)),
+                      DataCell(Text(_consentLabel(provider))),
+                      DataCell(Text('${provider['consent_scope'] ?? '-'}', style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textMuted))),
+                      DataCell(_actionButton(provider)),
+                    ]),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -97,17 +104,13 @@ class _ProvidersViewState extends State<ProvidersView> {
 
   Widget _actionButton(dynamic provider) {
     if (provider['is_cloud'] != true) {
-      return const Text('n/a (local)', style: TextStyle(color: Colors.grey));
+      return const TagLabel('n/a (local)', color: AppColors.textFaint);
     }
     final consented = provider['user_consented'] == true && provider['revoked'] != true;
     final providerId = provider['provider_id'] as String;
     if (consented) {
-      return TextButton(
-        onPressed: () => _revoke(providerId),
-        style: TextButton.styleFrom(foregroundColor: Colors.red),
-        child: const Text('Revoke'),
-      );
+      return GhostButton(label: 'Revoke', color: AppColors.danger, onTap: () => _revoke(providerId));
     }
-    return TextButton(onPressed: () => _grant(providerId), child: const Text('Grant consent'));
+    return GhostButton(label: 'Grant consent', onTap: () => _grant(providerId));
   }
 }

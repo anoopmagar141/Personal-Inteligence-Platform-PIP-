@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'home_shell.dart';
 import 'onboarding_screen.dart';
+import 'theme.dart';
 
 // PIP Core's default dev server address (matches every `uvicorn
 // backend.api.server:app --host 127.0.0.1 --port 8765` run used to validate
@@ -43,7 +44,9 @@ class PipApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PIP',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal), useMaterial3: true),
+      theme: AppTheme.dark,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.dark,
       home: const AppRoot(),
     );
   }
@@ -92,15 +95,21 @@ class _AppRootState extends State<AppRoot> {
         return Scaffold(
           body: Center(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(AppSpacing.xl),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text("Can't reach PIP", style: TextStyle(fontSize: 20)),
-                  const SizedBox(height: 8),
-                  Text(_errorMessage ?? '', textAlign: TextAlign.center),
-                  const SizedBox(height: 16),
-                  ElevatedButton(onPressed: _checkOnboarding, child: const Text('Retry')),
+                  const TagLabel('Connection error', color: AppColors.danger, size: 12),
+                  const SizedBox(height: AppSpacing.sm),
+                  const Text("Can't reach PIP", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    _errorMessage ?? '',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 12.5, color: AppColors.textMuted),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  FilledButton(onPressed: _checkOnboarding, child: const Text('RETRY')),
                 ],
               ),
             ),

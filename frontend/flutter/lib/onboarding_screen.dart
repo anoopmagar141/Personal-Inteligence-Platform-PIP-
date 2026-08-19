@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 
 import 'api_client.dart';
+import 'theme.dart';
 
 List<String>? _parseCsv(String value, int limit) {
   if (value.trim().isEmpty) return null;
@@ -83,22 +84,34 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Form(
-              key: _formKey,
-              child: Column(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: AppRadius.lg,
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Welcome to PIP', style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 4),
+                  const TagLabel('Setup', color: AppColors.accent),
+                  const SizedBox(height: AppSpacing.sm),
+                  const Text(
+                    'Welcome to PIP',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.text),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
                   const Text(
                     'A few questions before we start. Name, language, and timezone are locked once set.',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textMuted, height: 1.5),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: AppSpacing.lg),
                   TextFormField(
                     controller: _name,
                     decoration: const InputDecoration(labelText: 'Name *'),
@@ -152,18 +165,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       hintText: 'VS Code, Git, Ollama',
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: _submitting ? null : _submit,
-                    child: _submitting
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Complete setup'),
+                  const SizedBox(height: AppSpacing.lg),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _submitting ? null : _submit,
+                      child: _submitting
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentOn))
+                          : const Text('COMPLETE SETUP'),
+                    ),
                   ),
                   if (_error != null) ...[
-                    const SizedBox(height: 8),
-                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(_error!, style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.danger)),
                   ],
                 ],
+                ),
               ),
             ),
           ),

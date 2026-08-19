@@ -12,6 +12,7 @@ import 'screens/decisions_view.dart';
 import 'screens/profile_view.dart';
 import 'screens/projects_view.dart';
 import 'screens/providers_view.dart';
+import 'theme.dart';
 import 'ws_chat_client.dart';
 
 class HomeShell extends StatefulWidget {
@@ -53,35 +54,62 @@ class _HomeShellState extends State<HomeShell> {
     super.dispose();
   }
 
+  static const _tabIcons = <IconData>[
+    Icons.chat_bubble_outline,
+    Icons.person_outline,
+    Icons.fact_check_outlined,
+    Icons.folder_outlined,
+    Icons.power_settings_new,
+  ];
+
   @override
   Widget build(BuildContext context) {
+    final connected = _connectionStatus == 'connected';
     return Scaffold(
       body: Column(
         children: [
-          Material(
-            elevation: 1,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  for (var i = 0; i < _tabs.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: ChoiceChip(
-                        label: Text(_tabs[i]),
-                        selected: _selectedIndex == i,
-                        onSelected: (_) => setState(() => _selectedIndex = i),
-                      ),
-                    ),
-                  const Spacer(),
-                  Chip(
-                    label: Text(_connectionStatus),
-                    backgroundColor: _connectionStatus == 'connected'
-                        ? Colors.green.shade100
-                        : Colors.grey.shade200,
+          Container(
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              border: Border(bottom: BorderSide(color: AppColors.border)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+            child: Row(
+              children: [
+                const Text(
+                  'PIP',
+                  style: TextStyle(fontFamily: AppTheme.mono, fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.accent, letterSpacing: 1.2),
+                ),
+                const SizedBox(width: AppSpacing.lg),
+                for (var i = 0; i < _tabs.length; i++)
+                  _TabButton(
+                    label: _tabs[i],
+                    icon: _tabIcons[i],
+                    selected: _selectedIndex == i,
+                    onTap: () => setState(() => _selectedIndex = i),
                   ),
-                ],
-              ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: AppColors.surfaceRaised, borderRadius: AppRadius.sm),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: connected ? AppColors.accent : AppColors.textFaint,
+                          shape: BoxShape.circle,
+                          boxShadow: connected ? [const BoxShadow(color: AppColors.accent, blurRadius: 5)] : null,
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      TagLabel(_connectionStatus, color: connected ? AppColors.accent : AppColors.textMuted, size: 10.5),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -104,6 +132,40 @@ class _HomeShellState extends State<HomeShell> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _TabButton({required this.label, required this.icon, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpacing.xs),
+      child: Material(
+        color: selected ? AppColors.surfaceRaised : Colors.transparent,
+        borderRadius: AppRadius.sm,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: AppRadius.sm,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 15, color: selected ? AppColors.accent : AppColors.textMuted),
+                const SizedBox(width: 7),
+                TagLabel(label, color: selected ? AppColors.accent : AppColors.textMuted),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
