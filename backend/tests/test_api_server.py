@@ -144,13 +144,13 @@ def test_cors_allows_local_clients_on_other_ports(tmp_path, monkeypatch):
     # doesn't enforce - this is the missing link for a browser client.
     monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
     monkeypatch.delenv("PIP_DB_KEY", raising=False)
-    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
-    token = auth.get_or_create_token(tmp_path / "api_token")
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
 
     client = TestClient(server.app)
     response = client.get(
         "/api/v1/status",
-        headers={"Origin": "http://127.0.0.1:8091", "X-PIP-Token": token},
+        headers={"Origin": "http://127.0.0.1:8091", "Authorization": f"Bearer {token}"},
     )
 
     assert response.status_code == 200
@@ -162,8 +162,8 @@ def test_rest_rejects_missing_token(tmp_path, monkeypatch):
     # local API token - this used to have zero authentication at all.
     monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
     monkeypatch.delenv("PIP_DB_KEY", raising=False)
-    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
-    auth.get_or_create_token(tmp_path / "api_token")
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    auth.get_or_create_token(tmp_path / "api_token.txt")
 
     client = TestClient(server.app)
     response = client.get("/api/v1/status")
@@ -173,27 +173,54 @@ def test_rest_rejects_missing_token(tmp_path, monkeypatch):
 def test_rest_rejects_wrong_token(tmp_path, monkeypatch):
     monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
     monkeypatch.delenv("PIP_DB_KEY", raising=False)
-    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
-    auth.get_or_create_token(tmp_path / "api_token")
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    auth.get_or_create_token(tmp_path / "api_token.txt")
 
     client = TestClient(server.app)
-    response = client.get("/api/v1/status", headers={"X-PIP-Token": "wrong-token"})
+    response = client.get("/api/v1/status", headers={"Authorization": "Bearer wrong-token"})
     assert response.status_code == 401
 
 
+def test_rest_rejects_non_bearer_authorization_header(tmp_path, monkeypatch):
+    # A well-formed Authorization header in the wrong scheme (e.g. Basic)
+    # must still be rejected, not accidentally treated as a bearer token.
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    response = client.get("/api/v1/status", headers={"Authorization": f"Basic {token}"})
+    assert response.status_code == 401
+
+
+def test_rest_401_body_never_echoes_the_provided_token(tmp_path, monkeypatch):
+    # "Never return it in an error body" - the 401 response must be a fixed
+    # message, never a copy of whatever the caller sent.
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    response = client.get("/api/v1/status", headers={"Authorization": "Bearer a-guessed-secret-value"})
+    assert response.status_code == 401
+    assert "a-guessed-secret-value" not in response.text
+
+
 def test_rest_accepts_valid_token_on_a_mutating_route(tmp_path, monkeypatch):
-    # POST, not just the GET the other two tests exercise - confirms the
+    # POST, not just the GET the other tests exercise - confirms the
     # middleware covers write routes too, not just reads.
     monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
     monkeypatch.delenv("PIP_DB_KEY", raising=False)
-    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
-    token = auth.get_or_create_token(tmp_path / "api_token")
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
 
     client = TestClient(server.app)
     response = client.post(
         "/api/v1/onboarding/complete",
         json={"name": "BatMan", "language_preference": "English"},
-        headers={"X-PIP-Token": token},
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
 

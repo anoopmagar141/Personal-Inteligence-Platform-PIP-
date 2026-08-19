@@ -26,7 +26,7 @@ import os
 import secrets
 from pathlib import Path
 
-TOKEN_PATH = Path(__file__).parent.parent.parent / "data" / "api_token"
+TOKEN_PATH = Path(__file__).parent.parent.parent / "data" / "api_token.txt"
 
 _cached_token: str | None = None
 

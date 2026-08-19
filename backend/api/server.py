@@ -343,7 +343,7 @@ try:
 
     def _token_path() -> Path | None:
         # Test isolation, same pattern as PIP_DB_PATH - unset means "use the
-        # real persisted token in data/api_token" (production behavior).
+        # real persisted token in data/api_token.txt" (production behavior).
         override = os.environ.get("PIP_TOKEN_PATH")
         return Path(override) if override else None
 
@@ -362,12 +362,11 @@ try:
         finally:
             startup_conn.close()
 
-        token = auth.get_or_create_token(_token_path())
-        logger.info(
-            "PIP is ready. Every /api/v1/* call and /ws/chat connection needs this token "
-            f"(header X-PIP-Token, or ?token= on the WS URL): {token}\n"
-            f"Web client: http://127.0.0.1:8765/?token={token}"
-        )
+        # Ensures the token file exists before the first request arrives.
+        # Never logged: the file at auth.TOKEN_PATH (or PIP_TOKEN_PATH) is
+        # the only place this value is meant to be read from.
+        auth.get_or_create_token(_token_path())
+        logger.info(f"PIP is ready. API token file: {_token_path() or auth.TOKEN_PATH}")
 
         yield
 
@@ -417,17 +416,27 @@ try:
     # inside ws_chat() itself - BaseHTTPMiddleware only sees HTTP requests,
     # not the WebSocket upgrade. Static file serving (the "/" mount below)
     # deliberately stays open - it's just the JS/HTML/CSS bundle, not
-    # sensitive, and the client needs to load it before it has anywhere to
-    # read the token from.
+    # sensitive, and the client needs it to load before it has anywhere to
+    # send a token from.
+    #
+    # Standard `Authorization: Bearer <token>` header, not a custom one - the
+    # 401 body below never echoes back whatever was provided, only a fixed
+    # message, so a bad token can never round-trip into a response/log line
+    # via this path.
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
+
+    def _bearer_token(request) -> str | None:
+        header = request.headers.get("authorization", "")
+        if not header.startswith("Bearer "):
+            return None
+        return header[len("Bearer "):]
 
     class TokenAuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
             if request.url.path.startswith(BASE_PREFIX):
-                provided = request.headers.get("x-pip-token")
-                if not auth.verify_token(provided, _token_path()):
-                    return JSONResponse({"detail": "missing or invalid X-PIP-Token header"}, status_code=401)
+                if not auth.verify_token(_bearer_token(request), _token_path()):
+                    return JSONResponse({"detail": "missing or invalid bearer token"}, status_code=401)
             return await call_next(request)
 
     app.add_middleware(TokenAuthMiddleware)

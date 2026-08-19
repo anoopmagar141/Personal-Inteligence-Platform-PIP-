@@ -25,7 +25,8 @@ class ApiException implements Exception {
 class ApiClient {
   final String baseUrl; // e.g. http://127.0.0.1:8765/api/v1
   // Security fix: every /api/v1/* route now requires this (see
-  // backend/core/auth.py) - PIP prints a ready-to-use token at startup.
+  // backend/core/auth.py) - read from data/api_token.txt, never logged by
+  // the server.
   final String apiToken;
 
   ApiClient(this.baseUrl, {this.apiToken = ''});
@@ -33,7 +34,7 @@ class ApiClient {
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('$baseUrl$path').replace(queryParameters: query);
 
-  Map<String, String> get _authHeaders => {'X-PIP-Token': apiToken};
+  Map<String, String> get _authHeaders => {'Authorization': 'Bearer $apiToken'};
 
   dynamic _decode(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
