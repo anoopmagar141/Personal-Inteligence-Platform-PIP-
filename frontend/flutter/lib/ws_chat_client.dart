@@ -15,7 +15,7 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class ChatEvent {
-  final String type; // 'stage_hint' | 'token' | 'done' | 'error'
+  final String type; // 'stage_hint' | 'token' | 'done' | 'error' | 'stopped' | 'session_info'
   final dynamic data;
   const ChatEvent(this.type, this.data);
 }
@@ -27,6 +27,9 @@ class WsChatClient {
   // headers on connect, so the token travels as a query param instead.
   final String apiToken;
   final Duration reconnectDelay;
+  // Which conversation to resume (?conversation_id=... - see server.py's
+  // ws_chat()/_resolve_connection_state()). null means "start a fresh one."
+  String? _conversationId;
 
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
@@ -38,13 +41,20 @@ class WsChatClient {
   Stream<ChatEvent> get events => _eventController.stream;
   Stream<String> get status => _statusController.stream;
 
-  WsChatClient(this.wsUrl, {this.apiToken = '', this.reconnectDelay = const Duration(seconds: 2)});
+  // The private field's leading underscore shouldn't leak into the
+  // constructor's public parameter name, hence the manual assignment below
+  // instead of an initializing formal (this._conversationId).
+  WsChatClient(this.wsUrl, {this.apiToken = '', this.reconnectDelay = const Duration(seconds: 2), String? conversationId})
+      : _conversationId = conversationId; // ignore: prefer_initializing_formals
 
   void connect() {
     if (_disposed) return;
     _statusController.add('connecting');
     try {
-      final uri = Uri.parse(wsUrl).replace(queryParameters: {'token': apiToken});
+      final uri = Uri.parse(wsUrl).replace(queryParameters: {
+        'token': apiToken,
+        if (_conversationId != null) 'conversation_id': _conversationId,
+      });
       final channel = WebSocketChannel.connect(uri);
       _channel = channel;
       _subscription = channel.stream.listen(
@@ -75,6 +85,28 @@ class WsChatClient {
 
   void sendMessage(String text, {String? projectId}) {
     _channel?.sink.add(jsonEncode({'message': text, 'project_id': projectId}));
+  }
+
+  // Interrupts a response currently streaming (backend/api/server.py's
+  // stream_pipeline_to_websocket polls for exactly this shape between
+  // tokens). Sending it when nothing is streaming is harmless - the backend
+  // just drops it, per the /ws/chat wire protocol's "one request per turn"
+  // rule (Part 15.2).
+  void stop() {
+    _channel?.sink.add(jsonEncode({'type': 'stop'}));
+  }
+
+  // Switches to a different conversation (or starts a fresh one, if null) by
+  // tearing down the current connection and reconnecting with the new id -
+  // ADR-028's "connection = one conversation" extends naturally to "switch
+  // conversation = new connection," matching how the backend only ever
+  // resolves conversation_id once, at connect time (server.py's ws_chat()).
+  void switchConversation(String? conversationId) {
+    if (_disposed) return;
+    _conversationId = conversationId;
+    _subscription?.cancel();
+    _channel?.sink.close();
+    connect();
   }
 
   void dispose() {

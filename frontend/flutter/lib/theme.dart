@@ -1,20 +1,21 @@
-// PIP design system - "Terminal Trust" direction (dark, technical, precise).
-// System fonts only (default UI font for body, generic monospace for
-// data/labels) - no new package, no network font fetch.
+// PIP design system - "Clarity" direction (light, clean, modern SaaS).
+// System fonts only - no new package, no network font fetch.
 
 import 'package:flutter/material.dart';
 
 class AppColors {
-  static const bg = Color(0xFF14161A);
-  static const surface = Color(0xFF1C1F26);
-  static const surfaceRaised = Color(0xFF262A33);
-  static const border = Color(0xFF333844);
-  static const text = Color(0xFFE6E8EC);
-  static const textMuted = Color(0xFF8B93A1);
-  static const textFaint = Color(0xFF4A4F5A);
-  static const accent = Color(0xFF5EE6D0);
-  static const accentOn = Color(0xFF0E1013);
-  static const danger = Color(0xFFE5534B);
+  static const bg = Color(0xFFF7F8FB);
+  static const surface = Color(0xFFFFFFFF);
+  static const surfaceRaised = Color(0xFFF0F1F6);
+  static const border = Color(0xFFE3E6ED);
+  static const text = Color(0xFF1A1D26);
+  static const textMuted = Color(0xFF6B7080);
+  static const textFaint = Color(0xFFA0A4B2);
+  static const accent = Color(0xFF4F46E5);
+  static const accentSoft = Color(0xFFEEF0FD);
+  static const accentOn = Color(0xFFFFFFFF);
+  static const danger = Color(0xFFDC2626);
+  static const dangerSoft = Color(0xFFFDECEC);
 }
 
 class AppSpacing {
@@ -26,19 +27,21 @@ class AppSpacing {
 }
 
 class AppRadius {
-  static const sm = BorderRadius.all(Radius.circular(6));
-  static const md = BorderRadius.all(Radius.circular(10));
-  static const lg = BorderRadius.all(Radius.circular(14));
+  static const sm = BorderRadius.all(Radius.circular(8));
+  static const md = BorderRadius.all(Radius.circular(12));
+  static const lg = BorderRadius.all(Radius.circular(18));
 }
 
 class AppTheme {
+  // Kept for call sites that still reference a monospace treatment (rare,
+  // used only for literal IDs/paths now) - the system default elsewhere.
   static const mono = 'monospace';
 
-  static ThemeData get dark {
+  static ThemeData get light {
     final base = ThemeData(
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.bg,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         surface: AppColors.bg,
         primary: AppColors.accent,
         onPrimary: AppColors.accentOn,
@@ -68,19 +71,19 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
-        hintStyle: const TextStyle(color: AppColors.textMuted, fontFamily: mono, fontSize: 13.5),
+        hintStyle: const TextStyle(color: AppColors.textFaint, fontSize: 14),
         labelStyle: const TextStyle(color: AppColors.textMuted),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(borderRadius: AppRadius.sm, borderSide: const BorderSide(color: AppColors.border)),
         enabledBorder: OutlineInputBorder(borderRadius: AppRadius.sm, borderSide: const BorderSide(color: AppColors.border)),
-        focusedBorder: OutlineInputBorder(borderRadius: AppRadius.sm, borderSide: const BorderSide(color: AppColors.accent)),
+        focusedBorder: OutlineInputBorder(borderRadius: AppRadius.sm, borderSide: const BorderSide(color: AppColors.accent, width: 1.5)),
         errorBorder: OutlineInputBorder(borderRadius: AppRadius.sm, borderSide: const BorderSide(color: AppColors.danger)),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.accent,
           foregroundColor: AppColors.accentOn,
-          textStyle: const TextStyle(fontFamily: mono, fontWeight: FontWeight.w600, fontSize: 12.5, letterSpacing: 0.4),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: AppRadius.sm),
         ),
@@ -88,17 +91,17 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.accent,
-          textStyle: const TextStyle(fontFamily: mono, fontSize: 12, fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
         ),
       ),
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: AppColors.surfaceRaised,
-        labelStyle: const TextStyle(fontFamily: mono, fontSize: 12, color: AppColors.textMuted, letterSpacing: 0.3),
+        labelStyle: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
         side: const BorderSide(color: AppColors.border),
         shape: RoundedRectangleBorder(borderRadius: AppRadius.sm),
       ),
       dataTableTheme: DataTableThemeData(
-        headingTextStyle: const TextStyle(fontFamily: mono, fontSize: 11, color: AppColors.textMuted, letterSpacing: 0.6, fontWeight: FontWeight.w600),
+        headingTextStyle: const TextStyle(fontSize: 11.5, color: AppColors.textMuted, letterSpacing: 0.3, fontWeight: FontWeight.w600),
         dataTextStyle: const TextStyle(fontSize: 13.5, color: AppColors.text),
         dividerThickness: 1,
       ),
@@ -107,19 +110,19 @@ class AppTheme {
   }
 }
 
-/// Small uppercase monospace label, used throughout for section/status text
-/// (matches the mockup's tab bar / side-panel-title / hint-row treatment).
+/// Small label used for section eyebrows and status text - sentence case,
+/// soft-tinted pill when [color] is given, plain muted text otherwise.
 class TagLabel extends StatelessWidget {
   final String text;
   final Color color;
   final double size;
-  const TagLabel(this.text, {super.key, this.color = AppColors.textMuted, this.size = 11});
+  const TagLabel(this.text, {super.key, this.color = AppColors.textMuted, this.size = 12});
 
   @override
   Widget build(BuildContext context) {
     return Text(
-      text.toUpperCase(),
-      style: TextStyle(fontFamily: AppTheme.mono, fontSize: size, color: color, letterSpacing: 0.6, fontWeight: FontWeight.w600),
+      text,
+      style: TextStyle(fontSize: size, color: color, fontWeight: FontWeight.w600),
     );
   }
 }
@@ -137,12 +140,12 @@ class PageHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TagLabel(eyebrow, color: AppColors.accent),
+        TagLabel(eyebrow.toUpperCase(), color: AppColors.accent, size: 11),
         const SizedBox(height: AppSpacing.xs),
-        Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.text)),
+        Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.text)),
         if (description != null) ...[
           const SizedBox(height: 4),
-          Text(description!, style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textMuted, height: 1.5)),
+          Text(description!, style: const TextStyle(fontSize: 13.5, color: AppColors.textMuted, height: 1.5)),
         ],
         const SizedBox(height: AppSpacing.lg),
       ],
@@ -150,8 +153,8 @@ class PageHeader extends StatelessWidget {
   }
 }
 
-/// A surface-colored card wrapper matching the mockup's rounded, bordered
-/// panels (chat sidebar, onboarding card).
+/// A white, bordered, softly-shadowed card - the base surface for every
+/// list item and form on a CRUD screen.
 class SectionCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -161,14 +164,73 @@ class SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: padding,
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: AppRadius.md, border: Border.all(color: AppColors.border)),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.md,
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2)),
+        ],
+      ),
       child: child,
     );
   }
 }
 
-/// A small, uppercase-mono outlined action button, matching the mockup's
-/// "Set active" / "Grant consent" treatment - lighter weight than FilledButton.
+/// Icon + message + optional action, for every "nothing here yet" spot
+/// (matches 21st.dev's empty-state category - replaces what used to be a
+/// single line of faint plain text on Documents/Projects/Decisions/Profile).
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? description;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.description,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl, horizontal: AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.md,
+        border: Border.all(color: AppColors.border, style: BorderStyle.solid),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+            child: Icon(icon, size: 20, color: AppColors.accent),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(title, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: AppColors.text)),
+          if (description != null) ...[
+            const SizedBox(height: 4),
+            Text(description!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+          ],
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            GhostButton(label: actionLabel!, onTap: onAction),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A small outlined action button - lighter weight than FilledButton, for
+/// secondary actions like "Set active" / "Revoke".
 class GhostButton extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
@@ -178,14 +240,14 @@ class GhostButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.sm, side: BorderSide(color: onTap == null ? AppColors.border : color.withValues(alpha: 0.4))),
+      color: onTap == null ? Colors.transparent : color.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.sm, side: BorderSide(color: onTap == null ? AppColors.border : color.withValues(alpha: 0.3))),
       child: InkWell(
         onTap: onTap,
         borderRadius: AppRadius.sm,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          child: TagLabel(label, color: onTap == null ? AppColors.textFaint : color, size: 10.5),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: onTap == null ? AppColors.textFaint : color)),
         ),
       ),
     );

@@ -5,6 +5,7 @@ pypdf
 ddgs
 ollama
 fastapi
+python-multipart
 uvicorn
 pytest
 pytest-asyncio

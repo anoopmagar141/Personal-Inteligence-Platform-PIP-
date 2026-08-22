@@ -41,6 +41,13 @@ def run(
             "ok",
             f"Response delivered ({len(response_text)} chars)",
         )
+    elif status == "stopped":
+        trace.stage_log(
+            trace_id,
+            "stage_10_response_delivery",
+            "ok",
+            f"Response stopped by user ({len(response_text)} chars delivered before stop)",
+        )
     else:
         trace.stage_log(
             trace_id,

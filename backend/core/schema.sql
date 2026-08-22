@@ -263,6 +263,51 @@ CREATE TABLE IF NOT EXISTS pending_observer (
     processed_at TEXT
 );
 
+-- llm_settings Table (added after the original numbered sequence below - not
+-- renumbering table 22's existing decision_fts note to avoid touching every
+-- other comment in this codebase that already cites it by number).
+-- Which locally-pulled Ollama model pipeline.py's _default_providers() uses -
+-- previously hardcoded to "llama3.1:8b" everywhere. Its own table, not a
+-- column on profile_meta/identity, following the session_snapshot precedent
+-- above: a distinct app-level concern gets its own singleton row rather than
+-- being bolted onto an unrelated existing one. A missing row (fresh DB, or
+-- an existing DB from before this table existed) means "use the hardcoded
+-- default" - api_get_active_model()/get_default_model_name() in server.py
+-- fall back to that, so this table is optional state, never required.
+CREATE TABLE IF NOT EXISTS llm_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    model_name TEXT NOT NULL
+);
+
+-- conversations / messages Tables (added after the original numbered
+-- sequence, same reasoning as llm_settings above). Part 7's pipeline.py
+-- comment "there is no message-history table - the caller owns that state"
+-- was true until now: conversation_history lived only in one WS
+-- connection's memory, discarded on disconnect. These two tables give chat
+-- history the same "Claude/ChatGPT sidebar" persistence real users expect -
+-- every turn is written here as it happens, and /ws/chat can resume a past
+-- conversation_id by replaying its messages back into a fresh connection's
+-- in-memory conversation_history.
+CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL DEFAULT 'New chat',
+    project_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES active_projects(project_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+
 -- Note: Table 22 (decision_fts) is created at application level if FTS5 is available
 -- as virtual table:
 -- CREATE VIRTUAL TABLE IF NOT EXISTS decision_fts USING fts5(decision_text, reasoning, alternatives_considered, decision_id UNINDEXED);

@@ -18,7 +18,7 @@
 # dicts yielded by stage_09.run() and forwarded by server.py's ws_chat() are
 # unchanged by this module - it documents their shape, it doesn't enforce it.
 
-from typing import Any, Literal, TypedDict, Union
+from typing import Any, Literal, Optional, TypedDict, Union
 
 
 class StageHintData(TypedDict):
@@ -48,9 +48,66 @@ class ErrorEvent(TypedDict):
     data: str
 
 
-# Part 14.3: the only four event shapes ever sent over the /ws/chat wire, in
-# emission order stage_hint (always first) -> token* -> done, or -> error.
-WSChatEvent = Union[StageHintEvent, TokenEvent, DoneEvent, ErrorEvent]
+class StoppedEvent(TypedDict):
+    """
+    Terminal event when the client interrupts generation mid-stream (a
+    ChatRequest-shaped {"type": "stop"} message sent while tokens are still
+    arriving). Distinct from DoneEvent/ErrorEvent: this is a normal
+    user-initiated outcome, not a completion or a failure, and the client
+    should keep whatever partial text it already rendered rather than
+    discarding it.
+    """
+
+    type: Literal["stopped"]
+    data: None
+
+
+# Part 14.3: the five event shapes ever sent over the /ws/chat wire, in
+# emission order stage_hint (always first) -> token* -> (done | error | stopped).
+WSChatEvent = Union[StageHintEvent, TokenEvent, DoneEvent, ErrorEvent, StoppedEvent]
+
+
+# What a client sends into /ws/chat while a response is actively streaming, to
+# interrupt it early (Part 15.2 extension - stop is the only message meaningful
+# mid-turn, since the connection is otherwise one ChatRequest per turn).
+class StopRequest(TypedDict):
+    type: Literal["stop"]
+
+
+class SessionMessage(TypedDict):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class SessionInfoEvent(TypedDict):
+    """
+    Sent immediately after the WS connection is accepted and before any
+    ChatRequest is expected - not part of the stage_hint -> token* ->
+    (done|error|stopped) sequence above, that only ever describes one turn's
+    streaming. This describes the CONNECTION: which conversation_id it
+    resumed (?conversation_id=... query param), its title, and every prior
+    message so the client can replay them into its transcript instead of
+    starting blank.
+
+    Sent TWICE, not once, for a brand-new conversation (no conversation_id
+    given, or an unknown one): first right after connect with
+    conversation_id: null - a fresh conversation isn't actually created (and
+    committed to the DB) until the first real message arrives, so an idle
+    connection that never sends anything doesn't litter the history sidebar
+    with an empty "New chat" row - then again once that first message
+    triggers creation, this time carrying the real id. A resumed
+    conversation (conversation_id was known and valid) only ever gets the
+    one, upfront send.
+    """
+
+    type: Literal["session_info"]
+    data: "SessionInfoData"
+
+
+class SessionInfoData(TypedDict):
+    conversation_id: Optional[str]
+    title: str
+    messages: list[SessionMessage]
 
 
 class PipelineCompleteEvent(TypedDict):

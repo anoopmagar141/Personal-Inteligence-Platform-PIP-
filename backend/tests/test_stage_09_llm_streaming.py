@@ -87,8 +87,49 @@ def test_collect_aggregates_successful_stream():
     result = stage_09.collect(stage_09.run("ctx", [], [provider], cache_hit=True))
     assert result["response_text"] == "Hello world"
     assert result["status"] == "success"
+
+
+def test_should_stop_ends_stream_early_with_stopped_event():
+    provider = FakeProvider(tokens=["a", "b", "c", "d"])
+    # Stops right after the 2nd token has been yielded to the caller - proves
+    # the check runs before yielding the NEXT token, not that it drops
+    # tokens already delivered.
+    seen_tokens = []
+
+    def should_stop():
+        return len(seen_tokens) >= 2
+
+    events = []
+    for event in stage_09.run("ctx", [], [provider], should_stop=should_stop):
+        events.append(event)
+        if event["type"] == "token":
+            seen_tokens.append(event["data"])
+
+    assert [e["data"] for e in events if e["type"] == "token"] == ["a", "b"]
+    assert events[-1] == {"type": "stopped", "data": None}
+
+
+def test_should_stop_true_from_the_start_yields_stopped_before_any_token():
+    provider = FakeProvider(tokens=["a", "b", "c"])
+    events = list(stage_09.run("ctx", [], [provider], should_stop=lambda: True))
+    assert [e["type"] for e in events if e["type"] != "stage_hint"] == ["stopped"]
+
+
+def test_should_stop_none_never_stops_a_normal_stream():
+    # Default (no should_stop passed) behaves exactly as before this
+    # feature existed - a regression guard, not a stop-specific test.
+    provider = FakeProvider(tokens=["a", "b"])
+    events = list(stage_09.run("ctx", [], [provider]))
+    assert events[-1] == {"type": "done", "data": None}
+
+
+def test_collect_reports_stopped_status():
+    provider = FakeProvider(tokens=["a", "b", "c"])
+    result = stage_09.collect(stage_09.run("ctx", [], [provider], should_stop=lambda: True, cache_hit=True))
+    assert result["status"] == "stopped"
+    assert result["response_text"] == ""
     assert result["error"] is None
-    assert result["stage_hints"]["cache_hit"] is True
+    assert result["stage_hints"]["cache_hit"] is True  # stage_hint (always first) still reported normally
 
 
 def test_collect_aggregates_failed_stream():

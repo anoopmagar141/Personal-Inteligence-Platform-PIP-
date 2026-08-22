@@ -96,22 +96,23 @@ class _DecisionsViewState extends State<DecisionsView> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 13),
+                    style: const TextStyle(fontSize: 13),
                     decoration: const InputDecoration(hintText: 'search decisions...'),
                     onSubmitted: (_) => _search(),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                FilledButton(onPressed: _search, child: const Text('SEARCH')),
+                FilledButton(onPressed: _search, child: const Text('Search')),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            if (_error != null) Text(_error!, style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.danger)),
+            if (_error != null) Text(_error!, style: const TextStyle(color: AppColors.danger)),
             if (_decisions != null)
               if (_decisions!.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                  child: Text('No decisions found.', style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textFaint)),
+                const EmptyState(
+                  icon: Icons.fact_check_outlined,
+                  title: 'No decisions found',
+                  description: 'Log one below, or clear your search to see everything.',
                 )
               else
                 Column(
@@ -127,7 +128,7 @@ class _DecisionsViewState extends State<DecisionsView> {
                               const SizedBox(height: 6),
                               Text(
                                 'confidence ${(decision['confidence'] as num).toStringAsFixed(2)} · ${decision['state']} · ${decision['created_at']}',
-                                style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.textMuted, fontSize: 11),
+                                style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
                               ),
                             ],
                           ),
@@ -152,11 +153,11 @@ class _DecisionsViewState extends State<DecisionsView> {
                     onPressed: _creating ? null : _createDecision,
                     child: _creating
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentOn))
-                        : const Text('LOG DECISION'),
+                        : const Text('Log decision'),
                   ),
                   if (_createResult != null) ...[
                     const SizedBox(height: AppSpacing.sm),
-                    Text(_createResult!, style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 11.5, color: AppColors.textMuted)),
+                    Text(_createResult!, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
                   ],
                 ],
               ),

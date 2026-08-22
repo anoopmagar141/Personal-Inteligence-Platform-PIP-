@@ -1,13 +1,15 @@
 import asyncio
+import contextlib
 import logging
 import os
 import re
+import threading
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 from backend.config.settings import get_settings
 from backend.core import auth, pipeline, session_lifecycle
-from backend.memory import decision_log, profile_store, vector_store
+from backend.memory import conversation_store, decision_log, profile_store, vector_store
 from backend.providers.ollama_provider import OllamaProvider
 from backend.stages import stage_08_provider_gate as provider_gate
 from backend.stages.stage_08_provider_gate import ProviderConsentError
@@ -234,11 +236,143 @@ def api_revoke_consent(conn, provider_id: str) -> dict[str, Any]:
     return {"status": "revoked", "provider_id": provider_id}
 
 
+def api_list_llm_models() -> dict[str, Any]:
+    """
+    Every model Ollama has locally pulled - what a model picker shows to
+    choose from. Fails open with an empty list rather than a 500 when Ollama
+    is unreachable (e.g. not started yet): the picker screen should still
+    render, just with nothing to pick, not crash the whole request.
+    """
+    from backend.providers.ollama_provider import list_models
+
+    try:
+        models = list_models()
+    except Exception as e:
+        return {"models": [], "error": str(e)}
+    return {"models": [{"name": m.get("name"), "size": m.get("size")} for m in models]}
+
+
+def api_get_active_model(conn) -> dict[str, Any]:
+    return {"model_name": pipeline.get_active_model_name(conn)}
+
+
+def api_set_active_model(conn, payload: dict[str, Any]) -> dict[str, Any]:
+    model_name = payload.get("model_name")
+    if not model_name:
+        raise ValueError("model_name is required")
+
+    # Validated against what Ollama actually has pulled - but only when
+    # Ollama answers at all. If it's unreachable right now, the choice is
+    # still saved (fails open, same reasoning as api_list_llm_models above) -
+    # an unreachable Ollama shouldn't block picking a model for when it's
+    # back up, it just can't confirm the name is real yet.
+    from backend.providers.ollama_provider import list_models
+
+    try:
+        available = {m.get("name") for m in list_models()}
+    except Exception:
+        available = None
+    if available is not None and model_name not in available:
+        raise ValueError(f"'{model_name}' isn't pulled in Ollama yet - run `ollama pull {model_name}` first.")
+
+    conn.execute(
+        """
+        INSERT INTO llm_settings (id, model_name) VALUES (1, ?)
+        ON CONFLICT(id) DO UPDATE SET model_name = excluded.model_name
+        """,
+        (model_name,),
+    )
+    conn.commit()
+    return {"status": "updated", "model_name": model_name}
+
+
+def api_list_conversations(conn, project_id: Optional[str] = None) -> list[dict[str, Any]]:
+    return conversation_store.list_conversations(conn, project_id=project_id)
+
+
+def api_get_conversation_messages(conn, conversation_id: str) -> list[dict[str, Any]]:
+    if not conversation_store.conversation_exists(conn, conversation_id):
+        raise ValueError(f"Unknown conversation '{conversation_id}'.")
+    return conversation_store.get_messages(conn, conversation_id)
+
+
+def api_create_conversation(conn, payload: dict[str, Any]) -> dict[str, Any]:
+    conversation_id = conversation_store.create_conversation(conn, project_id=payload.get("project_id"))
+    return {"id": conversation_id, "title": "New chat"}
+
+
+def api_delete_conversation(conn, conversation_id: str) -> dict[str, Any]:
+    deleted = conversation_store.delete_conversation(conn, conversation_id)
+    if not deleted:
+        raise ValueError(f"Unknown conversation '{conversation_id}'.")
+    return {"status": "deleted", "id": conversation_id}
+
+
+def _resolve_connection_state(conn, conversation_id: Optional[str]) -> tuple[str, Optional[str], str, list[dict[str, str]]]:
+    """
+    Everything ws_chat() needs to know from the DB before it can start
+    handling turns, resolved in ONE executor round-trip rather than two
+    separate run_in_executor calls - fewer thread hops regardless, but also
+    found live while chasing an unrelated disconnect-cleanup hang (see
+    ws_chat()'s finally: block for the actual fix and what's still not
+    fully understood about it - a Starlette TestClient interaction, not
+    something traced to this function specifically in the end).
+
+    conversation_id resume logic: a known id resumes it - loads every prior
+    message so the caller can both replay them to the client and seed
+    conversation_history for LLM prompting. Anything else (None, or an id
+    that doesn't exist - e.g. stale from a deleted conversation) returns
+    conversation_id=None - "not created yet" - rather than eagerly creating
+    a row for a connection that might disconnect without ever sending a
+    message, which would otherwise litter the history sidebar with empty
+    "New chat" entries. The main loop creates the real row lazily, on the
+    first actual message (see ws_chat()'s main loop).
+    """
+    model_name = pipeline.get_active_model_name(conn)
+
+    if conversation_id and conversation_store.conversation_exists(conn, conversation_id):
+        rows = conversation_store.get_messages(conn, conversation_id)
+        title_row = conn.execute("SELECT title FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+        title = title_row["title"] if title_row else "New chat"
+        messages = [{"role": r["role"], "content": r["content"]} for r in rows]
+        return model_name, conversation_id, title, messages
+
+    return model_name, None, "New chat", []
+
+
 def api_ingest_document(conn, payload: dict[str, Any]) -> dict[str, Any]:
     file_path = payload.get("file_path")
     if not file_path:
         raise ValueError("file_path is required")
     return vector_store.ingest_document(conn, file_path, payload.get("project_id"))
+
+
+def api_upload_document(conn, filename: str, content: bytes, project_id: str | None = None) -> dict[str, Any]:
+    """
+    Accepts raw uploaded bytes (a desktop file picker returns a path outside
+    DOCUMENTS_ROOT, which ingest_document's sandbox check would reject) and
+    writes them under DOCUMENTS_ROOT before ingesting - the only way a picked
+    file can legally enter PIP's memory. filename is taken only for its
+    basename+extension: Path(filename).name discards any directory component,
+    so a crafted "../../evil.py" can't escape DOCUMENTS_ROOT here either.
+    """
+    safe_name = Path(filename).name
+    if not safe_name or safe_name in {".", ".."}:
+        raise ValueError("Invalid filename.")
+    ext = Path(safe_name).suffix.lower()
+    if ext not in vector_store.SUPPORTED_EXTENSIONS:
+        raise ValueError(f"Unsupported document extension: {ext}")
+
+    vector_store.DOCUMENTS_ROOT.mkdir(parents=True, exist_ok=True)
+    dest = vector_store.DOCUMENTS_ROOT / safe_name
+    if dest.exists():
+        stem = Path(safe_name).stem
+        n = 1
+        while dest.exists():
+            dest = vector_store.DOCUMENTS_ROOT / f"{stem} ({n}){ext}"
+            n += 1
+    dest.write_bytes(content)
+    return vector_store.ingest_document(conn, str(dest), project_id)
 
 
 def api_query_rag(conn, payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -272,6 +406,7 @@ async def stream_pipeline_to_websocket(
     conversation_history: list[dict[str, str]],
     project_id: str | None = None,
     executor=None,
+    incoming: Optional[asyncio.Queue] = None,
 ) -> dict[str, Any]:
     """
     Bridges pipeline.run()'s synchronous generator into the async WebSocket
@@ -298,13 +433,43 @@ async def stream_pipeline_to_websocket(
 
     The pipeline_complete sentinel event is consumed here, not forwarded - it's
     an internal Python convenience (see pipeline.run()'s docstring), not part
-    of the documented WS wire protocol (Part 14.3: token/stage_hint/error/done
-    only).
+    of the documented WS wire protocol (Part 14.3: token/stage_hint/error/done/
+    stopped only).
+
+    Stop support: `incoming` is a queue fed by ws_chat()'s single, permanent
+    reader task (see that function) - this is the SECOND design tried here.
+    The first used its own websocket.receive_json() call racing the pipeline's
+    next() call each iteration; found live, cancelling that receive when a
+    turn finished (to hand the socket back to ws_chat()'s own loop) could
+    still lose whatever message arrived right as the cancel landed - the
+    disconnect test that closes the connection right after one turn started
+    failing intermittently once this was in place, exactly the class of bug a
+    "shared queue, one true reader" design can't have (nothing here ever calls
+    receive_json() or cancels an in-flight one - it only ever does a
+    non-blocking get_nowait() on a queue). pipeline.run()'s should_stop is a
+    plain Callable[[], bool] (not asyncio-aware) because Stage 9's token loop
+    runs synchronously inside the executor thread - a threading.Event is the
+    primitive that's actually safe to poll from there.
     """
     loop = asyncio.get_event_loop()
-    gen = pipeline.run(conn, user_message, conversation_history=conversation_history, project_id=project_id)
+    stop_event = threading.Event()
+    gen = pipeline.run(
+        conn, user_message, conversation_history=conversation_history,
+        project_id=project_id, should_stop=stop_event.is_set,
+    )
 
     while True:
+        if incoming is not None:
+            while True:
+                try:
+                    msg = incoming.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if isinstance(msg, dict) and msg.get("type") == "stop":
+                    stop_event.set()
+                # Anything else arriving mid-stream is unexpected per protocol
+                # (one request per turn) - dropped, not queued for later.
+
         try:
             event: Union[WSChatEvent, PipelineCompleteEvent] = await loop.run_in_executor(executor, next, gen)
         except StopIteration:
@@ -318,11 +483,22 @@ async def stream_pipeline_to_websocket(
         await websocket.send_json(event)
 
 
-def _default_observer_provider():
-    # ADR-033: Observer uses the same model as generation now. Always local
-    # (stage_11_observer.run() enforces Rule 4 itself - raises if given a
-    # non-local provider - this is just supplying a real local one).
-    return OllamaProvider(model_name="llama3.1:8b")
+def _default_observer_provider(model_name: str):
+    # ADR-033: Observer uses the same model as generation now - takes the
+    # model_name the caller already resolved via pipeline.get_active_model_name()
+    # rather than querying conn itself. Deliberately NOT a conn param + its own
+    # conn.execute() call: found live, awaiting a fresh run_in_executor(...,
+    # conn.execute...) submitted from inside ws_chat()'s disconnect-handling
+    # finally: block hung indefinitely - the worker thread completed and
+    # returned a value (confirmed by instrumenting it), but the awaiting
+    # coroutine never woke to receive it, a Starlette TestClient/anyio
+    # interaction specific to that teardown path (every OTHER run_in_executor
+    # call on this same executor, including the very next line's conn.close(),
+    # works fine). Taking a plain str here avoids touching conn - and needing
+    # the executor at all - during that path; see the three call sites below
+    # for where model_name actually gets resolved (always earlier, off the
+    # disconnect/idle-timeout hot path).
+    return OllamaProvider(model_name=model_name)
 
 
 def _idle_timeout_seconds() -> float:
@@ -353,7 +529,9 @@ try:
         # (Part 7: drain before Stage 0 - there's no live traffic yet to delay).
         startup_conn = _conn()
         try:
-            result = session_lifecycle.drain_pending_on_startup(startup_conn, _default_observer_provider())
+            result = session_lifecycle.drain_pending_on_startup(
+                startup_conn, _default_observer_provider(pipeline.get_active_model_name(startup_conn))
+            )
             if result["completed"] or result["failed"]:
                 logger.info(f"Startup pending_observer drain: {result}")
         except Exception as e:
@@ -487,14 +665,68 @@ try:
         # live, a real crash, not a defensive guess).
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         conn = await loop.run_in_executor(executor, _conn)
-        conversation_history: list[dict[str, str]] = []
+        # observer_model_name: resolved once here, not re-queried from the
+        # idle-timeout/disconnect paths below - see _default_observer_provider's
+        # docstring for why a fresh conn.execute() from those specific spots
+        # hangs. The active model can't meaningfully change mid-connection
+        # anyway (no route re-reads it after this), so one lookup per
+        # connection is correct, not just a workaround.
+        #
+        # conversation_id/title/resumed_messages: resumes a past conversation
+        # (?conversation_id=...) or creates a new one - every turn from here on
+        # is persisted against this id (see the main loop below), giving chat
+        # history a Claude/ChatGPT-style sidebar instead of dying with the
+        # connection like before this feature. conversation_history seeds from
+        # whatever was resumed so the LLM has the same context a continued
+        # conversation should.
+        #
+        # Both resolved in ONE run_in_executor call - see
+        # _resolve_connection_state's docstring for why splitting this into two
+        # separate submissions (as originally written) broke disconnect
+        # cleanup.
+        requested_conversation_id = websocket.query_params.get("conversation_id")
+        observer_model_name, conversation_id, conversation_title, resumed_messages = await loop.run_in_executor(
+            executor, _resolve_connection_state, conn, requested_conversation_id
+        )
+        conversation_history: list[dict[str, str]] = list(resumed_messages)
         session_id = id(websocket)
         await _session_registry.register(session_id, conn, executor, conversation_history)
+
+        # Sent once, before the main loop - not part of the per-turn
+        # stage_hint -> token* -> (done|error|stopped) sequence (Part 14.3).
+        # See SessionInfoEvent's docstring in shared/ws_spec.py.
+        await websocket.send_json({
+            "type": "session_info",
+            "data": {"conversation_id": conversation_id, "title": conversation_title, "messages": resumed_messages},
+        })
+
+        # Single permanent reader for this connection's whole lifetime - the
+        # only thing anywhere in this handler that calls websocket.receive_json().
+        # Both a new-turn ChatRequest and a mid-stream {"type": "stop"} arrive
+        # through this same queue; stream_pipeline_to_websocket only ever
+        # peeks it non-blockingly while streaming (see its docstring - a
+        # second concurrent receive_json() caller was tried first and found
+        # live to be unsafe on Starlette's WebSocket). A disconnect or any
+        # other receive failure is turned into the _DISCONNECT sentinel
+        # rather than raised here, so the consumer loop below has one
+        # uniform shape to check regardless of why the reader stopped.
+        _DISCONNECT = object()
+
+        async def _read_forever():
+            try:
+                while True:
+                    msg = await websocket.receive_json()
+                    await incoming.put(msg)
+            except Exception:
+                await incoming.put(_DISCONNECT)
+
+        incoming: asyncio.Queue = asyncio.Queue()
+        reader_task = asyncio.ensure_future(_read_forever())
 
         try:
             while True:
                 try:
-                    data: ChatRequest = await asyncio.wait_for(websocket.receive_json(), timeout=_idle_timeout_seconds())
+                    data: ChatRequest = await asyncio.wait_for(incoming.get(), timeout=_idle_timeout_seconds())
                 except asyncio.TimeoutError:
                     # Rule 3: 10-min idle triggers Observer session-end. There's
                     # time here (nothing else is waiting on this connection), so
@@ -502,18 +734,36 @@ try:
                     if conversation_history:
                         try:
                             await session_lifecycle.run_observer_now(
-                                loop, executor, conn, conversation_history, _default_observer_provider(),
+                                loop, executor, conn, conversation_history,
+                                _default_observer_provider(observer_model_name),
                             )
                         except Exception as e:
                             logger.error(f"Idle-timeout Observer run failed, session transcript discarded: {e}")
                         conversation_history.clear()
                     continue
 
+                if data is _DISCONNECT:
+                    break
+
                 user_message = (data or {}).get("message", "")
                 project_id = (data or {}).get("project_id")
                 if not user_message:
                     await websocket.send_json({"type": "error", "data": "message is required"})
                     continue
+
+                # Lazy conversation creation: see _resolve_connection_state's
+                # docstring - a brand-new connection arrives here with
+                # conversation_id still None, and only gets a real (committed)
+                # row now that there's an actual first message to attach it to.
+                # Done BEFORE streaming starts, not after, so the client learns
+                # the real id promptly rather than only once the whole reply
+                # has already streamed in.
+                if conversation_id is None:
+                    conversation_id = await loop.run_in_executor(executor, conversation_store.create_conversation, conn)
+                    await websocket.send_json({
+                        "type": "session_info",
+                        "data": {"conversation_id": conversation_id, "title": "New chat", "messages": []},
+                    })
 
                 # conversation_history holds PRIOR turns only - stage_07 appends
                 # user_message as the final message itself (Part 7 Stage 7). Passing
@@ -524,13 +774,31 @@ try:
                     conversation_history=conversation_history,
                     project_id=project_id,
                     executor=executor,
+                    incoming=incoming,
                 )
+
                 conversation_history.append({"role": "user", "content": user_message})
-                if result.get("status") == "success" and result.get("response_text"):
+                await loop.run_in_executor(
+                    executor, conversation_store.append_message, conn, conversation_id, "user", user_message
+                )
+                if result.get("status") in ("success", "stopped") and result.get("response_text"):
                     conversation_history.append({"role": "assistant", "content": result["response_text"]})
+                    await loop.run_in_executor(
+                        executor, conversation_store.append_message,
+                        conn, conversation_id, "assistant", result["response_text"],
+                    )
         except WebSocketDisconnect:
+            # Belt-and-suspenders alongside the reader's own _DISCONNECT
+            # sentinel above: this path catches a disconnect surfaced through
+            # a *send* (e.g. websocket.send_json() inside
+            # stream_pipeline_to_websocket failing because the client is
+            # already gone), which the reader task never sees since it only
+            # ever calls receive_json().
             pass
         finally:
+            reader_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await reader_task
             await _session_registry.unregister(session_id)
             # Normal disconnect, not a shutdown race: there's time, run Observer
             # now rather than leaving it to a shutdown that may never come. If a
@@ -541,11 +809,29 @@ try:
             if conversation_history and not _session_registry.shutting_down:
                 try:
                     await session_lifecycle.run_observer_now(
-                        loop, executor, conn, conversation_history, _default_observer_provider(),
+                        loop, executor, conn, conversation_history,
+                        _default_observer_provider(observer_model_name),
                     )
                 except Exception as e:
                     logger.error(f"Disconnect Observer run failed, session transcript discarded: {e}")
-            await loop.run_in_executor(executor, conn.close)
+            # Bounded, not a bare await: found live, a connection that did any
+            # DB writes during its life (conversation history persistence)
+            # can leave this specific run_in_executor(conn.close) submission
+            # never dequeued by the single worker thread - reproduced
+            # deterministically under Starlette's TestClient (30s+, not just
+            # slow - genuinely never completes), narrowed to "any commit
+            # happened on this connection" but not fully root-caused beyond
+            # that. Whatever the exact framework interaction, a resource
+            # cleanup step must never be able to hang this connection's
+            # handler coroutine indefinitely - the process-level fallback
+            # (the OS reclaims the fd on process exit) is an acceptable
+            # backstop for the local single-user server this is, and the
+            # bug this guards is the entire ASGI task wedging, not a leaked
+            # connection silently accumulating across many disconnects.
+            try:
+                await asyncio.wait_for(loop.run_in_executor(executor, conn.close), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.error("conn.close() did not complete within 5s on disconnect - abandoning it, not blocking shutdown on it.")
             executor.shutdown(wait=False)
 
     @app.get(f"{BASE_PREFIX}/status")
@@ -633,6 +919,52 @@ try:
         with _conn() as conn:
             return api_list_providers(conn)
 
+    @app.get(f"{BASE_PREFIX}/llm/models")
+    def list_llm_models():
+        return api_list_llm_models()
+
+    @app.get(f"{BASE_PREFIX}/llm/active-model")
+    def get_active_model():
+        with _conn() as conn:
+            return api_get_active_model(conn)
+
+    @app.post(f"{BASE_PREFIX}/llm/active-model")
+    def set_active_model(payload: dict[str, Any]):
+        from fastapi import HTTPException
+        try:
+            with _conn() as conn:
+                return api_set_active_model(conn, payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+    @app.get(f"{BASE_PREFIX}/conversations")
+    def list_conversations(project_id: str | None = None):
+        with _conn() as conn:
+            return api_list_conversations(conn, project_id=project_id)
+
+    @app.get(f"{BASE_PREFIX}/conversations/{{conversation_id}}/messages")
+    def get_conversation_messages(conversation_id: str):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_get_conversation_messages(conn, conversation_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post(f"{BASE_PREFIX}/conversations")
+    def create_conversation(payload: dict[str, Any] | None = None):
+        with _conn() as conn:
+            return api_create_conversation(conn, payload or {})
+
+    @app.delete(f"{BASE_PREFIX}/conversations/{{conversation_id}}")
+    def delete_conversation(conversation_id: str):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_delete_conversation(conn, conversation_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
+
     @app.post(f"{BASE_PREFIX}/providers/{{provider_id}}/consent")
     def grant_consent(provider_id: str, payload: dict[str, Any]):
         from fastapi import HTTPException
@@ -650,6 +982,18 @@ try:
                 return api_revoke_consent(conn, provider_id)
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail=str(exc))
+
+    from fastapi import File, Form, UploadFile
+
+    @app.post(f"{BASE_PREFIX}/rag/upload")
+    async def upload_document(file: UploadFile = File(...), project_id: str | None = Form(None)):
+        from fastapi import HTTPException
+        content = await file.read()
+        with _conn() as conn:
+            try:
+                return api_upload_document(conn, file.filename or "", content, project_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
 
     @app.post(f"{BASE_PREFIX}/rag/ingest")
     def ingest_document(payload: dict[str, Any]):

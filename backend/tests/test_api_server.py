@@ -269,3 +269,275 @@ def test_rag_api_ingest_rejects_file_outside_documents_root(conn, tmp_path, isol
 
     with pytest.raises(ValueError, match="must resolve inside"):
         server.api_ingest_document(conn, {"file_path": str(outside_file)})
+
+
+def test_upload_api_writes_into_documents_root_and_ingests(conn, isolated_documents_root):
+    result = server.api_upload_document(conn, "notes.txt", b"PIP uses SQLCipher for encrypted storage.")
+    assert result["status"] == "ingested"
+
+    saved = isolated_documents_root / "notes.txt"
+    assert saved.read_bytes() == b"PIP uses SQLCipher for encrypted storage."
+
+    docs = server.api_list_documents(conn)
+    assert len(docs) == 1
+    assert docs[0]["file_path"] == str(saved.resolve())
+
+
+def test_upload_api_dedupes_colliding_filename(conn, isolated_documents_root):
+    server.api_upload_document(conn, "notes.txt", b"first")
+    server.api_upload_document(conn, "notes.txt", b"second")
+
+    assert (isolated_documents_root / "notes.txt").read_bytes() == b"first"
+    assert (isolated_documents_root / "notes (1).txt").read_bytes() == b"second"
+    assert len(server.api_list_documents(conn)) == 2
+
+
+def test_upload_api_rejects_unsupported_extension(conn, isolated_documents_root):
+    with pytest.raises(ValueError, match="Unsupported document extension"):
+        server.api_upload_document(conn, "virus.exe", b"whatever")
+
+
+def test_upload_api_rejects_path_traversal_in_filename(conn, isolated_documents_root, tmp_path):
+    # filename is attacker-controlled input (comes straight from the
+    # multipart upload) - Path(filename).name must strip any directory
+    # component so "../../evil.txt" can't escape DOCUMENTS_ROOT.
+    server.api_upload_document(conn, "../../evil.txt", b"payload")
+
+    escaped = tmp_path / "evil.txt"
+    assert not escaped.exists()
+    assert (isolated_documents_root / "evil.txt").read_bytes() == b"payload"
+
+
+def test_upload_api_rejects_empty_filename(conn, isolated_documents_root):
+    with pytest.raises(ValueError, match="Invalid filename"):
+        server.api_upload_document(conn, "", b"payload")
+
+
+def test_rest_upload_route_ingests_a_real_multipart_request(tmp_path, monkeypatch, isolated_documents_root):
+    # Route-level test, not just api_upload_document directly - confirms the
+    # actual FastAPI File()/Form() wiring works over real multipart, which a
+    # unit-level call to api_upload_document can't catch (the CORS ordering
+    # bug earlier this session was exactly this class of miss).
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    response = client.post(
+        "/api/v1/rag/upload",
+        files={"file": ("notes.txt", b"PIP uses SQLCipher for encrypted storage.", "text/plain")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "ingested"
+    assert (isolated_documents_root / "notes.txt").read_bytes() == b"PIP uses SQLCipher for encrypted storage."
+
+
+def test_get_active_model_defaults_when_no_row(conn):
+    from backend.core import pipeline
+    assert server.api_get_active_model(conn) == {"model_name": pipeline.DEFAULT_MODEL_NAME}
+
+
+def test_set_active_model_persists_and_is_read_back(conn, monkeypatch):
+    monkeypatch.setattr(
+        "backend.providers.ollama_provider.list_models",
+        lambda host="http://localhost:11434": [{"name": "mistral:latest", "size": 123}],
+    )
+    result = server.api_set_active_model(conn, {"model_name": "mistral:latest"})
+    assert result == {"status": "updated", "model_name": "mistral:latest"}
+    assert server.api_get_active_model(conn) == {"model_name": "mistral:latest"}
+
+
+def test_set_active_model_overwrites_previous_choice(conn, monkeypatch):
+    monkeypatch.setattr(
+        "backend.providers.ollama_provider.list_models",
+        lambda host="http://localhost:11434": [{"name": "a"}, {"name": "b"}],
+    )
+    server.api_set_active_model(conn, {"model_name": "a"})
+    server.api_set_active_model(conn, {"model_name": "b"})
+    assert server.api_get_active_model(conn) == {"model_name": "b"}
+
+
+def test_set_active_model_rejects_unpulled_model_when_ollama_reachable(conn, monkeypatch):
+    monkeypatch.setattr(
+        "backend.providers.ollama_provider.list_models",
+        lambda host="http://localhost:11434": [{"name": "llama3.1:8b"}],
+    )
+    with pytest.raises(ValueError, match="isn't pulled"):
+        server.api_set_active_model(conn, {"model_name": "nonexistent-model"})
+
+
+def test_set_active_model_fails_open_when_ollama_unreachable(conn, monkeypatch):
+    def raising(host="http://localhost:11434"):
+        raise ConnectionError("unreachable")
+    monkeypatch.setattr("backend.providers.ollama_provider.list_models", raising)
+    # Can't verify the name is real right now, but the choice is still saved -
+    # an unreachable Ollama shouldn't block picking a model for when it's
+    # back up (api_set_active_model's own fail-open reasoning).
+    result = server.api_set_active_model(conn, {"model_name": "llama3.1:8b"})
+    assert result["status"] == "updated"
+
+
+def test_set_active_model_requires_model_name(conn):
+    with pytest.raises(ValueError, match="model_name is required"):
+        server.api_set_active_model(conn, {})
+
+
+def test_list_llm_models_fails_open_when_ollama_unreachable(monkeypatch):
+    def raising(host="http://localhost:11434"):
+        raise ConnectionError("unreachable")
+    monkeypatch.setattr("backend.providers.ollama_provider.list_models", raising)
+    result = server.api_list_llm_models()
+    assert result["models"] == []
+    assert "error" in result
+
+
+def test_list_llm_models_returns_name_and_size(monkeypatch):
+    monkeypatch.setattr(
+        "backend.providers.ollama_provider.list_models",
+        lambda host="http://localhost:11434": [{"name": "llama3.1:8b", "size": 4700000000, "digest": "abc"}],
+    )
+    result = server.api_list_llm_models()
+    assert result["models"] == [{"name": "llama3.1:8b", "size": 4700000000}]
+
+
+def test_rest_llm_model_routes_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+    monkeypatch.setattr(
+        "backend.providers.ollama_provider.list_models",
+        lambda host="http://localhost:11434": [{"name": "phi3:latest", "size": 1}],
+    )
+
+    client = TestClient(server.app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    models = client.get("/api/v1/llm/models", headers=headers)
+    assert models.status_code == 200
+    assert models.json()["models"] == [{"name": "phi3:latest", "size": 1}]
+
+    set_response = client.post("/api/v1/llm/active-model", json={"model_name": "phi3:latest"}, headers=headers)
+    assert set_response.status_code == 200
+
+    get_response = client.get("/api/v1/llm/active-model", headers=headers)
+    assert get_response.status_code == 200
+    assert get_response.json() == {"model_name": "phi3:latest"}
+
+
+def test_rest_llm_model_route_rejects_unpulled_model(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+    monkeypatch.setattr(
+        "backend.providers.ollama_provider.list_models",
+        lambda host="http://localhost:11434": [{"name": "llama3.1:8b"}],
+    )
+
+    client = TestClient(server.app)
+    response = client.post(
+        "/api/v1/llm/active-model",
+        json={"model_name": "made-up-model"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+
+
+def test_api_create_conversation_defaults_to_new_chat(conn):
+    result = server.api_create_conversation(conn, {})
+    assert result["title"] == "New chat"
+    assert result["id"]
+
+
+def test_api_list_conversations_empty_then_populated(conn):
+    assert server.api_list_conversations(conn) == []
+
+    created = server.api_create_conversation(conn, {})
+    conversations = server.api_list_conversations(conn)
+    assert len(conversations) == 1
+    assert conversations[0]["id"] == created["id"]
+
+
+def test_api_get_conversation_messages_returns_them_in_order(conn):
+    from backend.memory import conversation_store
+
+    created = server.api_create_conversation(conn, {})
+    conversation_store.append_message(conn, created["id"], "user", "hi")
+    conversation_store.append_message(conn, created["id"], "assistant", "hello")
+
+    messages = server.api_get_conversation_messages(conn, created["id"])
+    assert [(m["role"], m["content"]) for m in messages] == [("user", "hi"), ("assistant", "hello")]
+
+
+def test_api_get_conversation_messages_raises_for_unknown_id(conn):
+    with pytest.raises(ValueError, match="Unknown conversation"):
+        server.api_get_conversation_messages(conn, "not-a-real-id")
+
+
+def test_api_delete_conversation_removes_it(conn):
+    created = server.api_create_conversation(conn, {})
+    result = server.api_delete_conversation(conn, created["id"])
+    assert result == {"status": "deleted", "id": created["id"]}
+    assert server.api_list_conversations(conn) == []
+
+
+def test_api_delete_conversation_raises_for_unknown_id(conn):
+    with pytest.raises(ValueError, match="Unknown conversation"):
+        server.api_delete_conversation(conn, "not-a-real-id")
+
+
+def test_rest_conversation_routes_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_response = client.post("/api/v1/conversations", json={}, headers=headers)
+    assert create_response.status_code == 200
+    conversation_id = create_response.json()["id"]
+
+    list_response = client.get("/api/v1/conversations", headers=headers)
+    assert list_response.status_code == 200
+    assert [c["id"] for c in list_response.json()] == [conversation_id]
+
+    messages_response = client.get(f"/api/v1/conversations/{conversation_id}/messages", headers=headers)
+    assert messages_response.status_code == 200
+    assert messages_response.json() == []
+
+    delete_response = client.delete(f"/api/v1/conversations/{conversation_id}", headers=headers)
+    assert delete_response.status_code == 200
+    assert client.get("/api/v1/conversations", headers=headers).json() == []
+
+
+def test_rest_conversation_messages_route_404s_for_unknown_id(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    response = client.get(
+        "/api/v1/conversations/not-a-real-id/messages",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 404
+
+
+def test_rest_conversation_delete_route_404s_for_unknown_id(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    response = client.delete(
+        "/api/v1/conversations/not-a-real-id",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 404

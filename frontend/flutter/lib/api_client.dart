@@ -110,4 +110,47 @@ class ApiClient {
   Future<void> revokeConsent(String providerId) async {
     await post('/providers/$providerId/revoke');
   }
+
+  Future<List<dynamic>> getDocuments() async => await get('/rag/documents') as List<dynamic>;
+
+  Future<void> deleteDocument(String filePath) async {
+    await delete('/rag/documents/${Uri.encodeComponent(filePath)}');
+  }
+
+  // Multipart, not the json post() helper above - the backend writes the
+  // picked file's bytes under its own sandboxed documents root (a desktop
+  // file picker returns a path outside it, which the plain /rag/ingest
+  // endpoint would reject) before ingesting it.
+  Future<Map<String, dynamic>> uploadDocument(String filename, List<int> bytes, {String? projectId}) async {
+    final request = http.MultipartRequest('POST', _uri('/rag/upload'))
+      ..headers.addAll(_authHeaders)
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    if (projectId != null) request.fields['project_id'] = projectId;
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    return _decode(response) as Map<String, dynamic>;
+  }
+
+  Future<List<dynamic>> getLlmModels() async {
+    final result = await get('/llm/models') as Map<String, dynamic>;
+    return result['models'] as List<dynamic>;
+  }
+
+  Future<String> getActiveModel() async {
+    final result = await get('/llm/active-model') as Map<String, dynamic>;
+    return result['model_name'] as String;
+  }
+
+  Future<void> setActiveModel(String modelName) async {
+    await post('/llm/active-model', {'model_name': modelName});
+  }
+
+  Future<List<dynamic>> getConversations() async => await get('/conversations') as List<dynamic>;
+
+  Future<List<dynamic>> getConversationMessages(String conversationId) async =>
+      await get('/conversations/$conversationId/messages') as List<dynamic>;
+
+  Future<void> deleteConversation(String conversationId) async {
+    await delete('/conversations/$conversationId');
+  }
 }

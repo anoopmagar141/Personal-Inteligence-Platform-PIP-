@@ -67,3 +67,21 @@ class OllamaProvider(BaseLLMProvider):
             "model_name": self.model_name,
             "host": self.host
         }
+
+
+def list_models(host: str = "http://localhost:11434") -> List[Dict[str, Any]]:
+    """
+    Every model Ollama has locally pulled, via its GET /api/tags endpoint -
+    standalone rather than an OllamaProvider method, since it isn't tied to
+    any one model_name (a model picker needs this BEFORE a model_name is
+    chosen, not after).
+    """
+    req = urllib.request.Request(f"{host}/api/tags", method='GET')
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return data.get('models', [])
+    except urllib.error.URLError as e:
+        raise ProviderUnavailableError(f"Ollama is unreachable at {host}: {e}")
+    except Exception as e:
+        raise ProviderExecutionError(f"Unexpected error listing Ollama models: {e}")

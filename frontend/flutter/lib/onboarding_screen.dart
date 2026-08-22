@@ -109,7 +109,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: AppSpacing.xs),
                   const Text(
                     'A few questions before we start. Name, language, and timezone are locked once set.',
-                    style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textMuted, height: 1.5),
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.5),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   TextFormField(
@@ -172,12 +172,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onPressed: _submitting ? null : _submit,
                       child: _submitting
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentOn))
-                          : const Text('COMPLETE SETUP'),
+                          : const Text('Complete setup'),
                     ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: AppSpacing.sm),
-                    Text(_error!, style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.danger)),
+                    Text(_error!, style: const TextStyle(fontSize: 12, color: AppColors.danger)),
                   ],
                 ],
                 ),

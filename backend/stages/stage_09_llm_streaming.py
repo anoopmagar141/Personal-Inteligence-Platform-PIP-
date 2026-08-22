@@ -13,7 +13,7 @@
 # provider list it's given.
 
 import logging
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from backend.providers.base_provider import (
     BaseLLMProvider,
@@ -36,6 +36,7 @@ def run(
     model_loading: bool = False,
     max_tokens: int = 2000,
     timeout_seconds: int = 30,
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> Iterator[WSChatEvent]:
     """
     Streams a response as an ordered sequence of Part 14.3 WS events:
@@ -46,6 +47,13 @@ def run(
     already yielding tokens, does NOT fall through - partial output has already
     reached the caller, and starting a second provider from scratch would produce
     a duplicated/garbled response, not a clean retry. Surfaces an error instead.
+
+    should_stop is polled once per token, not per provider-fallback-attempt: a
+    client-initiated stop always ends the whole call, it never triggers "try
+    the next provider" the way a provider failure does. Checked BEFORE
+    yielding the token that arrived, so a stop requested the instant before a
+    token was already in flight from the provider still drops that token
+    rather than emitting one token after the client asked to stop.
     """
     yield {
         "type": "stage_hint",
@@ -63,6 +71,11 @@ def run(
         yielded_any = False
         try:
             for token in provider.chat(messages, context=context, max_tokens=max_tokens, timeout_seconds=timeout_seconds):
+                if should_stop is not None and should_stop():
+                    provider_id = provider.get_model_info().get("provider_id", "unknown")
+                    logger.info(f"Stage 9: {provider_id} stopped by client mid-stream")
+                    yield {"type": "stopped", "data": None}
+                    return
                 yield {"type": "token", "data": token}
                 yielded_any = True
 
@@ -111,6 +124,8 @@ def collect(event_iterator: Iterator[WSChatEvent]) -> dict[str, Any]:
         elif event["type"] == "error":
             status = "error"
             error = event["data"]
+        elif event["type"] == "stopped":
+            status = "stopped"
 
     return {
         "response_text": response_text,

@@ -76,12 +76,13 @@ class _ProjectsViewState extends State<ProjectsView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const PageHeader(eyebrow: 'Context', title: 'Projects', description: 'What you\'re working on right now.'),
-            if (_error != null) Text(_error!, style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.danger)),
+            if (_error != null) Text(_error!, style: const TextStyle(color: AppColors.danger)),
             if (_projects != null)
               if (_projects!.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                  child: Text('No projects yet.', style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textFaint)),
+                const EmptyState(
+                  icon: Icons.folder_outlined,
+                  title: 'No projects yet',
+                  description: 'Create one below to give PIP context on what you\'re working on.',
                 )
               else
                 Column(
@@ -110,7 +111,7 @@ class _ProjectsViewState extends State<ProjectsView> {
                                       Text('${project['description']}', style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
                                     ],
                                     const SizedBox(height: 6),
-                                    Text('status: ${project['status']}', style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 11, color: AppColors.textFaint)),
+                                    Text('status: ${project['status']}', style: const TextStyle(fontSize: 11, color: AppColors.textFaint)),
                                   ],
                                 ),
                               ),
@@ -135,7 +136,7 @@ class _ProjectsViewState extends State<ProjectsView> {
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(child: TextField(controller: _descriptionController, decoration: const InputDecoration(labelText: 'Description'))),
                       const SizedBox(width: AppSpacing.sm),
-                      FilledButton(onPressed: _create, child: const Text('CREATE')),
+                      FilledButton(onPressed: _create, child: const Text('Create')),
                     ],
                   ),
                 ],

@@ -44,9 +44,9 @@ class PipApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PIP',
-      theme: AppTheme.dark,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.dark,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.light,
+      themeMode: ThemeMode.light,
       home: const AppRoot(),
     );
   }
@@ -106,10 +106,10 @@ class _AppRootState extends State<AppRoot> {
                   Text(
                     _errorMessage ?? '',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 12.5, color: AppColors.textMuted),
+                    style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  FilledButton(onPressed: _checkOnboarding, child: const Text('RETRY')),
+                  FilledButton(onPressed: _checkOnboarding, child: const Text('Retry')),
                 ],
               ),
             ),

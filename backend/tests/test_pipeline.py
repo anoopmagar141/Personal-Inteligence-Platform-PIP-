@@ -86,6 +86,35 @@ def test_happy_path_yields_tokens_then_pipeline_complete(db_conn):
     assert "trace_id" in final["data"]
 
 
+def test_should_stop_ends_pipeline_early_with_stopped_status(db_conn):
+    events = list(pipeline.run(
+        db_conn, "What is a hash table?",
+        providers=[FakeProvider(tokens=["A ", "hash ", "table."])],
+        should_stop=lambda: True,
+    ))
+    token_events = [e for e in events if e["type"] == "token"]
+    assert token_events == []  # stopped before the provider's own generator was ever consumed
+
+    final = events[-1]
+    assert final["type"] == "pipeline_complete"
+    assert final["data"]["status"] == "stopped"
+
+
+def test_stopped_response_is_never_cached(db_conn):
+    pipeline.run_sync(
+        db_conn, "Explain how caching works",
+        providers=[FakeProvider(tokens=["partial"])],
+        should_stop=lambda: True,
+    )
+    second = pipeline.run_sync(
+        db_conn, "Explain how caching works",
+        providers=[FakeProvider(tokens=["fresh", " answer"])],
+    )
+    # If the stopped call had been cached, this would come back as "" (the
+    # stopped call's empty response_text) instead of the fresh provider's text.
+    assert second["response_text"] == "fresh answer"
+
+
 def test_run_sync_returns_final_result_only(db_conn):
     result = pipeline.run_sync(
         db_conn, "Explain how a hash table works",

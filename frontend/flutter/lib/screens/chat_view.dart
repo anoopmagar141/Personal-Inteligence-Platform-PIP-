@@ -2,24 +2,34 @@
 // (pendingStageHints) and only rendered into the sidebar once done/error
 // arrives (Part 14.3: "static display, populated once response completes",
 // not a live per-stage animation).
+//
+// Conversation history sidebar: mirrors Claude/ChatGPT - a list of past
+// conversations, a "New chat" button, click to switch. Backed by
+// backend/api/server.py's /conversations REST endpoints (list/messages/
+// delete) plus the WS wire protocol's session_info event (see
+// shared/ws_spec.py) for resuming a conversation's messages and learning a
+// freshly (lazily) created conversation's real id.
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../api_client.dart';
 import '../theme.dart';
 import '../ws_chat_client.dart';
 
 class _ChatMessage {
   final String role; // 'user' | 'assistant' | 'system'
   final String content;
-  const _ChatMessage(this.role, this.content);
+  final bool stopped; // true if this assistant turn was interrupted by the user
+  const _ChatMessage(this.role, this.content, {this.stopped = false});
 }
 
 class ChatView extends StatefulWidget {
+  final ApiClient api;
   final WsChatClient chatClient;
   final String? activeProjectId;
-  const ChatView({super.key, required this.chatClient, required this.activeProjectId});
+  const ChatView({super.key, required this.api, required this.chatClient, required this.activeProjectId});
 
   @override
   State<ChatView> createState() => _ChatViewState();
@@ -36,15 +46,46 @@ class _ChatViewState extends State<ChatView> {
   Map<String, dynamic>? _pendingStageHint;
   Map<String, dynamic>? _lastStageHint;
 
+  String? _activeConversationId;
+  List<dynamic>? _conversations;
+
   @override
   void initState() {
     super.initState();
     _subscription = widget.chatClient.events.listen(_handleEvent);
+    _loadConversations();
+  }
+
+  Future<void> _loadConversations() async {
+    try {
+      final conversations = await widget.api.getConversations();
+      if (mounted) setState(() => _conversations = conversations);
+    } catch (_) {
+      // Sidebar is a convenience, not the chat's critical path - a failed
+      // list load just leaves it empty rather than blocking chat itself.
+    }
   }
 
   void _handleEvent(ChatEvent event) {
     if (!mounted) return;
     switch (event.type) {
+      case 'session_info':
+        final data = event.data as Map<String, dynamic>;
+        final messages = (data['messages'] as List<dynamic>).cast<Map<String, dynamic>>();
+        setState(() {
+          _activeConversationId = data['conversation_id'] as String?;
+          // Only replay when there's something to replay - the lazy-create
+          // send (real id, empty messages, mid-turn) must NOT clear a
+          // transcript that already has the in-progress turn in it.
+          if (messages.isNotEmpty) {
+            _transcript
+              ..clear()
+              ..addAll(messages.map((m) => _ChatMessage(m['role'] as String, m['content'] as String)));
+          }
+        });
+        _loadConversations(); // title/ordering may have changed
+        _scrollToBottom();
+        return;
       case 'stage_hint':
         _pendingStageHint = event.data as Map<String, dynamic>?;
         break;
@@ -71,6 +112,20 @@ class _ChatViewState extends State<ChatView> {
         });
         _scrollToBottom();
         return;
+      case 'stopped':
+        setState(() {
+          // Whatever streamed in before the stop lands as a normal assistant
+          // turn, not discarded - the user still read it, and it belongs in
+          // conversation_history the same way the backend keeps it (Part
+          // 15.2's server-side counterpart to this).
+          _transcript.add(_ChatMessage('assistant', _streamingText, stopped: true));
+          _streamingText = '';
+          _isStreaming = false;
+          _lastStageHint = _pendingStageHint;
+          _pendingStageHint = null;
+        });
+        _scrollToBottom();
+        return;
     }
     setState(() {});
   }
@@ -86,6 +141,44 @@ class _ChatViewState extends State<ChatView> {
     widget.chatClient.sendMessage(text, projectId: widget.activeProjectId);
     _controller.clear();
     _scrollToBottom();
+  }
+
+  void _stop() {
+    if (!_isStreaming) return;
+    widget.chatClient.stop();
+    // Not setState(_isStreaming = false) here - the server's own "stopped"
+    // event is what actually finalizes the turn (into _transcript, with
+    // whatever partial text had streamed in). Flipping the flag locally
+    // first would let a fresh _send() race ahead of that event arriving.
+  }
+
+  void _newChat() {
+    if (_activeConversationId == null && _transcript.isEmpty) return; // already a fresh, empty chat
+    setState(() {
+      _transcript.clear();
+      _streamingText = '';
+      _isStreaming = false;
+      _lastStageHint = null;
+      _activeConversationId = null;
+    });
+    widget.chatClient.switchConversation(null);
+  }
+
+  void _switchTo(String conversationId) {
+    if (conversationId == _activeConversationId) return;
+    setState(() {
+      _transcript.clear();
+      _streamingText = '';
+      _isStreaming = false;
+      _lastStageHint = null;
+    });
+    widget.chatClient.switchConversation(conversationId);
+  }
+
+  Future<void> _delete(String conversationId) async {
+    await widget.api.deleteConversation(conversationId);
+    if (conversationId == _activeConversationId) _newChat();
+    await _loadConversations();
   }
 
   void _scrollToBottom() {
@@ -112,6 +205,13 @@ class _ChatViewState extends State<ChatView> {
   Widget build(BuildContext context) {
     return Row(
       children: [
+        _ConversationSidebar(
+          conversations: _conversations,
+          activeConversationId: _activeConversationId,
+          onNewChat: _newChat,
+          onSelect: _switchTo,
+          onDelete: _delete,
+        ),
         Expanded(
           child: Column(
             children: [
@@ -133,13 +233,16 @@ class _ChatViewState extends State<ChatView> {
                     Expanded(
                       child: TextField(
                         controller: _controller,
-                        style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 13.5, color: AppColors.text),
-                        decoration: const InputDecoration(hintText: '> ask pip anything...'),
+                        style: const TextStyle(fontSize: 14.5, color: AppColors.text),
+                        decoration: const InputDecoration(hintText: 'Ask PIP anything...'),
                         onSubmitted: (_) => _send(),
+                        enabled: !_isStreaming,
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
-                    _SendButton(enabled: !_isStreaming, onTap: _send),
+                    _isStreaming
+                        ? _SendButton(enabled: true, onTap: _stop, icon: Icons.stop_rounded, color: AppColors.danger)
+                        : _SendButton(enabled: true, onTap: _send, icon: Icons.arrow_forward),
                   ],
                 ),
               ),
@@ -159,13 +262,135 @@ class _ChatViewState extends State<ChatView> {
               const TagLabel('Last response'),
               const SizedBox(height: AppSpacing.md),
               if (_lastStageHint == null)
-                const Text('No response yet.', style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textFaint))
+                const Text('No response yet.', style: TextStyle(fontSize: 12.5, color: AppColors.textFaint))
               else
                 for (final entry in _lastStageHint!.entries) _HintRow(label: entry.key, value: entry.value == true),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The Claude/ChatGPT-style conversation list: "New chat" up top, then every
+/// past conversation (most recently active first, per the backend's own
+/// ordering), each with a delete affordance that only appears on hover.
+class _ConversationSidebar extends StatelessWidget {
+  final List<dynamic>? conversations;
+  final String? activeConversationId;
+  final VoidCallback onNewChat;
+  final ValueChanged<String> onSelect;
+  final ValueChanged<String> onDelete;
+  const _ConversationSidebar({
+    required this.conversations,
+    required this.activeConversationId,
+    required this.onNewChat,
+    required this.onSelect,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(right: BorderSide(color: AppColors.border)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: GhostButton(label: '+ New chat', onTap: onNewChat),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: conversations == null
+                ? const SizedBox.shrink()
+                : conversations!.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(AppSpacing.md),
+                        child: Text('No conversations yet.', style: TextStyle(fontSize: 12, color: AppColors.textFaint)),
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                        children: [
+                          for (final conversation in conversations!)
+                            _ConversationRow(
+                              title: '${conversation['title']}',
+                              selected: conversation['id'] == activeConversationId,
+                              onTap: () => onSelect(conversation['id'] as String),
+                              onDelete: () => onDelete(conversation['id'] as String),
+                            ),
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConversationRow extends StatefulWidget {
+  final String title;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+  const _ConversationRow({required this.title, required this.selected, required this.onTap, required this.onDelete});
+
+  @override
+  State<_ConversationRow> createState() => _ConversationRowState();
+}
+
+class _ConversationRowState extends State<_ConversationRow> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+        child: Material(
+          color: widget.selected ? AppColors.accentSoft : Colors.transparent,
+          borderRadius: AppRadius.sm,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: AppRadius.sm,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: widget.selected ? AppColors.accent : AppColors.text,
+                        fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                  if (_hovering)
+                    InkWell(
+                      onTap: widget.onDelete,
+                      borderRadius: AppRadius.sm,
+                      child: const Padding(
+                        padding: EdgeInsets.all(2),
+                        child: Icon(Icons.close, size: 14, color: AppColors.textFaint),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -184,13 +409,12 @@ class _HintRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
-            child: Text(label, style: const TextStyle(fontFamily: AppTheme.mono, fontSize: 11.5, color: AppColors.textMuted)),
+            child: Text(label, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
           ),
           Text(
-            value ? 'true' : 'false',
+            value ? 'Yes' : 'No',
             style: TextStyle(
-              fontFamily: AppTheme.mono,
-              fontSize: 11.5,
+              fontSize: 12.5,
               fontWeight: FontWeight.w600,
               color: value ? AppColors.accent : AppColors.textFaint,
             ),
@@ -204,12 +428,14 @@ class _HintRow extends StatelessWidget {
 class _SendButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
-  const _SendButton({required this.enabled, required this.onTap});
+  final IconData icon;
+  final Color color;
+  const _SendButton({required this.enabled, required this.onTap, required this.icon, this.color = AppColors.accent});
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: enabled ? AppColors.accent : AppColors.surfaceRaised,
+      color: enabled ? color : AppColors.surfaceRaised,
       borderRadius: AppRadius.sm,
       child: InkWell(
         onTap: enabled ? onTap : null,
@@ -218,7 +444,7 @@ class _SendButton extends StatelessWidget {
           width: 40,
           height: 40,
           alignment: Alignment.center,
-          child: Icon(Icons.arrow_forward, size: 18, color: enabled ? AppColors.accentOn : AppColors.textFaint),
+          child: Icon(icon, size: 18, color: enabled ? AppColors.accentOn : AppColors.textFaint),
         ),
       ),
     );
@@ -237,37 +463,68 @@ class _MessageBubble extends StatelessWidget {
         child: Center(
           child: Text(
             message.content,
-            style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.danger, fontSize: 12),
+            style: const TextStyle(color: AppColors.danger, fontSize: 12.5),
           ),
         ),
       );
     }
     final isUser = message.role == 'user';
+    final bubble = Column(
+      crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: isUser
+              ? BoxDecoration(color: AppColors.accentSoft, borderRadius: AppRadius.md)
+              : null,
+          child: Text(
+            message.content,
+            style: const TextStyle(fontSize: 14.5, height: 1.5, color: AppColors.text),
+          ),
+        ),
+        if (message.stopped) ...[
+          const SizedBox(height: 4),
+          const Text('Stopped', style: TextStyle(fontSize: 11, color: AppColors.textFaint, fontStyle: FontStyle.italic)),
+        ],
+      ],
+    );
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs + 2),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.6),
-        child: Column(
-          crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            if (!isUser) ...[
-              const TagLabel('PIP', color: AppColors.accent, size: 10),
-              const SizedBox(height: 5),
-            ],
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-              decoration: isUser
-                  ? BoxDecoration(color: AppColors.surfaceRaised, borderRadius: AppRadius.sm, border: Border.all(color: AppColors.border))
-                  : null,
-              child: Text(
-                message.content,
-                style: const TextStyle(fontSize: 14.5, height: 1.5, color: AppColors.text),
-              ),
-            ),
-          ],
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: isUser
+              ? [Flexible(child: bubble), const SizedBox(width: 8), const _Avatar(isUser: true)]
+              : [const _Avatar(isUser: false), const SizedBox(width: 8), Flexible(child: bubble)],
         ),
       ),
+    );
+  }
+}
+
+/// Small circular avatar next to each message (matches 21st.dev's "Message"
+/// component from Vercel's AI SDK - a consistent user/assistant marker
+/// instead of relying on bubble color/alignment alone).
+class _Avatar extends StatelessWidget {
+  final bool isUser;
+  const _Avatar({required this.isUser});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 26,
+      height: 26,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: isUser ? AppColors.surfaceRaised : AppColors.accent,
+        shape: BoxShape.circle,
+      ),
+      child: isUser
+          ? const Icon(Icons.person_outline, size: 15, color: AppColors.textMuted)
+          : const Text('P', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accentOn)),
     );
   }
 }

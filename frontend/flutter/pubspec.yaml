@@ -39,6 +39,7 @@ dependencies:
   http: ^1.2.2
   # /ws/chat (Part 14.2: WebSocket is the only transport for chat, ADR-028).
   web_socket_channel: ^3.0.1
+  file_picker: ^12.0.0
 
 dev_dependencies:
   flutter_test:

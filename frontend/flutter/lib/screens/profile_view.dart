@@ -38,7 +38,7 @@ class _ProfileViewState extends State<ProfileView> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) return Center(child: Text(_error!, style: const TextStyle(fontFamily: AppTheme.mono, color: AppColors.danger)));
+    if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger)));
     if (_fields == null) return const Center(child: CircularProgressIndicator());
 
     return RefreshIndicator(
@@ -51,7 +51,11 @@ class _ProfileViewState extends State<ProfileView> {
           children: [
             const PageHeader(eyebrow: 'Memory', title: 'Profile', description: 'What PIP has learned about you, and how confident it is.'),
             _fields!.isEmpty
-                ? const Text('No profile fields yet.', style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12, color: AppColors.textFaint))
+                ? const EmptyState(
+                    icon: Icons.person_outline,
+                    title: 'No profile fields yet',
+                    description: 'PIP fills this in as it learns about you through conversation.',
+                  )
                 : SectionCard(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                     child: DataTable(

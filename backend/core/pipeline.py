@@ -30,7 +30,7 @@
 # each call.
 
 import logging
-from typing import Any, Generator, Optional, Union
+from typing import Any, Callable, Generator, Optional, Union
 
 from backend.core import response_cache, trace
 from backend.memory import session_snapshot
@@ -52,10 +52,27 @@ from shared.ws_spec import PipelineCompleteEvent, WSChatEvent
 logger = logging.getLogger(__name__)
 
 _DEFAULT_PROVIDER_ID = "ollama"
+DEFAULT_MODEL_NAME = "llama3.1:8b"
 
 
-def _default_providers() -> list[BaseLLMProvider]:
-    return [OllamaProvider(model_name="llama3.1:8b")]
+def get_active_model_name(conn) -> str:
+    """
+    Reads the user's selected Ollama model from llm_settings (schema.sql),
+    falling back to DEFAULT_MODEL_NAME if no row exists yet - a fresh DB, or
+    an existing DB from before this table existed, both read as "use the
+    default" rather than an error (schema.sql's CREATE TABLE IF NOT EXISTS
+    means the table itself is always present once initialize_schema() has
+    run, just possibly empty). Shared by _default_providers() below and
+    server.py's Observer provider - ADR-033 requires Observer to use the same
+    model as generation, so both read through this one function rather than
+    each hardcoding their own default.
+    """
+    row = conn.execute("SELECT model_name FROM llm_settings WHERE id = 1").fetchone()
+    return row["model_name"] if row else DEFAULT_MODEL_NAME
+
+
+def _default_providers(conn) -> list[BaseLLMProvider]:
+    return [OllamaProvider(model_name=get_active_model_name(conn))]
 
 
 def _load_last_session_timestamp(conn):
@@ -97,6 +114,7 @@ def run(
     providers: Optional[list[BaseLLMProvider]] = None,
     max_tokens: int = 2000,
     timeout_seconds: int = 30,
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> Generator[Union[WSChatEvent, PipelineCompleteEvent], None, None]:
     """
     Runs Stages 0-10 for one user message. A generator: yields every Stage 9 event
@@ -233,7 +251,7 @@ def run(
     trace.stage_log(trace_id, "stage_07_context_assembly", "ok", "context assembled")
 
     # Stage 8
-    gated_providers = _gate_providers(conn, trace_id, providers or _default_providers())
+    gated_providers = _gate_providers(conn, trace_id, providers or _default_providers(conn))
     if not gated_providers:
         trace.stage_log(trace_id, "stage_08_provider_gate", "error", "no consented providers available")
         result = stage_10.run(
@@ -255,6 +273,7 @@ def run(
         model_loading=False,  # no reliable warm/cold detection without extending BaseLLMProvider
         max_tokens=max_tokens,
         timeout_seconds=timeout_seconds,
+        should_stop=should_stop,
     )
 
     response_text = ""
@@ -272,8 +291,10 @@ def run(
         elif event["type"] == "error":
             status = "error"
             error = event["data"]
+        elif event["type"] == "stopped":
+            status = "stopped"
 
-    trace.stage_log(trace_id, "stage_09_llm_streaming", "ok" if status == "success" else "error", f"status={status}", error_detail=error or "")
+    trace.stage_log(trace_id, "stage_09_llm_streaming", "error" if status == "error" else "ok", f"status={status}", error_detail=error or "")
 
     if status == "success":
         response_cache.set(
