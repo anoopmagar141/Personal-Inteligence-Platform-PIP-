@@ -261,3 +261,74 @@ def test_run_session_end_reinforces_evidence_across_simulated_sessions(db_conn):
 
     row = db_conn.execute("SELECT evidence_count FROM preference_memory WHERE name = 'preferred_tools'").fetchone()
     assert row["evidence_count"] == 2  # written value reflects reinforcement, not just the check
+
+
+# --- Decision candidates that are really the assistant's own text (found live) ---
+
+
+def test_run_drops_decision_candidate_matching_an_assistant_line(db_conn):
+    transcript = (
+        "User: what's my status?\n"
+        "Assistant: Would you like me to help you prioritize the tasks or provide any updates on the project timeline?\n"
+    )
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [
+            {
+                # Not phrased as a question by itself, but is a verbatim echo of
+                # the assistant's own line above - the case the question-mark
+                # heuristic alone wouldn't catch.
+                "decision_text": "Would you like me to help you prioritize the tasks or provide any updates on the project timeline",
+                "signals_found": ["commitment_language", "alternative_considered"],
+                "raw_quote": "",
+            }
+        ],
+        "session_snapshot": {},
+    }
+    provider = FakeProvider(response_text=json.dumps(response))
+    result = observer.run(transcript, provider, db_conn)
+    assert result["decision_candidates"] == []
+
+
+def test_run_drops_decision_candidate_phrased_as_a_question(db_conn):
+    # Caught even with no matching assistant line at all - genuine decisions
+    # are statements, not questions.
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [
+            {
+                "decision_text": "Should we use Redis for caching?",
+                "signals_found": ["commitment_language", "alternative_considered"],
+                "raw_quote": "",
+            }
+        ],
+        "session_snapshot": {},
+    }
+    provider = FakeProvider(response_text=json.dumps(response))
+    result = observer.run("User: no assistant lines here", provider, db_conn)
+    assert result["decision_candidates"] == []
+
+
+def test_run_keeps_genuine_decision_alongside_assistant_lines(db_conn):
+    # A real decision must still survive even when the transcript has
+    # Assistant: lines present - the filter targets the specific echoed text,
+    # not "any decision in a transcript with assistant replies."
+    transcript = (
+        "User: let's go with FastAPI for async support\n"
+        "Assistant: Great choice, FastAPI has excellent async support.\n"
+    )
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [
+            {
+                "decision_text": "Chose FastAPI over Flask for async support",
+                "signals_found": ["alternative_considered", "commitment_language"],
+                "raw_quote": "let's go with FastAPI",
+            }
+        ],
+        "session_snapshot": {},
+    }
+    provider = FakeProvider(response_text=json.dumps(response))
+    result = observer.run(transcript, provider, db_conn)
+    assert len(result["decision_candidates"]) == 1
+    assert result["decision_candidates"][0]["decision_text"] == "Chose FastAPI over Flask for async support"

@@ -62,6 +62,10 @@ RULES:
   - Do NOT create fields outside the approved list.
   - Do NOT include emotional state, mood, or psychological signals.
   - If uncertain, omit. Never guess.
+  - A decision_candidate must be something the USER decided or committed to.
+    Never extract the assistant's own offers, questions, or suggestions
+    ("Would you like me to...", "I can help you...") as a decision - those
+    are not decisions, they weren't made by the user.
 
 APPROVED MEMORY FIELDS (target_table: [field_name, ...]):
   skill_memory: [python_level, docker_level, ...]
@@ -167,6 +171,39 @@ def _sanitize_decision_candidate(raw: Any) -> Optional[dict[str, Any]]:
     }
 
 
+def _extract_assistant_lines(transcript: str) -> list[str]:
+    return [
+        line.split(":", 1)[1].strip().lower()
+        for line in transcript.splitlines()
+        if line.strip().lower().startswith("assistant:")
+    ]
+
+
+def _looks_like_assistant_echo(decision_text: str, assistant_lines: list[str]) -> bool:
+    """
+    Found live: Observer's extraction sometimes echoes the assistant's own
+    prior reply back as a decision_candidate ("Would you like me to
+    prioritize the tasks...?" logged as if the user decided it) - the
+    RULES prompt instruction against this is not enough on its own (same
+    "don't trust the model's own compliance" lesson as ADR-005's confidence
+    scoring: instructions get ignored by a small model with nothing better
+    to extract). Two independent, deterministic signals, since a genuine
+    decision phrased as a question is conceivable but rare, while a
+    decision_text that's a near-verbatim assistant line essentially never is:
+      1. It's phrased as a question - decisions are statements of what was
+         decided, not requests or offers.
+      2. It appears verbatim (normalized) inside one of the transcript's own
+         "Assistant:" lines (format_transcript()'s role-labeled format,
+         session_lifecycle.py).
+    """
+    normalized = " ".join(decision_text.strip().lower().split())
+    if not normalized:
+        return True
+    if normalized.endswith("?"):
+        return True
+    return any(normalized in line for line in assistant_lines)
+
+
 def _as_string_list(value: Any) -> list[str]:
     """
     Coerces a list to a list of strings. Found live: llama3.1:8b sometimes nests
@@ -256,7 +293,18 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
     raw_decisions = parsed.get("decision_candidates")
     decision_candidates = []
     if isinstance(raw_decisions, list):
-        decision_candidates = [c for c in (_sanitize_decision_candidate(d) for d in raw_decisions) if c is not None]
+        assistant_lines = _extract_assistant_lines(transcript)
+        for d in raw_decisions:
+            candidate = _sanitize_decision_candidate(d)
+            if candidate is None:
+                continue
+            if _looks_like_assistant_echo(candidate["decision_text"], assistant_lines):
+                logger.info(
+                    f"Observer: dropping decision candidate that looks like an assistant echo: "
+                    f"{candidate['decision_text']!r}"
+                )
+                continue
+            decision_candidates.append(candidate)
 
     return {
         "memory_candidates": memory_candidates,
