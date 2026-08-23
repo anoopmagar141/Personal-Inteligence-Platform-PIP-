@@ -8,6 +8,7 @@ data/pip.db-wal
 data/chroma/
 data/api_token.txt
 data/documents/
+data/pip.lock
 backend/logs/
 .venv/
 .vs/

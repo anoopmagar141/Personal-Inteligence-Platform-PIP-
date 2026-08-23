@@ -1,4 +1,5 @@
 sqlcipher3
+cryptography
 chromadb
 sentence-transformers
 pypdf

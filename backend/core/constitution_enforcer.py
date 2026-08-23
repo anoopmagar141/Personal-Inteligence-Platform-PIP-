@@ -15,6 +15,38 @@ OBSERVER_WRITABLE_TABLES = {
     "active_projects",
 }
 
+
+def is_contradicting_inferred_observation(
+    proposed_value: Any,
+    current_value: Any,
+    label: str,
+    existing_source_label: Any,
+) -> bool:
+    """
+    True when an inferred candidate's proposed_value disagrees with the
+    currently stored value for a field whose current value came from the
+    user directly (explicit/user_verified/user_correction) - the shape of
+    observation the behavioral override mechanism exists to accumulate
+    evidence about.
+
+    Shared between ConstitutionEnforcer._triggers_behavioral_override
+    (decides whether enough of these have accumulated to actually trigger
+    reconciliation) and Stage 13 (decides whether THIS one is worth logging
+    as a data point toward that count at all, on the DISCARD path) - security
+    review finding: nothing in this codebase ever wrote to
+    preference_contradiction_log outside test fixtures, so the trigger's
+    inputs could never become true from real usage. Extracting this
+    predicate keeps the two callers from silently drifting on what counts as
+    a contradiction.
+    """
+    if current_value is None:
+        return False
+    if current_value == proposed_value:
+        return False
+    if label != "inferred":
+        return False
+    return existing_source_label in ("explicit", "user_verified", "user_correction")
+
 class ConstitutionEnforcer:
     def __init__(self, constitution_path: str):
         with open(constitution_path, "r", encoding="utf-8") as f:
@@ -92,20 +124,11 @@ class ConstitutionEnforcer:
         candidate: MemoryCandidate,
         existing_field: Any
     ) -> bool:
-        current_value = self._field_value(existing_field, "current_value")
-        if current_value is None:
-            return False
-
-        if current_value == candidate.get("proposed_value"):
-            return False
-
-        if candidate.get("label", "inferred") != "inferred":
-            return False
-
-        if self._field_value(existing_field, "source_label") not in (
-            "explicit",
-            "user_verified",
-            "user_correction",
+        if not is_contradicting_inferred_observation(
+            candidate.get("proposed_value"),
+            self._field_value(existing_field, "current_value"),
+            candidate.get("label", "inferred"),
+            self._field_value(existing_field, "source_label"),
         ):
             return False
 

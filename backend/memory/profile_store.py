@@ -614,3 +614,20 @@ def write_approved_candidate(conn: sqlite3.Connection, candidate: MemoryCandidat
         raise ValueError(f"Unsupported target_table for approved write: {target_table}")
 
     conn.commit()
+
+
+def log_preference_contradiction(conn: sqlite3.Connection, preference_id: int, contradiction_text: str) -> None:
+    """
+    Records one instance of an inferred observation contradicting a stated
+    preference_memory value - the data ConstitutionEnforcer's behavioral
+    override trigger counts (COUNT(*)) and dates (MIN(created_at)), see
+    stage_12_validation_layer._fetch_existing_state. Called from Stage 13 on
+    the DISCARD path, never from Observer directly (Rule 2: Observer never
+    writes) - same one-writer-per-resource discipline as every other
+    preference_memory write in this module.
+    """
+    conn.execute(
+        "INSERT INTO preference_contradiction_log (preference_id, contradiction_text, created_at) VALUES (?, ?, ?)",
+        (preference_id, contradiction_text, now_utc()),
+    )
+    conn.commit()

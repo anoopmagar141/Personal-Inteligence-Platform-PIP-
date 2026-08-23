@@ -17,6 +17,12 @@ def isolated_chroma(tmp_path, monkeypatch):
     monkeypatch.setattr(vector_store, "CHROMA_DB_PATH", str(tmp_path / "chroma"))
     monkeypatch.setattr(vector_store, "_client", None)
     monkeypatch.setattr(vector_store, "_collection", None)
+    # This module derives its own encryption key from PIP_DB_KEY directly
+    # (see vector_store._get_db_key()), independent of the SQLCipher db_key
+    # fixture/connection above - keep it unset by default so the existing
+    # plaintext-mode tests below stay exercising the no-key passthrough path.
+    # Tests for the encrypted path opt in explicitly via monkeypatch.setenv.
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
     yield
 
 
@@ -171,3 +177,80 @@ def test_ingest_accepts_file_in_documents_root_subdirectory(db_conn, isolated_do
 
     result = vector_store.ingest_document(db_conn, str(doc_path))
     assert result["status"] == "ingested"
+
+
+# --- Encryption at rest (PIP_DB_KEY set) ---
+
+
+def test_ingest_encrypts_chunk_text_and_file_path_on_disk(db_conn, sample_doc, monkeypatch, db_key):
+    # Security regression test: ChromaDB used to store chunk text and
+    # file_path in plaintext regardless of whether the main SQLite DB was
+    # SQLCipher-encrypted. With PIP_DB_KEY set, the raw values Chroma actually
+    # persists must never contain the plaintext content or path.
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+
+    vector_store.ingest_document(db_conn, sample_doc)
+
+    raw = vector_store._get_collection().get(include=["documents", "metadatas"])
+    assert raw["documents"], "expected at least one stored chunk"
+    for doc in raw["documents"]:
+        assert "ChromaDB" not in doc
+        assert "SQLCipher" not in doc
+    for meta in raw["metadatas"]:
+        assert "file_path" not in meta  # only the encrypted file_path_enc should be present
+        assert sample_doc not in meta["file_path_enc"]
+        assert "file_key" in meta
+
+
+def test_query_decrypts_chunk_text_and_file_path(db_conn, sample_doc, monkeypatch, db_key):
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+
+    vector_store.ingest_document(db_conn, sample_doc)
+    matches = vector_store.query(db_conn, "Is ChromaDB the source of truth?", threshold=0.1, top_k=3)
+
+    assert len(matches) >= 1
+    assert any("ChromaDB" in m["chunk_text"] for m in matches)
+    assert all(m["file_path"] == sample_doc for m in matches)
+
+
+def test_delete_document_works_under_encryption(db_conn, sample_doc, monkeypatch, db_key):
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+
+    vector_store.ingest_document(db_conn, sample_doc)
+    assert vector_store.delete_document(db_conn, sample_doc) is True
+
+    matches = vector_store.query(db_conn, "SQLCipher", threshold=0.1, top_k=3)
+    assert matches == []
+
+
+def test_reingest_changed_file_replaces_chunks_under_encryption(db_conn, isolated_documents_root, monkeypatch, db_key):
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+
+    doc_path = isolated_documents_root / "notes.txt"
+    doc_path.write_text("Original content about FastAPI.", encoding="utf-8")
+    vector_store.ingest_document(db_conn, str(doc_path))
+
+    doc_path.write_text("Completely different content about Neovim.", encoding="utf-8")
+    vector_store.ingest_document(db_conn, str(doc_path))
+
+    matches = vector_store.query(db_conn, "Neovim", threshold=0.1, top_k=5)
+    assert any("Neovim" in m["chunk_text"] for m in matches)
+    matches_old = vector_store.query(db_conn, "FastAPI", threshold=0.5, top_k=5)
+    assert matches_old == [] or all("FastAPI" not in m["chunk_text"] for m in matches_old)
+
+
+def test_query_skips_chunks_from_a_different_key_without_crashing(db_conn, sample_doc, monkeypatch, db_key):
+    # Simulates the mixed-schema edge case: chunks ingested under one key (or
+    # no key at all) still sitting in Chroma when PIP_DB_KEY changes. The read
+    # path must degrade to "skip that chunk" rather than raise.
+    vector_store.ingest_document(db_conn, sample_doc)  # ingested with no key (plaintext schema)
+
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    matches = vector_store.query(db_conn, "Is ChromaDB the source of truth?", threshold=0.1, top_k=3)
+    assert matches == []
+
+
+def test_rejects_non_hex_db_key(db_conn, sample_doc, monkeypatch):
+    monkeypatch.setenv("PIP_DB_KEY", "not-hex!!")
+    with pytest.raises(ValueError, match="hex-encoded"):
+        vector_store.ingest_document(db_conn, sample_doc)

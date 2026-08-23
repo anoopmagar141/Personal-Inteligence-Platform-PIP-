@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from backend.config.settings import get_settings
-from backend.core import auth, pipeline, session_lifecycle
+from backend.core import auth, instance_lock, pipeline, session_lifecycle
 from backend.memory import conversation_store, decision_log, profile_store, vector_store
 from backend.providers.ollama_provider import OllamaProvider
 from backend.stages import stage_08_provider_gate as provider_gate
@@ -525,39 +525,47 @@ try:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Startup: drain any pending_observer rows a previous shutdown left behind
-        # (Part 7: drain before Stage 0 - there's no live traffic yet to delay).
-        startup_conn = _conn()
+        # Security review finding: nothing previously stopped a second backend
+        # process from starting up against the same DB - see instance_lock.py.
+        # Raises loudly (AlreadyRunningError) rather than continuing, same
+        # "fail loud, not silent" posture as the SQLCipher wrong-key check.
+        instance_lock.acquire()
         try:
-            result = session_lifecycle.drain_pending_on_startup(
-                startup_conn, _default_observer_provider(pipeline.get_active_model_name(startup_conn))
-            )
-            if result["completed"] or result["failed"]:
-                logger.info(f"Startup pending_observer drain: {result}")
-        except Exception as e:
-            # Fail open - a drain problem must never block the app from starting.
-            logger.error(f"Startup pending_observer drain failed, continuing anyway: {e}")
-        finally:
-            startup_conn.close()
-
-        # Ensures the token file exists before the first request arrives.
-        # Never logged: the file at auth.TOKEN_PATH (or PIP_TOKEN_PATH) is
-        # the only place this value is meant to be read from.
-        auth.get_or_create_token(_token_path())
-        logger.info(f"PIP is ready. API token file: {_token_path() or auth.TOKEN_PATH}")
-
-        yield
-
-        # Shutdown: too slow to run a ~130s-class Observer pass per open
-        # connection (ADR-033 condition 2) - persist instead, drained for real
-        # on the next startup.
-        _session_registry.shutting_down = True
-        loop = asyncio.get_event_loop()
-        for session in await _session_registry.snapshot():
+            # Startup: drain any pending_observer rows a previous shutdown left behind
+            # (Part 7: drain before Stage 0 - there's no live traffic yet to delay).
+            startup_conn = _conn()
             try:
-                await session_lifecycle.enqueue_for_shutdown(loop, session)
+                result = session_lifecycle.drain_pending_on_startup(
+                    startup_conn, _default_observer_provider(pipeline.get_active_model_name(startup_conn))
+                )
+                if result["completed"] or result["failed"]:
+                    logger.info(f"Startup pending_observer drain: {result}")
             except Exception as e:
-                logger.error(f"Shutdown: failed to enqueue a session's transcript, it will be lost: {e}")
+                # Fail open - a drain problem must never block the app from starting.
+                logger.error(f"Startup pending_observer drain failed, continuing anyway: {e}")
+            finally:
+                startup_conn.close()
+
+            # Ensures the token file exists before the first request arrives.
+            # Never logged: the file at auth.TOKEN_PATH (or PIP_TOKEN_PATH) is
+            # the only place this value is meant to be read from.
+            auth.get_or_create_token(_token_path())
+            logger.info(f"PIP is ready. API token file: {_token_path() or auth.TOKEN_PATH}")
+
+            yield
+
+            # Shutdown: too slow to run a ~130s-class Observer pass per open
+            # connection (ADR-033 condition 2) - persist instead, drained for real
+            # on the next startup.
+            _session_registry.shutting_down = True
+            loop = asyncio.get_event_loop()
+            for session in await _session_registry.snapshot():
+                try:
+                    await session_lifecycle.enqueue_for_shutdown(loop, session)
+                except Exception as e:
+                    logger.error(f"Shutdown: failed to enqueue a session's transcript, it will be lost: {e}")
+        finally:
+            instance_lock.release()
 
     app = FastAPI(title="PIP Core API", lifespan=lifespan)
 

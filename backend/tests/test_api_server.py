@@ -1,10 +1,11 @@
+import os
 import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import server
-from backend.core import auth
+from backend.core import auth, instance_lock
 from backend.memory import profile_store, vector_store
 
 
@@ -541,3 +542,34 @@ def test_rest_conversation_delete_route_404s_for_unknown_id(tmp_path, monkeypatc
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 404
+
+
+def test_lifespan_refuses_to_start_when_another_instance_holds_the_lock(tmp_path, monkeypatch):
+    # Security review finding: nothing stopped a second backend process from
+    # starting against the same DB - see instance_lock.py. This confirms the
+    # FastAPI lifespan actually wires the check in, not just the module in
+    # isolation.
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    lock_path = tmp_path / "pip.lock"
+    monkeypatch.setenv("PIP_LOCK_PATH", str(lock_path))
+    lock_path.write_text(str(os.getppid()))  # a pid that's genuinely alive, but not this process
+
+    with pytest.raises(instance_lock.AlreadyRunningError):
+        with TestClient(server.app):
+            pass
+
+
+def test_lifespan_releases_the_lock_on_clean_shutdown(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    lock_path = tmp_path / "pip.lock"
+    monkeypatch.setenv("PIP_LOCK_PATH", str(lock_path))
+
+    with TestClient(server.app):
+        assert lock_path.exists()
+        assert int(lock_path.read_text()) == os.getpid()
+
+    assert not lock_path.exists()

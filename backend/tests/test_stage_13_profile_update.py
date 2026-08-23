@@ -1,7 +1,11 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
+from backend.core.constitution_enforcer import ConstitutionEnforcer
 from backend.core.types import MemoryCandidate, ValidationResult
 from backend.memory.profile_store import get_connection, initialize_schema
 from backend.memory import candidate_store
+from backend.stages import stage_12_validation_layer as stage_12
 from backend.stages import stage_13_profile_update as stage_13
 
 
@@ -113,3 +117,195 @@ def test_approved_write_failure_retries_once_then_fails(db_conn, monkeypatch):
     outcome = stage_13.run(db_conn, candidate, ValidationResult.APPROVED())
     assert outcome == "failed"
     assert calls["count"] == 2
+
+
+# --- Behavioral contradiction logging (DISCARD path) ---
+#
+# Security review finding: nothing in this codebase ever wrote to
+# preference_contradiction_log outside test fixtures, so
+# ConstitutionEnforcer's behavioral override trigger could never see real
+# data and could never fire. These tests cover the fix: Stage 13 logs a
+# contradiction on the DISCARD path instead of throwing the observation away.
+
+
+def test_discard_of_contradicting_inferred_candidate_logs_contradiction(db_conn):
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, source_label, evidence_count) VALUES ('editor', 'vim', 'explicit', 5)"
+    )
+    db_conn.commit()
+    pref_id = db_conn.execute("SELECT id FROM preference_memory WHERE name = 'editor'").fetchone()["id"]
+
+    candidate: MemoryCandidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "emacs",
+        "label": "inferred",
+        "evidence_count": 1,
+        "evidence_text": "Observed using emacs",
+    }
+    outcome = stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    assert outcome == "rejected"
+
+    rows = db_conn.execute(
+        "SELECT contradiction_text FROM preference_contradiction_log WHERE preference_id = ?", (pref_id,)
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["contradiction_text"] == "Observed using emacs"
+
+
+def test_discard_does_not_log_when_value_matches_existing(db_conn):
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, source_label, evidence_count) VALUES ('editor', 'vim', 'explicit', 5)"
+    )
+    db_conn.commit()
+
+    candidate: MemoryCandidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "vim",  # same as stored - not a contradiction
+        "label": "inferred",
+        "evidence_count": 1,
+        "evidence_text": "Still using vim",
+    }
+    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    count = db_conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0]
+    assert count == 0
+
+
+def test_discard_does_not_log_when_label_is_not_inferred(db_conn):
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, source_label, evidence_count) VALUES ('editor', 'vim', 'explicit', 5)"
+    )
+    db_conn.commit()
+
+    candidate: MemoryCandidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "emacs",
+        "label": "explicit",  # an explicit contradiction is a real conflict (TIER_2), not a behavioral one
+        "evidence_count": 1,
+        "evidence_text": "Said switched to emacs",
+    }
+    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    count = db_conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0]
+    assert count == 0
+
+
+def test_discard_does_not_log_when_existing_source_is_itself_inferred(db_conn):
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, source_label, evidence_count) VALUES ('editor', 'vim', 'inferred', 2)"
+    )
+    db_conn.commit()
+
+    candidate: MemoryCandidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "emacs",
+        "label": "inferred",
+        "evidence_count": 1,
+        "evidence_text": "Observed using emacs",
+    }
+    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    count = db_conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0]
+    assert count == 0
+
+
+def test_discard_does_not_log_when_no_existing_preference(db_conn):
+    candidate: MemoryCandidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "emacs",
+        "label": "inferred",
+        "evidence_count": 1,
+        "evidence_text": "Observed using emacs",
+    }
+    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    count = db_conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0]
+    assert count == 0
+
+
+def test_discard_does_not_log_for_non_preference_table(db_conn):
+    db_conn.execute("INSERT INTO identity (id, name, language_preference, timezone) VALUES (1, 'Alice', 'en-US', 'UTC')")
+    db_conn.commit()
+
+    candidate: MemoryCandidate = {
+        "target_table": "identity",
+        "field_name": "name",
+        "proposed_value": "Bob",
+        "label": "inferred",
+        "evidence_count": 1,
+        "evidence_text": "test",
+    }
+    stage_13.run(db_conn, candidate, ValidationResult.HARD_REJECT("immutable_field"))
+    count = db_conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0]
+    assert count == 0
+
+
+def test_behavioral_override_fires_end_to_end_after_repeated_discards(db_conn):
+    # The defense artifact: proof the governance mechanism actually executes
+    # end-to-end now, driven entirely by what Stage 12/13 themselves write -
+    # not a hand-set column or hand-seeded log row. Before this fix, this
+    # sequence could never reach PROMPT_RECONCILIATION no matter how many
+    # times a user's behavior contradicted a stated preference.
+    db_conn.execute(
+        "INSERT INTO profile_meta (id, schema_version, constitution_version, first_session_date) VALUES (1, '1.0', '1.0', ?)",
+        ((datetime.now(timezone.utc) - timedelta(weeks=10)).strftime("%Y-%m-%dT%H:%M:%SZ"),)
+    )
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, source_label, evidence_count) VALUES ('editor', 'vim', 'explicit', 5)"
+    )
+    db_conn.commit()
+
+    import os
+    enforcer = ConstitutionEnforcer(os.path.join("backend", "core", "constitutional.json"))
+
+    candidate: MemoryCandidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "emacs",
+        "label": "inferred",
+        "evidence_count": 1,
+        "evidence_text": "Observed using emacs this session",
+    }
+
+    # Month-2+ profile: a lone inferred candidate (confidence caps at 0.4)
+    # can never clear the 0.7 threshold, so every one of these is DISCARDed
+    # today - and each DISCARD should now log a contradiction instead of
+    # throwing the observation away.
+    for _ in range(3):
+        result = stage_12.run(db_conn, dict(candidate), enforcer)
+        assert result.status == "DISCARD"
+        outcome = stage_13.run(db_conn, dict(candidate), result)
+        assert outcome == "rejected"
+
+    pref_id = db_conn.execute("SELECT id FROM preference_memory WHERE name = 'editor'").fetchone()["id"]
+    logged = db_conn.execute(
+        "SELECT COUNT(*) FROM preference_contradiction_log WHERE preference_id = ?", (pref_id,)
+    ).fetchone()[0]
+    assert logged == 3
+
+    # Not enough elapsed time yet - all 3 rows were just inserted "now".
+    result = stage_12.run(db_conn, dict(candidate), enforcer)
+    assert result.status != "PROMPT_RECONCILIATION"
+
+    # Backdate the earliest row past trigger_days (14), simulating the first
+    # contradiction having actually happened two weeks ago.
+    old_date = (datetime.now(timezone.utc) - timedelta(days=15)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db_conn.execute(
+        "UPDATE preference_contradiction_log SET created_at = ? WHERE id = ("
+        "  SELECT id FROM preference_contradiction_log WHERE preference_id = ? ORDER BY created_at ASC LIMIT 1"
+        ")",
+        (old_date, pref_id),
+    )
+    db_conn.commit()
+
+    # Both trigger_sessions (3) and trigger_days (14) are now real,
+    # derived entirely from what Stage 13 itself wrote.
+    final_result = stage_12.run(db_conn, dict(candidate), enforcer)
+    assert final_result.status == "PROMPT_RECONCILIATION"
+
+    final_outcome = stage_13.run(db_conn, dict(candidate), final_result)
+    assert final_outcome == "pending"
+    pending = candidate_store.list_memory_candidates(db_conn)
+    assert len(pending) == 1
+    assert pending[0]["validation_status"] == "PROMPT_RECONCILIATION"

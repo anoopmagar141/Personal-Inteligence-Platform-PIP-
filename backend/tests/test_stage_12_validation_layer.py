@@ -55,21 +55,31 @@ def test_hard_reject_immutable(db_conn, enforcer):
     assert result.status == "HARD_REJECT"
 
 def test_prompt_reconciliation(db_conn, enforcer):
-    # Setup explicit preference memory with behavioral override conditions
+    # Setup explicit preference memory with behavioral override conditions.
+    # behavioral_signal_count is derived from COUNT(*) over
+    # preference_contradiction_log now (that column is no longer read at
+    # all - see stage_12_validation_layer._fetch_existing_state), so the
+    # "3+ sessions" condition is represented by 3 real log rows, not a
+    # hand-set column value.
     db_conn.execute("""
-        INSERT INTO preference_memory (name, value, source_label, behavioral_signal_count)
-        VALUES ('vim_keybindings', 'false', 'explicit', 4)
+        INSERT INTO preference_memory (name, value, source_label)
+        VALUES ('vim_keybindings', 'false', 'explicit')
     """)
     row_id = db_conn.execute("SELECT id FROM preference_memory WHERE name = 'vim_keybindings'").fetchone()["id"]
-    
-    # Insert contradiction log > 14 days ago (trigger_days is 14)
-    old_date = (datetime.now(timezone.utc) - timedelta(days=15)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    db_conn.execute("""
-        INSERT INTO preference_contradiction_log (preference_id, contradiction_text, created_at)
-        VALUES (?, 'User typed hjkl', ?)
-    """, (row_id, old_date))
+
+    # Three contradiction rows, oldest > 14 days ago (trigger_days is 14).
+    dates = [
+        (datetime.now(timezone.utc) - timedelta(days=15)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        (datetime.now(timezone.utc) - timedelta(days=8)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    ]
+    for d in dates:
+        db_conn.execute("""
+            INSERT INTO preference_contradiction_log (preference_id, contradiction_text, created_at)
+            VALUES (?, 'User typed hjkl', ?)
+        """, (row_id, d))
     db_conn.commit()
-    
+
     candidate = {
         "target_table": "preference_memory",
         "field_name": "vim_keybindings",
@@ -80,6 +90,74 @@ def test_prompt_reconciliation(db_conn, enforcer):
     }
     result = run(db_conn, candidate, enforcer)
     assert result.status == "PROMPT_RECONCILIATION"
+
+
+def test_prompt_reconciliation_does_not_fire_below_trigger_sessions(db_conn, enforcer):
+    # Same shape as test_prompt_reconciliation but only 2 contradiction rows
+    # (trigger_sessions is 3) - must not trigger yet.
+    db_conn.execute("""
+        INSERT INTO preference_memory (name, value, source_label)
+        VALUES ('vim_keybindings', 'false', 'explicit')
+    """)
+    row_id = db_conn.execute("SELECT id FROM preference_memory WHERE name = 'vim_keybindings'").fetchone()["id"]
+
+    for days_ago in (15, 8):
+        d = (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        db_conn.execute("""
+            INSERT INTO preference_contradiction_log (preference_id, contradiction_text, created_at)
+            VALUES (?, 'User typed hjkl', ?)
+        """, (row_id, d))
+    db_conn.commit()
+
+    candidate = {
+        "target_table": "preference_memory",
+        "field_name": "vim_keybindings",
+        "proposed_value": "true",
+        "label": "inferred",
+        "evidence_count": 1,
+        "evidence_text": "Used hjkl"
+    }
+    result = run(db_conn, candidate, enforcer)
+    assert result.status != "PROMPT_RECONCILIATION"
+
+
+def test_fetch_existing_state_derives_behavioral_signal_count_from_log(db_conn):
+    from backend.stages.stage_12_validation_layer import _fetch_existing_state
+
+    db_conn.execute("""
+        INSERT INTO preference_memory (name, value, source_label)
+        VALUES ('vim_keybindings', 'false', 'explicit')
+    """)
+    row_id = db_conn.execute("SELECT id FROM preference_memory WHERE name = 'vim_keybindings'").fetchone()["id"]
+    # A stale/legacy value in the column itself must be ignored entirely -
+    # the log is the only source of truth now.
+    db_conn.execute("UPDATE preference_memory SET behavioral_signal_count = 99 WHERE id = ?", (row_id,))
+
+    for _ in range(2):
+        db_conn.execute(
+            "INSERT INTO preference_contradiction_log (preference_id, contradiction_text, created_at) VALUES (?, 'x', ?)",
+            (row_id, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")),
+        )
+    db_conn.commit()
+
+    candidate = {"target_table": "preference_memory", "field_name": "vim_keybindings"}
+    existing = _fetch_existing_state(db_conn, candidate)
+    assert existing["behavioral_signal_count"] == 2
+
+
+def test_fetch_existing_state_reports_zero_signal_count_with_no_log_rows(db_conn):
+    from backend.stages.stage_12_validation_layer import _fetch_existing_state
+
+    db_conn.execute("""
+        INSERT INTO preference_memory (name, value, source_label)
+        VALUES ('vim_keybindings', 'false', 'explicit')
+    """)
+    db_conn.commit()
+
+    candidate = {"target_table": "preference_memory", "field_name": "vim_keybindings"}
+    existing = _fetch_existing_state(db_conn, candidate)
+    assert existing["behavioral_signal_count"] == 0
+    assert existing["first_contradiction_date"] is None
 
 def test_discard_threshold_violation(db_conn, enforcer):
     candidate = {

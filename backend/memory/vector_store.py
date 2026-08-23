@@ -20,14 +20,18 @@
 # accepts for similarity_threshold ("start 0.6, calibrate from 100 real interactions") -
 # revisit chunk_size_tokens or the embedding model choice once there's real usage data.
 
+import base64
 import hashlib
+import hmac
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Optional
 
 import chromadb
+from cryptography.fernet import Fernet, InvalidToken
 from sentence_transformers import SentenceTransformer
 
 from backend.core.types import now_utc
@@ -40,10 +44,56 @@ COLLECTION_NAME = "documents"
 
 SUPPORTED_EXTENSIONS = {".pdf", ".md", ".txt", ".py", ".json", ".html"}
 
+
+# Security review finding: ChromaDB's on-disk store (chroma.sqlite3 under
+# CHROMA_DB_PATH) was completely unencrypted, unlike the SQLCipher-protected
+# main database - anyone with filesystem access could read every ingested
+# document's full text straight off disk. This reuses PIP_DB_KEY (the same
+# hex key SQLCipher is keyed with, read the same way _conn() reads it in
+# server.py) to derive a Fernet key and encrypts chunk text and the
+# human-readable file path before either ever reaches Chroma.
+#
+# Embeddings themselves stay plaintext - Chroma's ANN index has to do real
+# vector math over them, and there's no practical way to run a similarity
+# search over ciphertext with this library. That's a documented, accepted
+# residual risk (recovering exact source text from an embedding vector alone
+# is hard but not provably impossible given model access), not a gap in this
+# fix - the actual human-readable content (chunk text, file path) is what's
+# protected.
+#
+# file_path can't be encrypted with plain Fernet on the value Chroma
+# filters/deletes by - Fernet is non-deterministic (a random IV per call), so
+# encrypting the same path twice gives two different ciphertexts and a
+# `where=` equality match would silently stop finding a file's own chunks.
+# Instead HMAC-SHA256(db_key, file_path) is used as the stable, deterministic
+# lookup key (same path -> same digest, but the digest doesn't reveal the
+# path), while the actual path is stored separately, Fernet-encrypted, purely
+# for display once a query has already found the right chunks.
+#
+# When PIP_DB_KEY isn't set at all (dev/test default, same as
+# profile_store.get_connection()'s unencrypted sqlite3 fallback), everything
+# below is a no-op passthrough - chunks and file_path are stored and read
+# back as plain text, exactly as before this fix.
+def _get_db_key() -> Optional[str]:
+    return os.environ.get("PIP_DB_KEY") or None
+
+
+def _fernet(db_key: str) -> Fernet:
+    if not re.fullmatch(r"[0-9a-fA-F]+", db_key):
+        raise ValueError("PIP_DB_KEY must be hex-encoded")
+    digest = hashlib.sha256(bytes.fromhex(db_key)).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def _file_key(db_key: str, file_path: str) -> str:
+    return hmac.new(bytes.fromhex(db_key), file_path.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
 # Security fix: ingest_document() used to pass file_path straight into
 # Path(file_path).stat()/.read_text()/PdfReader(file_path) with no validation
-# at all - any caller (and this endpoint has no auth - see server.py) could
-# make PIP read and embed an arbitrary file from anywhere the process can
+# at all - any caller (this endpoint is behind the global token auth now, see
+# auth.py/server.py, but wasn't when this fix was written) could make PIP
+# read and embed an arbitrary file from anywhere the process can
 # access (SSH keys, credential files, source with secrets in it - the
 # SUPPORTED_EXTENSIONS allowlist doesn't meaningfully block this, since .txt/
 # .json/.py cover most of what an attacker would actually want). The embedded
@@ -184,15 +234,28 @@ def ingest_document(
         return {"status": "unchanged", "file_path": file_path, "chunk_count": len(chunks)}
 
     collection = _get_collection()
+    db_key = _get_db_key()
 
     if existing:
-        _delete_chunks_for_path(collection, file_path)
+        _delete_chunks_for_path(collection, file_path, db_key)
 
     if chunks:
         embeddings = _get_model().encode(chunks, convert_to_numpy=True).tolist()
-        ids = [f"{file_path}::{i}" for i in range(len(chunks))]
-        metadatas = [{"file_path": file_path, "project_id": project_id or "", "chunk_index": i} for i in range(len(chunks))]
-        collection.upsert(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
+        if db_key:
+            fernet = _fernet(db_key)
+            file_key = _file_key(db_key, file_path)
+            ids = [f"{file_key}::{i}" for i in range(len(chunks))]
+            documents = [fernet.encrypt(c.encode("utf-8")).decode("ascii") for c in chunks]
+            file_path_enc = fernet.encrypt(file_path.encode("utf-8")).decode("ascii")
+            metadatas = [
+                {"file_key": file_key, "file_path_enc": file_path_enc, "project_id": project_id or "", "chunk_index": i}
+                for i in range(len(chunks))
+            ]
+        else:
+            ids = [f"{file_path}::{i}" for i in range(len(chunks))]
+            documents = chunks
+            metadatas = [{"file_path": file_path, "project_id": project_id or "", "chunk_index": i} for i in range(len(chunks))]
+        collection.upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
 
     timestamp = now_utc()
     if existing:
@@ -211,8 +274,11 @@ def ingest_document(
     return {"status": "ingested", "file_path": file_path, "chunk_count": len(chunks)}
 
 
-def _delete_chunks_for_path(collection, file_path: str) -> None:
-    collection.delete(where={"file_path": file_path})
+def _delete_chunks_for_path(collection, file_path: str, db_key: Optional[str]) -> None:
+    if db_key:
+        collection.delete(where={"file_key": _file_key(db_key, file_path)})
+    else:
+        collection.delete(where={"file_path": file_path})
 
 
 def delete_document(conn, file_path: str) -> bool:
@@ -222,7 +288,7 @@ def delete_document(conn, file_path: str) -> bool:
     if not row:
         return False
 
-    _delete_chunks_for_path(_get_collection(), file_path)
+    _delete_chunks_for_path(_get_collection(), file_path, _get_db_key())
     conn.execute(
         "UPDATE documents SET status = 'removed' WHERE id = ?", (row["id"],)
     )
@@ -264,18 +330,40 @@ def query(
     metadatas = results.get("metadatas") or [[]]
     distances = results.get("distances") or [[]]
 
+    db_key = _get_db_key()
+    fernet = _fernet(db_key) if db_key else None
+
     for doc, meta, distance in zip(docs[0], metadatas[0], distances[0]):
         # Chroma's default space is L2 distance; convert to a 0-1 similarity-like score.
         # cosine distance in [0,2] -> similarity = 1 - distance/2 stays in [0,1] for
         # normalized embeddings (sentence-transformers embeddings are normalized).
         similarity = 1 - (distance / 2)
-        if similarity >= threshold:
-            matches.append({
-                "chunk_text": doc,
-                "file_path": meta.get("file_path"),
-                "chunk_index": meta.get("chunk_index"),
-                "similarity": similarity,
-            })
+        if similarity < threshold:
+            continue
+
+        if fernet:
+            # (InvalidToken, KeyError) both mean "this chunk wasn't written
+            # under the current key/schema" - e.g. it predates PIP_DB_KEY
+            # being set, or the key changed. Skip it rather than crash the
+            # whole query; rebuild_from_sqlite() is the real fix for stale
+            # entries like that, not something this read path should paper
+            # over silently returning garbage for.
+            try:
+                chunk_text = fernet.decrypt(doc.encode("ascii")).decode("utf-8")
+                file_path = fernet.decrypt(meta["file_path_enc"].encode("ascii")).decode("utf-8")
+            except (InvalidToken, KeyError):
+                logger.error("RAG query: could not decrypt a chunk (key mismatch or pre-encryption data), skipping")
+                continue
+        else:
+            chunk_text = doc
+            file_path = meta.get("file_path")
+
+        matches.append({
+            "chunk_text": chunk_text,
+            "file_path": file_path,
+            "chunk_index": meta.get("chunk_index"),
+            "similarity": similarity,
+        })
 
     return matches
 
