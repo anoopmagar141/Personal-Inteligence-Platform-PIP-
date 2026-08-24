@@ -64,6 +64,16 @@ VALID_RESPONSE = {
     },
 }
 
+# A realistic User:/Assistant: transcript (format_transcript()'s shape) that
+# actually contains VALID_RESPONSE's raw_quote and a substantive user turn -
+# the bare "transcript" placeholder string used elsewhere in this file can't
+# satisfy the raw_quote-grounding / substantive-user-turn checks added after
+# the live confabulation finding (see _quote_is_grounded's docstring).
+VALID_TRANSCRIPT = (
+    "User: I'm going with FastAPI for the backend, what do you think?\n"
+    "Assistant: FastAPI is a solid choice for async workloads.\n"
+)
+
 
 @pytest.fixture
 def db_conn(tmp_path, db_key):
@@ -103,7 +113,7 @@ def test_run_requires_a_provider_consent_row_even_if_self_reported_local(db_conn
 
 def test_run_extracts_and_sanitizes_candidates(db_conn):
     provider = FakeProvider(response_text=json.dumps(VALID_RESPONSE))
-    result = observer.run("transcript", provider, db_conn)
+    result = observer.run(VALID_TRANSCRIPT, provider, db_conn)
 
     assert len(result["memory_candidates"]) == 1
     candidate = result["memory_candidates"][0]
@@ -165,7 +175,7 @@ def test_run_coerces_non_string_snapshot_list_items(db_conn):
         },
     }
     provider = FakeProvider(response_text=json.dumps(response))
-    result = observer.run("transcript", provider, db_conn)
+    result = observer.run("User: we discussed the web framework and the RAG pipeline design.\n", provider, db_conn)
     assert result["session_snapshot"]["last_decisions"] == ["Chose FastAPI", "a plain string decision"]
     assert result["session_snapshot"]["open_problems"] == ["a plain string problem"]
 
@@ -184,7 +194,7 @@ def test_run_drops_candidate_with_missing_keys(db_conn):
 def test_run_session_end_writes_snapshot_and_routes_candidates(db_conn):
     provider = FakeProvider(response_text=json.dumps(VALID_RESPONSE))
 
-    result = observer.run_session_end(db_conn, "transcript", provider)
+    result = observer.run_session_end(db_conn, VALID_TRANSCRIPT, provider)
 
     # snapshot written to the DB (session_snapshot table, security review fix
     # - it used to be a plain data/session_snapshot.json file)
@@ -217,7 +227,8 @@ def test_run_session_end_single_signal_decision_goes_to_pending(db_conn):
         "session_snapshot": {},
     }
     provider = FakeProvider(response_text=json.dumps(response))
-    result = observer.run_session_end(db_conn, "transcript", provider)
+    transcript = "User: I'll probably use Redis for caching, does that sound right?\n"
+    result = observer.run_session_end(db_conn, transcript, provider)
 
     assert result["decision_results"][0]["status"] == "pending"
     assert db_conn.execute("SELECT COUNT(*) FROM decision_log").fetchone()[0] == 0
@@ -332,3 +343,125 @@ def test_run_keeps_genuine_decision_alongside_assistant_lines(db_conn):
     result = observer.run(transcript, provider, db_conn)
     assert len(result["decision_candidates"]) == 1
     assert result["decision_candidates"][0]["decision_text"] == "Chose FastAPI over Flask for async support"
+
+
+# --- Confabulated decisions/snapshot from a thin transcript (found live) ---
+#
+# A real session consisting only of "hi" / "yes" / "sure" replies produced 7
+# auto-logged fake decisions and a fabricated session_snapshot describing an
+# entire "product launch meeting with Figma" scenario that was never
+# discussed - none phrased as questions, none verbatim assistant echoes, so
+# neither guard above caught them. The model invented plausible-sounding
+# content with no basis in the transcript at all.
+
+
+def test_run_drops_decision_candidate_with_unverifiable_raw_quote(db_conn):
+    # decision_text reads as a plausible, declarative (non-question) claim,
+    # and doesn't echo any assistant line - but the raw_quote it cites as its
+    # evidence was never actually said by anyone in this transcript.
+    transcript = "User: hi\nAssistant: Hi! How can I help?\nUser: yes\nAssistant: Great, let's proceed.\n"
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [
+            {
+                "decision_text": "we'll proceed with integrating Figma as your design tool",
+                "signals_found": ["commitment_language", "alternative_considered"],
+                "raw_quote": "let's integrate Figma into the workflow",
+            }
+        ],
+        "session_snapshot": {},
+    }
+    provider = FakeProvider(response_text=json.dumps(response))
+    result = observer.run(transcript, provider, db_conn)
+    assert result["decision_candidates"] == []
+
+
+def test_run_keeps_decision_with_a_raw_quote_actually_in_the_transcript(db_conn):
+    transcript = "User: let's integrate Figma into the workflow, I've decided.\nAssistant: Sounds good.\n"
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [
+            {
+                "decision_text": "Decided to integrate Figma into the workflow",
+                "signals_found": ["commitment_language", "alternative_considered"],
+                "raw_quote": "let's integrate Figma into the workflow",
+            }
+        ],
+        "session_snapshot": {},
+    }
+    provider = FakeProvider(response_text=json.dumps(response))
+    result = observer.run(transcript, provider, db_conn)
+    assert len(result["decision_candidates"]) == 1
+
+
+def test_run_withholds_snapshot_from_a_session_with_no_substantive_user_turn(db_conn):
+    # Reproduces the live finding exactly: a session of one-word
+    # acknowledgments still got a fabricated "product launch" topic/next-step
+    # with no basis in what was actually said.
+    transcript = (
+        "User: hi\n"
+        "Assistant: Hi! How can I help?\n"
+        "User: yes\n"
+        "Assistant: Great, let's proceed.\n"
+        "User: sure\n"
+        "Assistant: I'll take notes during the meeting.\n"
+    )
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [],
+        "session_snapshot": {
+            "topic": "Product launch preparations",
+            "open_problems": ["User Experience"],
+            "last_decisions": ["User committed to meeting with marketing team"],
+            "suggested_next_step": "Attend meeting with marketing team at 2 PM",
+        },
+    }
+    provider = FakeProvider(response_text=json.dumps(response))
+    result = observer.run(transcript, provider, db_conn)
+    assert result["session_snapshot"]["topic"] == ""
+    assert result["session_snapshot"]["last_decisions"] == []
+
+
+def test_run_keeps_snapshot_from_a_session_with_a_real_substantive_turn(db_conn):
+    transcript = "User: let's go with FastAPI for the backend\nAssistant: Good choice.\n"
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [],
+        "session_snapshot": {
+            "topic": "Choosing a web framework",
+            "open_problems": [],
+            "last_decisions": [],
+            "suggested_next_step": "",
+        },
+    }
+    provider = FakeProvider(response_text=json.dumps(response))
+    result = observer.run(transcript, provider, db_conn)
+    assert result["session_snapshot"]["topic"] == "Choosing a web framework"
+
+
+def test_run_session_end_does_not_overwrite_a_real_snapshot_with_a_withheld_one(db_conn):
+    # A later thin session ("thanks, bye") must not clobber a real prior
+    # snapshot with an empty one - the last good snapshot should survive.
+    session_snapshot.write_snapshot(db_conn, {
+        "topic": "Choosing a web framework",
+        "open_problems": [],
+        "last_decisions": [],
+        "suggested_next_step": "Write the inventory sync endpoint",
+        "snapshot_date": "2026-08-01T00:00:00Z",
+    })
+
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [],
+        "session_snapshot": {
+            "topic": "Product launch preparations",
+            "open_problems": [],
+            "last_decisions": [],
+            "suggested_next_step": "Attend meeting with marketing team",
+        },
+    }
+    provider = FakeProvider(response_text=json.dumps(response))
+    observer.run_session_end(db_conn, "User: thanks\nAssistant: You're welcome!\nUser: bye\n", provider)
+
+    written = session_snapshot.load_snapshot(db_conn)
+    assert written["topic"] == "Choosing a web framework"

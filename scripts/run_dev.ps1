@@ -1,15 +1,23 @@
 # One-command dev launcher: starts Ollama (if it isn't already running) and
-# the backend, each in its own window, waits for the backend to come up,
-# reads the current token from data/api_token.txt (avoids the manual
-# copy/paste step that kept going stale across restarts), and runs the
-# Flutter client with the right --dart-define flags already wired up.
+# the backend (with --reload, so backend edits apply automatically without a
+# manual restart), each in its own window, waits for the backend to come up,
+# then runs the Flutter client in debug mode against it - hot reload (r) /
+# hot restart (R) both work from the Flutter terminal this opens.
+#
+# Native desktop only (-d windows default) - main.dart reads its config via
+# dart:io's Platform.environment now, not --dart-define, and dart:io isn't
+# available on the web target at all ("Unsupported operation:
+# Platform._environment" is exactly this mismatch, not a real app bug) -
+# see main.dart's docstring for why. Passing PIP_DATA_DIR as a real
+# environment variable (not --dart-define) is what lets this script and
+# launch_pip.ps1 share the exact same config-reading path in the app.
 #
 # Usage:
-#   .\scripts\run_dev.ps1            # launches the Edge (web) build
-#   .\scripts\run_dev.ps1 -Device windows
+#   .\scripts\run_dev.ps1
+#   .\scripts\run_dev.ps1 -Device windows   # equivalent, windows is already the default
 
 param(
-    [string]$Device = "edge"
+    [string]$Device = "windows"
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,11 +39,11 @@ if (-not $ollamaRunning) {
     Write-Host "Ollama already running." -ForegroundColor DarkGray
 }
 
-Write-Host "Starting PIP backend..." -ForegroundColor Cyan
+Write-Host "Starting PIP backend (--reload: edits apply automatically)..." -ForegroundColor Cyan
 $venvActivate = Join-Path $root ".venv\Scripts\Activate.ps1"
 Start-Process powershell -ArgumentList @(
     "-NoExit", "-Command",
-    "Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned; Set-Location '$root'; & '$venvActivate'; python -m uvicorn backend.api.server:app --host 127.0.0.1 --port 8765"
+    "Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned; Set-Location '$root'; & '$venvActivate'; python -m uvicorn backend.api.server:app --host 127.0.0.1 --port 8765 --reload --reload-dir backend"
 )
 
 Write-Host "Waiting for backend on http://127.0.0.1:8765 ..." -ForegroundColor Cyan
@@ -61,11 +69,10 @@ if (-not (Test-Path $tokenPath)) {
     Write-Host "No token file yet at $tokenPath - backend may still be initializing. Waiting a bit longer..." -ForegroundColor Yellow
     Start-Sleep -Seconds 2
 }
-$token = (Get-Content $tokenPath -Raw).Trim()
 
 Write-Host "Launching Flutter client (device: $Device)..." -ForegroundColor Cyan
 Set-Location (Join-Path $root "frontend\flutter")
-flutter run -d $Device `
-    --dart-define=PIP_API_BASE=http://127.0.0.1:8765/api/v1 `
-    --dart-define=PIP_WS_URL=ws://127.0.0.1:8765/ws/chat `
-    --dart-define=PIP_API_TOKEN=$token
+$env:PIP_DATA_DIR = Join-Path $root "data"
+$env:PIP_API_BASE = "http://127.0.0.1:8765/api/v1"
+$env:PIP_WS_URL = "ws://127.0.0.1:8765/ws/chat"
+flutter run -d $Device

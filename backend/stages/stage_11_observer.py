@@ -204,6 +204,49 @@ def _looks_like_assistant_echo(decision_text: str, assistant_lines: list[str]) -
     return any(normalized in line for line in assistant_lines)
 
 
+def _quote_is_grounded(raw_quote: str, transcript_lower: str) -> bool:
+    """
+    Found live, a step past _looks_like_assistant_echo: a low-signal session
+    (a few one-word "yes"/"sure"/"hi" replies, nothing substantive) got 7
+    decision_candidates auto-logged - none phrased as questions, none a
+    verbatim echo of an assistant line, all entirely confabulated (a whole
+    fictional "product launch meeting with Figma" scenario with no basis in
+    the actual conversation). Rule 1 asks the model for a raw_quote "the
+    exact quote this was drawn from" precisely so a candidate can be checked
+    against reality instead of trusted at face value (same "don't trust the
+    model's own claim" posture as everywhere else this session) - if the
+    quote it claims to have drawn from isn't actually anywhere in the
+    transcript, the candidate has no real basis and is dropped, regardless
+    of how plausible decision_text itself reads.
+    """
+    normalized = " ".join(raw_quote.strip().lower().split())
+    if not normalized:
+        return False
+    return normalized in transcript_lower
+
+
+def _has_any_substantive_user_turn(transcript: str, min_words: int = 4) -> bool:
+    """
+    Companion gate for session_snapshot, which has no per-item raw_quote to
+    ground against (it's a holistic topic/decisions/next-step summary, not a
+    list of discrete claims). A session made entirely of one-word
+    acknowledgments ("hi", "yes", "sure") has nothing real to summarize -
+    the same confabulation Rule 1's raw_quote check catches for decisions
+    happens here too (an invented "product launch" topic/next-step from a
+    transcript that never mentioned one). min_words=4 is deliberately low:
+    the goal is ruling out a session that was ONLY trivial acknowledgments,
+    not requiring lengthy user turns - "let's go with FastAPI" (4 words) is
+    exactly the kind of short-but-real turn that should still pass.
+    """
+    for line in transcript.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("user:"):
+            content = stripped.split(":", 1)[1].strip()
+            if len(content.split()) >= min_words:
+                return True
+    return False
+
+
 def _as_string_list(value: Any) -> list[str]:
     """
     Coerces a list to a list of strings. Found live: llama3.1:8b sometimes nests
@@ -294,6 +337,7 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
     decision_candidates = []
     if isinstance(raw_decisions, list):
         assistant_lines = _extract_assistant_lines(transcript)
+        transcript_lower = transcript.lower()
         for d in raw_decisions:
             candidate = _sanitize_decision_candidate(d)
             if candidate is None:
@@ -304,12 +348,24 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
                     f"{candidate['decision_text']!r}"
                 )
                 continue
+            if not _quote_is_grounded(candidate["raw_quote"], transcript_lower):
+                logger.info(
+                    f"Observer: dropping decision candidate with an unverifiable raw_quote "
+                    f"(likely confabulated): {candidate['decision_text']!r}"
+                )
+                continue
             decision_candidates.append(candidate)
+
+    snapshot = (
+        _sanitize_snapshot(parsed.get("session_snapshot"))
+        if _has_any_substantive_user_turn(transcript)
+        else _empty_snapshot()
+    )
 
     return {
         "memory_candidates": memory_candidates,
         "decision_candidates": decision_candidates,
-        "session_snapshot": _sanitize_snapshot(parsed.get("session_snapshot")),
+        "session_snapshot": snapshot,
     }
 
 
@@ -332,7 +388,14 @@ def run_session_end(
     """
     output = run(transcript, provider, conn)
 
-    session_snapshot.write_snapshot(conn, output["session_snapshot"])
+    # An empty-topic snapshot means run() withheld it as ungrounded (no
+    # substantive user turn to summarize) - persisting it anyway would
+    # clobber the last REAL snapshot with nothing, discarding legitimate
+    # prior-session context just because this particular session was thin
+    # ("hi" / "thanks" / "bye"). Leaving the last good snapshot in place is
+    # strictly better than overwriting it with an empty one.
+    if output["session_snapshot"].get("topic"):
+        session_snapshot.write_snapshot(conn, output["session_snapshot"])
 
     enforcer = ConstitutionEnforcer(CONSTITUTION_PATH)
     memory_results = []
