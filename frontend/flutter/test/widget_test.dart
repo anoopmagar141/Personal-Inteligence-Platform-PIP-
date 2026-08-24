@@ -12,5 +12,6 @@ void main() {
   testWidgets('shows a loading indicator immediately on launch', (WidgetTester tester) async {
     await tester.pumpWidget(const PipApp());
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('PIP'), findsOneWidget);
   });
 }

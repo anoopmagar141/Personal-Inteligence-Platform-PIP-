@@ -9,6 +9,8 @@ data/chroma/
 data/api_token.txt
 data/documents/
 data/pip.lock
+data/backend.log
+data/backend.err.log
 backend/logs/
 .venv/
 .vs/
