@@ -34,9 +34,16 @@ def test_includes_all_sections_when_under_budget():
 def test_profile_truncated_to_its_own_budget():
     huge_profile = [{"table": "preference_memory", "field": f"pref{i}", "value": _words(20)} for i in range(50)]
     result = stage_07.run("question", profile_fields=huge_profile)
-    # user_profile_tokens budget is 400 - the formatted block (plus its own header
-    # words) must not run wildly past that.
-    assert stage_07._estimate_tokens(result["context"]) < 500
+    # Measures the profile block alone, not the whole context. Asserting on the
+    # total conflated two unrelated things and only held while the system
+    # instructions happened to be one sentence: rewriting them for grounding
+    # (longer by design - four numbered rules) pushed the total to 522 and
+    # failed this, despite the profile block itself still being truncated
+    # correctly to its 400-token budget. The prelude's length is not what this
+    # test is about.
+    profile_block = result["context"][len(stage_07._DEFAULT_SYSTEM_INSTRUCTIONS):]
+    # 400-token budget plus the block's own heading words and the "..." marker.
+    assert stage_07._estimate_tokens(profile_block) < 450
 
 
 def test_conversation_history_keeps_most_recent_not_oldest():
@@ -122,3 +129,94 @@ def test_fails_open_to_minimal_prompt_on_error(monkeypatch):
     monkeypatch.setattr(stage_07, "get_settings", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
     result = stage_07.run("hello", system_instructions="SYS")
     assert result == {"context": "SYS", "messages": [{"role": "user", "content": "hello"}]}
+
+
+# --- Grounding: the anti-confabulation contract (regression tests) ---
+#
+# These cover a live end-to-end failure, not a hypothetical. Asked "list the
+# projects I have" against a profile holding exactly one real project, the
+# model returned three invented ones with fabricated progress reports - and did
+# so again after the fabricated data had been cleaned out of the database,
+# because the prompt itself was the remaining cause. Nothing in this file
+# tested what the assembled context ASSERTS, only which substrings it
+# contained, so the format could (and did) drift into something a model read as
+# a database dump rather than a statement of record.
+
+
+def test_profile_marks_lists_complete_so_the_model_cannot_extend_them():
+    result = stage_07.run(
+        "list my projects",
+        profile_fields=[{"table": "active_projects", "field": "PIP", "value": "a personalised system"}],
+        category="project_question",
+    )
+    assert "complete list" in result["context"]
+    assert "PIP: a personalised system" in result["context"]
+
+
+def test_empty_expected_table_is_asserted_as_none_not_silently_omitted():
+    # The distinction that decides whether the model answers "you have none" or
+    # invents a plausible set: an absent heading reads as "not retrieved", which
+    # invites the model to supply what it assumes it wasn't shown.
+    result = stage_07.run(
+        "what goals do I have?",
+        profile_fields=[{"table": "active_projects", "field": "PIP", "value": "a personalised system"}],
+        category="project_question",
+    )
+    assert "Goals: none recorded." in result["context"]
+
+
+def test_no_category_keeps_the_previous_omit_empty_behaviour():
+    # Callers that don't pass a category (tests, direct users) must not suddenly
+    # start getting "none recorded" lines for tables they never asked about.
+    # Scoped to the profile block on purpose: rule 3 of the system instructions
+    # explains what "none recorded" means, so searching the whole context
+    # matches the prelude every time and asserts nothing about the profile.
+    result = stage_07.run(
+        "hello",
+        profile_fields=[{"table": "active_projects", "field": "PIP", "value": "a personalised system"}],
+    )
+    profile_block = result["context"][len(stage_07._DEFAULT_SYSTEM_INSTRUCTIONS):]
+    assert "none recorded" not in profile_block
+
+
+def test_system_instructions_do_not_claim_memory_the_context_may_not_hold():
+    # The original wording opened by telling the model it had "access to the
+    # user's project history" before showing any, and it duly produced a
+    # history to match. The prompt must not assert holdings the context itself
+    # has to substantiate.
+    text = stage_07._DEFAULT_SYSTEM_INSTRUCTIONS.lower()
+    assert "access to the user's project history" not in text
+    assert "you have no other memory" in text
+
+
+def test_system_instructions_require_admitting_missing_data():
+    text = stage_07._DEFAULT_SYSTEM_INSTRUCTIONS.lower()
+    assert "do not have it recorded" in text
+
+
+def test_set_membership_rows_are_not_rendered_as_redundant_pairs():
+    # preferred_tools stores the tool name in both field and value; "vs code:
+    # vs code" is noise that spends budget and reads as malformed.
+    result = stage_07.run(
+        "what tools do I use?",
+        profile_fields=[{"table": "preferred_tools", "field": "vs code", "value": "vs code"}],
+    )
+    assert "- vs code" in result["context"]
+    assert "vs code: vs code" not in result["context"]
+
+
+def test_grounding_rules_do_not_gag_general_knowledge():
+    # The first version of these rules bound to the whole reply rather than to
+    # claims about the user, and was tested live: "what is a hash table?"
+    # returned "I don't have that recorded." Refusing from an empty profile is
+    # the same defect as inventing from one - both substitute the profile for
+    # the model's own knowledge.
+    text = stage_07._DEFAULT_SYSTEM_INSTRUCTIONS.lower()
+    assert "facts about the user only" in text
+    assert "not a reason to refuse" in text
+
+
+def test_instructions_forbid_echoing_the_context_scaffolding():
+    # The annotations exist to bound what the model may claim, not to be read
+    # aloud; without this the reply opened with the literal words "complete list".
+    assert "never repeat them back" in stage_07._DEFAULT_SYSTEM_INSTRUCTIONS.lower()

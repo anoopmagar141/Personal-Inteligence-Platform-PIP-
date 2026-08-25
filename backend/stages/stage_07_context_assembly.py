@@ -25,14 +25,80 @@ import logging
 from typing import Any, Optional, TypedDict
 
 from backend.config.settings import get_settings
+from backend.stages import stage_04_memory_lookup as stage_04
 
 logger = logging.getLogger(__name__)
 
+# Rewritten after a live end-to-end failure that the previous wording caused
+# rather than merely failed to prevent. The old text opened with "a locally-run
+# personal assistant with access to the user's project history, decisions, and
+# preferences" - asserting to the model that it HOLDS that history, before any
+# of it was shown. Asked to list projects while the profile block contained a
+# single terse row, the model resolved the contradiction the way the prompt
+# invited: it produced the history it had been told it had, inventing three
+# projects with fabricated progress reports. Removing the capability claim
+# matters as much as adding the prohibition - a model told it has records will
+# supply records.
+#
+# The old prohibition ("never invent decisions or preferences") also enumerated
+# the wrong nouns: projects, goals, skills and tools were all absent from it,
+# and projects were exactly what got invented. This states the rule over the
+# context as a whole instead of by category, so it cannot be outgrown by adding
+# a table.
+# The grounding rules deliberately bind only to claims ABOUT THE USER, not to
+# the whole reply. A first version applied them to everything and was tested
+# live: "what is a hash table?" came back "I don't have that recorded." That is
+# the same failure as confabulation seen from the other side - the model
+# treating its own general knowledge as off-limits because nothing in the
+# profile mentioned hash tables. The pipeline has always distinguished these
+# (general_knowledge and technical_explanation are their own categories, cached
+# for 24h precisely because the model answers them from training), so the
+# prompt has to as well. Rule 5 exists to make the boundary explicit rather
+# than leaving the model to infer it from rules 1-4.
 _DEFAULT_SYSTEM_INSTRUCTIONS = (
-    "You are PIP, a locally-run personal assistant with access to the user's "
-    "project history, decisions, and preferences. Use the context provided below "
-    "when relevant. Never invent decisions or preferences that aren't given to you."
+    "You are PIP, a locally-run personal assistant. Everything you know about "
+    "THIS USER appears in the context below - you have no other memory of them.\n"
+    "Rules for statements about the user (their projects, decisions, goals, "
+    "skills, preferences, identity):\n"
+    "1. State only what the context contains. Do not add, extrapolate, or "
+    "illustrate with plausible examples.\n"
+    "2. A section marked 'complete list' is exhaustive. Never add entries to it, "
+    "and never present it as partial.\n"
+    "3. A section marked 'none recorded' means the user genuinely has none. Say "
+    "so plainly - do not treat it as missing data to fill in.\n"
+    "4. If the context does not contain a fact about the user that was asked "
+    "for, say you do not have it recorded, and stop. An honest 'I don't have "
+    "that recorded' is always correct; a plausible guess is always wrong.\n"
+    "5. These rules cover facts about the user only. For general questions - "
+    "how something works, what a term means, help with a problem - answer "
+    "normally and fully from your own knowledge. Absence from the context is "
+    "not a reason to refuse; it only means the question was not about the "
+    "user's records.\n"
+    "6. Write in your own words to the user. The headings and annotations below "
+    "('complete list', '3 recorded') are notes to you about how far the record "
+    "extends - never repeat them back as if they were part of the answer."
 )
+
+# Human-readable section names. The profile arrives as flat (table, field,
+# value) triples, which rendered as "active_projects.PIP: a personalised
+# system" - a database row, not a statement about the user, and empirically not
+# recognised as a project list at all.
+_TABLE_LABELS = {
+    "identity": "Identity",
+    "active_projects": "Projects",
+    "goal_memory": "Goals",
+    "skill_memory": "Skills",
+    "preference_memory": "Preferences",
+    "preferred_tools": "Preferred tools",
+    "interaction_style": "Interaction style",
+}
+
+# Tables where an empty result is itself information worth stating. Absence of
+# a "Projects" heading reads as "not retrieved"; "Projects: none recorded"
+# reads as a fact, and is the difference between the model reporting none and
+# inventing three. Not applied to every table - "Interaction style: none
+# recorded" is noise, since nothing hinges on its absence.
+_ASSERT_EMPTY_FOR = {"active_projects", "goal_memory", "skill_memory", "preferred_tools"}
 
 # Priority rank order, 1 (most protected) to 7 (dropped first). system_instructions
 # and user_message aren't in this list at all - both are always included in full,
@@ -69,11 +135,55 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     return " ".join(words[:max_tokens]) + " ..."
 
 
-def _format_profile(fields: list[dict[str, Any]], max_tokens: int) -> str:
-    if not fields:
+def _format_profile(
+    fields: list[dict[str, Any]],
+    max_tokens: int,
+    expected_tables: Optional[set[str]] = None,
+) -> str:
+    """
+    Renders the profile grouped under human-readable headings, each labelled
+    with how many entries it holds and that the list is complete.
+
+    expected_tables is what Stage 4 looked up (see its tables_for_category).
+    Tables in that set with no rows are rendered "none recorded" rather than
+    omitted, so the model is told the user has none instead of being left to
+    infer it simply wasn't shown them - the distinction that decides whether it
+    answers "you have no projects" or invents some.
+    """
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for f in fields:
+        grouped.setdefault(f["table"], []).append(f)
+
+    for table in expected_tables or set():
+        if table in _ASSERT_EMPTY_FOR:
+            grouped.setdefault(table, [])
+
+    if not grouped:
         return ""
-    lines = [f"- {f['table']}.{f['field']}: {f['value']}" for f in fields]
-    return _truncate_to_tokens("USER PROFILE:\n" + "\n".join(lines), max_tokens)
+
+    blocks = []
+    for table in sorted(grouped, key=lambda t: list(_TABLE_LABELS).index(t) if t in _TABLE_LABELS else 99):
+        rows = grouped[table]
+        label = _TABLE_LABELS.get(table, table)
+
+        if not rows:
+            blocks.append(f"{label}: none recorded.")
+            continue
+
+        header = f"{label} ({len(rows)} recorded, complete list):"
+        # field == value for set-membership tables (preferred_tools stores the
+        # tool name in both), where "vs code: vs code" is just noise.
+        body = "\n".join(
+            f"  - {r['field']}" if str(r["field"]) == str(r["value"]) else f"  - {r['field']}: {r['value']}"
+            for r in rows
+        )
+        blocks.append(f"{header}\n{body}")
+
+    return _truncate_to_tokens(
+        "WHAT PIP HAS RECORDED ABOUT THIS USER (the complete record, not a sample):\n\n"
+        + "\n\n".join(blocks),
+        max_tokens,
+    )
 
 
 def _format_snapshot(snapshot: Optional[dict[str, Any]], max_tokens: int) -> str:
@@ -134,6 +244,7 @@ def run(
     web_results: Optional[list[dict[str, Any]]] = None,
     conversation_history: Optional[list[dict[str, str]]] = None,
     context_depth_modifier: int = 2,
+    category: Optional[str] = None,
 ) -> AssembledContext:
     """
     Assembles a token-budgeted context string and message list, ready for
@@ -161,7 +272,11 @@ def run(
 
         snapshot_budget = int(budget["session_snapshot_tokens"] * (context_depth_modifier / 2))
 
-        profile_text = _format_profile(profile_fields or [], budget["user_profile_tokens"])
+        # category is optional so existing callers (tests, direct users) keep
+        # working unchanged; without it, empty tables are simply omitted as
+        # before rather than asserted as "none recorded".
+        expected_tables = stage_04.tables_for_category(category) if category else None
+        profile_text = _format_profile(profile_fields or [], budget["user_profile_tokens"], expected_tables)
         snapshot_text = _format_snapshot(session_snapshot, snapshot_budget)
         decisions_text = _format_decisions(decision_log_entries or [], budget["decision_log_tokens"])
         rag_text = _format_rag_chunks(rag_chunks or [], budget["rag_chunks_tokens"])

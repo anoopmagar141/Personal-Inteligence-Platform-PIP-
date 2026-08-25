@@ -244,6 +244,7 @@ def run(
             web_results=web_results,
             conversation_history=conversation_history,
             context_depth_modifier=gap_result.get("context_depth_modifier", 2),
+            category=intent_result["category"],
         )
     except Exception as e:
         logger.error(f"Pipeline: Stage 7 raised unexpectedly, falling back to minimal prompt: {e}")

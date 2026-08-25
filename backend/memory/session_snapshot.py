@@ -50,6 +50,34 @@ def load_snapshot(conn) -> Optional[SessionSnapshot]:
     }
 
 
+def clear_snapshot(conn) -> bool:
+    """
+    Removes the singleton snapshot row, returning the store to its genuine
+    "no snapshot yet" state (load_snapshot() -> None), rather than leaving a
+    row with empty strings that merely reads as one.
+
+    Exists because a snapshot can be actively wrong rather than just stale:
+    an Observer that extracted its topic from a transcript containing the
+    assistant's own invented content will persist that invention here, and
+    every subsequent session then receives it as established context (Stage 7
+    assembles it into the prompt unconditionally). There was no supported way
+    to retract that - write_snapshot() only ever overwrites with another
+    snapshot, and the next real session-end may not arrive for days.
+
+    Deliberately in this module rather than a caller issuing its own DELETE:
+    session_snapshot is the sole owner of this table, and a cleanup script
+    reaching past it would be exactly the direct-SQL coupling the dependency
+    rule exists to prevent.
+
+    Returns True if a row was actually removed, False if there was none -
+    so a caller can report "nothing to clear" honestly instead of implying
+    it undid something.
+    """
+    cur = conn.execute("DELETE FROM session_snapshot WHERE id = 1")
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def write_snapshot(conn, snapshot: SessionSnapshot) -> None:
     """
     Writes a new session snapshot to the DB. Called by the Observer (Stage 11)

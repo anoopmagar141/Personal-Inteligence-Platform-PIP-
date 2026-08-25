@@ -56,7 +56,37 @@ _RESEARCH_PATTERNS = (
 _PERSONAL_PATTERNS = (
     r"\bmy\b", r"\bi am\b", r"\bi'm\b", r"\bdo i\b", r"\bwhat did i\b",
     r"\bremind me\b", r"\bmy preference\b", r"\bwhat do i prefer\b",
+    # The most direct way to ask about oneself matched none of the above:
+    # "who am I?" and "tell me about myself" both fell through to
+    # general_knowledge, whose table set is interaction_style alone, so
+    # identity was never fetched for the one question that is entirely about
+    # identity. Previously this surfaced as a confident invented answer; once
+    # the prompt was tightened it surfaced as "I don't have that recorded"
+    # while name/timezone sat in the database unread. Wrong either way - the
+    # classification was always the actual fault.
+    r"\bwho am i\b", r"\babout myself\b", r"\babout me\b",
+    r"\bwhat do you know about me\b", r"\bmyself\b",
 )
+
+# Found live, THREE times in a row, each with a different phrasing that
+# defeated the previous fix: "list the program im working and have
+# completed", then "give me a summarized update on your project" (missed
+# because the status-word list didn't have "update"/"summary" yet), then
+# "okay list what you see in project history?" (misses again - "history"
+# isn't a status word either). Trying to enumerate every verb someone might
+# pair with "project"/"program" is an unwinnable whack-a-mole - each miss
+# routed to general_knowledge, which never fetches active_projects (stage_04's
+# _CATEGORY_TABLES), so the model had zero real project data and fabricated a
+# complete fictional narrative every single time (three DIFFERENT fictional
+# projects across three tries - not cache replay, genuine live confabulation
+# each time). Decisive fix: the literal word "project" or "program" appearing
+# ANYWHERE is sufficient on its own, no accompanying verb required. A stray
+# false-positive cost (e.g. a coding request that happens to say "program")
+# is just extra harmless context (active_projects/goal_memory alongside
+# whatever else gets retrieved) - far cheaper than another silent
+# mis-classification into a category that fetches nothing about projects at
+# all and lets the model invent one from nothing.
+_PROJECT_TERM_PATTERN = re.compile(r"\b(project|program)s?\b")
 
 _TECHNICAL_EXPLANATION_PATTERNS = (
     # Deliberately no bare "what is" pattern - it's too generic and overlaps heavily
@@ -132,7 +162,11 @@ def run(message: str, warm_start_level: str = "none", conn=None) -> IntentResult
     try:
         lowered = message.lower()
 
-        has_project_terms = _matches_active_project(lowered, conn) or _matches_decision_keywords(lowered, conn)
+        has_project_terms = (
+            _matches_active_project(lowered, conn)
+            or _matches_decision_keywords(lowered, conn)
+            or bool(_PROJECT_TERM_PATTERN.search(lowered))
+        )
 
         if _matches_any(_CONTINUATION_PATTERNS, lowered):
             category = "project_continuation"

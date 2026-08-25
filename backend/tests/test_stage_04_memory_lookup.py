@@ -31,8 +31,11 @@ def db_conn(tmp_path, db_key):
 def test_personal_question_returns_only_relevant_tables(db_conn):
     result = stage_04.run(db_conn, "personal_question")
     tables = {row["table"] for row in result}
-    assert tables <= {"identity", "preference_memory", "interaction_style", "skill_memory"}
-    assert "active_projects" not in tables
+    # active_projects is included here now (found live: "summarize my
+    # project" lands in personal_question via the bare "my" match, and needs
+    # real project data too, not just identity/preferences/skills).
+    assert tables <= {"identity", "preference_memory", "interaction_style", "skill_memory", "active_projects"}
+    assert "goal_memory" not in tables
 
 
 def test_project_question_returns_only_relevant_tables(db_conn):
