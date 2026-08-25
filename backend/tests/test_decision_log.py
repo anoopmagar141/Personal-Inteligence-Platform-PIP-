@@ -215,3 +215,97 @@ def test_active_decisions_have_no_state_reason(conn):
     decision_id = decision_log.insert_decision(conn, text="Never retracted")
     row = conn.execute("SELECT state_reason FROM decision_log WHERE id = ?", (decision_id,)).fetchone()
     assert row["state_reason"] is None
+
+
+# --- Duplicate suppression on write ---
+#
+# The live log held "machine learning approach for threat detection" and
+# "integrate with popular smart home devices" twice each (ids 1&4, 2&5): the
+# Observer proposed the same decision in consecutive sessions and nothing
+# compared it against what was already recorded.
+
+
+def test_identical_decision_is_not_logged_twice(conn):
+    first = decision_log.insert_decision(conn, text="We chose FastAPI", confidence=0.7)
+    second = decision_log.insert_decision(conn, text="We chose FastAPI", confidence=0.7)
+    assert first == second
+    assert conn.execute("SELECT COUNT(*) FROM decision_log").fetchone()[0] == 1
+
+
+def test_duplicate_matching_ignores_case_and_whitespace(conn):
+    first = decision_log.insert_decision(conn, text="We chose FastAPI", confidence=0.7)
+    second = decision_log.insert_decision(conn, text="  we   CHOSE   fastapi  ", confidence=0.7)
+    assert first == second
+    assert conn.execute("SELECT COUNT(*) FROM decision_log").fetchone()[0] == 1
+
+
+def test_same_text_under_a_different_project_is_a_separate_decision(conn):
+    conn.execute(
+        "INSERT INTO active_projects (project_id, name, description, status, last_active) "
+        "VALUES ('p1', 'One', '', 'active', '2026-01-01T00:00:00Z')"
+    )
+    conn.execute(
+        "INSERT INTO active_projects (project_id, name, description, status, last_active) "
+        "VALUES ('p2', 'Two', '', 'active', '2026-01-01T00:00:00Z')"
+    )
+    conn.commit()
+    first = decision_log.insert_decision(conn, text="Use Postgres", project_id="p1", confidence=0.7)
+    second = decision_log.insert_decision(conn, text="Use Postgres", project_id="p2", confidence=0.7)
+    # The same sentence about two projects describes two different commitments.
+    assert first != second
+    assert conn.execute("SELECT COUNT(*) FROM decision_log").fetchone()[0] == 2
+
+
+def test_redeciding_something_previously_abandoned_is_not_a_duplicate(conn):
+    first = decision_log.insert_decision(conn, text="Use Flask", confidence=0.7)
+    decision_log.update_decision_state(conn, first, state="abandoned", reason="moved to FastAPI")
+    second = decision_log.insert_decision(conn, text="Use Flask", confidence=0.7)
+    # Re-adopting something once dropped is exactly what this log should record,
+    # not collapse back into the retracted original.
+    assert first != second
+    assert conn.execute("SELECT COUNT(*) FROM decision_log WHERE state = 'active'").fetchone()[0] == 1
+
+
+def test_create_decision_reports_duplicate_rather_than_logging_again(conn):
+    first = decision_log.create_decision(
+        conn, text="We decided to use SQLCipher", reasoning="privacy", alternatives="plain sqlite"
+    )
+    assert first["status"] == "logged"
+
+    second = decision_log.create_decision(
+        conn, text="We decided to use SQLCipher", reasoning="privacy", alternatives="plain sqlite"
+    )
+    assert second["status"] == "duplicate"
+    assert second["decision_id"] == first["decision_id"]
+
+
+def test_duplicate_does_not_queue_a_pending_candidate(conn):
+    decision_log.insert_decision(conn, text="We chose FastAPI", confidence=0.7)
+    # Low signal count would normally route to pending; an already-logged
+    # decision must not queue review work for something already recorded.
+    result = decision_log.create_decision(conn, text="We chose FastAPI")
+    assert result["status"] == "duplicate"
+    assert conn.execute("SELECT COUNT(*) FROM decision_candidates_pending").fetchone()[0] == 0
+
+
+def test_observer_path_suppresses_a_decision_it_already_logged(conn):
+    first = decision_log.route_observer_decision(
+        conn, text="Ship the Flutter client first",
+        signals_found=["commitment_language", "alternative_considered"], raw_quote="q",
+    )
+    assert first["status"] == "logged"
+
+    second = decision_log.route_observer_decision(
+        conn, text="Ship the Flutter client first",
+        signals_found=["commitment_language", "alternative_considered"], raw_quote="q",
+    )
+    assert second["status"] == "duplicate"
+    assert conn.execute("SELECT COUNT(*) FROM decision_log").fetchone()[0] == 1
+
+
+def test_duplicate_is_not_indexed_twice_in_fts(conn):
+    decision_log.insert_decision(conn, text="We chose FastAPI", confidence=0.7)
+    decision_log.insert_decision(conn, text="We chose FastAPI", confidence=0.7)
+    # A skipped insert must skip its FTS sync too, or search returns the same
+    # decision repeatedly from a stale index.
+    assert len(decision_log.search_decisions(conn, query="FastAPI")) == 1

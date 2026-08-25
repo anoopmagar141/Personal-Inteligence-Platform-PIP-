@@ -24,6 +24,46 @@ COMMITMENT_TERMS = (
 )
 
 
+def _normalized(text: str) -> str:
+    """
+    Case- and whitespace-insensitive form used for duplicate matching. Same
+    idiom stage_11_observer already uses for its echo and quote-grounding
+    checks, kept identical so "the same decision" means one thing across the
+    codebase.
+    """
+    return " ".join((text or "").strip().lower().split())
+
+
+def find_active_duplicate(conn, text: str, project_id: str | None = None) -> int | None:
+    """
+    Returns the id of an ACTIVE decision whose text matches, or None.
+
+    Two deliberate scoping choices:
+
+    Active only. A decision that was abandoned and is later made again is a
+    genuine new decision, not a duplicate - re-deciding something you once
+    dropped is exactly the kind of event this log exists to capture, and
+    collapsing it into the retracted original would lose that.
+
+    Same project. The same sentence under two projects describes two different
+    commitments ("use FastAPI" for one service says nothing about another), so
+    project_id must match too - including None matching None.
+
+    Compared in Python rather than SQL because normalisation collapses internal
+    whitespace, which LOWER(TRIM(...)) does not; that makes this a scan of
+    active decisions per insert. Fine at this scale (a single user's log, and
+    only active rows), and worth revisiting if the log ever grows into the
+    thousands.
+    """
+    target = _normalized(text)
+    if not target:
+        return None
+    for row in conn.execute("SELECT id, decision_text, project_id FROM decision_log WHERE state = 'active'"):
+        if _normalized(row["decision_text"]) == target and row["project_id"] == project_id:
+            return int(row["id"])
+    return None
+
+
 def create_decision(
     conn,
     *,
@@ -35,6 +75,19 @@ def create_decision(
     signals = classify_decision_signals(text, reasoning, alternatives)
     confidence = score_confidence(signals)
     threshold = get_settings()["decision_log"]["log_threshold_manual"]
+
+    # Checked before the threshold branch, not after: a decision already in the
+    # log should not produce a pending candidate either, or re-deciding
+    # something out loud would queue review work for an entry that is already
+    # recorded.
+    duplicate_id = find_active_duplicate(conn, text, project_id)
+    if duplicate_id is not None:
+        return {
+            "status": "duplicate",
+            "decision_id": duplicate_id,
+            "confidence": confidence,
+            "signals": signals,
+        }
 
     if confidence < threshold:
         candidate_id = candidate_store.create_decision_candidate(
@@ -84,6 +137,19 @@ def route_observer_decision(
     confidence = score_confidence(signals)
     threshold = get_settings()["decision_log"]["log_threshold_observer"]
 
+    # The path that actually produced the duplicates in the live log: the
+    # Observer re-proposing a decision it had already had accepted in an
+    # earlier session. Nothing about a session transcript stops the same
+    # commitment being described again, so the check has to live here.
+    duplicate_id = find_active_duplicate(conn, text, project_id)
+    if duplicate_id is not None:
+        return {
+            "status": "duplicate",
+            "decision_id": duplicate_id,
+            "confidence": confidence,
+            "signals": signals,
+        }
+
     if confidence < threshold:
         candidate_id = candidate_store.create_decision_candidate(
             conn,
@@ -114,6 +180,23 @@ def insert_decision(
     project_id: str | None = None,
     confidence: float = 0.4,
 ) -> int:
+    # Every write path lands here (create_decision, route_observer_decision,
+    # promote_pending), so this is the one place a duplicate can be stopped
+    # without each caller having to remember to check. The live log had
+    # "machine learning approach for threat detection" and "integrate with
+    # popular smart home devices" logged twice each - the Observer proposed
+    # the same decision in consecutive sessions and nothing compared it to
+    # what was already there.
+    #
+    # Returns the existing id rather than raising: from the caller's side the
+    # decision IS in the log with that id afterwards, which is what it asked
+    # for. Callers that need to tell the two apart check
+    # find_active_duplicate() first and report status='duplicate' - the API
+    # paths below do exactly that.
+    existing_id = find_active_duplicate(conn, text, project_id)
+    if existing_id is not None:
+        return existing_id
+
     cur = conn.execute(
         """
         INSERT INTO decision_log (
