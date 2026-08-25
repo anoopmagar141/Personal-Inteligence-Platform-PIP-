@@ -18,11 +18,19 @@ class BaseLLMProvider(ABC):
         messages: List[Dict[str, str]],
         context: Optional[str] = None,
         max_tokens: int = 2000,
-        timeout_seconds: int = 30
+        timeout_seconds: int = 30,
+        response_format: Optional[Dict[str, Any]] = None
     ) -> Iterator[str]:
         """
         Stream response tokens one by one.
         messages: list of {role: str, content: str}
+        response_format: optional JSON Schema constraining the output. When a
+            backend supports constrained decoding, malformed output becomes
+            impossible at the sampler rather than merely discouraged by the
+            prompt. Callers must still tolerate unstructured output: this is
+            OPTIONAL for implementers, and a provider that cannot honour it is
+            expected to ignore it rather than raise, so asking for structure
+            never turns into a hard failure on a backend that lacks it.
         Yields: str — one token or word fragment at a time
         Raises: ProviderUnavailableError, ProviderExecutionError
         """

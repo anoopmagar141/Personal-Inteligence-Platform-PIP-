@@ -19,9 +19,11 @@ class FakeProvider(BaseLLMProvider):
         self._is_local = is_local
         self.raise_error = raise_error
         self.last_messages = None
+        self.last_response_format = None
 
-    def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30) -> Iterator[str]:
+    def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30, response_format=None) -> Iterator[str]:
         self.last_messages = messages
+        self.last_response_format = response_format
         if self.raise_error:
             raise self.raise_error
         yield self.response_text
@@ -465,3 +467,90 @@ def test_run_session_end_does_not_overwrite_a_real_snapshot_with_a_withheld_one(
 
     written = session_snapshot.load_snapshot(db_conn)
     assert written["topic"] == "Choosing a web framework"
+
+
+# --- Constrained output (response_format) ---
+#
+# The prompt asked for "valid JSON only" and _extract_json() cleaned up
+# afterwards; anything it could not parse cost the whole session's extraction -
+# every candidate and the snapshot - silently, with the transcript already
+# consumed. response_format moves that from a request to a constraint.
+
+
+def test_observer_asks_the_provider_for_schema_constrained_output(db_conn):
+    provider = FakeProvider(response_text=json.dumps(VALID_RESPONSE))
+    observer.run_session_end(db_conn, VALID_TRANSCRIPT, provider)
+
+    schema = provider.last_response_format
+    assert schema is not None, "Observer must request constrained output when the provider supports it"
+    assert set(schema["required"]) == {"memory_candidates", "decision_candidates", "session_snapshot"}
+
+
+def test_requested_schema_matches_what_the_sanitizers_expect(db_conn):
+    # The schema and the OUTPUT FORMAT block in the prompt describe one
+    # contract; a field required by the parser but absent from the schema is
+    # how they drift apart unnoticed.
+    provider = FakeProvider(response_text=json.dumps(VALID_RESPONSE))
+    observer.run_session_end(db_conn, VALID_TRANSCRIPT, provider)
+    schema = provider.last_response_format
+
+    decision_props = schema["properties"]["decision_candidates"]["items"]
+    assert "raw_quote" in decision_props["required"], (
+        "raw_quote is what _quote_is_grounded() checks against the transcript - "
+        "a candidate without one cannot be verified at all"
+    )
+    memory_props = schema["properties"]["memory_candidates"]["items"]
+    assert memory_props["properties"]["label"]["enum"] == ["explicit", "inferred"]
+    # ADR-005: the model labels, it never scores. No confidence field anywhere.
+    assert "confidence" not in memory_props["properties"]
+    # snapshot_date is stamped by the code via now_utc(), never asked of the model.
+    assert "snapshot_date" not in schema["properties"]["session_snapshot"]["properties"]
+
+
+def test_provider_without_response_format_support_still_works(db_conn):
+    # base_provider documents response_format as optional for implementers.
+    # A provider that never adopted it must extract unconstrained rather than
+    # raise TypeError and lose the session.
+    class LegacyProvider(BaseLLMProvider):
+        def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30) -> Iterator[str]:
+            yield json.dumps(VALID_RESPONSE)
+
+        def is_available(self) -> bool:
+            return True
+
+        def get_model_info(self):
+            return {"provider_id": "fake", "is_local": True, "model_name": "legacy"}
+
+    observer.run_session_end(db_conn, VALID_TRANSCRIPT, LegacyProvider())
+    # Asserted through the DB, as the other end-to-end tests here do: the
+    # snapshot is a write, not part of the return value.
+    written = session_snapshot.load_snapshot(db_conn)
+    assert written["topic"] == VALID_RESPONSE["session_snapshot"]["topic"]
+
+
+def test_accepts_response_format_detects_support_correctly():
+    class Takes(BaseLLMProvider):
+        def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30, response_format=None):
+            yield ""
+
+        def is_available(self): return True
+        def get_model_info(self): return {}
+
+    class DoesNot(BaseLLMProvider):
+        def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30):
+            yield ""
+
+        def is_available(self): return True
+        def get_model_info(self): return {}
+
+    class TakesKwargs(BaseLLMProvider):
+        def chat(self, messages, context=None, **kwargs):
+            yield ""
+
+        def is_available(self): return True
+        def get_model_info(self): return {}
+
+    assert observer._accepts_response_format(Takes()) is True
+    assert observer._accepts_response_format(DoesNot()) is False
+    # **kwargs binds the keyword fine, so it counts as support.
+    assert observer._accepts_response_format(TakesKwargs()) is True

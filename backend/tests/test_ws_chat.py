@@ -391,7 +391,7 @@ def test_app_startup_drains_pending_observer(monkeypatch, tmp_path):
     seed_conn.close()
 
     class FakeLocalProvider:
-        def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30):
+        def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30, response_format=None):
             yield '{"memory_candidates": [], "decision_candidates": [], "session_snapshot": {}}'
 
         def get_model_info(self):

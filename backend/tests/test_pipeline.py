@@ -29,7 +29,7 @@ class FakeProvider(BaseLLMProvider):
         self.tokens = tokens if tokens is not None else ["Hello", " world"]
         self._is_local = is_local
 
-    def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30) -> Iterator[str]:
+    def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30, response_format=None) -> Iterator[str]:
         yield from self.tokens
 
     def is_available(self) -> bool:
@@ -209,7 +209,7 @@ def test_mid_stream_provider_failure_still_finalizes_via_stage_10(db_conn):
     from backend.providers.base_provider import ProviderExecutionError
 
     class DyingProvider(FakeProvider):
-        def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30):
+        def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30, response_format=None):
             yield "partial"
             raise ProviderExecutionError("dropped connection")
 

@@ -19,6 +19,7 @@
 # and explicit candidates will stop clearing them past Week 3-4 (both require
 # evidence_count >= 2). This is a known, flagged gap - see Part 20 Phase 7 status.
 
+import inspect
 import json
 import logging
 import re
@@ -104,6 +105,81 @@ CONVERSATION TO ANALYZE:
 """
 
 
+# JSON Schema mirroring the OUTPUT FORMAT block above, handed to the provider
+# as response_format so the shape is enforced during sampling instead of hoped
+# for. Previously the only defence was the prompt saying "Produce valid JSON
+# only", with _extract_json() stripping markdown fences after the fact and
+# run_session_end() discarding the ENTIRE session's output on a parse failure -
+# so one stray sentence of commentary cost every candidate and the snapshot,
+# silently, with the transcript already gone.
+#
+# What this does and does not buy: it guarantees well-formed JSON of the right
+# shape. It guarantees nothing about truthfulness - a schema cannot tell an
+# observed decision from an invented one. The grounding checks
+# (_looks_like_assistant_echo, _quote_is_grounded, _has_any_substantive_user_turn)
+# remain the defence against that, and are unaffected by this.
+#
+# Kept adjacent to _EXTRACTION_PROMPT_PREFIX deliberately: the prompt's example
+# and this schema describe the same contract, and editing one without the other
+# is how they drift. snapshot_date is absent by design - the code stamps it via
+# now_utc(), and asking a model for the current time invites a wrong answer.
+_EXTRACTION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "memory_candidates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "target_table": {"type": "string"},
+                    "field_name": {"type": "string"},
+                    "proposed_value": {"type": "string"},
+                    # Constrained to the two labels the validation layer accepts
+                    # (_VALID_LABELS). ADR-005 forbids the model scoring its own
+                    # confidence; this is the label-only choice it may make.
+                    "label": {"type": "string", "enum": ["explicit", "inferred"]},
+                    "evidence_count": {"type": "integer"},
+                    "evidence_text": {"type": "string"},
+                },
+                "required": [
+                    "target_table", "field_name", "proposed_value",
+                    "label", "evidence_count", "evidence_text",
+                ],
+            },
+        },
+        "decision_candidates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "decision_text": {"type": "string"},
+                    "signals_found": {"type": "array", "items": {"type": "string"}},
+                    # Required, not optional: _quote_is_grounded() checks this
+                    # against the real transcript, and a candidate arriving
+                    # without one cannot be verified at all.
+                    "raw_quote": {"type": "string"},
+                },
+                "required": ["decision_text", "signals_found", "raw_quote"],
+            },
+        },
+        "session_snapshot": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string"},
+                "open_problems": {"type": "array", "items": {"type": "string"}},
+                "last_decisions": {"type": "array", "items": {"type": "string"}},
+                "suggested_next_step": {"type": "string"},
+            },
+            "required": ["topic", "open_problems", "last_decisions", "suggested_next_step"],
+        },
+    },
+    # All three keys required so "nothing to report" arrives as empty arrays -
+    # an explicit, parseable answer - rather than as absent keys indistinguishable
+    # from a truncated response.
+    "required": ["memory_candidates", "decision_candidates", "session_snapshot"],
+}
+
+
 class ObserverLocalProviderError(Exception):
     """Raised when Observer is given a non-local provider (ADR-033 Rule 4)."""
 
@@ -128,8 +204,33 @@ def _empty_output() -> ObserverOutput:
     return {"memory_candidates": [], "decision_candidates": [], "session_snapshot": _empty_snapshot()}
 
 
+def _accepts_response_format(provider: Any) -> bool:
+    """
+    Whether this provider's chat() takes the response_format keyword. A
+    provider accepting **kwargs counts, since the call will bind either way.
+    Any introspection failure is treated as "no" - falling back to an
+    unconstrained call always works, while guessing "yes" wrongly raises
+    TypeError and loses the session's extraction entirely.
+    """
+    try:
+        parameters = inspect.signature(provider.chat).parameters
+    except (TypeError, ValueError):
+        return False
+    if "response_format" in parameters:
+        return True
+    return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values())
+
+
 def _extract_json(raw_text: str) -> Optional[dict]:
-    """Models sometimes wrap JSON in markdown fences despite being told not to."""
+    """
+    Retained as a second line of defence even though response_format now makes
+    malformed output impossible on providers that honour it: providers that
+    ignore it fall through to exactly this path, which is how the Observer ran
+    until now. Cheap, and the alternative on a fenced response is losing the
+    whole session's extraction.
+
+    Models sometimes wrap JSON in markdown fences despite being told not to.
+    """
     text = raw_text.strip()
     fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, re.DOTALL)
     if fenced:
@@ -316,9 +417,23 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
             f"provider_consent.is_cloud={(None if row is None else bool(row['is_cloud']))!r}"
         )
 
+    # Asked before calling rather than by catching TypeError from the call: a
+    # TypeError raised inside the generator body during iteration would look
+    # identical to a rejected keyword, and retrying on that would hide a real
+    # bug behind a plausible-looking fallback. base_provider documents
+    # response_format as optional for implementers, so a provider that never
+    # adopted it still works - unconstrained, exactly as this ran until now.
+    kwargs: dict[str, Any] = {"max_tokens": 2000, "timeout_seconds": 180}
+    if _accepts_response_format(provider):
+        kwargs["response_format"] = _EXTRACTION_SCHEMA
+    else:
+        logger.warning(
+            "Provider does not accept response_format; extracting without constrained output"
+        )
+
     try:
         messages = [{"role": "user", "content": _EXTRACTION_PROMPT_PREFIX + transcript}]
-        raw_text = "".join(provider.chat(messages, max_tokens=2000, timeout_seconds=180))
+        raw_text = "".join(provider.chat(messages, **kwargs))
     except (ProviderUnavailableError, ProviderExecutionError) as e:
         logger.error(f"Observer LLM call failed, failing open: {e}")
         return _empty_output()

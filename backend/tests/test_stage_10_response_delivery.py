@@ -51,7 +51,7 @@ def test_full_pipeline_stage_9_into_stage_10(tmp_path, monkeypatch):
     from backend.providers.base_provider import BaseLLMProvider
 
     class SimpleProvider(BaseLLMProvider):
-        def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30):
+        def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30, response_format=None):
             yield "PIP "
             yield "works."
 

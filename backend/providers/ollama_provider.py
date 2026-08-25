@@ -15,7 +15,8 @@ class OllamaProvider(BaseLLMProvider):
         messages: List[Dict[str, str]],
         context: Optional[str] = None,
         max_tokens: int = 2000,
-        timeout_seconds: int = 30
+        timeout_seconds: int = 30,
+        response_format: Optional[Dict[str, Any]] = None
     ) -> Iterator[str]:
         if context:
             messages = [{"role": "system", "content": context}] + messages
@@ -28,7 +29,19 @@ class OllamaProvider(BaseLLMProvider):
                 "num_predict": max_tokens
             }
         }
-        
+
+        # Ollama's structured-output field: given a JSON Schema it constrains
+        # sampling so only tokens keeping the output valid against that schema
+        # can be emitted. Malformed JSON stops being something the prompt asks
+        # the model to avoid and becomes something it cannot produce.
+        #
+        # Streaming is unaffected - chunks still arrive token by token and the
+        # completed text is valid JSON - so this stays compatible with the
+        # generator interface Stage 9 relies on, even though the one caller
+        # that uses it (the Observer) joins the whole stream before parsing.
+        if response_format is not None:
+            payload["format"] = response_format
+
         req = urllib.request.Request(
             f"{self.host}/api/chat",
             data=json.dumps(payload).encode('utf-8'),

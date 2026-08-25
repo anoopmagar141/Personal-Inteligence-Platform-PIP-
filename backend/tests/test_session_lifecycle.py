@@ -25,7 +25,7 @@ class FakeProvider(BaseLLMProvider):
     def __init__(self, is_local=True):
         self._is_local = is_local
 
-    def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30) -> Iterator[str]:
+    def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30, response_format=None) -> Iterator[str]:
         yield '{"memory_candidates": [], "decision_candidates": [], "session_snapshot": {}}'
 
     def is_available(self) -> bool:

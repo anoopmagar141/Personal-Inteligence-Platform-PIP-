@@ -17,7 +17,7 @@ class FakeProvider(BaseLLMProvider):
         self.raise_error = raise_error
         self.raise_after = raise_after  # raise after yielding this many tokens
 
-    def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30) -> Iterator[str]:
+    def chat(self, messages, context=None, max_tokens=2000, timeout_seconds=30, response_format=None) -> Iterator[str]:
         for i, token in enumerate(self.tokens):
             if self.raise_error and i == self.raise_after:
                 raise self.raise_error
