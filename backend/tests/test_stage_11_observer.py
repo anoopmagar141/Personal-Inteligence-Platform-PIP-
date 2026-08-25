@@ -71,9 +71,16 @@ VALID_RESPONSE = {
 # the bare "transcript" placeholder string used elsewhere in this file can't
 # satisfy the raw_quote-grounding / substantive-user-turn checks added after
 # the live confabulation finding (see _quote_is_grounded's docstring).
+#
+# Now also carries the memory candidate's evidence_text verbatim. That line was
+# missing for the same reason the raw_quote line was missing before it: nothing
+# checked memory candidates, so nothing forced the fixture to be realistic
+# about them. Grounding them exposed it immediately.
 VALID_TRANSCRIPT = (
     "User: I'm going with FastAPI for the backend, what do you think?\n"
     "Assistant: FastAPI is a solid choice for async workloads.\n"
+    "User: Also I switched to Neovim last month and I'm not going back.\n"
+    "Assistant: Noted.\n"
 )
 
 
@@ -134,7 +141,10 @@ def test_run_extracts_and_sanitizes_candidates(db_conn):
 def test_run_handles_markdown_fenced_json(db_conn):
     fenced = "```json\n" + json.dumps(VALID_RESPONSE) + "\n```"
     provider = FakeProvider(response_text=fenced)
-    result = observer.run("transcript", provider, db_conn)
+    # VALID_TRANSCRIPT rather than the bare "transcript" placeholder: the
+    # candidate's evidence_text must appear in the transcript to survive
+    # grounding, same as raw_quote already had to.
+    result = observer.run(VALID_TRANSCRIPT, provider, db_conn)
     assert len(result["memory_candidates"]) == 1
 
 
@@ -267,7 +277,10 @@ def test_run_session_end_reinforces_evidence_across_simulated_sessions(db_conn):
         "session_snapshot": {},
     }
     provider = FakeProvider(response_text=json.dumps(response))
-    result = observer.run_session_end(db_conn, "transcript", provider)
+    # Transcript must contain the candidate's evidence_text verbatim, or
+    # grounding drops it before reinforcement is ever reached.
+    transcript = "User: still using Neovim, it's working well for me.\nAssistant: Good to hear.\n"
+    result = observer.run_session_end(db_conn, transcript, provider)
 
     assert result["memory_results"][0]["validation_status"] == "APPROVED"
     assert result["memory_results"][0]["candidate"]["evidence_count"] == 2
@@ -554,3 +567,82 @@ def test_accepts_response_format_detects_support_correctly():
     assert observer._accepts_response_format(DoesNot()) is False
     # **kwargs binds the keyword fine, so it counts as support.
     assert observer._accepts_response_format(TakesKwargs()) is True
+
+
+# --- Memory candidates must be grounded in the transcript ---
+#
+# Decisions had two grounding checks; memory candidates had none, so an
+# invented preference reached Stage 12 on its own say-so and the evidence_text
+# shown to the user at review time was never verified to exist.
+
+
+def _memory_response(evidence_text: str) -> dict:
+    return {
+        "memory_candidates": [
+            {
+                "target_table": "preference_memory",
+                "field_name": "preferred_tools",
+                "proposed_value": "Neovim",
+                "label": "explicit",
+                "evidence_text": evidence_text,
+            }
+        ],
+        "decision_candidates": [],
+        "session_snapshot": {},
+    }
+
+
+def test_memory_candidate_with_evidence_in_the_transcript_survives(db_conn):
+    transcript = "User: I switched to Neovim last month and I'm not going back.\nAssistant: Noted.\n"
+    provider = FakeProvider(response_text=json.dumps(_memory_response("switched to Neovim last month")))
+    result = observer.run(transcript, provider, db_conn)
+    assert len(result["memory_candidates"]) == 1
+
+
+def test_memory_candidate_with_invented_evidence_is_dropped(db_conn):
+    transcript = "User: I switched to Neovim last month.\nAssistant: Noted.\n"
+    provider = FakeProvider(
+        response_text=json.dumps(_memory_response("the user said they love Neovim above all else"))
+    )
+    result = observer.run(transcript, provider, db_conn)
+    # Same standard decisions are already held to: evidence that isn't in the
+    # transcript cannot be checked, so the candidate has no verifiable basis.
+    assert result["memory_candidates"] == []
+
+
+def test_prompt_placeholder_echoed_as_evidence_is_dropped(db_conn):
+    # The exact string the live model returned once response_format made the
+    # output legible - it copied the prompt's own description of the field
+    # instead of filling it in. Caught by grounding rather than by matching
+    # this specific text: a placeholder isn't in the transcript either.
+    transcript = "User: I switched to Neovim last month.\nAssistant: Noted.\n"
+    provider = FakeProvider(
+        response_text=json.dumps(_memory_response("the exact quote or paraphrase this was drawn from"))
+    )
+    result = observer.run(transcript, provider, db_conn)
+    assert result["memory_candidates"] == []
+
+
+def test_memory_candidate_with_empty_evidence_is_dropped(db_conn):
+    transcript = "User: I switched to Neovim last month.\nAssistant: Noted.\n"
+    provider = FakeProvider(response_text=json.dumps(_memory_response("")))
+    result = observer.run(transcript, provider, db_conn)
+    assert result["memory_candidates"] == []
+
+
+def test_evidence_grounding_ignores_case_and_whitespace(db_conn):
+    # Same normalisation _quote_is_grounded already applies, so a candidate is
+    # not rejected over capitalisation the model chose differently.
+    transcript = "User: I switched to Neovim last month.\nAssistant: Noted.\n"
+    provider = FakeProvider(response_text=json.dumps(_memory_response("SWITCHED   to   neovim")))
+    result = observer.run(transcript, provider, db_conn)
+    assert len(result["memory_candidates"]) == 1
+
+
+def test_prompt_tells_the_model_not_to_copy_the_field_descriptions(db_conn):
+    # The placeholders are angle-bracketed and the rules say not to copy them;
+    # grounding is the enforcement, this is the instruction that should make it
+    # unnecessary in the first place.
+    assert "Never copy those descriptions" in observer._EXTRACTION_PROMPT_PREFIX
+    assert "WORD FOR WORD" in observer._EXTRACTION_PROMPT_PREFIX
+    assert "the exact quote or paraphrase this was drawn from" not in observer._EXTRACTION_PROMPT_PREFIX

@@ -67,6 +67,11 @@ RULES:
     Never extract the assistant's own offers, questions, or suggestions
     ("Would you like me to...", "I can help you...") as a decision - those
     are not decisions, they weren't made by the user.
+  - evidence_text and raw_quote must be copied WORD FOR WORD from the
+    conversation below. Not a paraphrase, not a summary, not a description.
+    If you cannot find the user's own words to copy, omit the candidate.
+  - The angle-bracketed text in the example below describes what to put
+    there. Never copy those descriptions into your answer.
 
 APPROVED MEMORY FIELDS (target_table: [field_name, ...]):
   skill_memory: [python_level, docker_level, ...]
@@ -83,14 +88,14 @@ OUTPUT FORMAT:
       "proposed_value": "Neovim",
       "label": "explicit",
       "evidence_count": 1,
-      "evidence_text": "the exact quote or paraphrase this was drawn from"
+      "evidence_text": "<the user's own words, copied exactly from the conversation>"
     }
   ],
   "decision_candidates": [
     {
       "decision_text": "one sentence stating the decision",
       "signals_found": ["explicit_reasoning_in_conversation", "commitment_language", "alternative_considered"],
-      "raw_quote": "the exact quote this was drawn from"
+      "raw_quote": "<the user's own words, copied exactly from the conversation>"
     }
   ],
   "session_snapshot": {
@@ -443,16 +448,45 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
         logger.error("Observer output was not valid JSON, failing open")
         return _empty_output()
 
+    # Hoisted above both loops: memory candidates are now grounded against the
+    # transcript too, not only decisions.
+    assistant_lines = _extract_assistant_lines(transcript)
+    transcript_lower = transcript.lower()
+
     raw_memory = parsed.get("memory_candidates")
     memory_candidates = []
     if isinstance(raw_memory, list):
-        memory_candidates = [c for c in (_sanitize_memory_candidate(m) for m in raw_memory) if c is not None]
+        for m in raw_memory:
+            candidate = _sanitize_memory_candidate(m)
+            if candidate is None:
+                continue
+            # Memory candidates previously bypassed grounding entirely, while
+            # decisions had been given two checks - so an invented preference
+            # reached Stage 12 on nothing but its own say-so, and the
+            # evidence_text shown to the user when reviewing it was never
+            # verified to exist.
+            #
+            # Found live once response_format made the output legible: the
+            # model returned the prompt's own placeholder,
+            # "the exact quote or paraphrase this was drawn from", as the
+            # evidence for a real preference. Grounding subsumes that specific
+            # symptom rather than special-casing it - a placeholder string
+            # isn't in the transcript either, so it fails the same check any
+            # other unverifiable evidence does. Enumerating placeholder
+            # spellings would be the whack-a-mole this codebase has already
+            # lost once, in Stage 1's project-term matching.
+            if not _quote_is_grounded(candidate["evidence_text"], transcript_lower):
+                logger.info(
+                    f"Observer: dropping memory candidate whose evidence_text is not in the "
+                    f"transcript (placeholder or confabulated): "
+                    f"{candidate['target_table']}.{candidate['field_name']}={candidate['proposed_value']!r}"
+                )
+                continue
+            memory_candidates.append(candidate)
 
     raw_decisions = parsed.get("decision_candidates")
     decision_candidates = []
     if isinstance(raw_decisions, list):
-        assistant_lines = _extract_assistant_lines(transcript)
-        transcript_lower = transcript.lower()
         for d in raw_decisions:
             candidate = _sanitize_decision_candidate(d)
             if candidate is None:
