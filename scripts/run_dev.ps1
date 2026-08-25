@@ -22,7 +22,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$tokenPath = Join-Path $root "data\api_token.txt"
+$dataDir = Join-Path $root "data"
+$tokenPath = Join-Path $dataDir "api_token.txt"
+
+# Security fix: nothing previously set PIP_DB_KEY on the actual startup path,
+# so get_connection() (backend/memory/profile_store.py) always took its
+# unencrypted sqlite3 fallback despite SQLCipher support existing - ADR-026's
+# "encrypted at rest" guarantee was dead code in every real launch. Same
+# persisted-local-secret pattern as backend/core/auth.py's API token: a
+# random hex key generated once and reused on every subsequent start.
+$dbKeyPath = Join-Path $dataDir "db_key.txt"
+if (Test-Path $dbKeyPath) {
+    $dbKey = (Get-Content $dbKeyPath -Raw).Trim()
+} else {
+    New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+    $bytes = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $dbKey = ($bytes | ForEach-Object { $_.ToString("x2") }) -join ""
+    Set-Content -Path $dbKeyPath -Value $dbKey -NoNewline -Encoding utf8
+}
+$env:PIP_DB_KEY = $dbKey
 
 # Ollama listens on 11434 by default (see backend/providers/ollama_provider.py's
 # OllamaProvider host default) - a TCP probe is enough to tell "already

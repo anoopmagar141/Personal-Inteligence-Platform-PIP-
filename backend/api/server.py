@@ -25,7 +25,11 @@ VALID_CONSENT_SCOPES = {"full_inference", "web_search_only", "embedding_only", "
 
 # Shared by CORSMiddleware (REST) and ws_chat()'s own manual check (WS upgrades
 # never go through CORSMiddleware at all - it's HTTP-only in Starlette).
-_ALLOWED_ORIGIN_RE = re.compile(r"http://(localhost|127\.0\.0\.1)(:\d+)?")
+# Anchored with a trailing $: both consumers match this against the start of
+# the Origin string (CORSMiddleware's allow_origin_regex and the manual
+# .match() call below), so without the anchor "http://localhost.attacker.tld"
+# would satisfy the prefix and be treated as a trusted local origin.
+_ALLOWED_ORIGIN_RE = re.compile(r"http://(localhost|127\.0\.0\.1)(:\d+)?$")
 
 
 def open_app_connection(db_path: str | None = None, db_key: str | None = None):
