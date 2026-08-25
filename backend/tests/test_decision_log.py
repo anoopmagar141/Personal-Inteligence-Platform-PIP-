@@ -182,3 +182,36 @@ def test_route_observer_decision_drops_unknown_signal_names(conn):
     )
     assert result["signals"] == ["alternative_considered", "commitment_language"]
     assert result["confidence"] == 0.7
+
+
+# --- state_reason: retractions must record why (schema.sql / ADR-022) ---
+
+
+def test_update_decision_state_persists_the_reason_it_demands(conn):
+    decision_id = decision_log.insert_decision(conn, text="Use SQLCipher for storage")
+    decision_log.update_decision_state(
+        conn, decision_id, state="abandoned", reason="Superseded by a platform decision"
+    )
+    row = conn.execute("SELECT state, state_reason FROM decision_log WHERE id = ?", (decision_id,)).fetchone()
+    assert row["state"] == "abandoned"
+    # The reason was required and validated from the start, then discarded for
+    # want of a column - leaving "abandoned" indistinguishable between a
+    # cleaned-up fabrication and a genuine change of mind.
+    assert row["state_reason"] == "Superseded by a platform decision"
+
+
+def test_reactivating_replaces_the_retraction_reason_rather_than_keeping_it(conn):
+    decision_id = decision_log.insert_decision(conn, text="Use Flask")
+    decision_log.update_decision_state(conn, decision_id, state="abandoned", reason="Chose FastAPI instead")
+    decision_log.update_decision_state(conn, decision_id, state="active", reason="Flask is back for the admin app")
+    row = conn.execute("SELECT state, state_reason FROM decision_log WHERE id = ?", (decision_id,)).fetchone()
+    assert row["state"] == "active"
+    # Leaving "Chose FastAPI instead" attached to a row that is active again
+    # would read as a live justification for the opposite of what happened.
+    assert row["state_reason"] == "Flask is back for the admin app"
+
+
+def test_active_decisions_have_no_state_reason(conn):
+    decision_id = decision_log.insert_decision(conn, text="Never retracted")
+    row = conn.execute("SELECT state_reason FROM decision_log WHERE id = ?", (decision_id,)).fetchone()
+    assert row["state_reason"] is None

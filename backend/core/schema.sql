@@ -120,6 +120,13 @@ CREATE TABLE IF NOT EXISTS decision_log (
     confidence REAL NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
     state TEXT DEFAULT 'active' CHECK (state IN ('active', 'superseded', 'abandoned')),
     superseded_by INTEGER,
+    -- Why this decision left 'active'. update_decision_state() has always
+    -- REQUIRED a reason for superseded/abandoned and validated it non-empty,
+    -- then discarded it for want of anywhere to put it - so the log recorded
+    -- that six decisions were retracted but not why, in a project whose
+    -- entire premise is an auditable record. NULL for decisions still active,
+    -- and for any retracted before this column existed.
+    state_reason TEXT,
     created_at TEXT NOT NULL,
     FOREIGN KEY (project_id) REFERENCES active_projects(project_id) ON DELETE SET NULL,
     FOREIGN KEY (superseded_by) REFERENCES decision_log(id) ON DELETE SET NULL

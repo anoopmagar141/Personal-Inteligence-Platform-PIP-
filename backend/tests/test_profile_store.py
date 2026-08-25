@@ -136,3 +136,69 @@ def test_profile_write_interrupted_before_commit_reopens_with_prewrite_state(tmp
         ).fetchone()[0] == 1
     finally:
         reopened.close()
+
+
+# --- Column migrations for databases created before a column existed ---
+
+
+def _decision_log_columns(conn):
+    return {row["name"] for row in conn.execute("PRAGMA table_info(decision_log)")}
+
+
+def test_existing_database_missing_a_column_is_repaired(tmp_path, db_key):
+    # The case CREATE TABLE IF NOT EXISTS silently misses: a database created
+    # before the column existed keeps its original shape forever, and the
+    # failure surfaces at query time as "no such column", not at init.
+    db_path = str(tmp_path / "old.db")
+    conn = profile_store.get_connection(db_path, db_key)
+    profile_store.initialize_schema(conn)
+    conn.execute("ALTER TABLE decision_log DROP COLUMN state_reason")
+    conn.commit()
+    assert "state_reason" not in _decision_log_columns(conn)
+
+    added = profile_store.apply_column_migrations(conn)
+
+    assert added == ["decision_log.state_reason"]
+    assert "state_reason" in _decision_log_columns(conn)
+
+
+def test_column_migration_is_idempotent(tmp_path, db_key):
+    # Runs on every connection via initialize_schema(), so a second pass must
+    # be a silent no-op rather than an error or a duplicate column.
+    conn = profile_store.get_connection(str(tmp_path / "pip.db"), db_key)
+    profile_store.initialize_schema(conn)
+    assert profile_store.apply_column_migrations(conn) == []
+    assert profile_store.apply_column_migrations(conn) == []
+
+
+def test_migrated_database_matches_a_freshly_created_one(tmp_path, db_key):
+    # A repaired database and a new one must be indistinguishable, or the two
+    # populations drift and later code has to handle both shapes.
+    fresh = profile_store.get_connection(str(tmp_path / "fresh.db"), db_key)
+    profile_store.initialize_schema(fresh)
+
+    migrated = profile_store.get_connection(str(tmp_path / "migrated.db"), db_key)
+    profile_store.initialize_schema(migrated)
+    migrated.execute("ALTER TABLE decision_log DROP COLUMN state_reason")
+    migrated.commit()
+    profile_store.apply_column_migrations(migrated)
+
+    assert _decision_log_columns(migrated) == _decision_log_columns(fresh)
+
+
+def test_retraction_reason_survives_the_migration(tmp_path, db_key):
+    # End to end: an old database can be repaired and then record a reason,
+    # which is the whole point of the column.
+    from backend.memory import decision_log
+
+    conn = profile_store.get_connection(str(tmp_path / "pip.db"), db_key)
+    profile_store.initialize_schema(conn)
+    conn.execute("ALTER TABLE decision_log DROP COLUMN state_reason")
+    conn.commit()
+
+    decision_id = decision_log.insert_decision(conn, text="A decision made before the column existed")
+    profile_store.apply_column_migrations(conn)
+    decision_log.update_decision_state(conn, decision_id, state="abandoned", reason="No longer relevant")
+
+    row = conn.execute("SELECT state_reason FROM decision_log WHERE id = ?", (decision_id,)).fetchone()
+    assert row["state_reason"] == "No longer relevant"

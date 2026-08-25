@@ -45,10 +45,53 @@ def get_connection(db_path: str, db_key: str | None = None):
     return conn
 
 
+# Columns added to schema.sql after databases already existed in the wild.
+#
+# Every CREATE TABLE in schema.sql is IF NOT EXISTS, which means it shapes new
+# databases only - an existing one silently keeps whatever columns it was
+# created with, and the first query naming a new column fails at runtime with
+# "no such column" rather than at init. SQLite has no ADD COLUMN IF NOT EXISTS,
+# so each entry is guarded by a PRAGMA table_info check instead.
+#
+# Deliberately run from initialize_schema() rather than as another script in
+# scripts/: open_app_connection() calls initialize_schema() on every connection,
+# so an existing database repairs itself on the next start with nothing for the
+# user to remember to run. The check is a local PRAGMA read - cheap enough to
+# pay per connection, and paid only once per column thereafter.
+#
+# Only ever ADD nullable columns here. Renames, drops and type changes need a
+# real table rebuild, which does not belong in a startup path.
+_ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    # See schema.sql: update_decision_state() required a reason and had nowhere
+    # to store it.
+    ("decision_log", "state_reason", "TEXT"),
+)
+
+
+def apply_column_migrations(conn) -> list[str]:
+    """
+    Adds any columns in _ADDED_COLUMNS missing from an existing database.
+    Idempotent. Returns the "table.column" strings actually added, so a caller
+    can log a real migration and stay quiet on the usual no-op.
+    """
+    added = []
+    for table, column, decl in _ADDED_COLUMNS:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if not existing:
+            continue  # table absent entirely - schema.sql owns creating it, not this
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+            added.append(f"{table}.{column}")
+    if added:
+        conn.commit()
+    return added
+
+
 def initialize_schema(conn) -> None:
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
     conn.commit()
+    apply_column_migrations(conn)
     seed_provider_consent(conn)
 
 

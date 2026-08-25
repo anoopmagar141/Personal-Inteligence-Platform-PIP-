@@ -165,9 +165,21 @@ def update_decision_state(
     if state in {"superseded", "abandoned"} and not reason.strip():
         raise ValueError("reason is required")
 
+    # reason is now persisted (schema.sql: decision_log.state_reason). It was
+    # required and validated here from the start, then dropped - so the log
+    # recorded that a decision had been retracted while losing the one piece
+    # of information that makes a retraction interpretable later. Under
+    # ADR-022 nothing is ever deleted, which means these rows are read months
+    # afterwards by someone who has to tell "this was a fabrication we cleaned
+    # up" from "this was real and we changed our mind" - indistinguishable
+    # from state alone.
+    #
+    # Stored verbatim for every state including 'active': re-activating is
+    # itself a decision worth explaining, and silently keeping the old
+    # retraction reason on a now-active row would be actively misleading.
     conn.execute(
-        "UPDATE decision_log SET state = ?, superseded_by = ? WHERE id = ?",
-        (state, superseded_by, decision_id),
+        "UPDATE decision_log SET state = ?, superseded_by = ?, state_reason = ? WHERE id = ?",
+        (state, superseded_by, reason, decision_id),
     )
     conn.commit()
 

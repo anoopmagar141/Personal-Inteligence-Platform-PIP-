@@ -102,12 +102,23 @@ def _norm(text: str) -> str:
     return " ".join((text or "").strip().lower().split())
 
 
+def _has_state_reason(conn) -> bool:
+    """
+    Whether this database has the state_reason column yet. Normally it will -
+    profile_store.apply_column_migrations() adds it on any app start - but this
+    script connects directly and may run against a database the app has not
+    opened since the column was introduced. Checked rather than assumed so the
+    backfill degrades to a no-op instead of raising "no such column".
+    """
+    return any(r["name"] == "state_reason" for r in conn.execute("PRAGMA table_info(decision_log)"))
+
+
 def retract_decisions(conn, dry_run: bool) -> tuple[int, int, int]:
     done = skipped = already = 0
     for decision_id, expected_text in sorted(FABRICATED_DECISIONS.items()):
-        row = conn.execute(
-            "SELECT id, decision_text, state FROM decision_log WHERE id = ?", (decision_id,)
-        ).fetchone()
+        # SELECT * rather than naming state_reason: this script may run against
+        # a database predating that column, where naming it raises outright.
+        row = conn.execute("SELECT * FROM decision_log WHERE id = ?", (decision_id,)).fetchone()
 
         if row is None:
             print(f"  [{decision_id}] SKIP - no such decision (database has moved on)")
@@ -120,7 +131,25 @@ def retract_decisions(conn, dry_run: bool) -> tuple[int, int, int]:
             skipped += 1
             continue
         if row["state"] != "active":
-            print(f"  [{decision_id}] already retracted (state={row['state']})")
+            # Backfill: the first run of this script predated
+            # decision_log.state_reason existing, so those retractions recorded
+            # the state change and lost the reason - exactly the gap the column
+            # was added to close. Repair them rather than skipping, otherwise
+            # the rows this script itself retracted stay permanently
+            # unexplained while every later one is documented.
+            has_column = _has_state_reason(conn)
+            if has_column and not (row["state_reason"] or "").strip():
+                if dry_run:
+                    print(f"  [{decision_id}] already retracted - would backfill missing reason")
+                else:
+                    conn.execute(
+                        "UPDATE decision_log SET state_reason = ? WHERE id = ?",
+                        (RETRACTION_REASON, decision_id),
+                    )
+                    conn.commit()
+                    print(f"  [{decision_id}] already retracted - reason backfilled")
+            else:
+                print(f"  [{decision_id}] already retracted (state={row['state']})")
             already += 1
             continue
 
