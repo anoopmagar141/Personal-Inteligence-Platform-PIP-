@@ -8,6 +8,7 @@ data/pip.db-wal
 data/chroma/
 data/api_token.txt
 data/db_key.txt
+data/salt.bin
 data/documents/
 data/pip.lock
 data/backend.log
