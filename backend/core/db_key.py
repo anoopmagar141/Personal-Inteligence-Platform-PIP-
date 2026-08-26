@@ -43,6 +43,13 @@ KDF_ITERATIONS = 256_000
 KEY_BYTES = 32  # 256-bit, the width SQLCipher's raw-hex key syntax expects
 SALT_BYTES = 16
 
+# Lives here rather than in whichever script happens to ask for a password:
+# two entry points now set one (scripts/set_db_password.py for an existing
+# database, scripts/derive_db_key.py --init for a first run), and a minimum
+# that differs between them is the kind of drift nobody notices until the
+# weaker path is the one someone used.
+MIN_PASSWORD_LENGTH = 8
+
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 SALT_PATH = DATA_DIR / "salt.bin"
 

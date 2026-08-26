@@ -12,6 +12,7 @@ driven by piping - the prompts are monkeypatched instead.
 """
 
 import importlib
+import os
 import secrets
 import sys
 from pathlib import Path
@@ -38,6 +39,14 @@ def script(tmp_path, monkeypatch):
     importlib.reload(module)  # re-read the env-derived module paths
     yield module
     sys.modules.pop("set_db_password", None)
+    # Safety net. _rebuild_vector_store() scopes PIP_DB_KEY to the rebuild and
+    # restores it, so this should already be clean - but monkeypatch.delenv
+    # above records nothing when the variable was already absent, leaving it
+    # with no value to restore if that ever stops being true. Nothing else in
+    # the suite isolates PIP_DB_KEY, and a stray real key makes
+    # get_connection() hand a plaintext test database to SQLCipher, which
+    # fails somewhere else entirely.
+    os.environ.pop("PIP_DB_KEY", None)
 
 
 def _seed_legacy_db(tmp_path) -> str:
@@ -132,6 +141,48 @@ def test_changing_an_existing_password_requires_the_current_one(script, tmp_path
     assert db_key.verify_key(
         str(tmp_path / "pip.db"), db_key.derive_key_from_stored_salt("the second password")
     )
+
+
+def test_the_vector_index_is_rebuilt_under_the_new_key(script, tmp_path, monkeypatch):
+    """
+    PIP_DB_KEY protects the ChromaDB vector index as well as the database:
+    chunk text and file paths are Fernet-encrypted with a key derived from it,
+    and chunks are addressed by HMAC(PIP_DB_KEY, file_path). A rekey therefore
+    orphans the whole index - unreadable AND unaddressable in one step - and
+    the read path degrades to returning nothing at all, silently, forever.
+
+    So the rebuild is part of the operation, not homework for the user. The
+    key it rebuilds under has to be the NEW one; rebuilding under the old key
+    would re-encrypt everything right back into unreadability.
+
+    Spied rather than run for real - vector_store pulls in chromadb and
+    sentence-transformers, and the rebuild itself is covered end-to-end in
+    test_vector_store.py.
+    """
+    _seed_legacy_db(tmp_path)
+    _answer(monkeypatch, script, "a good long password", "a good long password")
+
+    called_with = []
+    monkeypatch.setattr(script, "_rebuild_vector_store", lambda key: called_with.append(key))
+
+    assert script.main() == 0
+
+    assert called_with == [db_key.derive_key_from_stored_salt("a good long password")]
+
+
+def test_rebuild_is_skipped_when_nothing_is_ingested(script, tmp_path, monkeypatch, capsys):
+    """
+    The real _rebuild_vector_store, unspied, on a database with no documents.
+
+    It must reach its early return without importing vector_store: that import
+    costs seconds of chromadb + sentence-transformers startup, and a database
+    with nothing ingested should not pay it just to change a password.
+    """
+    _seed_legacy_db(tmp_path)
+    _answer(monkeypatch, script, "a good long password", "a good long password")
+
+    assert script.main() == 0
+    assert "nothing ingested, nothing to rebuild" in capsys.readouterr().out
 
 
 def test_wrong_current_password_aborts_without_touching_the_database(script, tmp_path, monkeypatch):

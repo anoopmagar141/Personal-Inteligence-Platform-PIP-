@@ -18,10 +18,32 @@ What it does
   3. Re-encrypts the database in place with SQLCipher's PRAGMA rekey.
   4. Reopens with the NEW key and verifies integrity plus row counts.
   5. Only then removes data/db_key.txt, if it was there.
+  6. Rebuilds the ChromaDB vector index under the new key.
 
 Ordering is the safety property. Nothing irreversible happens until the new key
 has been proven to open the re-encrypted database - and if the rekey fails
 partway, the old key still works, because PRAGMA rekey is transactional.
+
+Why step 6 exists
+-----------------
+pip.db is not the only thing PIP_DB_KEY protects. backend/memory/vector_store.py
+encrypts every RAG chunk and file path with a Fernet key derived from the same
+value, and addresses chunks by HMAC(PIP_DB_KEY, file_path). Re-keying the
+database therefore orphans the entire vector index in one shot: the chunks
+can't be decrypted (query() logs an InvalidToken and skips each one) and can't
+even be located for deletion (the HMAC digest has changed too).
+
+Without step 6 that failed silently in the worst possible way - RAG simply
+returned nothing, for every query, forever, with no error reaching the user and
+no error reaching the client. Ingested documents appeared in the sidebar the
+whole time. So the rebuild is part of the operation, not an afterthought the
+user is expected to know to run: SQLite's `documents` table is the source of
+truth for what should be indexed, and vector_store.rebuild_from_sqlite() turns
+it back into a correct index under the new key.
+
+A failed rebuild is reported, not fatal. By that point the rekey is committed
+and verified; re-ingesting a document is recoverable, so the exit code stays 0
+and the specific files are named.
 
 THERE IS NO RECOVERY. Part 10.1 states this as a feature rather than a
 limitation: a forgotten password means permanent profile loss, and that is the
@@ -58,7 +80,7 @@ DB_PATH = pathlib.Path(os.environ["PIP_DB_PATH"]) if os.environ.get("PIP_DB_PATH
 DATA_DIR = DB_PATH.parent
 LEGACY_KEY_PATH = DATA_DIR / "db_key.txt"
 
-MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_LENGTH = db_key.MIN_PASSWORD_LENGTH
 
 
 def _current_key() -> str | None:
@@ -142,6 +164,71 @@ def _row_counts(conn) -> dict[str, int]:
     return counts
 
 
+def _rebuild_vector_store(new_key: str) -> None:
+    """
+    Re-indexes ChromaDB under the new key. See the module docstring's "Why step
+    6 exists" - without this, a password change silently empties RAG.
+
+    Never fatal. The rekey is committed and verified before this runs, and a
+    vector index is derived data: every chunk can be rebuilt from the
+    `documents` registry plus the files still sitting in data/documents. A
+    failure here costs a re-upload, not a profile.
+    """
+    # vector_store._get_db_key() reads PIP_DB_KEY from the environment, so the
+    # new key has to be there while the rebuild runs - and only while it runs.
+    #
+    # Set-and-leave was tried first and is wrong in a way worth recording:
+    # _current_key() checks PIP_DB_KEY before it prompts for a password, so a
+    # second main() in the same process would find the key this function had
+    # exported and skip the "prove you know the current password" step
+    # entirely. A one-shot script exits before that matters; a script that
+    # quietly depends on exiting to stay correct does not deserve the benefit
+    # of the doubt. Scoped and restored instead.
+    previous_key = os.environ.get("PIP_DB_KEY")
+
+    def _restore_env() -> None:
+        if previous_key is None:
+            os.environ.pop("PIP_DB_KEY", None)
+        else:
+            os.environ["PIP_DB_KEY"] = previous_key
+
+    os.environ["PIP_DB_KEY"] = new_key
+
+    try:
+        conn = profile_store.get_connection(str(DB_PATH), new_key)
+    except Exception as e:
+        _restore_env()
+        print(f"  WARNING: could not reopen the database to rebuild the vector index: {e}")
+        return
+
+    try:
+        active = conn.execute("SELECT COUNT(*) FROM documents WHERE status = 'active'").fetchone()[0]
+        if not active:
+            # Checked before the import on purpose: vector_store pulls in
+            # chromadb and sentence-transformers, seconds of import time that a
+            # database with nothing ingested should not pay.
+            print("  vector index: nothing ingested, nothing to rebuild")
+            return
+
+        print(f"  Re-indexing {active} document(s) under the new key ...")
+        print("  (re-embedding on CPU - this is the slow part)")
+        from backend.memory import vector_store
+
+        result = vector_store.rebuild_from_sqlite(conn)
+        print(f"  vector index: {len(result['rebuilt'])} document(s) re-indexed")
+        for failure in result["failed"]:
+            print(f"    COULD NOT RE-INDEX {failure['file_path']}: {failure['reason']}")
+        if result["failed"]:
+            print("    Those are no longer searchable - re-upload them from the app.")
+    except Exception as e:
+        print(f"  WARNING: could not rebuild the vector index: {e}")
+        print("  The database itself is fine. RAG will return nothing until the")
+        print("  documents are re-uploaded from the app.")
+    finally:
+        conn.close()
+        _restore_env()
+
+
 def _check_only() -> int:
     try:
         db_key.load_salt()
@@ -219,6 +306,11 @@ def main() -> int:
     if LEGACY_KEY_PATH.exists():
         LEGACY_KEY_PATH.unlink()
         print(f"  removed {LEGACY_KEY_PATH.name} - the key is no longer stored on disk")
+
+    # Last, and after the point of no return by design: PIP_DB_KEY protects the
+    # vector index as well as the database, so a rekey orphans every RAG chunk
+    # until they are re-embedded under the new key.
+    _rebuild_vector_store(new_key)
 
     print()
     print("Done. The database is now encrypted with a key derived from your password.")
