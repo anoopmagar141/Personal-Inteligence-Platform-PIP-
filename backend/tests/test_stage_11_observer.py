@@ -13,6 +13,7 @@ from backend.providers.base_provider import (
 from backend.stages import stage_11_observer as observer
 
 
+
 class FakeProvider(BaseLLMProvider):
     def __init__(self, response_text: str = "", is_local: bool = True, raise_error: Exception = None):
         self.response_text = response_text
@@ -646,3 +647,50 @@ def test_prompt_tells_the_model_not_to_copy_the_field_descriptions(db_conn):
     assert "Never copy those descriptions" in observer._EXTRACTION_PROMPT_PREFIX
     assert "WORD FOR WORD" in observer._EXTRACTION_PROMPT_PREFIX
     assert "the exact quote or paraphrase this was drawn from" not in observer._EXTRACTION_PROMPT_PREFIX
+
+
+# --- target_table must name a real, writable table ---
+
+
+def test_approved_fields_name_only_real_writable_tables():
+    # "observer_writable" was a key here: a CATEGORY name from
+    # constitutional.json, not a table. The prompt taught it as a target_table,
+    # the model emitted it, and every such candidate was HARD_REJECTed as a
+    # schema violation - two rejections and four "Unhandled target_table"
+    # warnings per session, guaranteed, from a conversation about nothing
+    # unusual.
+    from backend.core.constitution_enforcer import OBSERVER_WRITABLE_TABLES
+
+    for table in observer.APPROVED_MEMORY_FIELDS:
+        assert table in OBSERVER_WRITABLE_TABLES, f"{table} would be HARD_REJECTed by the constitution"
+
+
+def test_approved_tables_can_actually_be_written(db_conn):
+    # Naming a permitted-but-unimplemented table would be worse than the bug it
+    # replaced: write_approved_candidate raises "Unsupported target_table",
+    # so the candidate throws and lands as "failed" rather than being cleanly
+    # rejected. Every table offered to the model must survive the write path.
+    from backend.memory import profile_store
+
+    for table, fields in observer.APPROVED_MEMORY_FIELDS.items():
+        candidate = {
+            "target_table": table,
+            "field_name": "goal:1" if table == "goal_memory" else fields[0],
+            "proposed_value": "0.5" if table == "skill_memory" else "something",
+            "label": "explicit",
+            "evidence_count": 1,
+            "evidence_text": "quoted",
+        }
+        # Must not raise "Unsupported target_table for approved write".
+        profile_store.write_approved_candidate(db_conn, candidate)
+
+
+def test_schema_constrains_target_table_to_the_approved_set():
+    # Enforced at the sampler, not merely requested in the prompt.
+    enum = observer._EXTRACTION_SCHEMA["properties"]["memory_candidates"]["items"]["properties"]["target_table"]["enum"]
+    assert set(enum) == set(observer.APPROVED_MEMORY_FIELDS)
+    assert "observer_writable" not in enum
+
+
+def test_prompt_does_not_advertise_the_category_name_as_a_table():
+    assert "observer_writable" not in observer._EXTRACTION_PROMPT_PREFIX

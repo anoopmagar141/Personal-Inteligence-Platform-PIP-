@@ -43,12 +43,43 @@ CONSTITUTION_PATH = str(Path(__file__).parent.parent / "core" / "constitutional.
 
 _VALID_LABELS = {"explicit", "inferred"}
 
-# Must exactly match Part 9.1 observer_may_write.fields (constitutional.json)
+# target_tables the Observer may propose candidates for. Every key here must be
+# a real table that the whole downstream path can actually handle.
+#
+# "observer_writable" used to be a key, carried over from constitutional.json's
+# observer_may_write.fields - but that is a CATEGORY NAME grouping three tables,
+# not a table itself. The prompt taught it to the model as a target_table, the
+# model dutifully emitted it, and ConstitutionEnforcer HARD_REJECTed every one
+# as a schema violation because no table by that name exists. Seen live: two
+# candidates rejected and four "Unhandled target_table in _fetch_existing_state"
+# warnings from a single session, every run, guaranteed.
+#
+# The three tables it named (topic_interests, preferred_tools,
+# document_access_patterns) are genuinely permitted by the constitution, and
+# they are NOT listed here on purpose. Naming them correctly would only move the
+# failure later and make it worse: stage_12's _fetch_existing_state has no
+# branch for any of them, and profile_store.write_approved_candidate raises
+# "Unsupported target_table for approved write", so an APPROVED candidate would
+# throw, be retried once, and land as "failed" - an exception path instead of
+# today's clean rejection.
+#
+# Enabling them means three things, in this order: a _fetch_existing_state
+# handler, a write_approved_candidate branch (they are set-membership tables -
+# topic/tool_name/document_path with an evidence counter, not the
+# name/value shape the others use), and something that actually READS them.
+# That last one is the reason this is a removal rather than an implementation:
+# nothing in the codebase selects from topic_interests or
+# document_access_patterns at all - not get_profile(), not any of stage_04's
+# category table sets - so writing to them would produce data no prompt ever
+# sees and no profile view ever shows.
+#
+# Tool preferences are not lost by this: preference_memory.preferred_tools is
+# listed below, is observer-writable, and is read by get_profile() and
+# stage_04's coding_question - a path that works end to end today.
 APPROVED_MEMORY_FIELDS = {
     "skill_memory": ["python_level", "docker_level", "sql_level"],
     "preference_memory": ["preferred_tools", "answer_style"],
     "goal_memory": ["active_goals", "project_objectives"],
-    "observer_writable": ["topic_interests", "preferred_tools", "document_access_patterns"],
 }
 
 _EXTRACTION_PROMPT_PREFIX = """SYSTEM:
@@ -73,11 +104,11 @@ RULES:
   - The angle-bracketed text in the example below describes what to put
     there. Never copy those descriptions into your answer.
 
-APPROVED MEMORY FIELDS (target_table: [field_name, ...]):
-  skill_memory: [python_level, docker_level, ...]
-  preference_memory: [preferred_tools, answer_style, ...]
+APPROVED MEMORY FIELDS - target_table must be one of these exact names:
+  skill_memory: [python_level, docker_level, sql_level]
+  preference_memory: [preferred_tools, answer_style]
   goal_memory: [active_goals, project_objectives]
-  observer_writable: [topic_interests, preferred_tools, document_access_patterns]
+Use no other target_table. A candidate naming anything else is discarded.
 
 OUTPUT FORMAT:
 {
@@ -136,7 +167,14 @@ _EXTRACTION_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "target_table": {"type": "string"},
+                    # Constrained to the tables the whole downstream path can
+                    # actually handle, so an unwritable target_table becomes
+                    # unemittable rather than something the prompt merely asks
+                    # the model not to produce - the same "constrain the
+                    # mechanism" move as response_format itself. Derived from
+                    # APPROVED_MEMORY_FIELDS so the schema, the prompt and the
+                    # write path cannot drift to three different answers.
+                    "target_table": {"type": "string", "enum": sorted(APPROVED_MEMORY_FIELDS)},
                     "field_name": {"type": "string"},
                     "proposed_value": {"type": "string"},
                     # Constrained to the two labels the validation layer accepts
