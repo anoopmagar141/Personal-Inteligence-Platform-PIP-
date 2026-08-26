@@ -32,6 +32,75 @@ VALID_CONSENT_SCOPES = {"full_inference", "web_search_only", "embedding_only", "
 _ALLOWED_ORIGIN_RE = re.compile(r"http://(localhost|127\.0\.0\.1)(:\d+)?$")
 
 
+# Security fix: the API token was being written to disk in plaintext by
+# uvicorn's access log. Browsers cannot set headers on a WebSocket handshake,
+# so /ws/chat takes the token as a query parameter (see ws_chat) - and uvicorn
+# logs the full request path, producing lines like:
+#
+#   "WebSocket /ws/chat?token=ae4fda2629...b6f4" [accepted]
+#
+# in data/backend.err.log. auth.py states the token file is "the only place
+# this value is meant to be read from", and ws_chat's own origin check exists
+# to limit the damage of "a leaked token (logs, shoulder-surfed URL, browser
+# history)" - the code named this exact threat and then produced it.
+#
+# The severity is not that a local attacker gains anything (api_token.txt is
+# already readable by anything running as this user) but that LOGS TRAVEL: they
+# get pasted into bug reports, forums and submissions, in a way a file called
+# api_token.txt never does. One of those lines hands over full API access to
+# the contents of an otherwise-encrypted database.
+#
+# Redaction rather than --no-access-log: knowing which requests arrived is
+# genuinely useful for debugging, and the connection log is how this was found
+# in the first place. Applied to record.args as well as record.msg because
+# uvicorn logs with lazy %-formatting - the path arrives as an argument, and a
+# filter that only rewrote record.msg would leave the token untouched in every
+# real access-log line.
+_TOKEN_IN_QUERY_RE = re.compile(r"(token=)[^&\s\"'\\]+", re.IGNORECASE)
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, str):
+        return _TOKEN_IN_QUERY_RE.sub(r"\1[REDACTED]", value)
+    return value
+
+
+class RedactTokenFilter(logging.Filter):
+    """Strips `token=...` query values out of log records. Never drops a record."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = _redact(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(_redact(a) for a in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {k: _redact(v) for k, v in record.args.items()}
+        return True
+
+
+def install_log_redaction() -> None:
+    """
+    Attaches RedactTokenFilter to the loggers that can carry a request URL.
+
+    Called from the lifespan startup rather than at import: uvicorn configures
+    its own logging when it starts, and a filter attached before that can be
+    discarded by the reconfiguration. By the time lifespan runs, uvicorn's
+    loggers exist and are final - and the first WebSocket connection, which is
+    what actually carries the token, cannot have happened yet.
+
+    Idempotent, since the lifespan runs once per TestClient in the test suite.
+    """
+    for name in ("uvicorn.access", "uvicorn.error", "uvicorn", ""):
+        logger_obj = logging.getLogger(name)
+        if not any(isinstance(f, RedactTokenFilter) for f in logger_obj.filters):
+            logger_obj.addFilter(RedactTokenFilter())
+        # A filter on a logger only runs for records logged directly to it, not
+        # for records propagating up from children - so the handlers get one
+        # too, which is what actually catches uvicorn.access's output.
+        for handler in logger_obj.handlers:
+            if not any(isinstance(f, RedactTokenFilter) for f in handler.filters):
+                handler.addFilter(RedactTokenFilter())
+
+
 def open_app_connection(db_path: str | None = None, db_key: str | None = None):
     path = Path(db_path) if db_path else DEFAULT_DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -534,6 +603,9 @@ try:
         # Raises loudly (AlreadyRunningError) rather than continuing, same
         # "fail loud, not silent" posture as the SQLCipher wrong-key check.
         instance_lock.acquire()
+        # Before anything can log a request URL - the /ws/chat handshake carries
+        # the token in its query string and uvicorn logs the full path.
+        install_log_redaction()
         try:
             # Startup: drain any pending_observer rows a previous shutdown left behind
             # (Part 7: drain before Stage 0 - there's no live traffic yet to delay).
