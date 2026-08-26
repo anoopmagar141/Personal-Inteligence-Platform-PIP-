@@ -74,6 +74,44 @@ def get_messages(conn, conversation_id: str) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def mark_observed(conn, conversation_id: str, *, timestamp: str | None = None) -> None:
+    """
+    Records that the Observer has taken a pass over this conversation, so
+    startup recovery does not process it a second time.
+    """
+    conn.execute(
+        "UPDATE conversations SET observed_at = ? WHERE id = ?",
+        (timestamp or now_utc(), conversation_id),
+    )
+    conn.commit()
+
+
+def list_unobserved(conn) -> list[dict[str, Any]]:
+    """
+    Conversations that hold messages but have never been through the Observer.
+
+    In normal operation this is empty: a disconnect runs the Observer straight
+    away, and a clean shutdown persists the transcript to pending_observer. It
+    fills only when the process died without either - `Stop-Process -Force`, a
+    crash, a power cut - where the messages were already committed per turn but
+    the extraction never happened. That failure was previously silent, which is
+    the worst shape for it to take in a memory system: the conversation is
+    visible in the sidebar, so nothing looks wrong, while none of it was
+    learned from.
+
+    Empty conversations are excluded via the JOIN - a row created for a
+    connection that disconnected before sending anything has nothing to extract
+    and would only produce an empty Observer pass.
+    """
+    rows = conn.execute(
+        "SELECT c.id, c.project_id, c.created_at, c.updated_at, COUNT(m.id) AS message_count "
+        "FROM conversations c JOIN messages m ON m.conversation_id = c.id "
+        "WHERE c.observed_at IS NULL "
+        "GROUP BY c.id ORDER BY c.updated_at ASC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def conversation_exists(conn, conversation_id: str) -> bool:
     row = conn.execute("SELECT 1 FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
     return row is not None

@@ -301,6 +301,12 @@ CREATE TABLE IF NOT EXISTS conversations (
     project_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    -- When the Observer last took a pass over this conversation. NULL means it
+    -- never has, which is how a session killed without a clean disconnect or
+    -- shutdown is found again at startup: the messages were persisted per turn,
+    -- but the extraction that turns them into memory never ran, and nothing
+    -- previously noticed. See session_lifecycle.recover_unobserved_conversations.
+    observed_at TEXT,
     FOREIGN KEY (project_id) REFERENCES active_projects(project_id) ON DELETE SET NULL
 );
 

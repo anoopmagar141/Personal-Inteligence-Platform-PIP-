@@ -276,7 +276,9 @@ def test_idle_timeout_triggers_observer_and_clears_history(monkeypatch, token):
 
     observer_calls = []
 
-    async def fake_run_observer_now(loop, executor, conn, conversation_history, provider, project_id=None):
+    async def fake_run_observer_now(
+        loop, executor, conn, conversation_history, provider, project_id=None, conversation_id=None
+    ):
         observer_calls.append(list(conversation_history))
         return {"memory_results": [], "decision_results": []}
 

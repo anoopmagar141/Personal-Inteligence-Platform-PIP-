@@ -65,7 +65,26 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # See schema.sql: update_decision_state() required a reason and had nowhere
     # to store it.
     ("decision_log", "state_reason", "TEXT"),
+    # See schema.sql: NULL marks a conversation the Observer never processed.
+    ("conversations", "observed_at", "TEXT"),
 )
+
+# Run once, immediately after the named column is first added, to give existing
+# rows a sensible value. Keyed by "table.column" so a backfill can never fire
+# twice: apply_column_migrations only calls it on the pass that actually adds
+# the column.
+_BACKFILLS: dict[str, str] = {
+    # Every conversation predating this column has already had whatever
+    # Observer treatment it was going to get, and is stamped as observed rather
+    # than left NULL. Without this, the first start after the upgrade would see
+    # the entire conversation history as unprocessed and queue an LLM pass for
+    # each one - minutes of blocking startup, re-extracting from transcripts
+    # that were handled long ago. Recovery is meant for sessions genuinely lost
+    # to a kill, which only accumulate one at a time.
+    "conversations.observed_at": (
+        "UPDATE conversations SET observed_at = datetime('now') WHERE observed_at IS NULL"
+    ),
+}
 
 
 def apply_column_migrations(conn) -> list[str]:
@@ -81,7 +100,13 @@ def apply_column_migrations(conn) -> list[str]:
             continue  # table absent entirely - schema.sql owns creating it, not this
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
-            added.append(f"{table}.{column}")
+            key = f"{table}.{column}"
+            # Only on the pass that actually adds the column, so a backfill
+            # cannot re-run later and overwrite real values with defaults.
+            backfill = _BACKFILLS.get(key)
+            if backfill:
+                conn.execute(backfill)
+            added.append(key)
     if added:
         conn.commit()
     return added

@@ -202,3 +202,43 @@ def test_retraction_reason_survives_the_migration(tmp_path, db_key):
 
     row = conn.execute("SELECT state_reason FROM decision_log WHERE id = ?", (decision_id,)).fetchone()
     assert row["state_reason"] == "No longer relevant"
+
+
+def test_observed_at_backfill_marks_existing_conversations_as_handled(tmp_path, db_key):
+    # Without the backfill, the first start after this upgrade would see every
+    # conversation ever held as unprocessed and queue an LLM pass for each -
+    # minutes of blocking startup, re-extracting transcripts handled long ago.
+    from backend.memory import conversation_store
+
+    conn = profile_store.get_connection(str(tmp_path / "old.db"), db_key)
+    profile_store.initialize_schema(conn)
+    conn.execute("ALTER TABLE conversations DROP COLUMN observed_at")
+    conn.commit()
+
+    cid = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, cid, "user", "an old conversation")
+
+    added = profile_store.apply_column_migrations(conn)
+
+    assert "conversations.observed_at" in added
+    row = conn.execute("SELECT observed_at FROM conversations WHERE id = ?", (cid,)).fetchone()
+    assert row["observed_at"] is not None, "pre-existing conversations must not look unprocessed"
+    assert conversation_store.list_unobserved(conn) == []
+
+
+def test_backfill_does_not_rerun_and_overwrite_real_values(tmp_path, db_key):
+    # apply_column_migrations runs on every connection; a backfill firing again
+    # would stamp genuinely-unobserved conversations as handled and silently
+    # discard their learning.
+    from backend.memory import conversation_store
+
+    conn = profile_store.get_connection(str(tmp_path / "pip.db"), db_key)
+    profile_store.initialize_schema(conn)
+
+    cid = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, cid, "user", "a conversation killed before extraction")
+
+    profile_store.apply_column_migrations(conn)
+    profile_store.apply_column_migrations(conn)
+
+    assert [c["id"] for c in conversation_store.list_unobserved(conn)] == [cid]

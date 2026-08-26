@@ -168,3 +168,134 @@ def test_drain_pending_on_startup_processes_existing_entries(db_conn):
     assert len(result["completed"]) == 1
     assert result["failed"] == []
     assert pending_observer.list_pending(db_conn) == []
+
+
+# --- Recovery from an unclean shutdown (force-kill / crash / power loss) ---
+#
+# The third failure mode: a disconnect runs the Observer immediately and a
+# clean shutdown persists to pending_observer, but a process killed outright
+# runs neither, because both live in code that never executes.
+# conversation_history dies with the process. Found live - a session was killed
+# mid-test and the conversation sat in the sidebar looking normal while nothing
+# had been learned from it.
+
+
+@pytest.fixture
+def conv_conn(tmp_path, db_key):
+    conn = get_connection(str(tmp_path / "recover.db"), db_key=db_key)
+    initialize_schema(conn)
+    yield conn
+    conn.close()
+
+
+def _conversation_with_messages(conn, *, observed: bool = False) -> str:
+    from backend.memory import conversation_store
+
+    cid = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, cid, "user", "I've decided to use SQLCipher for storage")
+    conversation_store.append_message(conn, cid, "assistant", "Noted.")
+    if observed:
+        conversation_store.mark_observed(conn, cid)
+    return cid
+
+
+def test_killed_session_is_recovered_and_queued(conv_conn):
+    cid = _conversation_with_messages(conv_conn)
+
+    recovered = session_lifecycle.recover_unobserved_conversations(conv_conn)
+
+    assert recovered == [cid]
+    queued = pending_observer.list_pending(conv_conn)
+    assert len(queued) == 1
+    # Transcript rebuilt from the committed messages, not from the memory that died.
+    assert "I've decided to use SQLCipher for storage" in queued[0]["session_transcript"]
+    assert queued[0]["session_transcript"].startswith("User:")
+
+
+def test_already_observed_conversation_is_not_reprocessed(conv_conn):
+    _conversation_with_messages(conv_conn, observed=True)
+    assert session_lifecycle.recover_unobserved_conversations(conv_conn) == []
+    assert pending_observer.list_pending(conv_conn) == []
+
+
+def test_recovery_does_not_requeue_on_a_second_startup(conv_conn):
+    # Marked at enqueue time, so a restart before the drain finishes does not
+    # queue the same conversation again on every boot.
+    _conversation_with_messages(conv_conn)
+    first = session_lifecycle.recover_unobserved_conversations(conv_conn)
+    second = session_lifecycle.recover_unobserved_conversations(conv_conn)
+    assert len(first) == 1
+    assert second == []
+    assert len(pending_observer.list_pending(conv_conn)) == 1
+
+
+def test_empty_conversation_is_not_queued(conv_conn):
+    # A row created for a connection that disconnected before sending anything
+    # has nothing to extract; queueing it would only burn an Observer pass.
+    from backend.memory import conversation_store
+
+    conversation_store.create_conversation(conv_conn)
+    assert session_lifecycle.recover_unobserved_conversations(conv_conn) == []
+    assert pending_observer.list_pending(conv_conn) == []
+
+
+def test_recovered_transcript_is_drained_by_the_existing_startup_drain(conv_conn):
+    # Recovery only enqueues - it deliberately reuses the queue the shutdown
+    # path already fills rather than adding a second way to process a session.
+    _conversation_with_messages(conv_conn)
+    session_lifecycle.recover_unobserved_conversations(conv_conn)
+
+    seen = []
+    result = pending_observer.drain(conv_conn, lambda transcript: seen.append(transcript))
+
+    assert len(result["completed"]) == 1
+    assert result["failed"] == []
+    assert "SQLCipher" in seen[0]
+
+
+@pytest.mark.asyncio
+async def test_successful_observer_run_marks_the_conversation_observed(executor_conn):
+    loop = asyncio.get_event_loop()
+    # conn is opened on the executor's worker thread and can only be used
+    # there, so every touch of it goes through run_in_executor - the same
+    # constraint the production WS handler works under.
+    conn, executor = executor_conn
+    cid = await loop.run_in_executor(executor, _conversation_with_messages, conn)
+
+    await session_lifecycle.run_observer_now(
+        loop, executor, conn,
+        [{"role": "user", "content": "hello there friend"}],
+        FakeProvider(), conversation_id=cid,
+    )
+
+    still_unobserved = await loop.run_in_executor(
+        executor, session_lifecycle.recover_unobserved_conversations, conn
+    )
+    assert still_unobserved == []
+
+
+@pytest.mark.asyncio
+async def test_failed_observer_run_leaves_it_for_startup_recovery(executor_conn):
+    # If extraction raised, the conversation genuinely has not been processed.
+    # Marking it anyway would write the session off permanently - the opposite
+    # of what this recovery path exists to prevent.
+    loop = asyncio.get_event_loop()
+    conn, executor = executor_conn
+    cid = await loop.run_in_executor(executor, _conversation_with_messages, conn)
+
+    class Exploding(FakeProvider):
+        def chat(self, *a, **k):
+            raise RuntimeError("model unavailable")
+            yield  # pragma: no cover - generator marker
+
+    with pytest.raises(Exception):
+        await session_lifecycle.run_observer_now(
+            loop, executor, conn,
+            [{"role": "user", "content": "hello there friend"}],
+            Exploding(), conversation_id=cid,
+        )
+
+    still_unobserved = await loop.run_in_executor(
+        executor, session_lifecycle.recover_unobserved_conversations, conn
+    )
+    assert still_unobserved == [cid]

@@ -21,7 +21,7 @@ import logging
 from typing import Any, Optional
 
 from backend.core import trace
-from backend.memory import pending_observer
+from backend.memory import conversation_store, pending_observer
 from backend.providers.base_provider import BaseLLMProvider
 from backend.stages import stage_11_observer as observer
 
@@ -77,6 +77,7 @@ async def run_observer_now(
     conversation_history: list[dict[str, str]],
     provider: BaseLLMProvider,
     project_id: Optional[str] = None,
+    conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Runs Stage 11's full session-end flow on the connection's own dedicated
@@ -105,10 +106,26 @@ async def run_observer_now(
     trace_id = trace.generate_trace_id()
     trace.stage_log(trace_id, "stage_11_observer", "ok", f"session-end run starting, {len(conversation_history)} messages")
     transcript = format_transcript(conversation_history)
+
+    def _extract_and_mark() -> dict[str, Any]:
+        # Marking happens inside this same executor call rather than as a
+        # second `await run_in_executor(...)` at the call site. Both callers
+        # are in ws_chat's disconnect/idle paths, and the disconnect path is
+        # documented there as able to leave a fresh executor submission never
+        # dequeued once the connection has done any DB writes - adding another
+        # unbounded await into it would be putting a new call in the one place
+        # already known to wedge. One round trip avoids that entirely.
+        #
+        # After run_session_end, so a raised extraction leaves observed_at NULL
+        # and the conversation is retried by startup recovery rather than being
+        # written off as handled.
+        outcome = observer.run_session_end(conn, transcript, provider, project_id)
+        if conversation_id:
+            conversation_store.mark_observed(conn, conversation_id)
+        return outcome
+
     try:
-        result = await loop.run_in_executor(
-            executor, lambda: observer.run_session_end(conn, transcript, provider, project_id)
-        )
+        result = await loop.run_in_executor(executor, _extract_and_mark)
     except Exception as e:
         trace.stage_log(trace_id, "stage_11_observer", "error", "session-end run raised", error_detail=str(e))
         raise
@@ -133,6 +150,57 @@ async def enqueue_for_shutdown(loop, session: dict[str, Any]) -> None:
     await loop.run_in_executor(
         session["executor"], pending_observer.enqueue, session["conn"], transcript
     )
+
+
+def recover_unobserved_conversations(conn) -> list[str]:
+    """
+    Finds conversations whose messages were committed but never went through the
+    Observer, and queues them for the startup drain. Returns the ids recovered.
+
+    Closes the third failure mode this module did not previously handle. A
+    disconnect runs the Observer immediately; a clean shutdown persists the
+    transcript to pending_observer; but a process killed outright - taskkill,
+    `Stop-Process -Force`, a crash, a power cut - runs neither, because both
+    paths live in code that never gets to execute. conversation_history lives
+    only in the WS handler's memory, so it dies with the process.
+
+    Found live: a real session was killed mid-test, and the conversation sat in
+    the sidebar looking perfectly normal while none of it had been learned
+    from. Silent non-learning is the worst possible shape for this failure in a
+    system whose entire purpose is remembering - a crash that loses data is at
+    least visible.
+
+    Recovery is possible at all because messages are committed per turn (see
+    ws_chat), so the transcript can be rebuilt from the database rather than
+    from the memory that died. This reconstructs it and hands it to
+    pending_observer, deliberately reusing the queue the shutdown path already
+    fills rather than adding a second way to process a session: that queue
+    already has retry-on-failure, keeps failed entries instead of dropping
+    them, and is drained by machinery that exists and is tested.
+
+    Marks each conversation observed at enqueue time, not after the LLM pass.
+    Once the transcript is in pending_observer its recovery is that queue's
+    responsibility - a row that fails is retained and retried on the next
+    start, so leaving observed_at NULL as well would queue the same
+    conversation twice on every subsequent boot.
+    """
+    unobserved = conversation_store.list_unobserved(conn)
+    recovered = []
+    for conversation in unobserved:
+        history = [
+            {"role": m["role"], "content": m["content"]}
+            for m in conversation_store.get_messages(conn, conversation["id"])
+        ]
+        if not history:
+            continue
+        pending_observer.enqueue(conn, format_transcript(history))
+        conversation_store.mark_observed(conn, conversation["id"])
+        recovered.append(conversation["id"])
+        logger.info(
+            f"Recovered an unobserved conversation ({conversation['message_count']} messages) "
+            f"left by an unclean shutdown; queued for the Observer."
+        )
+    return recovered
 
 
 def drain_pending_on_startup(conn, provider: BaseLLMProvider) -> dict[str, list]:

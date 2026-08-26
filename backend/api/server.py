@@ -607,20 +607,53 @@ try:
         # the token in its query string and uvicorn logs the full path.
         install_log_redaction()
         try:
-            # Startup: drain any pending_observer rows a previous shutdown left behind
-            # (Part 7: drain before Stage 0 - there's no live traffic yet to delay).
-            startup_conn = _conn()
-            try:
-                result = session_lifecycle.drain_pending_on_startup(
-                    startup_conn, _default_observer_provider(pipeline.get_active_model_name(startup_conn))
-                )
-                if result["completed"] or result["failed"]:
-                    logger.info(f"Startup pending_observer drain: {result}")
-            except Exception as e:
-                # Fail open - a drain problem must never block the app from starting.
-                logger.error(f"Startup pending_observer drain failed, continuing anyway: {e}")
-            finally:
-                startup_conn.close()
+            # Catch-up (recover unobserved conversations, then drain
+            # pending_observer) runs in the BACKGROUND, not inline before yield.
+            #
+            # It used to be inline, on the Part 7 reasoning that there is no
+            # live traffic yet to delay. That held only while pending_observer
+            # was populated by clean shutdowns alone - rare, usually empty, so
+            # the drain was almost always a no-op. Startup recovery breaks that
+            # assumption: any conversation left unobserved by a kill now lands
+            # in the same queue, and draining one is a ~130s-class LLM pass
+            # (ADR-033). Inline, that is an app which hangs for over two minutes
+            # on launch - measured, not predicted: the WS test suite began
+            # intermittently timing out the moment recovery was added, because a
+            # second TestClient in the same test found the first one's
+            # conversation and drained it against a real Ollama.
+            #
+            # Backgrounding it costs nothing that was actually guaranteed:
+            # Part 7's "before Stage 0" ordering only ever mattered so a
+            # recovered session's memory is not missed on the NEXT turn, and a
+            # pass that takes minutes could never satisfy that for a user who
+            # starts typing immediately anyway. ADR-003's "zero response-speed
+            # impact" is the stronger constraint, and it points here.
+            #
+            # asyncio.to_thread runs the whole function on ONE worker thread, so
+            # the connection it opens is created and used and closed there -
+            # the sqlite3/sqlcipher3 thread-affinity rule this file documents
+            # elsewhere. Nothing outside that function ever touches that conn.
+            def _catch_up_blocking() -> None:
+                conn = _conn()
+                try:
+                    recovered = session_lifecycle.recover_unobserved_conversations(conn)
+                    if recovered:
+                        logger.info(
+                            f"Recovered {len(recovered)} conversation(s) an unclean shutdown left "
+                            f"unprocessed; queued for the Observer."
+                        )
+                    result = session_lifecycle.drain_pending_on_startup(
+                        conn, _default_observer_provider(pipeline.get_active_model_name(conn))
+                    )
+                    if result["completed"] or result["failed"]:
+                        logger.info(f"Startup pending_observer drain: {result}")
+                except Exception as e:
+                    # Fail open - catch-up must never stop the app working.
+                    logger.error(f"Startup catch-up failed, continuing anyway: {e}")
+                finally:
+                    conn.close()
+
+            catch_up_task = asyncio.create_task(asyncio.to_thread(_catch_up_blocking))
 
             # Ensures the token file exists before the first request arrives.
             # Never logged: the file at auth.TOKEN_PATH (or PIP_TOKEN_PATH) is
@@ -634,6 +667,21 @@ try:
             # connection (ADR-033 condition 2) - persist instead, drained for real
             # on the next startup.
             _session_registry.shutting_down = True
+
+            # Abandon catch-up rather than wait for it: a drain in flight is a
+            # ~130s LLM pass, and shutdown cannot block on that (the same
+            # ADR-033 constraint that put the queue there to begin with).
+            # Nothing is lost by abandoning it - pending_observer.drain marks a
+            # row 'processing' before running it, and _list_for_drain picks
+            # 'processing' rows back up, so an interrupted entry is retried on
+            # the next start instead of being silently consumed. cancel() only
+            # detaches the awaiting coroutine; the worker thread itself runs to
+            # completion or dies with the process, which is why that retry
+            # behaviour is what actually makes this safe.
+            catch_up_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await catch_up_task
+
             loop = asyncio.get_event_loop()
             for session in await _session_registry.snapshot():
                 try:
@@ -820,6 +868,7 @@ try:
                             await session_lifecycle.run_observer_now(
                                 loop, executor, conn, conversation_history,
                                 _default_observer_provider(observer_model_name),
+                                conversation_id=conversation_id,
                             )
                         except Exception as e:
                             logger.error(f"Idle-timeout Observer run failed, session transcript discarded: {e}")
@@ -892,9 +941,14 @@ try:
             # for a single local process serving one user.
             if conversation_history and not _session_registry.shutting_down:
                 try:
+                    # conversation_id marks it observed inside the same executor
+                    # call (see run_observer_now) - deliberately not a second
+                    # await here, since this is the path documented below as
+                    # able to leave a submission never dequeued.
                     await session_lifecycle.run_observer_now(
                         loop, executor, conn, conversation_history,
                         _default_observer_provider(observer_model_name),
+                        conversation_id=conversation_id,
                     )
                 except Exception as e:
                     logger.error(f"Disconnect Observer run failed, session transcript discarded: {e}")
