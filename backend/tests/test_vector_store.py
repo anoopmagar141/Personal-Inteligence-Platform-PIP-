@@ -309,3 +309,60 @@ def test_rebuild_clears_chunks_the_registry_no_longer_lists(db_conn, sample_doc)
 
     vector_store.rebuild_from_sqlite(db_conn)
     assert vector_store._get_collection().count() == 0
+
+
+# --- rebuild_under_key: the shared helper both migration scripts use --------
+
+
+def test_rebuild_under_key_reindexes_and_leaves_the_environment_as_it_found_it(
+    db_conn, sample_doc, monkeypatch, db_key
+):
+    # The plaintext -> encrypted direction, which is what
+    # scripts/migrate_encrypt_db.py does: chunks written in passthrough mode,
+    # then a key starts existing. query() would look for file_path_enc, not
+    # find it, and skip every chunk.
+    import os
+
+    vector_store.ingest_document(db_conn, sample_doc)
+    assert os.environ.get("PIP_DB_KEY") is None
+
+    result = vector_store.rebuild_under_key(db_conn, db_key)
+    assert sample_doc in result["rebuilt"]
+
+    # Scoped, not exported: a script that leaves this set changes the behaviour
+    # of everything it runs afterwards - which is how set_db_password.py
+    # originally let a second run skip its own current-password check.
+    assert os.environ.get("PIP_DB_KEY") is None
+
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    matches = vector_store.query(db_conn, "Is ChromaDB the source of truth?", threshold=0.1, top_k=3)
+    assert any("ChromaDB" in m["chunk_text"] for m in matches)
+    assert all(m["file_path"] == sample_doc for m in matches)
+
+
+def test_rebuild_under_key_restores_a_preexisting_value_rather_than_clearing_it(
+    db_conn, sample_doc, monkeypatch, db_key
+):
+    import os
+
+    monkeypatch.setenv("PIP_DB_KEY", "aa" * 32)
+    vector_store.ingest_document(db_conn, sample_doc)
+
+    vector_store.rebuild_under_key(db_conn, db_key)
+
+    assert os.environ["PIP_DB_KEY"] == "aa" * 32
+
+
+def test_rebuild_under_key_restores_the_environment_even_when_the_rebuild_raises(
+    db_conn, monkeypatch, db_key
+):
+    import os
+
+    def boom(conn):
+        raise RuntimeError("chroma exploded")
+
+    monkeypatch.setattr(vector_store, "rebuild_from_sqlite", boom)
+    with pytest.raises(RuntimeError):
+        vector_store.rebuild_under_key(db_conn, db_key)
+
+    assert os.environ.get("PIP_DB_KEY") is None

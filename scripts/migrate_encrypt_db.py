@@ -47,6 +47,22 @@ Usage
     .venv\\Scripts\\python.exe scripts\\migrate_encrypt_db.py --remove-plaintext-backup
 
 Idempotent: if pip.db is already encrypted, it reports that and exits 0.
+
+The vector index is rebuilt too
+-------------------------------
+PIP_DB_KEY protects more than pip.db. backend/memory/vector_store.py encrypts
+chunk text and file paths with a Fernet key derived from it, and addresses
+chunks by HMAC(PIP_DB_KEY, file_path). Everything ingested before this
+migration was written in passthrough mode - plain text, plain `file_path`, no
+`file_path_enc` - so the moment a key exists, query() looks for a field that
+is not there, skips every chunk it finds, and RAG returns nothing on every
+query with no error anywhere. The documents keep listing in the sidebar
+throughout, which is what makes it hard to notice.
+
+So step 6 re-embeds every active document under the new key, from the SQLite
+`documents` registry. It runs after the swap is verified and is never fatal:
+the index is derived data, and a failure costs a re-upload rather than a
+profile.
 """
 
 from __future__ import annotations
@@ -75,6 +91,13 @@ ROOT = Path(__file__).parent.parent
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "pip.db"
 KEY_PATH = DATA_DIR / "db_key.txt"
+
+# Newly required: this script talked to sqlcipher3 directly and imported
+# nothing from the project until rebuild_vector_index() had to reach
+# backend.memory. Without it the script works when launched from the project
+# root and dies with ModuleNotFoundError from anywhere else - which is exactly
+# how a one-shot migration script gets run.
+sys.path.insert(0, str(ROOT))
 
 # The plaintext SQLite header. An encrypted SQLCipher file starts with random
 # ciphertext instead, which is exactly how "already migrated" is detected.
@@ -191,6 +214,59 @@ def verify(encrypted_path: Path, db_key: str, expected: dict[str, int]) -> None:
         conn.close()
 
 
+def rebuild_vector_index(db_key: str) -> None:
+    """
+    Re-indexes ChromaDB under the key the database was just encrypted with.
+
+    Without this the migration silently empties RAG, for the same reason a
+    password change did (see scripts/set_db_password.py): PIP_DB_KEY protects
+    more than pip.db. vector_store encrypts chunk text and file paths with a
+    Fernet key derived from it and addresses chunks by
+    HMAC(PIP_DB_KEY, file_path).
+
+    The direction here is plaintext -> encrypted, so the existing chunks were
+    written in passthrough mode, with a plain `file_path` in their metadata and
+    no `file_path_enc` at all. The moment PIP_DB_KEY is set, query() builds a
+    Fernet and looks for `file_path_enc` on every hit - a KeyError it catches
+    and skips. So every chunk is skipped, every query returns nothing, no error
+    reaches the user, and the documents keep showing in the sidebar the whole
+    time.
+
+    Never fatal. The swap above is already committed and verified, and a vector
+    index is derived data - SQLite's `documents` table is the registry of what
+    should be indexed and the files are still in data/documents. A failure here
+    costs a re-upload, not a profile.
+    """
+    from backend.memory import profile_store
+
+    conn = profile_store.get_connection(str(DB_PATH), db_key)
+    try:
+        active = conn.execute("SELECT COUNT(*) FROM documents WHERE status = 'active'").fetchone()[0]
+        if not active:
+            # Counted before the import on purpose: vector_store pulls in
+            # chromadb and sentence-transformers, seconds of import time that a
+            # database with nothing ingested should not pay.
+            print("  vector index: nothing ingested, nothing to rebuild")
+            return
+
+        print(f"  Re-indexing {active} document(s) under the new key ...")
+        print("  (re-embedding on CPU - this is the slow part)")
+        from backend.memory import vector_store
+
+        result = vector_store.rebuild_under_key(conn, db_key)
+        print(f"  vector index: {len(result['rebuilt'])} document(s) re-indexed")
+        for failure in result["failed"]:
+            print(f"    COULD NOT RE-INDEX {failure['file_path']}: {failure['reason']}")
+        if result["failed"]:
+            print("    Those are no longer searchable - re-upload them from the app.")
+    except Exception as e:
+        print(f"  WARNING: could not rebuild the vector index: {e}")
+        print("  The database itself is fine. RAG will return nothing until the")
+        print("  documents are re-uploaded from the app.")
+    finally:
+        conn.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
@@ -266,6 +342,12 @@ def main() -> int:
             stale.unlink()
 
     print(f"\nDone. {DB_PATH} is now encrypted.")
+
+    # After the swap, deliberately: the key that protects the database now also
+    # protects the vector index, and every existing chunk was written before
+    # that key existed. See rebuild_vector_index() - skipping this leaves RAG
+    # silently returning nothing on every query, forever.
+    rebuild_vector_index(db_key)
 
     if args.remove_plaintext_backup:
         backup_path.unlink()

@@ -174,30 +174,16 @@ def _rebuild_vector_store(new_key: str) -> None:
     `documents` registry plus the files still sitting in data/documents. A
     failure here costs a re-upload, not a profile.
     """
-    # vector_store._get_db_key() reads PIP_DB_KEY from the environment, so the
-    # new key has to be there while the rebuild runs - and only while it runs.
-    #
-    # Set-and-leave was tried first and is wrong in a way worth recording:
-    # _current_key() checks PIP_DB_KEY before it prompts for a password, so a
-    # second main() in the same process would find the key this function had
-    # exported and skip the "prove you know the current password" step
-    # entirely. A one-shot script exits before that matters; a script that
-    # quietly depends on exiting to stay correct does not deserve the benefit
-    # of the doubt. Scoped and restored instead.
-    previous_key = os.environ.get("PIP_DB_KEY")
-
-    def _restore_env() -> None:
-        if previous_key is None:
-            os.environ.pop("PIP_DB_KEY", None)
-        else:
-            os.environ["PIP_DB_KEY"] = previous_key
-
-    os.environ["PIP_DB_KEY"] = new_key
-
+    # The PIP_DB_KEY scoping this needs lives in vector_store.rebuild_under_key
+    # - shared with migrate_encrypt_db.py, which needs exactly the same thing,
+    # rather than hand-rolled twice. Set-and-leave was tried here first and was
+    # wrong in a way worth recording: _current_key() checks PIP_DB_KEY before
+    # it prompts, so a second main() in the same process would find the key
+    # this function had exported and skip the "prove you know the current
+    # password" step entirely.
     try:
         conn = profile_store.get_connection(str(DB_PATH), new_key)
     except Exception as e:
-        _restore_env()
         print(f"  WARNING: could not reopen the database to rebuild the vector index: {e}")
         return
 
@@ -214,7 +200,7 @@ def _rebuild_vector_store(new_key: str) -> None:
         print("  (re-embedding on CPU - this is the slow part)")
         from backend.memory import vector_store
 
-        result = vector_store.rebuild_from_sqlite(conn)
+        result = vector_store.rebuild_under_key(conn, new_key)
         print(f"  vector index: {len(result['rebuilt'])} document(s) re-indexed")
         for failure in result["failed"]:
             print(f"    COULD NOT RE-INDEX {failure['file_path']}: {failure['reason']}")
@@ -226,7 +212,6 @@ def _rebuild_vector_store(new_key: str) -> None:
         print("  documents are re-uploaded from the app.")
     finally:
         conn.close()
-        _restore_env()
 
 
 def _check_only() -> int:

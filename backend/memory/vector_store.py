@@ -394,6 +394,37 @@ def query(
     return matches
 
 
+def rebuild_under_key(conn, db_key: Optional[str]) -> dict[str, Any]:
+    """
+    rebuild_from_sqlite() with PIP_DB_KEY set to db_key for the duration, then
+    restored.
+
+    Exists because both migration scripts need exactly this and the "then
+    restored" half is easy to get wrong. _get_db_key() reads the environment on
+    every call, so a script that has just changed the database key has to
+    export the new one before re-ingesting - and set_db_password.py originally
+    exported it and left it set, which let a second run in the same process
+    find the key it had exported and skip the "prove you know the current
+    password" check entirely. Scoping it here means neither caller can
+    reintroduce that.
+
+    db_key=None rebuilds in plaintext passthrough mode, which is what an
+    unencrypted install should get.
+    """
+    previous = os.environ.get("PIP_DB_KEY")
+    if db_key is None:
+        os.environ.pop("PIP_DB_KEY", None)
+    else:
+        os.environ["PIP_DB_KEY"] = db_key
+    try:
+        return rebuild_from_sqlite(conn)
+    finally:
+        if previous is None:
+            os.environ.pop("PIP_DB_KEY", None)
+        else:
+            os.environ["PIP_DB_KEY"] = previous
+
+
 def rebuild_from_sqlite(conn) -> dict[str, Any]:
     """
     Clears ChromaDB and re-ingests every active document from its recorded
