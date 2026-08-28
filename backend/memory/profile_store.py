@@ -67,6 +67,10 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("decision_log", "state_reason", "TEXT"),
     # See schema.sql: NULL marks a conversation the Observer never processed.
     ("conversations", "observed_at", "TEXT"),
+    # See schema.sql: how far the Observer got, as a messages.id high-water
+    # mark. observed_at could only answer yes/no for a whole conversation,
+    # which is wrong for anything observed in segments.
+    ("conversations", "observed_upto_message_id", "INTEGER"),
 )
 
 # Run once, immediately after the named column is first added, to give existing
@@ -83,6 +87,25 @@ _BACKFILLS: dict[str, str] = {
     # to a kill, which only accumulate one at a time.
     "conversations.observed_at": (
         "UPDATE conversations SET observed_at = datetime('now') WHERE observed_at IS NULL"
+    ),
+    # Give every already-observed conversation a high-water mark at its last
+    # existing message, so the turns it already had are not re-extracted on the
+    # next start. Conversations with observed_at NULL are left NULL here too -
+    # they were never processed, and must stay fully recoverable.
+    #
+    # A row that ends up with observed_at set and this still NULL (an upgrade
+    # where only the older column was added) is read as fully observed rather
+    # than fully unobserved - see conversation_store.list_unobserved. Erring
+    # the other way would re-run the Observer over every conversation in the
+    # history on first launch after the upgrade, which is the exact
+    # minutes-of-blocking-startup failure the observed_at backfill above
+    # exists to avoid.
+    "conversations.observed_upto_message_id": (
+        "UPDATE conversations "
+        "   SET observed_upto_message_id = ("
+        "         SELECT MAX(m.id) FROM messages m WHERE m.conversation_id = conversations.id"
+        "       ) "
+        " WHERE observed_at IS NOT NULL"
     ),
 }
 

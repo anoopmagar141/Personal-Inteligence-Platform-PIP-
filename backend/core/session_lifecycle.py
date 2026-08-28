@@ -44,13 +44,28 @@ class SessionRegistry:
         self._sessions: dict[int, dict[str, Any]] = {}
         self.shutting_down = False
 
-    async def register(self, session_id: int, conn, executor, conversation_history: list) -> None:
+    async def register(self, session_id: int, conn, executor, conversation_history: list,
+                       observed_upto_index: int = 0) -> dict[str, Any]:
+        """
+        Returns the session record so the caller can keep observed_upto_index
+        current. It has to be mutated through this dict rather than tracked as
+        a local int in the handler: shutdown reads these records, and an int
+        copied in at registration would still say 0 after an idle-timeout
+        Observer run had already retired half the transcript.
+        """
         async with self._lock:
-            self._sessions[session_id] = {
+            record = {
                 "conn": conn,
                 "executor": executor,
                 "conversation_history": conversation_history,
+                # Index into conversation_history where the turns the Observer
+                # has NOT seen begin. Non-zero from the start for a resumed
+                # conversation, whose earlier turns were observed on the
+                # disconnect that ended the previous session.
+                "observed_upto_index": observed_upto_index,
             }
+            self._sessions[session_id] = record
+            return record
 
     async def unregister(self, session_id: int) -> None:
         async with self._lock:
@@ -142,8 +157,13 @@ async def enqueue_for_shutdown(loop, session: dict[str, Any]) -> None:
     Observer synchronously - shutdown cannot wait for a ~130s-class pass per
     open connection (ADR-033 condition 2). Drained for real on next startup.
     No-ops if the session has no unprocessed conversation yet.
+
+    Only the turns past observed_upto_index are persisted. Sending the whole
+    list would re-extract the replayed history of a resumed conversation, and
+    would re-extract everything before an idle timeout that had already run -
+    a full LLM pass on the next start to re-derive memory that already exists.
     """
-    history = session["conversation_history"]
+    history = session["conversation_history"][session.get("observed_upto_index", 0):]
     if not history:
         return
     transcript = format_transcript(history)
@@ -181,23 +201,34 @@ def recover_unobserved_conversations(conn) -> list[str]:
     Marks each conversation observed at enqueue time, not after the LLM pass.
     Once the transcript is in pending_observer its recovery is that queue's
     responsibility - a row that fails is retained and retried on the next
-    start, so leaving observed_at NULL as well would queue the same
+    start, so leaving the high-water mark where it was would queue the same
     conversation twice on every subsequent boot.
+
+    Only the messages past the high-water mark are rebuilt, not the whole
+    conversation. A conversation the Observer already handled a segment of -
+    one resumed from the sidebar, or one that outlived an idle timeout - would
+    otherwise be re-extracted from turn one, burning a full LLM pass to
+    re-derive memory that already exists.
     """
     unobserved = conversation_store.list_unobserved(conn)
     recovered = []
     for conversation in unobserved:
-        history = [
-            {"role": m["role"], "content": m["content"]}
-            for m in conversation_store.get_messages(conn, conversation["id"])
-        ]
-        if not history:
+        messages = conversation_store.get_messages_after(
+            conn, conversation["id"], conversation["observed_upto_message_id"]
+        )
+        if not messages:
             continue
+        history = [{"role": m["role"], "content": m["content"]} for m in messages]
         pending_observer.enqueue(conn, format_transcript(history))
-        conversation_store.mark_observed(conn, conversation["id"])
+        # The id actually read, not whatever the maximum happens to be by the
+        # time this line runs - marking past the end of the snapshot would
+        # retire a message nothing ever extracted from.
+        conversation_store.mark_observed(
+            conn, conversation["id"], upto_message_id=messages[-1]["id"]
+        )
         recovered.append(conversation["id"])
         logger.info(
-            f"Recovered an unobserved conversation ({conversation['message_count']} messages) "
+            f"Recovered {len(messages)} unobserved message(s) from a conversation "
             f"left by an unclean shutdown; queued for the Observer."
         )
     return recovered

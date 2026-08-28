@@ -307,6 +307,26 @@ CREATE TABLE IF NOT EXISTS conversations (
     -- but the extraction that turns them into memory never ran, and nothing
     -- previously noticed. See session_lifecycle.recover_unobserved_conversations.
     observed_at TEXT,
+    -- HOW FAR the Observer got, as a messages.id high-water mark. observed_at
+    -- alone could only say "yes" or "no" for a whole conversation, but
+    -- observation happens per SEGMENT: an idle timeout runs the Observer and
+    -- the same connection keeps accepting turns afterwards, and resuming a
+    -- conversation from the sidebar adds turns to one already marked. Both
+    -- left a conversation flagged observed while carrying turns that never
+    -- were - and a kill at that point lost them silently, since recovery
+    -- looked only at observed_at IS NULL. Anything with id greater than this
+    -- is still unprocessed.
+    --
+    -- A message id rather than a timestamp because now_utc() is
+    -- second-resolution (see backend/core/types.py): an Observer run finishing
+    -- in the same second as the last message it read - the normal case, not a
+    -- rare one - could not be told apart from a message arriving just after.
+    -- messages.id is AUTOINCREMENT and already the ORDER BY for every read.
+    --
+    -- NULL alongside a non-NULL observed_at means a row from before this
+    -- column existed, and is read as "fully observed" (see
+    -- conversation_store.list_unobserved).
+    observed_upto_message_id INTEGER,
     FOREIGN KEY (project_id) REFERENCES active_projects(project_id) ON DELETE SET NULL
 );
 

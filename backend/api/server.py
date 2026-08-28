@@ -381,7 +381,7 @@ def api_delete_conversation(conn, conversation_id: str) -> dict[str, Any]:
     return {"status": "deleted", "id": conversation_id}
 
 
-def _resolve_connection_state(conn, conversation_id: Optional[str]) -> tuple[str, Optional[str], str, list[dict[str, str]]]:
+def _resolve_connection_state(conn, conversation_id: Optional[str]) -> tuple[str, Optional[str], str, list[dict[str, str]], int]:
     """
     Everything ws_chat() needs to know from the DB before it can start
     handling turns, resolved in ONE executor round-trip rather than two
@@ -400,17 +400,31 @@ def _resolve_connection_state(conn, conversation_id: Optional[str]) -> tuple[str
     message, which would otherwise litter the history sidebar with empty
     "New chat" entries. The main loop creates the real row lazily, on the
     first actual message (see ws_chat()'s main loop).
+
+    The fifth return value is where the Observer's work ends inside the
+    replayed messages. Every resumed turn was already extracted from by the
+    disconnect that ended the previous session, so handing the whole list back
+    to the Observer at this session's end would re-derive memory that already
+    exists - a full ~130s pass, every time a conversation is reopened, even if
+    the user reopens it and says nothing. The turns still count as LLM context;
+    they just aren't new evidence.
     """
     model_name = pipeline.get_active_model_name(conn)
 
     if conversation_id and conversation_store.conversation_exists(conn, conversation_id):
-        rows = conversation_store.get_messages(conn, conversation_id)
+        rows = conversation_store.get_messages_after(conn, conversation_id)
         title_row = conn.execute("SELECT title FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
         title = title_row["title"] if title_row else "New chat"
         messages = [{"role": r["role"], "content": r["content"]} for r in rows]
-        return model_name, conversation_id, title, messages
 
-    return model_name, None, "New chat", []
+        # Counted by id rather than assumed to be all of them: a conversation
+        # can be resumed after a kill that left some of its turns unobserved,
+        # and those still need extracting at this session's end.
+        marker = conversation_store.observed_upto(conn, conversation_id)
+        observed_count = 0 if marker is None else sum(1 for r in rows if r["id"] <= marker)
+        return model_name, conversation_id, title, messages, observed_count
+
+    return model_name, None, "New chat", [], 0
 
 
 def api_ingest_document(conn, payload: dict[str, Any]) -> dict[str, Any]:
@@ -817,12 +831,25 @@ try:
         # separate submissions (as originally written) broke disconnect
         # cleanup.
         requested_conversation_id = websocket.query_params.get("conversation_id")
-        observer_model_name, conversation_id, conversation_title, resumed_messages = await loop.run_in_executor(
+        (
+            observer_model_name,
+            conversation_id,
+            conversation_title,
+            resumed_messages,
+            observed_count,
+        ) = await loop.run_in_executor(
             executor, _resolve_connection_state, conn, requested_conversation_id
         )
         conversation_history: list[dict[str, str]] = list(resumed_messages)
         session_id = id(websocket)
-        await _session_registry.register(session_id, conn, executor, conversation_history)
+        # session["observed_upto_index"] is the live boundary between turns the
+        # Observer has already extracted from and turns it hasn't. Kept on the
+        # registry record rather than as a local, so the shutdown path - which
+        # only ever sees these records - reads the same value this handler
+        # maintains. See SessionRegistry.register.
+        session = await _session_registry.register(
+            session_id, conn, executor, conversation_history, observed_count
+        )
 
         # Sent once, before the main loop - not part of the per-turn
         # stage_hint -> token* -> (done|error|stopped) sequence (Part 14.3).
@@ -863,16 +890,33 @@ try:
                     # Rule 3: 10-min idle triggers Observer session-end. There's
                     # time here (nothing else is waiting on this connection), so
                     # run it now rather than persist-and-defer.
-                    if conversation_history:
+                    #
+                    # Only the turns since the last Observer pass. On a resumed
+                    # conversation the replayed history is already extracted
+                    # from, and re-sending it would spend a ~130s pass
+                    # re-deriving memory that exists - or, when nothing new has
+                    # been said at all, run the Observer over a segment with no
+                    # new evidence in it whatsoever.
+                    unobserved = conversation_history[session["observed_upto_index"]:]
+                    if unobserved:
                         try:
                             await session_lifecycle.run_observer_now(
-                                loop, executor, conn, conversation_history,
+                                loop, executor, conn, unobserved,
                                 _default_observer_provider(observer_model_name),
                                 conversation_id=conversation_id,
                             )
                         except Exception as e:
                             logger.error(f"Idle-timeout Observer run failed, session transcript discarded: {e}")
+                    # Cleared whenever there was anything, unobserved or not,
+                    # exactly as before - an idle timeout is a session end, so
+                    # the next turn starts a fresh LLM context, and that must
+                    # not now depend on whether the Observer had work to do.
+                    # The index follows the list back to zero; the DB's own
+                    # high-water mark (set by run_observer_now) is what carries
+                    # the boundary across a restart.
+                    if conversation_history:
                         conversation_history.clear()
+                        session["observed_upto_index"] = 0
                     continue
 
                 if data is _DISCONNECT:
@@ -939,14 +983,23 @@ try:
             # handler's snapshot() may have already captured (and be enqueuing)
             # this same session - a best-effort, not a perfectly atomic guarantee,
             # for a single local process serving one user.
-            if conversation_history and not _session_registry.shutting_down:
+            unobserved = conversation_history[session["observed_upto_index"]:]
+            if unobserved and not _session_registry.shutting_down:
                 try:
                     # conversation_id marks it observed inside the same executor
                     # call (see run_observer_now) - deliberately not a second
                     # await here, since this is the path documented below as
                     # able to leave a submission never dequeued.
+                    # `unobserved`, not the whole history: reopening a
+                    # conversation from the sidebar replays every past turn
+                    # into conversation_history for LLM context, and those were
+                    # already extracted from when the previous session ended.
+                    # Passing them again re-derived the same memory on every
+                    # reopen - including for a reopen where the user said
+                    # nothing at all, which used to run a full pass over a
+                    # transcript containing no new evidence whatsoever.
                     await session_lifecycle.run_observer_now(
-                        loop, executor, conn, conversation_history,
+                        loop, executor, conn, unobserved,
                         _default_observer_provider(observer_model_name),
                         conversation_id=conversation_id,
                     )

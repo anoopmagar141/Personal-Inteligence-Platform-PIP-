@@ -242,3 +242,32 @@ def test_backfill_does_not_rerun_and_overwrite_real_values(tmp_path, db_key):
     profile_store.apply_column_migrations(conn)
 
     assert [c["id"] for c in conversation_store.list_unobserved(conn)] == [cid]
+
+
+def test_observed_upto_backfill_gives_existing_observed_conversations_a_mark(tmp_path, db_key):
+    # Upgrading a database that already has observed conversations. Without the
+    # backfill every one of them would have a NULL high-water mark, and
+    # list_unobserved would offer their entire history up for re-extraction on
+    # the first start after the upgrade.
+    from backend.memory import conversation_store
+
+    conn = profile_store.get_connection(str(tmp_path / "old.db"), db_key)
+    profile_store.initialize_schema(conn)
+    conn.execute("ALTER TABLE conversations DROP COLUMN observed_upto_message_id")
+    conn.commit()
+
+    observed = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, observed, "user", "already handled")
+    conn.execute("UPDATE conversations SET observed_at = datetime('now') WHERE id = ?", (observed,))
+    unobserved = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, unobserved, "user", "killed before extraction")
+    conn.commit()
+
+    added = profile_store.apply_column_migrations(conn)
+
+    assert "conversations.observed_upto_message_id" in added
+    assert conversation_store.observed_upto(conn, observed) is not None
+    # The one that was never observed must stay fully recoverable.
+    assert conversation_store.observed_upto(conn, unobserved) is None
+    assert [c["id"] for c in conversation_store.list_unobserved(conn)] == [unobserved]
+    conn.close()

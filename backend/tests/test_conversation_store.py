@@ -108,3 +108,87 @@ def test_delete_conversation_removes_it_and_its_messages(conn):
 
 def test_delete_conversation_returns_false_for_unknown_id(conn):
     assert conversation_store.delete_conversation(conn, "not-a-real-id") is False
+
+
+# --- The Observer's high-water mark ------------------------------------------
+
+
+def test_get_messages_after_returns_only_the_tail(conn):
+    conversation_id = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, conversation_id, "user", "one")
+    conversation_store.append_message(conn, conversation_id, "assistant", "two")
+    conversation_store.append_message(conn, conversation_id, "user", "three")
+
+    everything = conversation_store.get_messages_after(conn, conversation_id)
+    assert [m["content"] for m in everything] == ["one", "two", "three"]
+
+    tail = conversation_store.get_messages_after(conn, conversation_id, everything[0]["id"])
+    assert [m["content"] for m in tail] == ["two", "three"]
+
+
+def test_mark_observed_records_how_far_it_got(conn):
+    conversation_id = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, conversation_id, "user", "one")
+    conversation_store.append_message(conn, conversation_id, "assistant", "two")
+
+    conversation_store.mark_observed(conn, conversation_id)
+    marker = conversation_store.observed_upto(conn, conversation_id)
+
+    assert marker == conn.execute(
+        "SELECT MAX(id) FROM messages WHERE conversation_id = ?", (conversation_id,)
+    ).fetchone()[0]
+    assert conversation_store.get_messages_after(conn, conversation_id, marker) == []
+
+
+def test_mark_observed_can_be_told_exactly_where_to_stop(conn):
+    # Recovery builds its transcript from a snapshot and must not retire a
+    # message that arrived after it - marking the current maximum would write
+    # off a turn nothing ever read.
+    conversation_id = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, conversation_id, "user", "read by the observer")
+    read = conversation_store.get_messages_after(conn, conversation_id)[-1]["id"]
+    conversation_store.append_message(conn, conversation_id, "user", "arrived afterwards")
+
+    conversation_store.mark_observed(conn, conversation_id, upto_message_id=read)
+
+    remaining = conversation_store.get_messages_after(
+        conn, conversation_id, conversation_store.observed_upto(conn, conversation_id)
+    )
+    assert [m["content"] for m in remaining] == ["arrived afterwards"]
+
+
+def test_observed_upto_reads_a_pre_column_row_as_fully_observed(conn):
+    # observed_at set, no high-water mark: a row from before the column
+    # existed. Reading it as "nothing observed" would re-extract the whole
+    # conversation.
+    conversation_id = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, conversation_id, "user", "one")
+    conversation_store.mark_observed(conn, conversation_id)
+    conn.execute(
+        "UPDATE conversations SET observed_upto_message_id = NULL WHERE id = ?", (conversation_id,)
+    )
+    conn.commit()
+
+    marker = conversation_store.observed_upto(conn, conversation_id)
+    assert marker is not None
+    assert conversation_store.get_messages_after(conn, conversation_id, marker) == []
+
+
+def test_observed_upto_is_none_when_the_observer_never_ran(conn):
+    conversation_id = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, conversation_id, "user", "one")
+    assert conversation_store.observed_upto(conn, conversation_id) is None
+
+
+def test_list_unobserved_counts_only_the_unobserved_messages(conn):
+    conversation_id = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, conversation_id, "user", "one")
+    conversation_store.append_message(conn, conversation_id, "assistant", "two")
+    conversation_store.mark_observed(conn, conversation_id)
+    conversation_store.append_message(conn, conversation_id, "user", "three")
+
+    rows = conversation_store.list_unobserved(conn)
+    assert len(rows) == 1
+    # Not 3 - reporting the conversation's total would overstate what the
+    # recovery log says was actually recovered.
+    assert rows[0]["message_count"] == 1

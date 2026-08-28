@@ -299,3 +299,110 @@ async def test_failed_observer_run_leaves_it_for_startup_recovery(executor_conn)
         executor, session_lifecycle.recover_unobserved_conversations, conn
     )
     assert still_unobserved == [cid]
+
+
+# --- Observation happens per SEGMENT, not per conversation -------------------
+#
+# observed_at could only say yes or no for a whole conversation. Two ordinary
+# flows leave one marked observed while carrying turns that never were: an idle
+# timeout runs the Observer and the same connection keeps taking turns, and
+# resuming from the sidebar adds turns to a conversation a previous disconnect
+# already marked. A kill in either state lost those turns silently - the same
+# failure the recovery tests above exist for, narrowed to conversations that
+# had been observed once already. conversations.observed_upto_message_id is the
+# high-water mark that tells the two apart.
+
+
+def test_only_the_turns_since_the_last_observer_pass_are_recovered(conv_conn):
+    from backend.memory import conversation_store
+
+    cid = _conversation_with_messages(conv_conn, observed=True)
+    conversation_store.append_message(conv_conn, cid, "user", "and I've switched to Ollama for inference")
+    conversation_store.append_message(conv_conn, cid, "assistant", "Understood.")
+
+    recovered = session_lifecycle.recover_unobserved_conversations(conv_conn)
+
+    assert recovered == [cid], "turns added after an Observer pass must still be recoverable"
+    queued = pending_observer.list_pending(conv_conn)
+    assert len(queued) == 1
+    transcript = queued[0]["session_transcript"]
+    assert "switched to Ollama" in transcript
+    # The already-extracted turn must not be sent through the Observer twice -
+    # that is a full ~130s pass to re-derive memory that already exists.
+    assert "SQLCipher" not in transcript
+
+
+def test_recovering_a_segment_advances_the_mark_rather_than_replaying_it(conv_conn):
+    from backend.memory import conversation_store
+
+    cid = _conversation_with_messages(conv_conn, observed=True)
+    conversation_store.append_message(conv_conn, cid, "user", "one more thing")
+
+    assert session_lifecycle.recover_unobserved_conversations(conv_conn) == [cid]
+    assert session_lifecycle.recover_unobserved_conversations(conv_conn) == []
+    assert len(pending_observer.list_pending(conv_conn)) == 1
+
+
+def test_a_conversation_observed_before_the_high_water_mark_existed_is_left_alone(conv_conn):
+    # The compatibility case: rows written before observed_upto_message_id
+    # existed carry observed_at and nothing else. Reading them as fully
+    # unobserved would queue every conversation in the history for
+    # re-extraction on the first launch after the upgrade.
+    cid = _conversation_with_messages(conv_conn, observed=True)
+    conv_conn.execute(
+        "UPDATE conversations SET observed_upto_message_id = NULL WHERE id = ?", (cid,)
+    )
+    conv_conn.commit()
+
+    assert session_lifecycle.recover_unobserved_conversations(conv_conn) == []
+    assert pending_observer.list_pending(conv_conn) == []
+
+
+@pytest.mark.asyncio
+async def test_shutdown_enqueues_only_the_unobserved_tail(executor_conn):
+    # A resumed conversation replays its whole history into
+    # conversation_history for LLM context. Only what came after the resume is
+    # new evidence; persisting the replayed turns would re-extract them on the
+    # next start.
+    conn, executor = executor_conn
+    loop = asyncio.get_event_loop()
+
+    session = {
+        "conn": conn,
+        "executor": executor,
+        "conversation_history": [
+            {"role": "user", "content": "replayed from the previous session"},
+            {"role": "assistant", "content": "replayed reply"},
+            {"role": "user", "content": "brand new this session"},
+        ],
+        "observed_upto_index": 2,
+    }
+    await session_lifecycle.enqueue_for_shutdown(loop, session)
+
+    pending = await loop.run_in_executor(executor, pending_observer.list_pending, conn)
+    assert len(pending) == 1
+    assert "brand new this session" in pending[0]["session_transcript"]
+    assert "replayed" not in pending[0]["session_transcript"]
+
+
+@pytest.mark.asyncio
+async def test_shutdown_of_a_fully_observed_session_enqueues_nothing(executor_conn):
+    # Reopening a conversation and closing it again without saying anything.
+    # The old code saw a non-empty conversation_history and queued the entire
+    # replayed transcript for an Observer pass with no new evidence in it.
+    conn, executor = executor_conn
+    loop = asyncio.get_event_loop()
+
+    session = {
+        "conn": conn,
+        "executor": executor,
+        "conversation_history": [
+            {"role": "user", "content": "replayed from the previous session"},
+            {"role": "assistant", "content": "replayed reply"},
+        ],
+        "observed_upto_index": 2,
+    }
+    await session_lifecycle.enqueue_for_shutdown(loop, session)
+
+    pending = await loop.run_in_executor(executor, pending_observer.list_pending, conn)
+    assert pending == []

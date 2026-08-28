@@ -321,8 +321,18 @@ def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch, to
 
     calls = {"registered": None, "unregistered": None}
 
-    async def fake_register(session_id, conn, executor, conversation_history):
+    async def fake_register(session_id, conn, executor, conversation_history, observed_upto_index=0):
         calls["registered"] = (session_id, conversation_history)
+        # register() hands back the session record, which ws_chat then keeps
+        # observed_upto_index current on - a stub returning None makes the
+        # handler fail at the first idle/disconnect check rather than at the
+        # call, which is a much harder failure to read.
+        return {
+            "conn": conn,
+            "executor": executor,
+            "conversation_history": conversation_history,
+            "observed_upto_index": observed_upto_index,
+        }
 
     async def fake_unregister(session_id):
         calls["unregistered"] = session_id
@@ -490,3 +500,86 @@ def test_ws_chat_resuming_an_unknown_conversation_id_creates_a_new_one_lazily(mo
         info = _expect_session_info(ws)
         assert info["conversation_id"] is None
         assert info["messages"] == []
+
+
+# _resolve_connection_state's fifth return value: where the Observer's previous
+# work ends inside the replayed messages. Asserted here rather than through a
+# live disconnect because the disconnect-time Observer call races the client's
+# own teardown (see the notes in the two cleanup tests above) - the boundary
+# itself is what this needs to pin down, and the behaviour it drives is covered
+# deterministically in test_session_lifecycle.py.
+
+
+def test_resolve_connection_state_marks_a_fully_observed_resume_as_having_nothing_new(tmp_path):
+    from backend.memory import conversation_store
+
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        cid = conversation_store.create_conversation(conn)
+        conversation_store.append_message(conn, cid, "user", "earlier question")
+        conversation_store.append_message(conn, cid, "assistant", "earlier answer")
+        conversation_store.mark_observed(conn, cid)  # the previous session's disconnect
+
+        _, _, _, messages, observed_count = server._resolve_connection_state(conn, cid)
+
+        # Every turn still replayed - they are LLM context, just not new evidence.
+        assert len(messages) == 2
+        # ...and all of them already extracted from, so reopening this
+        # conversation and closing it again must not run an Observer pass.
+        assert observed_count == 2
+    finally:
+        conn.close()
+
+
+def test_resolve_connection_state_keeps_turns_a_kill_left_unobserved(tmp_path):
+    # Resuming a conversation that was observed once and then had more turns
+    # added before a force-kill. The tail never went through the Observer and
+    # still has to.
+    from backend.memory import conversation_store
+
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        cid = conversation_store.create_conversation(conn)
+        conversation_store.append_message(conn, cid, "user", "earlier question")
+        conversation_store.append_message(conn, cid, "assistant", "earlier answer")
+        conversation_store.mark_observed(conn, cid)
+        conversation_store.append_message(conn, cid, "user", "never extracted from")
+        conversation_store.append_message(conn, cid, "assistant", "nor this")
+
+        _, _, _, messages, observed_count = server._resolve_connection_state(conn, cid)
+
+        assert len(messages) == 4
+        assert observed_count == 2
+        assert [m["content"] for m in messages[observed_count:]] == [
+            "never extracted from",
+            "nor this",
+        ]
+    finally:
+        conn.close()
+
+
+def test_resolve_connection_state_treats_a_never_observed_resume_as_all_new(tmp_path):
+    from backend.memory import conversation_store
+
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        cid = conversation_store.create_conversation(conn)
+        conversation_store.append_message(conn, cid, "user", "earlier question")
+
+        _, _, _, messages, observed_count = server._resolve_connection_state(conn, cid)
+
+        assert len(messages) == 1
+        assert observed_count == 0
+    finally:
+        conn.close()
+
+
+def test_resolve_connection_state_reports_nothing_observed_for_a_fresh_connection(tmp_path):
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        _, conversation_id, _, messages, observed_count = server._resolve_connection_state(conn, None)
+        assert conversation_id is None
+        assert messages == []
+        assert observed_count == 0
+    finally:
+        conn.close()
