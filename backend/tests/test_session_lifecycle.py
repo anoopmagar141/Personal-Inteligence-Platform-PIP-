@@ -7,7 +7,7 @@ import pytest
 from backend.core import session_lifecycle, trace
 from backend.memory import pending_observer
 from backend.memory.profile_store import get_connection, initialize_schema
-from backend.providers.base_provider import BaseLLMProvider
+from backend.providers.base_provider import BaseLLMProvider, ProviderUnavailableError
 
 
 @pytest.fixture(autouse=True)
@@ -406,3 +406,66 @@ async def test_shutdown_of_a_fully_observed_session_enqueues_nothing(executor_co
 
     pending = await loop.run_in_executor(executor, pending_observer.list_pending, conn)
     assert pending == []
+
+
+# --- An unreachable LLM must not retire a transcript ------------------------
+#
+# Stage 11 used to fail open when the provider was unreachable, returning an
+# empty extraction indistinguishable from "nothing worth remembering." Both
+# consumers believed it: drain() called mark_completed() on a transcript the
+# model never read, and _extract_and_mark() went on to stamp the conversation
+# observed. Confirmed live against a copy of the real database - a recovered
+# session was retired with zero candidates, having never reached Ollama.
+#
+# It is the normal state after the crash recovery exists for: launch_pip.ps1
+# starts Ollama alongside the backend without waiting for it.
+
+
+class UnreachableProvider(FakeProvider):
+    def chat(self, *a, **k):
+        raise ProviderUnavailableError("Ollama is unreachable at http://localhost:11434")
+        yield  # pragma: no cover - generator marker
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_llm_leaves_the_conversation_recoverable(executor_conn):
+    from backend.memory import conversation_store
+
+    loop = asyncio.get_event_loop()
+    conn, executor = executor_conn
+    cid = await loop.run_in_executor(executor, _conversation_with_messages, conn)
+
+    with pytest.raises(Exception):
+        await session_lifecycle.run_observer_now(
+            loop, executor, conn,
+            [{"role": "user", "content": "I've decided to use SQLCipher for storage"}],
+            UnreachableProvider(), conversation_id=cid,
+        )
+
+    # The high-water mark must not have moved past turns nothing ever read.
+    marker = await loop.run_in_executor(executor, conversation_store.observed_upto, conn, cid)
+    assert marker is None
+    still_there = await loop.run_in_executor(
+        executor, session_lifecycle.recover_unobserved_conversations, conn
+    )
+    assert still_there == [cid]
+
+
+def test_startup_drain_defers_an_unreachable_llm_instead_of_consuming_it(db_conn):
+    pending_observer.enqueue(db_conn, "User: worth remembering\nAssistant: noted")
+
+    result = session_lifecycle.drain_pending_on_startup(db_conn, UnreachableProvider())
+
+    assert result["completed"] == []
+    assert result["failed"] == [], "an LLM that was never reached has not failed, it has not run"
+    assert len(result["deferred"]) == 1
+
+    # Still queued, and picked up for real once the model is back.
+    row = db_conn.execute("SELECT status FROM pending_observer").fetchone()
+    assert row["status"] == "processing"
+
+    later = session_lifecycle.drain_pending_on_startup(db_conn, FakeProvider())
+    assert len(later["completed"]) == 1
+    assert db_conn.execute(
+        "SELECT status FROM pending_observer"
+    ).fetchone()["status"] == "completed"
