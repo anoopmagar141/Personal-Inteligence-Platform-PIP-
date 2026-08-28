@@ -254,3 +254,58 @@ def test_rejects_non_hex_db_key(db_conn, sample_doc, monkeypatch):
     monkeypatch.setenv("PIP_DB_KEY", "not-hex!!")
     with pytest.raises(ValueError, match="hex-encoded"):
         vector_store.ingest_document(db_conn, sample_doc)
+
+
+def test_rebuild_after_a_key_change_makes_documents_searchable_again(db_conn, sample_doc, monkeypatch, db_key):
+    """
+    The companion to test_query_skips_chunks_from_a_different_key_above.
+
+    That test pins down what query() does when the key changes under it - skip
+    the chunk, don't crash - and its `matches == []` is a statement about
+    graceful degradation. It is also, on its own, a description of a silent
+    outage: every document in the sidebar, none of them searchable, no error
+    anywhere. scripts/set_db_password.py changes the key on purpose, so that
+    outage was reachable by following the project's own instructions.
+
+    rebuild_from_sqlite() is what turns it back into a working index, and this
+    asserts that it does - the regression test for the fix.
+    """
+    vector_store.ingest_document(db_conn, sample_doc)
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    assert vector_store.query(db_conn, "Is ChromaDB the source of truth?", threshold=0.1, top_k=3) == []
+
+    result = vector_store.rebuild_from_sqlite(db_conn)
+    assert result["failed"] == []
+    assert sample_doc in result["rebuilt"]
+
+    matches = vector_store.query(db_conn, "Is ChromaDB the source of truth?", threshold=0.1, top_k=3)
+    assert any("ChromaDB" in m["chunk_text"] for m in matches)
+    # file_path is stored separately and Fernet-encrypted; it has to come back
+    # readable under the new key too, not just the chunk text.
+    assert all(m["file_path"] == sample_doc for m in matches)
+
+
+def test_rebuild_clears_chunks_the_registry_no_longer_lists(db_conn, sample_doc):
+    """
+    rebuild_from_sqlite()'s docstring has always claimed it "removes any
+    ChromaDB chunks for file_paths no longer marked active in SQLite." It did
+    not - it only ever re-ingested the active ones, so it could restore what
+    was missing but never remove what shouldn't be there.
+
+    That mattered for more than tidiness: after a key change the old chunks
+    can't be addressed by file_path at all (the HMAC digest changes with the
+    key), so re-ingesting on top would strand them permanently.
+
+    SQLite is authoritative here, so a document it no longer lists as active
+    must not survive a rebuild.
+    """
+    vector_store.ingest_document(db_conn, sample_doc)
+    assert vector_store._get_collection().count() > 0
+
+    # Drift SQLite out from under Chroma without going through
+    # delete_document(), which would remove the chunks itself.
+    db_conn.execute("UPDATE documents SET status = 'removed' WHERE file_path = ?", (sample_doc,))
+    db_conn.commit()
+
+    vector_store.rebuild_from_sqlite(db_conn)
+    assert vector_store._get_collection().count() == 0

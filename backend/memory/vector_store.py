@@ -122,6 +122,32 @@ def _get_collection():
     return _collection
 
 
+def reset_collection() -> None:
+    """
+    Drops every chunk in the collection, leaving an empty one behind.
+
+    Only ever called by rebuild_from_sqlite(), and safe precisely because of
+    this module's founding rule: ChromaDB is NEVER authoritative. Everything
+    dropped here is re-derivable from the SQLite `documents` registry plus the
+    files on disk, which is what the rebuild does next.
+
+    Deleting the collection outright rather than issuing a `where`-filtered
+    delete is deliberate - a filtered delete can only remove chunks it can
+    still address, and the case this exists for is exactly the one where it
+    can't: after a key change, _file_key() hashes to different digests and the
+    old chunks become unaddressable as well as undecryptable. Only dropping
+    the whole collection reaches them.
+    """
+    global _collection
+    try:
+        _get_client().delete_collection(COLLECTION_NAME)
+    except Exception:
+        # Chroma raises when the collection isn't there - nothing to clear,
+        # which is the desired end state anyway.
+        pass
+    _collection = None
+
+
 def _get_model() -> SentenceTransformer:
     global _model
     if _model is None:
@@ -370,13 +396,38 @@ def query(
 
 def rebuild_from_sqlite(conn) -> dict[str, Any]:
     """
-    Re-ingests every active document from its recorded file_path, and removes any
-    ChromaDB chunks for file_paths no longer marked active in SQLite. Called at startup
-    when a schema-version or document-count mismatch is detected between SQLite and
-    ChromaDB (Part 11.1 rebuild-on-mismatch trigger).
+    Clears ChromaDB and re-ingests every active document from its recorded
+    file_path, making the index match the SQLite `documents` registry exactly.
+    Part 11.1's rebuild-on-mismatch recovery.
+
+    The clear used to be missing. This function only ever re-ingested the
+    active documents, so it could restore chunks that had been lost but could
+    never remove chunks that shouldn't be there - despite the docstring
+    claiming it "removes any ChromaDB chunks for file_paths no longer marked
+    active in SQLite," and despite the module header describing the operation
+    as "clear ChromaDB and re-index from SQLite authoritative state." Both were
+    describing reset_collection(), which didn't exist.
+
+    That gap is what makes this function the answer to a key change (see
+    scripts/set_db_password.py, which calls it after a rekey). Chunk text and
+    file paths are encrypted under a key derived from PIP_DB_KEY, and chunks
+    are addressed by HMAC(PIP_DB_KEY, file_path) - so after a rekey every
+    existing chunk is both undecryptable AND unaddressable. Re-ingesting on
+    top would write correct new chunks while leaving the old ones behind
+    forever, as permanently-unreadable ballast that query() skips one
+    InvalidToken at a time. Dropping the collection first is the only thing
+    that actually reaches them.
+
+    Callers must have PIP_DB_KEY set to the CURRENT key before calling: the
+    re-ingested chunks are encrypted with whatever _get_db_key() returns now.
     """
     active_docs = list_documents(conn)
     rebuilt, failed = [], []
+
+    # Before any re-ingest, not after: an old chunk left in place is
+    # unreadable ballast, and after a key change it can no longer be
+    # addressed for deletion by file_path at all.
+    reset_collection()
 
     for doc in active_docs:
         try:
