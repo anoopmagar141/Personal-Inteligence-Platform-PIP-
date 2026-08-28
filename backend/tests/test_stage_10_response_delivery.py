@@ -20,7 +20,7 @@ def test_success_logs_ok_and_returns_summary(tmp_path, monkeypatch):
     assert result["response_text"] == "Here is your answer."
     assert result["stage_hints"]["decision_log_hit"] is True
 
-    entries = json.loads(trace.TRACE_LOG_PATH.read_text(encoding="utf-8"))
+    entries = trace.read_entries()
     assert len(entries) == 1
     assert entries[0]["trace_id"] == trace_id
     assert entries[0]["stage"] == "stage_10_response_delivery"
@@ -40,7 +40,7 @@ def test_failure_logs_error_with_detail(tmp_path, monkeypatch):
     result = stage_10.run(trace_id, collected)
 
     assert result["status"] == "error"
-    entries = json.loads(trace.TRACE_LOG_PATH.read_text(encoding="utf-8"))
+    entries = trace.read_entries()
     assert entries[0]["status"] == "error"
     assert entries[0]["error_detail"] == "All providers failed: connection refused"
 

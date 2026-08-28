@@ -189,7 +189,7 @@ def test_stage_3_exception_does_not_crash_pipeline(db_conn, monkeypatch):
 
 def test_trace_log_records_every_stage(db_conn):
     pipeline.run_sync(db_conn, "hello", providers=[FakeProvider()])
-    entries = json.loads(trace.TRACE_LOG_PATH.read_text(encoding="utf-8"))
+    entries = trace.read_entries()
     stages = {e["stage"] for e in entries}
     assert "stage_00_gap_detector" in stages
     assert "stage_01_intent_classifier" in stages
