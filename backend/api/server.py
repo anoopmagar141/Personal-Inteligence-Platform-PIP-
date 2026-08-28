@@ -708,9 +708,12 @@ try:
     app = FastAPI(title="PIP Core API", lifespan=lifespan)
 
     # Local-only clients served from a different origin than this server -
-    # e.g. `flutter run -d web-server` on its own port, vs. the HTML/JS web
-    # client, which is same-origin because StaticFiles mounts it onto this
-    # same app below. Browsers block cross-origin fetch() without CORS
+    # e.g. `flutter run -d web-server` on its own port. (This used to contrast
+    # them with the HTML/JS client, which was same-origin via a StaticFiles
+    # mount; that client and its mount are gone - see the note where the mount
+    # used to be, at the bottom of this block. Every remaining browser client
+    # is cross-origin, so these headers matter more now, not less.)
+    # Browsers block cross-origin fetch() without CORS
     # headers regardless of how trusted the target is; PIP is entirely
     # localhost-only (no public deployment, no cookie-based auth to leak), so
     # this is scoped to localhost/127.0.0.1 on any port rather than a bare
@@ -731,10 +734,11 @@ try:
     # rather than adding a Depends() to ~20 individual route functions one at
     # a time and risking missing one. The WS route is handled separately
     # inside ws_chat() itself - BaseHTTPMiddleware only sees HTTP requests,
-    # not the WebSocket upgrade. Static file serving (the "/" mount below)
-    # deliberately stays open - it's just the JS/HTML/CSS bundle, not
-    # sensitive, and the client needs it to load before it has anywhere to
-    # send a token from.
+    # not the WebSocket upgrade. There is no longer an unauthenticated static
+    # mount alongside this: serving the JS/HTML/CSS bundle needed an open "/"
+    # (the client had to load before it had anywhere to send a token from),
+    # and that client is retired - so nothing this app serves is reachable
+    # without a token now.
     #
     # Standard `Authorization: Bearer <token>` header, not a custom one - the
     # 401 body below never echoes back whatever was provided, only a fixed
@@ -1218,15 +1222,18 @@ try:
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail=str(exc))
 
-    # Part 14.1: plain HTML/JS web client, built and proven before Flutter.
-    # Mounted LAST so it never shadows the /api/v1/* and /ws/chat routes above -
-    # Starlette matches routes in registration order and StaticFiles is a
-    # catch-all.
-    _WEB_CLIENT_DIR = Path(__file__).parent.parent.parent / "frontend" / "web"
-    if _WEB_CLIENT_DIR.is_dir():
-        from fastapi.staticfiles import StaticFiles
-
-        app.mount("/", StaticFiles(directory=str(_WEB_CLIENT_DIR), html=True), name="web")
+    # The plain HTML/JS web client (Part 14.1, frontend/web/) used to be
+    # mounted here at "/". It was retired by ccfb900 in favour of the native
+    # Windows build, but kept being served regardless - and it could not
+    # authenticate any other way than by carrying the API token in this page's
+    # own URL (`http://127.0.0.1:8765/?token=<token>`), which puts a
+    # full-access credential into the address bar and browser history. That is
+    # the same leak class the uvicorn access-log redaction above exists to
+    # close, reached through a client nothing was using any more.
+    #
+    # Files removed along with the mount; recoverable from git history, where
+    # the Flutter sources' many "matches frontend/web/app.js" provenance
+    # comments still point.
 
 except ImportError:
     app = None

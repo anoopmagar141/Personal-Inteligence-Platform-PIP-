@@ -573,3 +573,20 @@ def test_lifespan_releases_the_lock_on_clean_shutdown(tmp_path, monkeypatch):
         assert int(lock_path.read_text()) == os.getpid()
 
     assert not lock_path.exists()
+
+
+def test_the_retired_web_client_is_no_longer_served(tmp_path, monkeypatch):
+    # frontend/web/ was retired by ccfb900 but kept being mounted at "/", and
+    # it had no way to authenticate other than carrying the API token in the
+    # page's own URL - putting a full-access credential in the address bar and
+    # browser history, the same leak class the uvicorn access-log redaction
+    # exists to close. The mount is gone; nothing this app serves is reachable
+    # without a token now.
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    for path in ("/", "/index.html", "/app.js"):
+        assert client.get(path).status_code == 404, f"{path} is still being served"
