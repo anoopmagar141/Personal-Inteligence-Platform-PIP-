@@ -67,3 +67,36 @@ def test_finds_matches_despite_punctuation_in_the_query(db_conn):
     results = stage_03.run(db_conn, "What did I decide about FastAPI?")
     assert len(results) == 1
     assert results[0]["decision_text"] == "We chose FastAPI for the inventory service"
+
+
+def test_caps_results_at_max_entries(db_conn):
+    # _build_fts5_match_query() ORs bareword tokens, so a question's ordinary
+    # words match nearly every entry carrying reasoning. Without the cap this
+    # returned all of them and Stage 7 spent its decision budget on whichever
+    # happened to come first.
+    for i in range(stage_03.MAX_ENTRIES + 8):
+        decision_log.insert_decision(
+            db_conn,
+            text=f"We chose option {i} for the service",
+            reasoning="the reason it was chosen",
+            confidence=0.7,
+        )
+
+    results = stage_03.run(db_conn, "what is the reason it was chosen for the service")
+    assert len(results) == stage_03.MAX_ENTRIES
+
+
+def test_cap_keeps_the_most_relevant_not_the_first_inserted(db_conn):
+    # The cap cuts at bm25 rank, so a rare term still wins over entries that
+    # only matched on common words - even when it was inserted last.
+    for i in range(stage_03.MAX_ENTRIES + 5):
+        decision_log.insert_decision(
+            db_conn, text=f"We chose option {i} for the service", confidence=0.7
+        )
+    decision_log.insert_decision(
+        db_conn, text="We chose SQLCipher for encryption at rest", confidence=0.7
+    )
+
+    results = stage_03.run(db_conn, "why did we choose SQLCipher for the service")
+    assert len(results) == stage_03.MAX_ENTRIES
+    assert results[0]["decision_text"] == "We chose SQLCipher for encryption at rest"

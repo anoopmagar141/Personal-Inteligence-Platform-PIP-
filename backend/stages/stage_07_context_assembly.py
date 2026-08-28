@@ -114,6 +114,13 @@ _PRIORITY_RANK = [
 ]
 
 
+# How many of the (bm25-ranked) decision entries carry their reasoning into
+# the prompt, and how much of it. Sized against decision_log_tokens (600): the
+# top three at ~45 words each leave room for a dozen more headline lines.
+_DECISIONS_WITH_REASONING = 3
+_REASONING_WORDS = 45
+
+
 class AssembledContext(TypedDict):
     context: str
     messages: list[dict[str, str]]
@@ -132,7 +139,11 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     words = text.split()
     if len(words) <= max_tokens:
         return text
-    return " ".join(words[:max_tokens]) + " ..."
+    # The ellipsis counts. Appending it after taking max_tokens words returned
+    # max_tokens + 1, so every section this trims sat one word over the budget
+    # it was being trimmed to - small, but it made "<= budget" false for the
+    # one path that exists to make it true.
+    return " ".join(words[: max_tokens - 1]) + " ..."
 
 
 def _format_profile(
@@ -200,10 +211,71 @@ def _format_snapshot(snapshot: Optional[dict[str, Any]], max_tokens: int) -> str
 
 
 def _format_decisions(entries: list[dict[str, Any]], max_tokens: int) -> str:
+    """
+    Dated decision lines, with the reasoning behind the most relevant few.
+
+    This used to render decision_text alone. Both of the other columns it
+    dropped are the ones a question about the decision log actually asks for:
+
+    created_at, so "when did I build the RAG part?" is answerable at all. The
+    date was on every row and never left the database, so the log could say
+    what was decided but never when - which is most of what a history is for.
+
+    reasoning, so "why" questions get the argument rather than the headline.
+    An entry reading "The Observer runs on llama3.1:8b instead of a separate
+    small model" is the conclusion of an A/B test whose numbers are sitting in
+    reasoning, unread, while the model is left to guess at the justification -
+    exactly the gap that invites it to invent one.
+
+    Only the top few carry reasoning. Entries arrive bm25-ranked from Stage 3,
+    so the first ones are the most relevant, and reasoning is far longer than
+    decision_text - giving it to every entry would spend the whole budget on
+    two or three of them.
+
+    Built up to the budget rather than built whole and truncated, because
+    _truncate_to_tokens() joins on whitespace and would flatten the dates and
+    indented reasoning into one run-on line. Stopping at the budget keeps the
+    structure and drops whole entries from the least relevant end, which is
+    the same thing the rolling-window trim does for conversation history.
+    """
     if not entries:
         return ""
-    lines = [f"- {e['decision_text']}" for e in entries]
-    return _truncate_to_tokens("RELEVANT DECISIONS:\n" + "\n".join(lines), max_tokens)
+
+    header = "RELEVANT DECISIONS (most relevant first):"
+    used = _estimate_tokens(header)
+    lines: list[str] = []
+
+    for position, entry in enumerate(entries):
+        # .get() throughout: Stage 3 hands over whole decision_log rows, but
+        # this function is called directly with partial dicts too, and a
+        # missing date is not a reason to drop a real decision.
+        date = (entry.get("created_at") or "")[:10]
+        text = entry.get("decision_text", "")
+        if not text:
+            continue
+
+        block = [f"- [{date}] {text}" if date else f"- {text}"]
+
+        reasoning = (entry.get("reasoning") or "").strip()
+        if reasoning and position < _DECISIONS_WITH_REASONING:
+            words = reasoning.split()
+            if len(words) > _REASONING_WORDS:
+                reasoning = " ".join(words[:_REASONING_WORDS]) + " ..."
+            else:
+                reasoning = " ".join(words)
+            block.append(f"    why: {reasoning}")
+
+        cost = sum(_estimate_tokens(line) for line in block)
+        if lines and used + cost > max_tokens:
+            break
+        used += cost
+        lines.extend(block)
+
+    if not lines:
+        return ""
+    # The first entry can exceed the budget on its own; truncate that one case
+    # rather than returning nothing at all for it.
+    return _truncate_to_tokens(header + "\n" + "\n".join(lines), max_tokens)
 
 
 def _format_rag_chunks(chunks: list[dict[str, Any]], max_tokens: int) -> str:

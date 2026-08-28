@@ -220,3 +220,69 @@ def test_instructions_forbid_echoing_the_context_scaffolding():
     # The annotations exist to bound what the model may claim, not to be read
     # aloud; without this the reply opened with the literal words "complete list".
     assert "never repeat them back" in stage_07._DEFAULT_SYSTEM_INSTRUCTIONS.lower()
+
+
+def test_decision_lines_carry_their_date():
+    # created_at was on every row and never reached the prompt, so the log
+    # could say what was decided but never when.
+    result = stage_07.run(
+        "when did we choose it?",
+        decision_log_entries=[
+            {"decision_text": "We chose FastAPI over Flask", "created_at": "2026-08-16T12:00:00Z"}
+        ],
+    )
+    assert "[2026-08-16] We chose FastAPI over Flask" in result["context"]
+
+
+def test_decision_without_a_date_still_renders():
+    result = stage_07.run(
+        "what did we decide?",
+        decision_log_entries=[{"decision_text": "We chose FastAPI over Flask"}],
+    )
+    assert "- We chose FastAPI over Flask" in result["context"]
+
+
+def test_reasoning_reaches_the_prompt_for_the_top_entries_only():
+    entries = [
+        {"decision_text": f"Decision {i}", "created_at": "2026-08-16T12:00:00Z",
+         "reasoning": f"because of reason{i}"}
+        for i in range(stage_07._DECISIONS_WITH_REASONING + 3)
+    ]
+    context = stage_07.run("why?", decision_log_entries=entries)["context"]
+
+    for i in range(stage_07._DECISIONS_WITH_REASONING):
+        assert f"why: because of reason{i}" in context
+    # Past the cutoff the decision still appears; only its reasoning is dropped.
+    assert f"Decision {stage_07._DECISIONS_WITH_REASONING}" in context
+    assert f"reason{stage_07._DECISIONS_WITH_REASONING}" not in context
+
+
+def test_long_reasoning_is_trimmed_not_dropped():
+    entries = [{"decision_text": "Decision", "reasoning": _words(400, prefix="r")}]
+    context = stage_07.run("why?", decision_log_entries=entries)["context"]
+    assert "why: r0" in context
+    assert f"r{stage_07._REASONING_WORDS + 10}" not in context
+
+
+def test_decision_block_stays_within_its_budget_and_keeps_its_structure():
+    # Built up to the budget rather than built whole and truncated: the old
+    # path joined on whitespace, which flattened every date and reasoning line
+    # into one run-on line as soon as the budget was exceeded.
+    entries = [
+        {"decision_text": _words(30, prefix=f"d{i}_"), "created_at": "2026-08-16T12:00:00Z",
+         "reasoning": _words(100, prefix=f"r{i}_")}
+        for i in range(40)
+    ]
+    budget = stage_07.get_settings()["pipeline"]["decision_log_tokens"]
+    block = stage_07._format_decisions(entries, budget)
+
+    assert stage_07._estimate_tokens(block) <= budget
+    assert block.count("\n- ") >= 2  # several whole entries, not one flattened line
+    assert "..." not in block.splitlines()[1]  # first entry survives intact
+
+
+def test_single_oversized_decision_is_truncated_rather_than_dropped():
+    block = stage_07._format_decisions([{"decision_text": _words(900)}], 600)
+    assert block.startswith("RELEVANT DECISIONS")
+    assert block.endswith("...")
+    assert stage_07._estimate_tokens(block) <= 600
