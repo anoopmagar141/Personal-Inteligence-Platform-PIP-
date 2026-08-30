@@ -1,6 +1,15 @@
 sqlcipher3
 cryptography
 chromadb
+# Pinned - alone in this file - because the version matters for a reason no
+# resolver can know about. A Windows Application Control policy blocked
+# grpcio 1.83.0's cygrpc DLL, and since chromadb imports grpc, that took out
+# RAG ingestion, retrieval, and 7 test files at collection time. 1.83.1 ships
+# a binary the policy accepts. chromadb (>=1.58.0) and the OTLP exporter
+# (>=1.63.2) both set only floors, so nothing prevents a fresh install
+# resolving back to the blocked build - which is why this is an exact pin and
+# not a minimum.
+grpcio==1.83.1
 sentence-transformers
 pypdf
 ddgs
