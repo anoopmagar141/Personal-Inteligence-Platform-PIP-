@@ -473,6 +473,9 @@ function describeTrigger(t) {
   if (t.trigger === "goal_inactive_14_days") {
     return `Goal not mentioned in over ${t.threshold_days} days: ${t.goal_text}`;
   }
+  if (t.trigger === "document_decision_conflict_detected") {
+    return `A document may disagree with a recorded decision - "${t.decision_text}" vs ${t.document_path}`;
+  }
   return t.trigger;
 }
 

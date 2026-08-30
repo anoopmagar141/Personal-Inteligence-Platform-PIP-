@@ -373,3 +373,111 @@ def test_retiring_is_scoped_to_the_candidate_s_own_table(conn):
 def test_retiring_an_unknown_field_is_survivable(conn):
     assert profile_store.retire_profile_field(conn, "preference_memory", "never_existed") is False
     assert profile_store.retire_profile_field(conn, "goal_memory", "anything") is False
+
+
+# --- document_decision_conflict_detected ------------------------------------
+# The third allowed trigger. Stage 5 detected these on every query and dropped
+# the answer into a trace log line, so a conflict PIP had found reached nobody.
+
+
+def _seed_conflict(conn, *, doc="/docs/arch.md", decision="Store embeddings in ChromaDB, never in SQLite"):
+    from backend.memory import decision_log
+
+    decision_id = decision_log.insert_decision(conn, text=decision)
+    conn.execute(
+        "INSERT INTO documents (file_path, content_hash, chunk_count, status, ingested_at) "
+        "VALUES (?, 'h', 1, 'active', '2026-01-01T00:00:00Z')", (doc,))
+    conn.commit()
+    return decision_id
+
+
+def _run_stage_05_with(conn, chunk, monkeypatch):
+    from backend.memory import vector_store
+    from backend.stages import stage_05_rag_retrieval as stage_05
+
+    monkeypatch.setattr(vector_store, "query", lambda *a, **kw: [chunk])
+    return stage_05.run(conn, "anything")
+
+
+def _conflicts(conn):
+    return [t for t in proactive.evaluate(conn) if t["trigger"] == proactive.DOCUMENT_DECISION_CONFLICT]
+
+
+def test_stage_5_records_the_conflict_it_detects(conn, monkeypatch):
+    _seed_conflict(conn)
+    result = _run_stage_05_with(conn, {
+        "chunk_text": "embeddings are stored in SQLite rather than ChromaDB for the store",
+        "file_path": "/docs/arch.md",
+    }, monkeypatch)
+
+    assert result["conflict_flag"] is True
+    assert conn.execute("SELECT COUNT(*) FROM document_decision_conflicts").fetchone()[0] == 1
+
+
+def test_a_recorded_conflict_is_reported_with_both_sides_named(conn, monkeypatch):
+    _seed_conflict(conn)
+    _run_stage_05_with(conn, {
+        "chunk_text": "embeddings are stored in SQLite rather than ChromaDB for the store",
+        "file_path": "/docs/arch.md",
+    }, monkeypatch)
+
+    reported = _conflicts(conn)
+    assert len(reported) == 1
+    assert reported[0]["document_path"] == "/docs/arch.md"
+    assert "ChromaDB" in reported[0]["decision_text"]
+
+
+def test_the_same_pair_is_not_duplicated_across_queries(conn, monkeypatch):
+    _seed_conflict(conn)
+    chunk = {"chunk_text": "embeddings are stored in SQLite rather than ChromaDB for the store",
+             "file_path": "/docs/arch.md"}
+    for _ in range(3):
+        _run_stage_05_with(conn, chunk, monkeypatch)
+
+    assert conn.execute("SELECT COUNT(*) FROM document_decision_conflicts").fetchone()[0] == 1
+    assert len(_conflicts(conn)) == 1
+
+
+def test_superseding_the_decision_clears_the_trigger(conn, monkeypatch):
+    """
+    Self-clearing like the other two triggers - nothing to dismiss, no state to
+    reconcile.
+    """
+    from backend.memory import decision_log
+
+    decision_id = _seed_conflict(conn)
+    _run_stage_05_with(conn, {
+        "chunk_text": "embeddings are stored in SQLite rather than ChromaDB for the store",
+        "file_path": "/docs/arch.md",
+    }, monkeypatch)
+    assert len(_conflicts(conn)) == 1
+
+    decision_log.update_decision_state(conn, decision_id, state="superseded", reason="changed our minds")
+
+    assert _conflicts(conn) == []
+
+
+def test_removing_the_document_clears_the_trigger(conn, monkeypatch):
+    _seed_conflict(conn)
+    _run_stage_05_with(conn, {
+        "chunk_text": "embeddings are stored in SQLite rather than ChromaDB for the store",
+        "file_path": "/docs/arch.md",
+    }, monkeypatch)
+    assert len(_conflicts(conn)) == 1
+
+    conn.execute("UPDATE documents SET status = 'removed' WHERE file_path = '/docs/arch.md'")
+    conn.commit()
+
+    assert _conflicts(conn) == []
+
+
+def test_an_unrelated_chunk_records_nothing(conn, monkeypatch):
+    _seed_conflict(conn)
+    result = _run_stage_05_with(conn, {
+        "chunk_text": "the kitchen was painted yellow last spring",
+        "file_path": "/docs/arch.md",
+    }, monkeypatch)
+
+    assert result["conflict_flag"] is False
+    assert conn.execute("SELECT COUNT(*) FROM document_decision_conflicts").fetchone()[0] == 0
+    assert _conflicts(conn) == []

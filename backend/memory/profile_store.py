@@ -1090,6 +1090,34 @@ _RETIRABLE_TABLES = {
 }
 
 
+def record_document_conflicts(conn: sqlite3.Connection, conflicts) -> int:
+    """
+    Records (document_path, decision_id) pairs Stage 5 found to overlap.
+    Returns how many rows were written or refreshed.
+
+    Fails open, like everything else on the per-message path: a proactive
+    trigger is worth less than the response it would have cost.
+    """
+    written = 0
+    try:
+        for document_path, decision_id in conflicts:
+            conn.execute(
+                """
+                INSERT INTO document_decision_conflicts (document_path, decision_id, detected_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(document_path, decision_id) DO UPDATE SET
+                    detected_at = excluded.detected_at
+                """,
+                (document_path, int(decision_id), now_utc()),
+            )
+            written += 1
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to record a document/decision conflict, continuing: {e}")
+        return 0
+    return written
+
+
 def retire_profile_field(conn: sqlite3.Connection, target_table: str, field_name: str) -> bool:
     """
     Marks one stored field deleted after the user has said it is wrong about

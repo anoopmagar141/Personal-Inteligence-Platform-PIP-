@@ -413,6 +413,31 @@ CREATE TABLE IF NOT EXISTS memory_observation_log (
 CREATE INDEX IF NOT EXISTS idx_memory_observation_signal
 ON memory_observation_log(target_table, field_name, proposed_value);
 
+-- document_decision_conflicts Table
+--
+-- constitutional.json allows document_decision_conflict_detected as a proactive
+-- trigger, and the name is precise: it fires on a DETECTION, which is an event
+-- rather than a standing fact. Stage 5 is the only thing that detects one - it
+-- compares retrieved chunks against active decisions on every query - and it
+-- was throwing the answer away into a trace log line. This is where it goes now.
+--
+-- Recording rather than recomputing matters for cost. Answering the trigger
+-- from scratch would mean pulling every active document's chunks out of
+-- ChromaDB and comparing them against every active decision on each poll;
+-- Stage 5 has already done the comparison, for free, on chunks it had to fetch
+-- anyway.
+--
+-- UNIQUE(document_path, decision_id) because the same pair will be detected
+-- again on every query that retrieves that document - the row is refreshed, not
+-- duplicated.
+CREATE TABLE IF NOT EXISTS document_decision_conflicts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_path TEXT NOT NULL,
+    decision_id INTEGER NOT NULL,
+    detected_at TEXT NOT NULL,
+    UNIQUE (document_path, decision_id)
+);
+
 CREATE VIEW IF NOT EXISTS active_preferences AS 
 SELECT * FROM preference_memory WHERE status = 'active';
 

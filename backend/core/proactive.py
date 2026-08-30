@@ -31,9 +31,6 @@ logger = logging.getLogger(__name__)
 SESSION_GAP = "session_gap_exceeds_48h"
 GOAL_INACTIVE = "goal_inactive_14_days"
 
-# constitutional.json lists a third allowed trigger,
-# document_decision_conflict_detected, which is NOT evaluated here - see the
-# module note in evaluate().
 DOCUMENT_DECISION_CONFLICT = "document_decision_conflict_detected"
 
 
@@ -112,6 +109,42 @@ def _inactive_goals(conn, now: datetime.datetime) -> list[dict[str, Any]]:
     ]
 
 
+def _document_conflicts(conn) -> list[dict[str, Any]]:
+    """
+    Conflicts Stage 5 has detected that are still live.
+
+    Read from the recorded detections rather than recomputed. Stage 5 does the
+    comparison on chunks it had to fetch anyway; redoing it here would mean
+    pulling every active document out of ChromaDB against every active decision
+    on each poll, to reach an answer that was already worked out.
+
+    Self-clearing, like the other two triggers. A conflict is only reported
+    while the decision is still active AND the document still ingested - so
+    superseding the decision or removing the document retires it, with nothing
+    to dismiss and no state to reconcile. The stale row is left in place rather
+    than deleted, because the same pair conflicting again later is worth
+    knowing about and the join already hides it in the meantime.
+    """
+    return [
+        {
+            "trigger": DOCUMENT_DECISION_CONFLICT,
+            "document_path": row["document_path"],
+            "decision_id": row["decision_id"],
+            "decision_text": row["decision_text"],
+            "detected_at": row["detected_at"],
+        }
+        for row in conn.execute(
+            """
+            SELECT c.document_path, c.decision_id, c.detected_at, d.decision_text
+            FROM document_decision_conflicts c
+            JOIN decision_log d ON d.id = c.decision_id AND d.state = 'active'
+            JOIN documents doc ON doc.file_path = c.document_path AND doc.status = 'active'
+            ORDER BY c.detected_at DESC
+            """
+        )
+    ]
+
+
 def evaluate(conn, now: datetime.datetime | None = None) -> list[dict[str, Any]]:
     """
     Every allowed proactive trigger currently firing, as plain data. Empty list
@@ -120,15 +153,15 @@ def evaluate(conn, now: datetime.datetime | None = None) -> list[dict[str, Any]]
     `now` is injectable for deterministic tests, the same convention
     stage_00_gap_detector.run already uses for exactly this reason.
 
-    document_decision_conflict_detected is the one allowed trigger not evaluated
-    here, and not by oversight. Stage 5 already detects it, per query, against
-    the chunks that query retrieved (see _check_conflict) - it is a property of
-    a retrieval, not a standing fact about the database. Answering it here would
-    mean pulling every active document's chunks out of ChromaDB and comparing
-    them against every active decision on each call, which is a real design
-    decision about cost and caching rather than a config key to wire up. The
-    detection that exists today already reaches the user through the pipeline's
-    conflict_flag.
+    All three allowed triggers are evaluated now. The third,
+    document_decision_conflict_detected, is answered from what Stage 5 recorded
+    rather than recomputed here - see _document_conflicts().
+
+    An earlier version of this docstring said that detection "already reaches
+    the user through the pipeline's conflict_flag", and that was simply wrong:
+    conflict_flag reached one trace log line and stopped. PIP was detecting
+    conflicts between a document and a decision on every query and telling
+    nobody.
 
     Fails open, per trigger: one broken evaluation returns no trigger rather
     than taking down the others or the endpoint.
@@ -157,5 +190,10 @@ def evaluate(conn, now: datetime.datetime | None = None) -> list[dict[str, Any]]
         triggers.extend(_inactive_goals(conn, now))
     except Exception as e:
         logger.error(f"Proactive: inactive-goal check failed, skipping: {e}")
+
+    try:
+        triggers.extend(_document_conflicts(conn))
+    except Exception as e:
+        logger.error(f"Proactive: document-conflict check failed, skipping: {e}")
 
     return triggers

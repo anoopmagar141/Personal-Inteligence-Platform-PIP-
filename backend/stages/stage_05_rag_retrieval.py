@@ -40,14 +40,31 @@ def _overlap_ratio(a: set[str], b: set[str]) -> float:
     return len(a & b) / min(len(a), len(b))
 
 
-def _check_conflict(chunks: list[dict], active_decisions: list[dict]) -> bool:
+def _find_conflicts(chunks: list[dict], active_decisions: list[dict]) -> set[tuple[str, int]]:
+    """
+    Every (document_path, decision_id) pair whose overlap clears the threshold.
+
+    Returns the pairs rather than the bare True this used to, because the answer
+    was worth keeping and was being thrown away - conflict_flag reached one
+    trace log line and nothing else, so a conflict PIP had detected could not be
+    raised with the user, shown in context, or even counted. Knowing WHICH
+    document disagrees with WHICH decision is the whole of what makes it
+    actionable.
+
+    Stops at the first decision per chunk-document as before: one conflicting
+    decision is enough to flag the pair, and the loop's cost is bounded by
+    top_k chunks times the active decision count either way.
+    """
+    conflicts: set[tuple[str, int]] = set()
     for chunk in chunks:
         chunk_kw = _keywords(chunk["chunk_text"])
+        document_path = chunk.get("file_path")
         for decision in active_decisions:
             decision_kw = _keywords(decision.get("decision_text", "") + " " + (decision.get("reasoning") or ""))
             if _overlap_ratio(chunk_kw, decision_kw) >= _CONFLICT_OVERLAP_THRESHOLD:
-                return True
-    return False
+                if document_path and decision.get("id") is not None:
+                    conflicts.add((document_path, int(decision["id"])))
+    return conflicts
 
 
 def run(
@@ -89,7 +106,14 @@ def run(
 
     try:
         active_decisions = decision_log.list_decisions(conn, state="active", project_id=project_id)
-        conflict_flag = _check_conflict(chunks, active_decisions)
+        conflicts = _find_conflicts(chunks, active_decisions)
+        # Recorded, not just returned. constitutional.json allows
+        # document_decision_conflict_detected as a proactive trigger, and a
+        # detection is an event - this stage is the only thing that performs
+        # one, so nothing could raise it later unless this stage kept it.
+        if conflicts:
+            profile_store.record_document_conflicts(conn, conflicts)
+        conflict_flag = bool(conflicts)
     except Exception as e:
         logger.error(f"Stage 5 conflict check failed, defaulting to no conflict: {e}")
         conflict_flag = False

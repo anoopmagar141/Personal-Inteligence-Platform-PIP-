@@ -137,6 +137,9 @@ class _ReviewViewState extends State<ReviewView> {
         return 'It has been about $days day(s) since your last session.';
       case 'goal_inactive_14_days':
         return 'Goal not mentioned in over ${trigger['threshold_days']} days: ${trigger['goal_text']}';
+      case 'document_decision_conflict_detected':
+        return 'A document may disagree with a recorded decision - '
+            '"${trigger['decision_text']}" vs ${trigger['document_path']}';
       default:
         return '${trigger['trigger']}';
     }
