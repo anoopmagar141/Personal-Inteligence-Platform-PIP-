@@ -11,13 +11,27 @@
 #           LOCAL provider - enforced below, not assumed.
 #   Rule 5: Does NOT detect document-decision conflicts. That is Stage 5's job.
 #
-# Known scope boundary: every memory_candidate below carries evidence_count=1 - a
+# Every memory_candidate below carries evidence_count=1, and correctly so - a
 # single-pass extraction over one transcript can only attest "observed once, this
-# session." Part 8.6's REINFORCEMENT step (incrementing evidence_count when a signal
-# recurs across sessions) is NOT implemented here or anywhere yet. Until it exists,
-# inferred candidates will rarely clear Stage 12's tiered thresholds past Week 1-2,
-# and explicit candidates will stop clearing them past Week 3-4 (both require
-# evidence_count >= 2). This is a known, flagged gap - see Part 20 Phase 7 status.
+# session." Accumulating past that is Part 8.6's REINFORCEMENT step, which lives in
+# stage_12.reinforce_evidence() and is applied to every candidate before validation
+# in run_session_end() below.
+#
+# This comment previously said reinforcement was "NOT implemented here or anywhere
+# yet", and it was half right for longer than it looked: the function existed and
+# was called, but it could only raise evidence_count by reading an already-stored
+# row, and storing that row is precisely what the thresholds were blocking. So the
+# predicted failure happened anyway - explicit candidates stopped clearing past
+# Week 3-4, exactly as written here - while the code read as though it had been
+# handled. Reinforcement now accumulates in memory_observation_log, so a signal
+# repeated across sessions gains evidence without needing a prior write.
+#
+# What remains true: an INFERRED candidate still cannot auto-write from month 2
+# onward, because that threshold also requires confidence >= 0.7 and the inferred
+# label caps confidence at 0.4 no matter how much evidence accrues. That is the
+# constitution's confidence model rather than a gap - such a signal is meant to
+# reach the profile through the user (the memory_candidates_pending review queue),
+# not through repetition alone.
 
 import inspect
 import json
@@ -26,6 +40,7 @@ import re
 from pathlib import Path
 from typing import Any, Optional, TypedDict
 
+from backend.config.settings import get_settings
 from backend.core.constitution_enforcer import ConstitutionEnforcer
 from backend.core.types import now_utc
 from backend.memory import decision_log, session_snapshot
@@ -76,13 +91,67 @@ _VALID_LABELS = {"explicit", "inferred"}
 # Tool preferences are not lost by this: preference_memory.preferred_tools is
 # listed below, is observer-writable, and is read by get_profile() and
 # stage_04's coding_question - a path that works end to end today.
+# target_table -> either a fixed list of field names, or a sentence describing
+# what field_name means for an open-ended table. Both render into the prompt
+# (see _approved_fields_prompt_block) and the keys drive the constrained-output
+# schema's target_table enum.
 APPROVED_MEMORY_FIELDS = {
-    "skill_memory": ["python_level", "docker_level", "sql_level"],
+    # field_name is the SKILL'S OWN NAME, matching skill_memory.name - which is
+    # what onboarding writes ("Python") and what get_profile and
+    # soft_delete_profile_field key on.
+    #
+    # This used to be the fixed list [python_level, docker_level, sql_level],
+    # and it was wrong twice over. It could only ever learn three skills, so a
+    # Rust developer's Rust was unlearnable by construction. And the names did
+    # not match the store: a candidate for "python_level" found no existing
+    # row, was treated as a brand new skill, and INSERTed a second row beside
+    # the real one - measured, a profile holding both ("Python", 0.5) and
+    # ("python_level", 0.9) after a single session. Same family as the
+    # goal:<id> mismatch: two halves of the system disagreeing about what a
+    # record is called, with nothing positioned to see both.
+    "skill_memory": (
+        "the skill's own name, e.g. Python or Rust; proposed_value must be a "
+        "number from 0.0 to 1.0 estimating demonstrated ability"
+    ),
     "preference_memory": ["preferred_tools", "answer_style"],
     "goal_memory": ["active_goals", "project_objectives"],
+    # Open-ended by nature: the field name IS the topic, so there is no fixed
+    # list to enumerate. The constrained-output schema only enums target_table,
+    # never field_name, so this shape was always expressible.
+    "topic_interests": "any short topic name the user keeps returning to",
+    # Both of these are supported end to end downstream - _fetch_existing_state
+    # reads them, write_approved_candidate and apply_verified_correction write
+    # them - and were simply never offered to the model, so a conversation could
+    # not teach PIP that a new project had started or that the user wants to be
+    # answered differently. Both are gated by the constitution, so neither is
+    # written without the user confirming it.
+    "active_projects": "the project's name; proposed_value is a one-line description",
+    "interaction_style": (
+        "always the literal word value; proposed_value is how the user wants to "
+        "be answered, e.g. concise"
+    ),
 }
 
-_EXTRACTION_PROMPT_PREFIX = """SYSTEM:
+
+def _approved_fields_prompt_block() -> str:
+    """
+    The APPROVED MEMORY FIELDS section of the extraction prompt, generated from
+    APPROVED_MEMORY_FIELDS rather than restated by hand.
+
+    The schema's target_table enum was already derived from that dict, with a
+    comment claiming this kept "the schema, the prompt and the write path" from
+    drifting to three different answers - but the prompt text underneath was a
+    hand-written literal that no such derivation touched. Adding a table would
+    have updated two of the three and left the model still being told the old
+    list.
+    """
+    lines = []
+    for table, fields in APPROVED_MEMORY_FIELDS.items():
+        rendered = fields if isinstance(fields, str) else ", ".join(fields)
+        lines.append(f"  {table}: [{rendered}]")
+    return "\n".join(lines)
+
+_EXTRACTION_PROMPT_TEMPLATE = """SYSTEM:
 You are an information extraction assistant. Your only job is to analyze
 a conversation and extract structured signals from it.
 Produce valid JSON only. No commentary. No explanation.
@@ -105,9 +174,7 @@ RULES:
     there. Never copy those descriptions into your answer.
 
 APPROVED MEMORY FIELDS - target_table must be one of these exact names:
-  skill_memory: [python_level, docker_level, sql_level]
-  preference_memory: [preferred_tools, answer_style]
-  goal_memory: [active_goals, project_objectives]
+__APPROVED_FIELDS__
 Use no other target_table. A candidate naming anything else is discarded.
 
 OUTPUT FORMAT:
@@ -118,6 +185,14 @@ OUTPUT FORMAT:
       "field_name": "preferred_tools",
       "proposed_value": "Neovim",
       "label": "explicit",
+      "evidence_count": 1,
+      "evidence_text": "<the user's own words, copied exactly from the conversation>"
+    },
+    {
+      "target_table": "skill_memory",
+      "field_name": "Rust",
+      "proposed_value": "0.8",
+      "label": "inferred",
       "evidence_count": 1,
       "evidence_text": "<the user's own words, copied exactly from the conversation>"
     }
@@ -284,6 +359,22 @@ def _extract_json(raw_text: str) -> Optional[dict]:
         return None
 
 
+def _is_storable_skill_level(value: Any) -> bool:
+    """
+    skill_memory.level is REAL NOT NULL CHECK (level >= 0.0 AND level <= 1.0).
+    A word like "advanced" survives every check between here and the write, then
+    fails that CHECK - and Stage 13 turns the IntegrityError into one retry and
+    an outcome of "failed", so the signal is lost with only a log line to say so.
+    Dropping it here instead makes it the same clean rejection as any other
+    malformed candidate, and the prompt already tells the model to omit rather
+    than guess.
+    """
+    try:
+        return 0.0 <= float(value) <= 1.0
+    except (TypeError, ValueError):
+        return False
+
+
 def _sanitize_memory_candidate(raw: Any) -> Optional[dict[str, Any]]:
     if not isinstance(raw, dict):
         return None
@@ -293,6 +384,12 @@ def _sanitize_memory_candidate(raw: Any) -> Optional[dict[str, Any]]:
     if label not in _VALID_LABELS:
         # Rule 1: anything other than explicit|inferred (including a hallucinated
         # confidence-bearing label) is dropped, never passed downstream.
+        return None
+    if raw["target_table"] == "skill_memory" and not _is_storable_skill_level(raw["proposed_value"]):
+        logger.info(
+            f"Observer: dropping skill candidate whose level is not a 0.0-1.0 number: "
+            f"{raw['field_name']}={raw['proposed_value']!r}"
+        )
         return None
     return {
         "target_table": raw["target_table"],
@@ -425,9 +522,57 @@ def _sanitize_snapshot(raw: Any) -> dict[str, Any]:
     }
 
 
+_EXTRACTION_PROMPT_PREFIX = _EXTRACTION_PROMPT_TEMPLATE.replace(
+    "__APPROVED_FIELDS__", _approved_fields_prompt_block()
+)
+
+
+def _cap_transcript(transcript: str) -> str:
+    """
+    Bounds the transcript at observer.max_session_tokens (settings.json, 8000).
+    That setting existed and was read by nothing, so a long session sent the
+    whole thing: llama3.1:8b has a finite context window, and the failure when
+    you exceed it is not an error but a silently truncated prompt - whichever
+    end the runtime decides to drop, with the extraction quietly degrading and
+    no way to tell from the output that it happened.
+
+    Keeps the END of the transcript, not the start. A session-end pass is
+    summarising what this session arrived at: the closing turns carry the
+    decisions and the suggested next step, while the opening turns are the part
+    most likely to have already been extracted by an earlier pass over an
+    earlier session.
+
+    Cut on line boundaries so the model never receives half a turn, and cut the
+    transcript ONCE here so everything downstream - the grounding checks in
+    particular - reasons about exactly the text the model was shown. Grounding a
+    quote against turns the model never saw would accept a "quote" it could only
+    have invented.
+    """
+    max_tokens = get_settings()["observer"]["max_session_tokens"]
+    if len(transcript.split()) <= max_tokens:
+        return transcript
+
+    lines = transcript.splitlines()
+    kept: list[str] = []
+    used = 0
+    for line in reversed(lines):
+        cost = len(line.split())
+        if used + cost > max_tokens and kept:
+            break
+        kept.append(line)
+        used += cost
+    kept.reverse()
+    logger.warning(
+        f"Observer transcript exceeded max_session_tokens ({max_tokens}); "
+        f"kept the last {len(kept)} of {len(lines)} lines."
+    )
+    return "\n".join(kept)
+
+
 def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
     """
-    Single-pass extraction over a full session transcript.
+    Single-pass extraction over a full session transcript, capped at
+    observer.max_session_tokens - see _cap_transcript().
     Failure mode: fails open (Part 7 Stage 11 spec: "profile unchanged, snapshot not
     updated"). Any LLM/network failure or unparseable output returns an empty result
     rather than raising - the only exception is ObserverLocalProviderError, which is
@@ -447,6 +592,8 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
     provider_consent row at all, same fail-closed posture Stage 8 already
     uses for unknown providers.
     """
+    transcript = _cap_transcript(transcript)
+
     model_info = provider.get_model_info()
     provider_id = model_info.get("provider_id")
     row = conn.execute(

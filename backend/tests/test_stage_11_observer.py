@@ -673,10 +673,23 @@ def test_approved_tables_can_actually_be_written(db_conn):
     from backend.memory import profile_store
 
     for table, fields in observer.APPROVED_MEMORY_FIELDS.items():
+        # fields is a sentence rather than a list for an open-ended table
+        # (topic_interests, skill_memory, active_projects: the field name is the
+        # record's own name, so there is no fixed list). Any name is valid
+        # there, which is exactly what this asserts survives the write path.
+        if table == "goal_memory":
+            field_name = "goal:1"
+        elif isinstance(fields, str):
+            field_name = "distributed systems"
+        else:
+            field_name = fields[0]
         candidate = {
             "target_table": table,
-            "field_name": "goal:1" if table == "goal_memory" else fields[0],
+            "field_name": field_name,
             "proposed_value": "0.5" if table == "skill_memory" else "something",
+            # interaction_style writes a singleton row keyed on id = 1 and
+            # ignores field_name, but the name still has to be the one the
+            # prompt teaches, or the gated-field pattern would not match it.
             "label": "explicit",
             "evidence_count": 1,
             "evidence_text": "quoted",
@@ -694,3 +707,52 @@ def test_schema_constrains_target_table_to_the_approved_set():
 
 def test_prompt_does_not_advertise_the_category_name_as_a_table():
     assert "observer_writable" not in observer._EXTRACTION_PROMPT_PREFIX
+
+
+# --- observer.max_session_tokens ------------------------------------------
+# The setting existed and was read by nothing, so a long session sent its whole
+# transcript to a model with a finite context window - where over-length input
+# is not an error but a silent truncation nobody downstream can detect.
+
+
+def test_short_transcript_is_passed_through_untouched():
+    transcript = "User: hello\nAssistant: hi"
+    assert observer._cap_transcript(transcript) == transcript
+
+
+def test_long_transcript_is_capped_to_the_configured_budget(monkeypatch):
+    from backend.config import settings
+
+    monkeypatch.setattr(settings, "_settings", None)
+    real = settings.get_settings()
+    monkeypatch.setattr(
+        settings, "_settings", {**real, "observer": {**real["observer"], "max_session_tokens": 20}}
+    )
+
+    lines = [f"User: message number {i} with some padding words here" for i in range(50)]
+    capped = observer._cap_transcript("\n".join(lines))
+
+    assert len(capped.split()) <= 20
+
+
+def test_capping_keeps_the_end_of_the_session(monkeypatch):
+    """
+    A session-end pass summarises what the session arrived at, so the closing
+    turns are the ones that must survive. Cutting on line boundaries also means
+    the model never receives half a turn.
+    """
+    from backend.config import settings
+
+    monkeypatch.setattr(settings, "_settings", None)
+    real = settings.get_settings()
+    monkeypatch.setattr(
+        settings, "_settings", {**real, "observer": {**real["observer"], "max_session_tokens": 12}}
+    )
+
+    lines = [f"User: turn {i}" for i in range(40)]
+    capped = observer._cap_transcript("\n".join(lines))
+
+    assert "turn 39" in capped
+    assert "turn 0" not in capped
+    for line in capped.splitlines():
+        assert line.startswith("User: turn ")

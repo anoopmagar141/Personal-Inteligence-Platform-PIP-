@@ -242,3 +242,239 @@ def test_backfill_does_not_rerun_and_overwrite_real_values(tmp_path, db_key):
     profile_store.apply_column_migrations(conn)
 
     assert [c["id"] for c in conversation_store.list_unobserved(conn)] == [cid]
+
+
+# --- Session counting -------------------------------------------------------
+# profile_meta.session_count was written once by onboarding and never touched
+# again, so everything the constitution measures in sessions had nothing to
+# measure against.
+
+
+def test_begin_session_returns_none_before_onboarding(conn):
+    """
+    No profile_meta row exists until onboarding. A session that predates the
+    profile must not be counted, and must not raise either.
+    """
+    assert profile_store.current_session_no(conn) is None
+    assert profile_store.begin_session(conn) is None
+
+
+def test_onboarding_is_session_one(conn):
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    assert profile_store.current_session_no(conn) == 1
+
+
+def test_begin_session_increments_and_stamps_last_session_date(conn):
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    before = conn.execute("SELECT last_session_date FROM profile_meta WHERE id = 1").fetchone()[0]
+
+    assert profile_store.begin_session(conn) == 2
+    assert profile_store.begin_session(conn) == 3
+    assert profile_store.current_session_no(conn) == 3
+
+    after = conn.execute("SELECT last_session_date FROM profile_meta WHERE id = 1").fetchone()[0]
+    assert after >= before
+
+
+def test_begin_session_does_not_reset_on_repeat_onboarding(conn):
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    profile_store.begin_session(conn)
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    assert profile_store.current_session_no(conn) == 2
+
+
+def test_contradictions_are_stamped_with_the_current_session(conn):
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    profile_store.correct_profile_field(conn, "editor", "vscode")
+    pref_id = conn.execute("SELECT id FROM preference_memory WHERE name = 'editor'").fetchone()["id"]
+
+    profile_store.log_preference_contradiction(conn, pref_id, "used vim")
+    profile_store.begin_session(conn)
+    profile_store.log_preference_contradiction(conn, pref_id, "used vim again")
+
+    stamps = [
+        r["session_no"]
+        for r in conn.execute(
+            "SELECT session_no FROM preference_contradiction_log ORDER BY id"
+        )
+    ]
+    assert stamps == [1, 2]
+
+
+def test_session_no_column_is_added_to_an_existing_database(tmp_path, db_key):
+    conn = profile_store.get_connection(str(tmp_path / "old.db"), db_key)
+    profile_store.initialize_schema(conn)
+    conn.execute("ALTER TABLE preference_contradiction_log DROP COLUMN session_no")
+    conn.commit()
+
+    assert profile_store.apply_column_migrations(conn) == ["preference_contradiction_log.session_no"]
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(preference_contradiction_log)")}
+    assert "session_no" in columns
+
+
+def test_session_no_is_deliberately_not_backfilled(tmp_path, db_key):
+    """
+    There is no record of which session an existing contradiction belonged to.
+    Inventing one would either merge unrelated contradictions into a single
+    session (disarming an override that was already armed) or split one session
+    into several (arming one that should not be). NULL is the honest value, and
+    the enforcer counts NULL rows one-each, which is what they were written
+    under.
+    """
+    conn = profile_store.get_connection(str(tmp_path / "old.db"), db_key)
+    profile_store.initialize_schema(conn)
+    conn.execute("INSERT INTO preference_memory (name, value, source_label) VALUES ('editor', 'vscode', 'explicit')")
+    pref_id = conn.execute("SELECT id FROM preference_memory WHERE name = 'editor'").fetchone()["id"]
+    conn.execute("ALTER TABLE preference_contradiction_log DROP COLUMN session_no")
+    conn.execute(
+        "INSERT INTO preference_contradiction_log (preference_id, contradiction_text, created_at) "
+        "VALUES (?, 'used vim', '2026-01-01T00:00:00Z')",
+        (pref_id,),
+    )
+    conn.commit()
+
+    profile_store.apply_column_migrations(conn)
+
+    assert conn.execute("SELECT session_no FROM preference_contradiction_log").fetchone()["session_no"] is None
+
+
+def test_observation_log_appears_on_an_existing_database(tmp_path, db_key):
+    """
+    memory_observation_log is a new TABLE rather than a new column, so
+    schema.sql's CREATE TABLE IF NOT EXISTS repairs an existing database on the
+    next connection with no migration entry needed. Asserted rather than assumed
+    - reinforcement silently stops accumulating if the table is missing, and the
+    symptom (nothing new is ever learned) is the same one it was built to fix.
+    """
+    db_path = str(tmp_path / "old.db")
+    conn = profile_store.get_connection(db_path, db_key)
+    profile_store.initialize_schema(conn)
+    conn.execute("DROP TABLE memory_observation_log")
+    conn.commit()
+    conn.close()
+
+    reopened = profile_store.get_connection(db_path, db_key)
+    profile_store.initialize_schema(reopened)
+    tables = {
+        r["name"]
+        for r in reopened.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    reopened.close()
+    assert "memory_observation_log" in tables
+
+
+def test_origin_backfills_existing_pending_candidates_as_observer(tmp_path, db_key):
+    """
+    Every pending candidate predating the column came from the Observer - the
+    verification loop that writes the other value did not exist yet. Left NULL,
+    a client would have no way to word the question and would have to guess.
+    """
+    conn = profile_store.get_connection(str(tmp_path / "old.db"), db_key)
+    profile_store.initialize_schema(conn)
+    conn.execute("ALTER TABLE memory_candidates_pending DROP COLUMN origin")
+    conn.execute(
+        "INSERT INTO memory_candidates_pending "
+        "(target_table, field_name, proposed_value, label, evidence_count, "
+        " evidence_text, validation_status, created_at) "
+        "VALUES ('preference_memory', 'editor', 'vim', 'inferred', 1, 'x', "
+        "        'TIER_2_REQUIRED', '2026-01-01T00:00:00Z')"
+    )
+    conn.commit()
+
+    assert "memory_candidates_pending.origin" in profile_store.apply_column_migrations(conn)
+    assert conn.execute("SELECT origin FROM memory_candidates_pending").fetchone()["origin"] == "observer"
+
+
+def _make_legacy_trace_log(conn):
+    """The original shape: composite primary key, no id column."""
+    conn.execute("DROP TABLE IF EXISTS trace_log")
+    conn.execute("""
+        CREATE TABLE trace_log (
+            trace_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            stage TEXT NOT NULL,
+            status TEXT NOT NULL,
+            message TEXT,
+            error_detail TEXT,
+            PRIMARY KEY (trace_id, stage)
+        )
+    """)
+    conn.commit()
+
+
+def test_stale_trace_log_is_rebuilt_with_an_id_key(tmp_path, db_key):
+    """
+    CREATE TABLE IF NOT EXISTS cannot change a primary key, so without this an
+    upgraded database would keep the composite key while a fresh one got the id
+    key - and the same INSERT would succeed on one and raise IntegrityError on
+    the other.
+    """
+    conn = profile_store.get_connection(str(tmp_path / "old.db"), db_key)
+    profile_store.initialize_schema(conn)
+    _make_legacy_trace_log(conn)
+
+    assert profile_store.rebuild_trace_log_if_stale(conn) is True
+
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(trace_log)")}
+    assert "id" in columns
+
+
+def test_trace_log_rebuild_is_idempotent(tmp_path, db_key):
+    conn = profile_store.get_connection(str(tmp_path / "pip.db"), db_key)
+    profile_store.initialize_schema(conn)
+    assert profile_store.rebuild_trace_log_if_stale(conn) is False
+    assert profile_store.rebuild_trace_log_if_stale(conn) is False
+
+
+def test_trace_log_rebuild_preserves_any_rows_it_finds(tmp_path, db_key):
+    """
+    The table should be empty in every existing database, since nothing ever
+    wrote to it - but the rebuild copies rows rather than relying on that
+    argument being right.
+    """
+    conn = profile_store.get_connection(str(tmp_path / "old.db"), db_key)
+    profile_store.initialize_schema(conn)
+    _make_legacy_trace_log(conn)
+    conn.execute(
+        "INSERT INTO trace_log (trace_id, timestamp, stage, status, message, error_detail) "
+        "VALUES ('t1', '2026-01-01T00:00:00Z', 'stage_01', 'ok', 'kept', '')"
+    )
+    conn.commit()
+
+    profile_store.rebuild_trace_log_if_stale(conn)
+
+    rows = conn.execute("SELECT trace_id, message FROM trace_log").fetchall()
+    assert [(r["trace_id"], r["message"]) for r in rows] == [("t1", "kept")]
+
+
+def test_a_rebuilt_trace_log_accepts_repeated_stages(tmp_path, db_key):
+    """
+    The point of the rebuild: the old key silently dropped the second entry for
+    a stage, and the stages that log twice are the error paths.
+    """
+    from backend.core import trace
+
+    conn = profile_store.get_connection(str(tmp_path / "old.db"), db_key)
+    profile_store.initialize_schema(conn)
+    _make_legacy_trace_log(conn)
+    profile_store.rebuild_trace_log_if_stale(conn)
+
+    trace.stage_log(conn, "t1", "stage_08_provider_gate", "error", "first")
+    trace.stage_log(conn, "t1", "stage_08_provider_gate", "error", "second")
+
+    assert len(trace.get_trace(conn, "t1")) == 2
+
+
+def test_initialize_schema_rebuilds_a_stale_trace_log(tmp_path, db_key):
+    """A database repairs itself on the next connection, with nothing to run."""
+    db_path = str(tmp_path / "old.db")
+    conn = profile_store.get_connection(db_path, db_key)
+    profile_store.initialize_schema(conn)
+    _make_legacy_trace_log(conn)
+    conn.close()
+
+    reopened = profile_store.get_connection(db_path, db_key)
+    profile_store.initialize_schema(reopened)
+    columns = {r["name"] for r in reopened.execute("PRAGMA table_info(trace_log)")}
+    reopened.close()
+    assert "id" in columns

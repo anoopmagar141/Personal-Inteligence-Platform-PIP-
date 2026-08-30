@@ -38,10 +38,13 @@ CREATE TABLE IF NOT EXISTS skill_memory (
 );
 
 -- 4. skill_contradiction_log Table
+-- session_no: see preference_contradiction_log below - the behavioral override
+-- counts sessions, not rows, and this table feeds the same rule.
 CREATE TABLE IF NOT EXISTS skill_contradiction_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     skill_id INTEGER NOT NULL,
     contradiction_text TEXT NOT NULL,
+    session_no INTEGER,
     created_at TEXT NOT NULL,
     FOREIGN KEY (skill_id) REFERENCES skill_memory(id) ON DELETE CASCADE
 );
@@ -62,10 +65,18 @@ CREATE TABLE IF NOT EXISTS preference_memory (
 );
 
 -- 6. preference_contradiction_log Table
+-- session_no: profile_meta.session_count at the moment the contradiction was
+-- observed. The behavioral override triggers on trigger_sessions (3), and
+-- without this the enforcer counted ROWS - so three contradictions inside one
+-- session satisfied a rule that asks for three separate ones. NULL on rows
+-- written before this column existed, and on any observed before onboarding
+-- created profile_meta; the enforcer counts those one-each, which is exactly
+-- the behaviour they were written under.
 CREATE TABLE IF NOT EXISTS preference_contradiction_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     preference_id INTEGER NOT NULL,
     contradiction_text TEXT NOT NULL,
+    session_no INTEGER,
     created_at TEXT NOT NULL,
     FOREIGN KEY (preference_id) REFERENCES preference_memory(id) ON DELETE CASCADE
 );
@@ -154,6 +165,15 @@ CREATE TABLE IF NOT EXISTS memory_candidates_pending (
     evidence_count INTEGER DEFAULT 1 CHECK (evidence_count >= 1),
     evidence_text TEXT,
     validation_status TEXT NOT NULL CHECK (validation_status IN ('REQUIRES_CONFIRMATION', 'TIER_2_REQUIRED', 'PROMPT_RECONCILIATION')),
+    -- Why this row is in the queue. 'observer' is a candidate Stage 12 could not
+    -- decide alone; 'verification' is the periodic memory check-in asking the
+    -- user to confirm something already stored. Both need a human answer, but a
+    -- client has to word them very differently - "should I remember this?" is
+    -- not the same question as "do I still have this right?" - and inferring
+    -- the difference from prose in evidence_text would be guesswork. NULL on
+    -- rows written before this column existed; those were all observer rows,
+    -- which is what the backfill records.
+    origin TEXT DEFAULT 'observer',
     state TEXT DEFAULT 'pending' CHECK (state IN ('pending', 'resolved', 'dismissed')),
     resolved_at TEXT,
     created_at TEXT NOT NULL
@@ -171,15 +191,34 @@ CREATE TABLE IF NOT EXISTS provider_consent (
 );
 
 -- 15. trace_log Table
+-- Where pipeline traces actually live now. This table was declared from the
+-- start and never written to: core/trace.py wrote to a plain JSON file at
+-- backend/logs/trace_log.json instead, which put pipeline diagnostics outside
+-- the SQLCipher boundary everything else gets. pipeline.py already carries a
+-- security fix that had to STOP recording message text for that exact reason.
+-- Same finding, same resolution as session_snapshot a few tables down.
+--
+-- Keyed by an autoincrement id, not by (trace_id, stage) as it was originally
+-- declared. A trace is an event stream, and several stages legitimately log
+-- more than once per run - stage_08_provider_gate logs once per blocked
+-- provider, again if web_search is blocked, and again if nothing consented is
+-- left. Under the composite key the second entry would collide with the first,
+-- so the trace would lose events precisely on the error paths it exists to
+-- explain. Ordering within a trace comes from the id: now_utc() has
+-- second resolution and a whole pipeline run fits inside one second.
 CREATE TABLE IF NOT EXISTS trace_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     trace_id TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     stage TEXT NOT NULL,
     status TEXT NOT NULL,
     message TEXT,
-    error_detail TEXT,
-    PRIMARY KEY (trace_id, stage)
+    error_detail TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_trace_log_trace_id ON trace_log(trace_id);
+-- Supports the retention sweep (trace.hard_delete_after_days).
+CREATE INDEX IF NOT EXISTS idx_trace_log_timestamp ON trace_log(timestamp);
 
 -- 16. topic_interests Table
 CREATE TABLE IF NOT EXISTS topic_interests (
@@ -328,6 +367,42 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation
 -- 6 Views
 CREATE VIEW IF NOT EXISTS active_skills AS 
 SELECT * FROM skill_memory WHERE status = 'active';
+
+-- memory_observation_log Table (added after the original numbered sequence,
+-- same reasoning as llm_settings and conversations above).
+--
+-- Part 8.6's REINFORCEMENT step needed somewhere to accumulate. Before this
+-- table, stage_12.reinforce_evidence() could only raise evidence_count for a
+-- field that was ALREADY stored - and storing it is what the thresholds were
+-- blocking. From week 3 onward (evidence >= 2) that is a deadlock: the write
+-- needs two observations, the second observation cannot know about the first,
+-- so a value PIP had never stored could never be stored, no matter how many
+-- times it was observed. Verified before the fix: the same explicit user
+-- statement, made in six separate sessions, was DISCARDed all six times with
+-- evidence_count stuck at 1.
+--
+-- One row per observation, counted by DISTINCT session - deliberately the same
+-- shape as preference_contradiction_log, which is the mirror image of this
+-- (that one accumulates evidence AGAINST a stored value, this one accumulates
+-- evidence FOR a proposed one). session_no is NULL for observations made
+-- before onboarding created profile_meta; those count one-each, matching the
+-- rule used for contradictions.
+--
+-- Not pruned. An Observer pass writes a handful of rows per session against an
+-- indexed integer-keyed table, so this grows far slower than the conversation
+-- history sitting beside it.
+CREATE TABLE IF NOT EXISTS memory_observation_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_table TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    proposed_value TEXT NOT NULL,
+    label TEXT NOT NULL CHECK (label IN ('explicit', 'inferred', 'user_verified', 'user_correction')),
+    session_no INTEGER,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_observation_signal
+ON memory_observation_log(target_table, field_name, proposed_value);
 
 CREATE VIEW IF NOT EXISTS active_preferences AS 
 SELECT * FROM preference_memory WHERE status = 'active';

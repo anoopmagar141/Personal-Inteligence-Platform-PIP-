@@ -88,14 +88,15 @@ def create_memory_candidate(
     evidence_count: int,
     evidence_text: str,
     validation_status: str,
+    origin: str = "observer",
 ) -> int:
     cur = conn.execute(
         """
         INSERT INTO memory_candidates_pending (
             target_table, field_name, proposed_value, label,
-            evidence_count, evidence_text, validation_status, state, created_at
+            evidence_count, evidence_text, validation_status, origin, state, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
         """,
         (
             target_table,
@@ -105,6 +106,7 @@ def create_memory_candidate(
             evidence_count,
             evidence_text,
             validation_status,
+            origin,
             now_utc(),
         ),
     )
@@ -123,6 +125,41 @@ def list_memory_candidates(conn, *, limit: int | None = None) -> list[dict[str, 
         sql += " LIMIT ?"
         params = (limit,)
     return [dict(row) for row in conn.execute(sql, params)]
+
+
+def find_pending_memory_candidate(
+    conn,
+    *,
+    target_table: str,
+    field_name: str,
+    proposed_value: Any,
+) -> dict[str, Any] | None:
+    """
+    An unanswered candidate already asking this exact question, if there is one.
+
+    Matched on target_table as well as field_name and proposed_value. The table
+    is what makes the field name unambiguous - field names are only unique
+    within their own table, so two tables that happened to share one would
+    otherwise be treated as the same question and one of them would be dropped.
+
+    Scoped to state = 'pending' on purpose. A resolved or dismissed candidate is
+    a question the user has already answered, and a fresh observation later is
+    new information rather than a repeat - suppressing it against an answer from
+    weeks ago would be the silent discard this queue exists to avoid.
+    """
+    row = conn.execute(
+        """
+        SELECT * FROM memory_candidates_pending
+        WHERE state = 'pending'
+          AND target_table = ?
+          AND field_name = ?
+          AND proposed_value = ?
+        ORDER BY created_at ASC
+        LIMIT 1
+        """,
+        (target_table, field_name, str(proposed_value)),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def get_memory_candidate(conn, candidate_id: int) -> dict[str, Any] | None:

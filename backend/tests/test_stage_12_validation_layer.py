@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from backend.core.types import MemoryCandidate
 from backend.core.constitution_enforcer import ConstitutionEnforcer
 from backend.stages.stage_12_validation_layer import run, reinforce_evidence
+from backend.memory import profile_store
 from backend.memory.profile_store import get_connection, initialize_schema
 
 @pytest.fixture
@@ -223,7 +224,10 @@ def test_unhandled_observer_writable_table_logs_warning_and_fails_open(db_conn, 
     assert "Unhandled target_table" in caplog.text
 
 
-def test_reinforce_evidence_no_prior_state_leaves_candidate_unchanged(db_conn):
+def test_reinforce_evidence_first_observation_of_an_unstored_field_stays_at_one(db_conn):
+    # One session of evidence IS evidence_count 1 - reinforcement only has
+    # something to add from the second session onward. See
+    # test_reinforcement_accumulates_for_a_field_never_stored below.
     candidate = {
         "target_table": "preference_memory",
         "field_name": "editor",
@@ -321,3 +325,223 @@ def test_reinforced_evidence_flows_through_to_approval_across_simulated_sessions
     assert reinforced["evidence_count"] == 2
     reinforced_result = run(db_conn, reinforced, enforcer)
     assert reinforced_result.status == "APPROVED"
+
+
+# --- trigger_sessions means sessions, not rows ------------------------------
+
+
+def _seed_contradicted_preference(db_conn, session_numbers):
+    """
+    A stated preference plus one contradiction row per entry in session_numbers,
+    dated 15/8/1 days ago so the trigger_days condition (14) is always met and
+    only the session count is under test.
+    """
+    db_conn.execute("""
+        INSERT INTO preference_memory (name, value, source_label)
+        VALUES ('vim_keybindings', 'false', 'explicit')
+    """)
+    row_id = db_conn.execute(
+        "SELECT id FROM preference_memory WHERE name = 'vim_keybindings'"
+    ).fetchone()["id"]
+
+    ages = [15, 8, 1, 1, 1]
+    for i, session_no in enumerate(session_numbers):
+        created = (datetime.now(timezone.utc) - timedelta(days=ages[i])).strftime("%Y-%m-%dT%H:%M:%SZ")
+        db_conn.execute("""
+            INSERT INTO preference_contradiction_log (preference_id, contradiction_text, session_no, created_at)
+            VALUES (?, 'User typed hjkl', ?, ?)
+        """, (row_id, session_no, created))
+    db_conn.commit()
+
+    return {
+        "target_table": "preference_memory",
+        "field_name": "vim_keybindings",
+        "proposed_value": "true",
+        "label": "inferred",
+        "evidence_count": 1,
+        "evidence_text": "Used hjkl",
+    }
+
+
+def test_three_contradictions_in_one_session_do_not_trigger_the_override(db_conn, enforcer):
+    """
+    The constitution asks for trigger_sessions (3) - three separate sessions.
+    Counting rows meant one unusual conversation could satisfy it on its own.
+    """
+    candidate = _seed_contradicted_preference(db_conn, [7, 7, 7])
+    assert run(db_conn, candidate, enforcer).status != "PROMPT_RECONCILIATION"
+
+
+def test_three_contradictions_across_three_sessions_trigger_the_override(db_conn, enforcer):
+    candidate = _seed_contradicted_preference(db_conn, [5, 6, 7])
+    assert run(db_conn, candidate, enforcer).status == "PROMPT_RECONCILIATION"
+
+
+def test_repeats_within_sessions_still_count_once_each(db_conn, enforcer):
+    """Five rows, two sessions - fewer distinct sessions than the trigger."""
+    candidate = _seed_contradicted_preference(db_conn, [5, 5, 6, 6, 6])
+    assert run(db_conn, candidate, enforcer).status != "PROMPT_RECONCILIATION"
+
+
+def test_unstamped_legacy_rows_keep_counting_one_each(db_conn, enforcer):
+    """
+    Rows predating the session_no column are NULL and were written under
+    count-the-rows semantics. They must keep behaving that way rather than
+    collapsing into a single "unknown session" and silently disarming an
+    override that was already armed on an upgraded database.
+    """
+    candidate = _seed_contradicted_preference(db_conn, [None, None, None])
+    assert run(db_conn, candidate, enforcer).status == "PROMPT_RECONCILIATION"
+
+
+# --- Reinforcement accumulates across sessions ------------------------------
+# Before this, reinforce_evidence() could only raise evidence_count by reading
+# an already-stored row, and storing the row is what the thresholds blocked.
+# From week 3 onward that was a deadlock: nothing new could ever be learned.
+
+
+def _signal(**overrides):
+    candidate = {
+        "target_table": "preference_memory",
+        "field_name": "answer_style",
+        "proposed_value": "terse",
+        "label": "explicit",
+        "evidence_count": 1,
+        "evidence_text": "User asked for short answers",
+    }
+    candidate.update(overrides)
+    return candidate
+
+
+def _observe_across_sessions(db_conn, count, **overrides):
+    """One reinforce_evidence() call per session, as Stage 11 does."""
+    last = None
+    for _ in range(count):
+        profile_store.begin_session(db_conn)
+        last = reinforce_evidence(db_conn, _signal(**overrides))
+    return last
+
+
+def test_reinforcement_accumulates_for_a_field_never_stored(db_conn):
+    assert _observe_across_sessions(db_conn, 1)["evidence_count"] == 1
+    assert _observe_across_sessions(db_conn, 1)["evidence_count"] == 2
+    assert _observe_across_sessions(db_conn, 1)["evidence_count"] == 3
+
+
+def test_reinforcement_does_not_move_within_a_single_session(db_conn):
+    """
+    Rule 3 gives one Observer pass per session, but a retry or a drained
+    pending_observer row must not inflate the count. Sessions are counted, not
+    rows, so repeats inside one session collapse.
+    """
+    profile_store.begin_session(db_conn)
+    first = reinforce_evidence(db_conn, _signal())
+    second = reinforce_evidence(db_conn, _signal())
+    third = reinforce_evidence(db_conn, _signal())
+    assert first["evidence_count"] == second["evidence_count"] == third["evidence_count"] == 1
+
+
+def test_reinforcement_is_scoped_to_the_exact_value(db_conn):
+    _observe_across_sessions(db_conn, 3, proposed_value="terse")
+    other = _observe_across_sessions(db_conn, 1, proposed_value="verbose")
+    assert other["evidence_count"] == 1
+
+
+def test_reinforcement_is_scoped_to_the_field(db_conn):
+    _observe_across_sessions(db_conn, 3, field_name="answer_style")
+    other = _observe_across_sessions(db_conn, 1, field_name="editor")
+    assert other["evidence_count"] == 1
+
+
+def test_reinforcement_never_lowers_a_stored_count(db_conn):
+    """
+    A stored row that already claims more evidence than the log has seen keeps
+    its count - apply_verified_correction pins a user-confirmed value to 5, and
+    a couple of observations must not talk that back down.
+    """
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+        "VALUES ('answer_style', 'terse', 5, 'user_verified', 'active')"
+    )
+    db_conn.commit()
+
+    reinforced = _observe_across_sessions(db_conn, 2)
+    assert reinforced["evidence_count"] == 6
+
+
+def test_reinforcement_still_ignores_a_contradicting_value(db_conn):
+    """
+    Repeat observations of a value that disagrees with what is stored must not
+    accumulate into confidence. That path escalates to the user through the
+    behavioral override instead, which is the whole point of having one.
+    """
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+        "VALUES ('answer_style', 'verbose', 4, 'explicit', 'active')"
+    )
+    db_conn.commit()
+
+    reinforced = _observe_across_sessions(db_conn, 5, proposed_value="terse")
+    assert reinforced["evidence_count"] == 1
+
+
+def test_explicit_signal_clears_week_3_4_on_its_second_session(db_conn, enforcer):
+    """
+    The deadlock, end to end. Six sessions of the same explicit statement used
+    to produce six DISCARDs with evidence_count stuck at 1.
+    """
+    db_conn.execute(
+        "UPDATE profile_meta SET first_session_date = ? WHERE id = 1",
+        ((datetime.now(timezone.utc) - timedelta(weeks=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),),
+    )
+    db_conn.commit()
+
+    statuses = []
+    for _ in range(3):
+        profile_store.begin_session(db_conn)
+        candidate = reinforce_evidence(db_conn, _signal())
+        statuses.append(run(db_conn, candidate, enforcer).status)
+
+    assert statuses == ["DISCARD", "APPROVED", "APPROVED"]
+
+
+def test_explicit_signal_clears_month_2_on_its_fourth_session(db_conn, enforcer):
+    """
+    Month 2+ needs evidence >= 3 AND confidence >= 0.7. An explicit label
+    computes 0.9 * min(ec, 5) / 5, so it takes four sessions (0.72), not three
+    (0.54) - the evidence and confidence rules bind at different points.
+    """
+    db_conn.execute(
+        "UPDATE profile_meta SET first_session_date = ? WHERE id = 1",
+        ((datetime.now(timezone.utc) - timedelta(weeks=10)).strftime("%Y-%m-%dT%H:%M:%SZ"),),
+    )
+    db_conn.commit()
+
+    statuses = []
+    for _ in range(5):
+        profile_store.begin_session(db_conn)
+        candidate = reinforce_evidence(db_conn, _signal())
+        statuses.append(run(db_conn, candidate, enforcer).status)
+
+    assert statuses == ["DISCARD", "DISCARD", "DISCARD", "APPROVED", "APPROVED"]
+
+
+def test_inferred_signal_still_cannot_auto_write_after_month_2(db_conn, enforcer):
+    """
+    Deliberately NOT fixed by reinforcement. An inferred label caps confidence
+    at 0.4 however many sessions accumulate, and month_2_plus requires 0.7. That
+    is the constitution's confidence model: something PIP merely inferred should
+    reach the profile through the user, not through repetition.
+    """
+    db_conn.execute(
+        "UPDATE profile_meta SET first_session_date = ? WHERE id = 1",
+        ((datetime.now(timezone.utc) - timedelta(weeks=10)).strftime("%Y-%m-%dT%H:%M:%SZ"),),
+    )
+    db_conn.commit()
+
+    for _ in range(8):
+        profile_store.begin_session(db_conn)
+        candidate = reinforce_evidence(db_conn, _signal(label="inferred"))
+        assert run(db_conn, candidate, enforcer).status == "DISCARD"
+
+    assert candidate["evidence_count"] == 8

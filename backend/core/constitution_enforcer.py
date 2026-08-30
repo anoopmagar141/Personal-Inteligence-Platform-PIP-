@@ -4,6 +4,29 @@ from fnmatch import fnmatch
 from typing import Any
 from backend.core.types import MemoryCandidate, ValidationResult
 
+# Which column a candidate's proposed_value actually writes, per table.
+#
+# gated_fields in constitutional.json authors patterns at three levels:
+# "goal_memory.*" (any field of a table), "interaction_style.*", and
+# "skill_memory.*.level" - table, record, COLUMN. A MemoryCandidate carries
+# target_table and field_name but no notion of a column, so the deepest form
+# could never match anything: _matches_gated_field built "skill_memory.python"
+# and tested it against a three-segment pattern that needs one more.
+#
+# The effect was not theoretical. skill_memory.*.level is the constitution
+# saying a skill level must be confirmed by the user before it is written, and
+# it silently never fired - every skill candidate went straight to APPROVED and
+# was written with no confirmation at all. This map is what lets the enforcer
+# evaluate a column-qualified pattern as written, rather than the constitution
+# having to be reworded to fit what the code could check.
+_VALUE_COLUMN = {
+    "skill_memory": "level",
+    "preference_memory": "value",
+    "interaction_style": "value",
+    "goal_memory": "goal_text",
+    "active_projects": "description",
+}
+
 OBSERVER_WRITABLE_TABLES = {
     "topic_interests",
     "preferred_tools",
@@ -147,17 +170,29 @@ class ConstitutionEnforcer:
         )
 
     def _matches_gated_field(self, candidate: MemoryCandidate) -> bool:
-        # field_name (e.g. "goal_text") is never table-qualified on its own -
-        # every gated_fields pattern in constitutional.json IS table-qualified
-        # ("goal_memory.*", "skill_memory.*.level", ...), so field_path is the
-        # branch that actually matches them; the bare field_name check is a
-        # defensive fallback for a future bare (non-table-qualified) pattern,
-        # not dead code to delete - constitutional.json authors gated_fields
-        # patterns, this function shouldn't assume they're always qualified.
-        field_path = f"{candidate.get('target_table')}.{candidate.get('field_name')}"
+        # The bare field_name check is a defensive fallback for a future bare
+        # (non-table-qualified) pattern, not dead code to delete -
+        # constitutional.json authors these patterns, and this function should
+        # not assume they are always qualified.
+        target_table = candidate.get("target_table")
+        field_name = candidate.get("field_name", "")
+        field_path = f"{target_table}.{field_name}"
+
+        # Three forms are tested, because constitutional.json authors patterns
+        # at three depths (see _VALUE_COLUMN above for the one that used to be
+        # unreachable):
+        #   "answer_style"                -> a bare field name
+        #   "goal_memory.*"               -> table.field
+        #   "skill_memory.*.level"        -> table.field.column
+        candidates = [field_path, field_name]
+        value_column = _VALUE_COLUMN.get(target_table)
+        if value_column:
+            candidates.append(f"{field_path}.{value_column}")
+
         return any(
-            fnmatch(field_path, pattern) or fnmatch(candidate.get("field_name", ""), pattern)
+            fnmatch(path, pattern)
             for pattern in self.rules["gated_fields"]["fields"]
+            for path in candidates
         )
 
     def _field_value(self, existing_field: Any, name: str, default: Any = None) -> Any:

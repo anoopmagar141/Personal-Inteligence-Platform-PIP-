@@ -2,6 +2,8 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 from backend.core.types import MemoryCandidate, ValidationResult
 from backend.core.constitution_enforcer import ConstitutionEnforcer
+from backend.core.types import now_utc
+from backend.memory import profile_store
 
 def _get_profile_age_weeks(conn) -> int:
     row = conn.execute("SELECT first_session_date FROM profile_meta WHERE id = 1").fetchone()
@@ -42,8 +44,22 @@ def _fetch_existing_state(conn, candidate: MemoryCandidate) -> Optional[Dict[str
             # path via profile_store.log_preference_contradiction) - derived here
             # via COUNT()/MIN() instead of trusting the stale column, so there's
             # one source of truth instead of two that can drift apart.
+            #
+            # DISTINCT sessions, not rows: the enforcer compares this against
+            # behavioral_override.trigger_sessions (3), and counting rows meant
+            # three contradictions inside a single session satisfied a rule that
+            # asks for three separate ones - the override could fire off one
+            # unusual conversation. COALESCE(session_no, -id) counts a row with
+            # no session number as its own session: session_no is NULL only on
+            # rows written before that column existed (see profile_store's
+            # _ADDED_COLUMNS - deliberately not backfilled, the information does
+            # not exist to backfill with), and -id is always negative where a
+            # real session_no is always >= 1, so the two can never collide. The
+            # effect is that legacy rows keep counting exactly as they did
+            # before, and only new rows get the stricter, correct treatment.
             c_row = conn.execute(
-                "SELECT COUNT(*) as contradiction_count, MIN(created_at) as first_created_at "
+                "SELECT COUNT(DISTINCT COALESCE(session_no, -id)) as contradiction_count, "
+                "MIN(created_at) as first_created_at "
                 "FROM preference_contradiction_log WHERE preference_id = ?",
                 (row["id"],)
             ).fetchone()
@@ -67,8 +83,15 @@ def _fetch_existing_state(conn, candidate: MemoryCandidate) -> Optional[Dict[str
             if not row:
                 return None
 
+            # Was a hardcoded 0 alongside a real first_contradiction_date read
+            # from this same table - a count that could never move, dated from
+            # a table nothing wrote to. Both halves are real now; see
+            # profile_store.log_skill_contradiction for why skills get a
+            # behavioral override after all. Same DISTINCT-session counting as
+            # preferences above, for the same reason.
             c_row = conn.execute(
-                "SELECT MIN(created_at) as created_at "
+                "SELECT COUNT(DISTINCT COALESCE(session_no, -id)) as contradiction_count, "
+                "MIN(created_at) as first_created_at "
                 "FROM skill_contradiction_log WHERE skill_id = ?",
                 (row["id"],)
             ).fetchone()
@@ -78,8 +101,8 @@ def _fetch_existing_state(conn, candidate: MemoryCandidate) -> Optional[Dict[str
                 "source_label": row["source_label"],
                 "confidence": row["confidence"],
                 "evidence_count": row["evidence_count"],
-                "behavioral_signal_count": 0,
-                "first_contradiction_date": c_row["created_at"] if c_row else None
+                "behavioral_signal_count": c_row["contradiction_count"] if c_row else 0,
+                "first_contradiction_date": c_row["first_created_at"] if c_row else None
             }
 
         elif target_table == "identity":
@@ -109,13 +132,52 @@ def _fetch_existing_state(conn, candidate: MemoryCandidate) -> Optional[Dict[str
             }
 
         elif target_table == "goal_memory":
-            row = conn.execute("SELECT goal_text, confidence, evidence_count FROM goal_memory WHERE id = ?", (field_name.replace("goal:", ""),)).fetchone()
+            # Resolved through the same helper the write paths use, so lookup
+            # and write cannot disagree about which goal a candidate names.
+            # This previously did field_name.replace("goal:", ""), a substring
+            # replace rather than a prefix strip, and then queried
+            # id = 'active_goals' for every candidate the Observer produced -
+            # always no row, so a repeated goal never reinforced against its own
+            # stored evidence and the conflict check had nothing to compare.
+            goal_id = profile_store.goal_id_from_field(field_name or "")
+            if goal_id is not None:
+                row = conn.execute(
+                    "SELECT goal_text, confidence, evidence_count FROM goal_memory WHERE id = ?",
+                    (goal_id,),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT goal_text, confidence, evidence_count FROM goal_memory "
+                    "WHERE goal_text = ? AND status = 'active'",
+                    (str(candidate.get("proposed_value")),),
+                ).fetchone()
             if not row:
                 return None
             return {
                 "current_value": row["goal_text"],
                 "source_label": "explicit",
                 "confidence": row["confidence"],
+                "evidence_count": row["evidence_count"],
+                "behavioral_signal_count": 0,
+                "first_contradiction_date": None
+            }
+
+        elif target_table == "topic_interests":
+            # Set membership: the topic IS the field, so "already recorded"
+            # means present, and current_value equals the proposed value by
+            # construction. That matters for the conflict check above - a topic
+            # can never contradict itself, so a repeat observation reinforces
+            # rather than escalating to TIER_2_REQUIRED.
+            row = conn.execute(
+                "SELECT evidence_count FROM topic_interests WHERE topic = ? AND status = 'active'",
+                (field_name,),
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "current_value": field_name,
+                "source_label": "inferred",
+                "confidence": None,
                 "evidence_count": row["evidence_count"],
                 "behavioral_signal_count": 0,
                 "first_contradiction_date": None
@@ -147,36 +209,121 @@ def _fetch_existing_state(conn, candidate: MemoryCandidate) -> Optional[Dict[str
         logger.error(f"Database error in _fetch_existing_state querying table '{target_table}': {e}")
         return None
 
+def _record_observation(conn, candidate: MemoryCandidate) -> None:
+    """
+    Appends this observation to memory_observation_log, stamped with the session
+    it was made in. Failure is swallowed: reinforcement is an accuracy
+    improvement, and a broken log must never stop a candidate being validated.
+    """
+    target_table = candidate.get("target_table")
+    field_name = candidate.get("field_name")
+    proposed_value = candidate.get("proposed_value")
+    label = candidate.get("label", "inferred")
+    if not target_table or not field_name or proposed_value is None:
+        return
+    try:
+        conn.execute(
+            "INSERT INTO memory_observation_log "
+            "(target_table, field_name, proposed_value, label, session_no, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (target_table, field_name, str(proposed_value), label,
+             profile_store.current_session_no(conn), now_utc()),
+        )
+        conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to record memory observation: {e}")
+
+
+def _observed_sessions(conn, candidate: MemoryCandidate) -> int:
+    """
+    How many DISTINCT sessions this exact signal has been observed in, the
+    current one included (_record_observation runs first).
+
+    COALESCE(session_no, -id) counts an unstamped row as its own session, the
+    same rule the behavioral override uses - session_no is NULL only for
+    observations made before onboarding created profile_meta, and -id is always
+    negative where a real session_no is always >= 1, so the two cannot collide.
+
+    Counting sessions rather than rows is what makes this safe to call more than
+    once for the same candidate: a retry inside one session adds a row but not a
+    session, so the count does not move.
+    """
+    try:
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT COALESCE(session_no, -id)) AS sessions "
+            "FROM memory_observation_log "
+            "WHERE target_table = ? AND field_name = ? AND proposed_value = ?",
+            (candidate.get("target_table"), candidate.get("field_name"),
+             str(candidate.get("proposed_value"))),
+        ).fetchone()
+        return int(row["sessions"]) if row else 0
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to count memory observations: {e}")
+        return 0
+
+
 def reinforce_evidence(conn, candidate: MemoryCandidate) -> MemoryCandidate:
     """
-    Part 8.6's REINFORCEMENT step: if the existing stored value for this field
-    matches the candidate's proposed_value, this is a repeat observation of the
-    same signal, not a fresh one - bump evidence_count to existing + 1 rather than
-    leaving it at whatever the caller (e.g. a single Observer pass, which can only
-    ever attest evidence_count=1 - one transcript is one observation) provided.
+    Part 8.6's REINFORCEMENT step: a signal seen in more than one session is
+    worth more than evidence_count=1, which is all a single Observer pass over a
+    single transcript can honestly attest on its own.
 
-    Deliberately does NOT reinforce when the proposed_value differs from the
-    existing value: that's a conflicting observation, not a repeat one, and is
-    already handled by the existing behavioral-override/TIER_2_REQUIRED paths in
-    ConstitutionEnforcer.validate() - reinforcing evidence_count there too would
-    let a single contradicting session look more confident, not less.
+    Records the observation, then returns the candidate carrying however much
+    evidence has actually accumulated for it:
 
-    Call this BEFORE enforcer.validate(), and pass the (possibly reinforced)
-    returned candidate to both stage_12.run() and stage_13.run() - reinforcement
-    must be visible to both the confidence/threshold check and the actual write,
-    or the reinforced count is computed but never persisted.
+      - Nothing stored for this field yet -> the number of distinct sessions the
+        signal has been observed in. This is the case that was broken. The old
+        version could only raise evidence_count by reading the stored row, and
+        from week 3 onward (evidence >= 2) storing the row is exactly what the
+        thresholds were blocking - so a value PIP had never stored could never
+        BE stored, however often the user said it. Measured before the fix: the
+        same explicit statement in six separate sessions, DISCARDed six times,
+        evidence_count never leaving 1. The call site in Stage 11 already
+        claimed this function prevented that; it could not, because there was
+        nowhere for the first observation to live.
+      - Stored value matches -> max(stored + 1, distinct sessions). Never lower
+        than the old behaviour, and the log acts as a floor for a row whose
+        stored count was reset (a soft-deleted field can come back at 1).
+      - Stored value differs -> unchanged, deliberately. That is a conflicting
+        observation, not a repeat one, and reinforcing it would make a single
+        contradicting session look MORE confident rather than less. Conflicts
+        have their own path: Stage 13 logs them to preference_contradiction_log
+        and the behavioral override escalates to the user.
+      - Tables with no evidence_count column to reinforce (identity,
+        active_projects) -> unchanged.
 
-    Tables with no evidence_count column (identity, active_projects) are returned
-    unchanged - there's nothing to reinforce.
+    Call this BEFORE enforcer.validate(), and pass the returned candidate to
+    both stage_12.run() and stage_13.run() - reinforcement must be visible to
+    both the confidence/threshold check and the actual write, or the reinforced
+    count is computed but never persisted.
+
+    What this does NOT fix, deliberately: the month_2_plus rule also requires
+    confidence >= 0.7, and an inferred label caps confidence at 0.4 no matter
+    how many sessions accumulate. An inferred signal therefore still cannot
+    auto-write after month 2 - that is the constitution's confidence model, not
+    a bug in reinforcement, and the route for such a signal is the user-review
+    queue rather than a silent write.
     """
+    _record_observation(conn, candidate)
+    observed_sessions = _observed_sessions(conn, candidate)
+
     existing = _fetch_existing_state(conn, candidate)
-    if existing is None or existing.get("evidence_count") is None:
+    if existing is None:
+        if observed_sessions <= candidate.get("evidence_count", 1):
+            return candidate
+        reinforced = dict(candidate)
+        reinforced["evidence_count"] = observed_sessions
+        return reinforced
+
+    if existing.get("evidence_count") is None:
         return candidate
     if existing["current_value"] != candidate.get("proposed_value"):
         return candidate
 
     reinforced = dict(candidate)
-    reinforced["evidence_count"] = existing["evidence_count"] + 1
+    reinforced["evidence_count"] = max(existing["evidence_count"] + 1, observed_sessions)
     return reinforced
 
 def run(conn, candidate: MemoryCandidate, enforcer: ConstitutionEnforcer) -> ValidationResult:
