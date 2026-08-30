@@ -31,16 +31,11 @@
 #
 # conn is deliberately untyped, as it is in every other stage. ADR-025 (Clean
 # Architecture / Dependency Rule) forbids backend/stages and backend/api from
-# depending directly on the database, ChromaDB or Ollama drivers, and
-# scripts/pre-commit enforces it. This file used to take that dependency for a
-# single `conn: <driver>.Connection` annotation - the whole coupling the rule
-# exists to prevent, acquired for a type hint. The hook never fired because the
-# violation predated it and nothing had staged this file since; any commit
-# touching it would have been rejected.
-#
-# Note for anyone tempted to spell the driver name out above: the hook greps the
-# whole file, comments included, so naming it here would trip the very rule this
-# comment is describing.
+# importing sqlite3, chromadb or ollama, and scripts/pre-commit enforces it.
+# This file used to import sqlite3 for a single `conn: sqlite3.Connection`
+# annotation - the whole coupling the rule exists to prevent, acquired for a
+# type hint. The hook never fired because the violation predated it and nothing
+# had staged this file since; any commit touching it would have been rejected.
 
 from dataclasses import dataclass
 

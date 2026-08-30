@@ -1,17 +1,32 @@
 #!/bin/bash
 # Enforce ADR-025 (Clean Architecture / Dependency Rule)
-# No stage file or api/client code can directly import sqlite3, chromadb, or ollama.
+# Nothing under backend/stages/ or backend/api/ may depend directly on the
+# database, ChromaDB or Ollama drivers - those belong behind backend/memory/.
 
 errors=0
 
-# Check files under backend/stages/ and backend/api/
-for file in $(git diff --cached --name-only | grep -E '^backend/stages/|^backend/api/'); do
-    if [ -f "$file" ]; then
-        if grep -E 'import[[:space:]]+(sqlite3|chromadb|ollama)' "$file" > /dev/null || \
-           grep -E 'from[[:space:]]+(sqlite3|chromadb|ollama)[[:space:]]+import' "$file" > /dev/null; then
-            echo "ERROR: [ADR-025 Violation] $file directly imports sqlite3, chromadb, or ollama."
-            errors=$((errors + 1))
-        fi
+for file in $(git diff --cached --name-only --diff-filter=ACM | grep -E '^backend/stages/|^backend/api/'); do
+    # The STAGED content, not the file on disk. Reading the working tree meant
+    # the hook judged something other than what was about to be committed: a
+    # violation staged and then fixed unstaged would slip through, and a fix
+    # staged and then undone in the working tree would be rejected for a line
+    # the commit did not contain.
+    content=$(git show ":$file" 2>/dev/null) || continue
+
+    # Comments stripped before matching. This check is about imports, and a file
+    # that merely DESCRIBES the rule was being rejected for describing it -
+    # writing "never import sqlite3 here" in a comment read identically to
+    # actually doing it, so the rule could not be documented where it applies.
+    #
+    # Known limit, left deliberately: a string literal containing the same
+    # phrase still matches. Stripping those needs a real parser rather than
+    # sed, the case is rare, and it fails loudly rather than silently - which is
+    # the right way round for a rule about dependencies.
+    code=$(printf '%s\n' "$content" | sed 's/#.*//')
+
+    if printf '%s\n' "$code" | grep -qE 'import[[:space:]]+(sqlite3|chromadb|ollama)|from[[:space:]]+(sqlite3|chromadb|ollama)[[:space:]]+import'; then
+        echo "ERROR: [ADR-025 Violation] $file imports sqlite3, chromadb, or ollama directly."
+        errors=$((errors + 1))
     fi
 done
 
