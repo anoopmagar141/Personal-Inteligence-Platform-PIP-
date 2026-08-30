@@ -177,3 +177,38 @@ th { color: var(--muted); font-weight: 500; }
 button.small { padding: 4px 10px; font-size: 0.8em; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; }
 button.small:hover { background: var(--border); }
 button.danger { color: var(--error); border-color: var(--error); }
+
+/* Review queue */
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: white;
+  font-size: 0.75em;
+  line-height: 1.5;
+}
+
+#memory-pending-list, #decision-pending-list, #proactive-list { list-style: none; padding: 0; }
+#memory-pending-list li, #decision-pending-list li, #proactive-list li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.review-question { font-size: 0.85em; color: var(--muted); margin-bottom: 6px; }
+.review-claim { line-height: 1.4; }
+.review-claim strong { color: var(--accent); }
+.review-evidence {
+  color: var(--muted);
+  font-size: 0.85em;
+  margin-top: 6px;
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+}
+.review-actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
+button.primary { background: var(--accent); color: white; border: 1px solid var(--accent); }
+button.primary:hover { opacity: 0.9; background: var(--accent); }
+.review-error { color: var(--error); font-size: 0.85em; margin-top: 6px; }

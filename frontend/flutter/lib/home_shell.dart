@@ -18,6 +18,7 @@ import 'screens/documents_view.dart';
 import 'screens/profile_view.dart';
 import 'screens/projects_view.dart';
 import 'screens/providers_view.dart';
+import 'screens/review_view.dart';
 import 'theme.dart';
 import 'ws_chat_client.dart';
 
@@ -30,21 +31,28 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  static const _tabs = ['Chat', 'Profile', 'Decisions', 'Projects', 'Documents', 'Providers'];
+  static const _tabs = ['Chat', 'Review', 'Profile', 'Decisions', 'Projects', 'Documents', 'Providers'];
   static const _tabIcons = <IconData>[
     Icons.chat_bubble_outline,
+    Icons.rule,
     Icons.person_outline,
     Icons.fact_check_outlined,
     Icons.folder_outlined,
     Icons.description_outlined,
     Icons.power_settings_new,
   ];
+  static const _reviewIndex = 1;
 
   late final WsChatClient _chatClient;
   int _selectedIndex = 0;
   String _connectionStatus = 'connecting';
   String? _activeProjectId;
   bool _collapsed = false;
+  int _pendingCount = 0;
+  // IndexedStack keeps ReviewView alive for the app's lifetime, so its
+  // initState runs exactly once. Bumping this on each selection is what makes
+  // reopening the tab actually re-read the queue.
+  int _reviewEpoch = 0;
 
   @override
   void initState() {
@@ -54,6 +62,32 @@ class _HomeShellState extends State<HomeShell> {
       if (mounted) setState(() => _connectionStatus = status);
     });
     _chatClient.connect();
+    _refreshPendingCount();
+  }
+
+  /// Read at startup rather than only when the Review tab is opened. The
+  /// Observer runs at session end, so a queue filled by the previous
+  /// conversation would otherwise sit unnoticed until the user happened to
+  /// look - which is the failure the badge exists to prevent.
+  ///
+  /// Fails quietly: a badge is an affordance, and a backend hiccup must not put
+  /// an error in front of someone who was trying to open a chat.
+  Future<void> _refreshPendingCount() async {
+    try {
+      final status = await widget.api.getStatus();
+      final waiting = ((status['pending_memory'] ?? 0) as num).toInt() +
+          ((status['pending_decisions'] ?? 0) as num).toInt();
+      if (mounted) setState(() => _pendingCount = waiting);
+    } catch (_) {
+      if (mounted) setState(() => _pendingCount = 0);
+    }
+  }
+
+  void _selectTab(int index) {
+    setState(() {
+      _selectedIndex = index;
+      if (index == _reviewIndex) _reviewEpoch++;
+    });
   }
 
   static String _wsUrlFromApiBase(String apiBase) {
@@ -109,7 +143,8 @@ class _HomeShellState extends State<HomeShell> {
                     icon: _tabIcons[i],
                     selected: _selectedIndex == i,
                     collapsed: _collapsed,
-                    onTap: () => setState(() => _selectedIndex = i),
+                    badge: i == _reviewIndex ? _pendingCount : 0,
+                    onTap: () => _selectTab(i),
                   ),
                 const Spacer(),
                 Padding(
@@ -127,6 +162,11 @@ class _HomeShellState extends State<HomeShell> {
                   api: widget.api,
                   chatClient: _chatClient,
                   activeProjectId: _activeProjectId,
+                ),
+                ReviewView(
+                  api: widget.api,
+                  refreshToken: _reviewEpoch,
+                  onQueueChanged: _refreshPendingCount,
                 ),
                 ProfileView(api: widget.api),
                 DecisionsView(api: widget.api, activeProjectId: _activeProjectId),
@@ -151,6 +191,7 @@ class _SidebarItem extends StatelessWidget {
   final IconData icon;
   final bool selected;
   final bool collapsed;
+  final int badge;
   final VoidCallback onTap;
   const _SidebarItem({
     required this.label,
@@ -158,17 +199,36 @@ class _SidebarItem extends StatelessWidget {
     required this.selected,
     required this.collapsed,
     required this.onTap,
+    this.badge = 0,
   });
 
   @override
   Widget build(BuildContext context) {
+    final pill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: const BoxDecoration(color: AppColors.accent, borderRadius: AppRadius.sm),
+      child: Text(
+        '$badge',
+        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.accentOn),
+      ),
+    );
     final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 18, color: selected ? AppColors.accent : AppColors.textMuted),
+        // Collapsed to icons, the count still has to be visible or the sidebar
+        // silently stops telling you PIP is waiting on something.
+        if (collapsed && badge > 0)
+          Badge(
+            label: Text('$badge', style: const TextStyle(fontSize: 9)),
+            backgroundColor: AppColors.accent,
+            child: Icon(icon, size: 18, color: selected ? AppColors.accent : AppColors.textMuted),
+          )
+        else
+          Icon(icon, size: 18, color: selected ? AppColors.accent : AppColors.textMuted),
         if (!collapsed) ...[
           const SizedBox(width: 12),
           Text(label, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: selected ? AppColors.accent : AppColors.textMuted)),
+          if (badge > 0) ...[const SizedBox(width: 8), pill],
         ],
       ],
     );

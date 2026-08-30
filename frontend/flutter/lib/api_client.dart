@@ -18,8 +18,26 @@ class ApiException implements Exception {
   final String body;
   ApiException(this.statusCode, this.body);
 
+  /// The server's own sentence, unwrapped from FastAPI's {"detail": "..."}
+  /// envelope, falling back to the raw body when it is not shaped that way.
+  ///
+  /// That sentence is the entire point of some refusals rather than incidental
+  /// detail - the memory review queue can reject a confirmation with 422
+  /// because the candidate exists but cannot be applied, and "immutable
+  /// identity fields cannot be edited after onboarding" is the only thing that
+  /// tells a user why. Showing them a JSON envelope would throw it away.
+  String get detail {
+    try {
+      final parsed = jsonDecode(body);
+      if (parsed is Map && parsed['detail'] is String) return parsed['detail'] as String;
+    } catch (_) {
+      // Not JSON - fall through to the raw body.
+    }
+    return body;
+  }
+
   @override
-  String toString() => 'ApiException($statusCode): $body';
+  String toString() => detail;
 }
 
 class ApiClient {
@@ -144,6 +162,38 @@ class ApiClient {
   Future<void> setActiveModel(String modelName) async {
     await post('/llm/active-model', {'model_name': modelName});
   }
+
+  // --- Review queue -------------------------------------------------------
+  // Everything PIP has learned but is not allowed to keep without asking:
+  // constitution-gated candidates parked by Stage 13, and the periodic memory
+  // check that adds to the same queue every 30 sessions.
+
+  Future<List<dynamic>> getPendingMemory() async =>
+      await get('/memory/pending') as List<dynamic>;
+
+  Future<void> confirmPendingMemory(int candidateId) async {
+    await post('/memory/pending/$candidateId/confirm');
+  }
+
+  Future<void> dismissPendingMemory(int candidateId) async {
+    await post('/memory/pending/$candidateId/dismiss');
+  }
+
+  Future<List<dynamic>> getPendingDecisions() async =>
+      await get('/decision/pending') as List<dynamic>;
+
+  Future<void> promotePendingDecision(int candidateId) async {
+    await post('/decision/pending/$candidateId/promote');
+  }
+
+  Future<void> dismissPendingDecision(int candidateId) async {
+    await post('/decision/pending/$candidateId/dismiss');
+  }
+
+  /// Deterministic triggers only - the constitution forbids model judgment of
+  /// relevance or urgency here, so this is a plain read of what is currently
+  /// true, never a ranked feed.
+  Future<List<dynamic>> getProactive() async => await get('/proactive') as List<dynamic>;
 
   Future<List<dynamic>> getConversations() async => await get('/conversations') as List<dynamic>;
 

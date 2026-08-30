@@ -54,6 +54,7 @@
   <nav id="tabs">
     <button data-view="chat" class="tab active">Chat</button>
     <button data-view="profile" class="tab">Profile</button>
+    <button data-view="review" class="tab">Review<span id="review-badge" class="badge hidden">0</span></button>
     <button data-view="decisions" class="tab">Decisions</button>
     <button data-view="projects" class="tab">Projects</button>
     <button data-view="providers" class="tab">Providers</button>
@@ -85,6 +86,27 @@
         <thead><tr><th>Table</th><th>Field</th><th>Value</th><th>Confidence</th><th>Source</th></tr></thead>
         <tbody></tbody>
       </table>
+    </section>
+
+    <!-- Review view -->
+    <!-- Everything PIP has learned but is not allowed to keep without asking.
+         The constitution gates several memory types behind prompt_confirm, and
+         Stage 13 parks those candidates in memory_candidates_pending; the
+         periodic memory check (every 30 sessions) adds to the same queue. All
+         of it was reachable only by curl until this view existed. -->
+    <section id="view-review" class="view">
+      <h2>Review</h2>
+      <p class="muted">PIP asks before writing anything the constitution gates, and before
+        trusting a memory it has never had confirmed. Nothing here is stored until you say so.</p>
+
+      <h3>Memory</h3>
+      <ul id="memory-pending-list"></ul>
+
+      <h3>Decisions PIP noticed</h3>
+      <ul id="decision-pending-list"></ul>
+
+      <h3>Worth knowing</h3>
+      <ul id="proactive-list"></ul>
     </section>
 
     <!-- Decisions view -->
