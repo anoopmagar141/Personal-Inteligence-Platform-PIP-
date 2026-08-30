@@ -90,6 +90,8 @@ _TABLE_LABELS = {
     "skill_memory": "Skills",
     "preference_memory": "Preferences",
     "preferred_tools": "Preferred tools",
+    "topic_interests": "Topics they keep returning to",
+    "document_access_patterns": "Documents they consult most",
     "interaction_style": "Interaction style",
 }
 
@@ -151,6 +153,14 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     return " ".join(words[: max_tokens - 1]) + " ..."
 
 
+def _profile_line(r: dict[str, Any]) -> str:
+    field, value = str(r["field"]), str(r["value"])
+    line = f"  - {field}" if field == value else f"  - {field}: {value}"
+    if r.get("stale"):
+        line += "  [not mentioned recently - may no longer be current]"
+    return line
+
+
 def _format_profile(
     fields: list[dict[str, Any]],
     max_tokens: int,
@@ -189,10 +199,14 @@ def _format_profile(
         header = f"{label} ({len(rows)} recorded, complete list):"
         # field == value for set-membership tables (preferred_tools stores the
         # tool name in both), where "vs code: vs code" is just noise.
-        body = "\n".join(
-            f"  - {r['field']}" if str(r["field"]) == str(r["value"]) else f"  - {r['field']}: {r['value']}"
-            for r in rows
-        )
+        #
+        # Stale entries are marked, not dropped. A goal that has gone quiet past
+        # goal_decay_inactive_days may be finished, abandoned, or simply not
+        # discussed lately, and the model guessing which is exactly the
+        # invention this block is built to prevent - so it is told the age of
+        # the record and left to treat it accordingly. Dropping it would be
+        # worse still: the header promises a complete list.
+        body = "\n".join(_profile_line(r) for r in rows)
         blocks.append(f"{header}\n{body}")
 
     return _truncate_to_tokens(

@@ -34,6 +34,7 @@ import chromadb
 from cryptography.fernet import Fernet, InvalidToken
 from sentence_transformers import SentenceTransformer
 
+from backend.config.settings import get_settings
 from backend.core.types import now_utc
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,21 @@ CHROMA_DB_PATH = str(Path(__file__).parent.parent.parent / "data" / "chroma")
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 COLLECTION_NAME = "documents"
 
-SUPPORTED_EXTENSIONS = {".pdf", ".md", ".txt", ".py", ".json", ".html"}
+# Every RAG tunable is read from config/settings.json rather than restated here.
+# The values were previously duplicated - as this module constant and as default
+# arguments on ingest_document()/query() - which meant editing settings.json
+# changed nothing at all, silently. That is the worse half of the failure: a
+# configuration file that is read by no one still LOOKS authoritative, so the
+# next person to tune similarity_threshold has no reason to suspect their edit
+# did not take.
+_RAG = get_settings()["rag"]
+
+SUPPORTED_EXTENSIONS = set(_RAG["supported_extensions"])
+DEFAULT_CHUNK_SIZE_TOKENS = _RAG["chunk_size_tokens"]
+DEFAULT_CHUNK_OVERLAP_TOKENS = _RAG["chunk_overlap_tokens"]
+DEFAULT_SIMILARITY_THRESHOLD = _RAG["similarity_threshold"]
+DEFAULT_TOP_K = _RAG["top_k_results"]
+DEFAULT_MAX_DOCUMENT_SIZE_MB = _RAG["max_document_size_mb"]
 
 
 # Security review finding: ChromaDB's on-disk store (chroma.sqlite3 under
@@ -196,10 +211,10 @@ def ingest_document(
     file_path: str,
     project_id: Optional[str] = None,
     *,
-    chunk_size_tokens: int = 500,
-    overlap_tokens: int = 50,
+    chunk_size_tokens: int | None = None,
+    overlap_tokens: int | None = None,
     force: bool = False,
-    max_document_size_mb: int = 50,
+    max_document_size_mb: int | None = None,
 ) -> dict[str, Any]:
     """
     Extracts text, chunks it, embeds each chunk, writes chunks+embeddings to ChromaDB,
@@ -212,6 +227,12 @@ def ingest_document(
     while the on-disk file itself never changed - trusting the hash in that case
     would silently skip the very re-ingestion the rebuild exists to perform.
     """
+    chunk_size_tokens = DEFAULT_CHUNK_SIZE_TOKENS if chunk_size_tokens is None else chunk_size_tokens
+    overlap_tokens = DEFAULT_CHUNK_OVERLAP_TOKENS if overlap_tokens is None else overlap_tokens
+    max_document_size_mb = (
+        DEFAULT_MAX_DOCUMENT_SIZE_MB if max_document_size_mb is None else max_document_size_mb
+    )
+
     resolved_path = _validate_file_path(file_path)
     file_path = str(resolved_path)  # store/key everything by the canonical path from here on
 
@@ -304,13 +325,20 @@ def query(
     conn,
     query_text: str,
     project_id: Optional[str] = None,
-    threshold: float = 0.6,
-    top_k: int = 3,
+    threshold: float | None = None,
+    top_k: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Returns chunks above the similarity threshold, highest similarity first.
     Failure mode: any ChromaDB error returns an empty list (Stage 5 spec: fail open).
+
+    threshold/top_k default from config/settings.json (rag.similarity_threshold,
+    rag.top_k_results). None rather than the literal values as defaults, so the
+    setting is resolved per call - a default argument would bind at import and
+    quietly ignore any later change.
     """
+    threshold = DEFAULT_SIMILARITY_THRESHOLD if threshold is None else threshold
+    top_k = DEFAULT_TOP_K if top_k is None else top_k
     try:
         collection = _get_collection()
         query_embedding = _get_model().encode([query_text], convert_to_numpy=True).tolist()

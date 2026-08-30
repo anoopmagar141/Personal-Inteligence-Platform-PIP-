@@ -254,3 +254,20 @@ def test_rejects_non_hex_db_key(db_conn, sample_doc, monkeypatch):
     monkeypatch.setenv("PIP_DB_KEY", "not-hex!!")
     with pytest.raises(ValueError, match="hex-encoded"):
         vector_store.ingest_document(db_conn, sample_doc)
+
+
+def test_rag_tunables_come_from_settings_not_from_duplicated_literals():
+    """
+    These were restated as Python defaults in vector_store and again in
+    stage_05, so editing config/settings.json changed nothing - the silent kind
+    of broken, since a config file read by no one still looks authoritative.
+    """
+    from backend.config.settings import get_settings
+
+    rag = get_settings()["rag"]
+    assert vector_store.SUPPORTED_EXTENSIONS == set(rag["supported_extensions"])
+    assert vector_store.DEFAULT_CHUNK_SIZE_TOKENS == rag["chunk_size_tokens"]
+    assert vector_store.DEFAULT_CHUNK_OVERLAP_TOKENS == rag["chunk_overlap_tokens"]
+    assert vector_store.DEFAULT_SIMILARITY_THRESHOLD == rag["similarity_threshold"]
+    assert vector_store.DEFAULT_TOP_K == rag["top_k_results"]
+    assert vector_store.DEFAULT_MAX_DOCUMENT_SIZE_MB == rag["max_document_size_mb"]

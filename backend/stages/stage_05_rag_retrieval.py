@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Optional
 
-from backend.memory import decision_log, vector_store
+from backend.memory import decision_log, profile_store, vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +54,18 @@ def run(
     conn,
     retrieval_hint: str,
     project_id: Optional[str] = None,
-    threshold: float = 0.6,
-    top_k: int = 3,
+    threshold: float | None = None,
+    top_k: int | None = None,
 ) -> dict:
     """
     Retrieves RAG chunks above threshold and flags potential conflict against the
     active Decision Log. Fail-open per Part 7.4: any failure returns empty chunks
     and conflict_flag=False, pipeline continues.
+
+    threshold/top_k default to None and are resolved by vector_store from
+    config/settings.json. They used to be restated here as 0.6 and 3 - the same
+    numbers settings.json already carried, in a third place, where the pipeline
+    (which passes neither) picked them up and settings.json was read by nobody.
     """
     try:
         chunks = vector_store.query(conn, retrieval_hint, project_id=project_id, threshold=threshold, top_k=top_k)
@@ -70,6 +75,17 @@ def run(
 
     if not chunks:
         return {"chunks": [], "conflict_flag": False}
+
+    # document_access_patterns is written here and nowhere else. The
+    # constitution files it under observer_may_write, but the Observer reads a
+    # conversation transcript and a transcript cannot say which documents were
+    # consulted - this stage is the only thing that knows. Documents reach a
+    # conversation only by being retrieved, so retrieval frequency IS the access
+    # pattern. Fails open inside record_document_access; a usage counter must
+    # never cost a response.
+    profile_store.record_document_access(
+        conn, [chunk.get("file_path") for chunk in chunks]
+    )
 
     try:
         active_decisions = decision_log.list_decisions(conn, state="active", project_id=project_id)
