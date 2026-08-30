@@ -256,3 +256,120 @@ def test_observer_candidates_keep_their_origin(conn):
         validation_status="TIER_2_REQUIRED",
     )
     assert stage_13.list_pending(conn)[0]["origin"] == "observer"
+
+
+# --- what "no" means, and why it depends on origin --------------------------
+
+
+def _queue_verification(conn, name="answer_style", value="terse", table="preference_memory"):
+    if table == "preference_memory":
+        conn.execute(
+            "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+            "VALUES (?, ?, 1, 'inferred', 'active')", (name, value))
+    else:
+        conn.execute(
+            "INSERT INTO skill_memory (name, level, evidence_count, source_label, status) "
+            "VALUES (?, ?, 1, 'inferred', 'active')", (name, value))
+    conn.commit()
+    return verification.run_if_due(conn, 30)[0]
+
+
+def _profile_fields(conn):
+    return {r["field"] for r in profile_store.get_profile(conn)}
+
+
+def test_rejecting_a_verification_retires_the_field(conn):
+    """
+    "No" to "do I still have this right?" means the STORED value is wrong. It
+    used to write nothing, leaving a value the user had explicitly disowned
+    active and reaching every prompt PIP assembled.
+    """
+    candidate_id = _queue_verification(conn)
+    assert "answer_style" in _profile_fields(conn)
+
+    result = stage_13.dismiss_pending(conn, candidate_id)
+
+    assert result["retired"] is True
+    assert "answer_style" not in _profile_fields(conn)
+
+
+def test_rejecting_a_verification_soft_deletes_rather_than_destroying(conn):
+    """Recoverable, in case the rejection was a misclick."""
+    candidate_id = _queue_verification(conn)
+    stage_13.dismiss_pending(conn, candidate_id)
+
+    row = conn.execute("SELECT status FROM preference_memory WHERE name = 'answer_style'").fetchone()
+    assert row is not None, "the row must survive"
+    assert row["status"] == "deleted"
+
+
+def test_rejecting_a_skill_verification_retires_it_too(conn):
+    candidate_id = _queue_verification(conn, name="Rust", value="0.4", table="skill_memory")
+
+    assert stage_13.dismiss_pending(conn, candidate_id)["retired"] is True
+    assert conn.execute(
+        "SELECT status FROM skill_memory WHERE name = 'Rust'").fetchone()["status"] == "deleted"
+
+
+def test_rejecting_an_observer_candidate_still_writes_nothing(conn):
+    """
+    The opposite case, and the reason origin has to be consulted: an Observer
+    candidate proposes something NOT yet stored, so "no" means "do not remember
+    that" - it must not reach into the profile and delete a same-named field.
+    """
+    from backend.core.types import ValidationResult
+
+    conn.execute(
+        "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+        "VALUES ('editor', 'vim', 1, 'inferred', 'active')")
+    conn.commit()
+    stage_13.run(conn, {
+        "target_table": "preference_memory", "field_name": "editor",
+        "proposed_value": "emacs", "label": "inferred", "evidence_count": 1,
+        "evidence_text": "seen using emacs",
+    }, ValidationResult.REQUIRES_CONFIRMATION("gated_field"))
+    candidate_id = stage_13.list_pending(conn)[0]["id"]
+
+    result = stage_13.dismiss_pending(conn, candidate_id)
+
+    assert result["retired"] is False
+    assert "editor" in _profile_fields(conn), "an observer rejection must not touch the profile"
+
+
+def test_retiring_clears_that_field_s_contradiction_history(conn):
+    """
+    Those rows are keyed by the profile row's id, and re-adding a field of the
+    same name upserts onto that same id - so stale evidence about a disowned
+    value would attach itself to whatever replaces it.
+    """
+    candidate_id = _queue_verification(conn)
+    pref_id = conn.execute("SELECT id FROM preference_memory WHERE name = 'answer_style'").fetchone()["id"]
+    profile_store.log_preference_contradiction(conn, pref_id, "observed otherwise")
+    assert conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0] == 1
+
+    stage_13.dismiss_pending(conn, candidate_id)
+
+    assert conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0] == 0
+
+
+def test_retiring_is_scoped_to_the_candidate_s_own_table(conn):
+    """
+    soft_delete_profile_field takes a bare name and hits every table that has
+    one. Here the candidate names exactly one, and a same-named field elsewhere
+    must not be collateral.
+    """
+    conn.execute(
+        "INSERT INTO skill_memory (name, level, evidence_count, source_label, status) "
+        "VALUES ('focus', '0.5', 1, 'inferred', 'active')")
+    conn.commit()
+    candidate_id = _queue_verification(conn, name="focus", value="deep")
+
+    stage_13.dismiss_pending(conn, candidate_id)
+
+    assert conn.execute("SELECT status FROM preference_memory WHERE name = 'focus'").fetchone()["status"] == "deleted"
+    assert conn.execute("SELECT status FROM skill_memory WHERE name = 'focus'").fetchone()["status"] == "active"
+
+
+def test_retiring_an_unknown_field_is_survivable(conn):
+    assert profile_store.retire_profile_field(conn, "preference_memory", "never_existed") is False
+    assert profile_store.retire_profile_field(conn, "goal_memory", "anything") is False

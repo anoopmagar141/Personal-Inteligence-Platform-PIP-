@@ -3,7 +3,7 @@ from typing import Any
 
 from backend.core.constitution_enforcer import is_contradicting_inferred_observation
 from backend.core.types import MemoryCandidate, ValidationResult
-from backend.memory import candidate_store, profile_store
+from backend.memory import candidate_store, profile_store, verification
 
 logger = logging.getLogger(__name__)
 
@@ -230,17 +230,41 @@ def resolve_pending(conn, candidate_id: int) -> dict[str, Any]:
 
 def dismiss_pending(conn, candidate_id: int) -> dict[str, Any]:
     """
-    The user rejected a pending candidate: mark it dismissed and write nothing.
+    The user rejected a pending candidate. What that means depends entirely on
+    where the candidate came from, and treating both the same was losing real
+    information.
 
-    Nothing is logged to preference_contradiction_log here, unlike run()'s
-    DISCARD path. That path logs because the Observer keeps inferring something
-    the stored value contradicts, and the count of those is the evidence the
-    behavioral override accumulates. A user saying "no" is the opposite signal -
-    counting it toward a trigger whose whole purpose is to ask the user again
-    would make each rejection push the system closer to re-asking.
+    An OBSERVER candidate proposes something not yet stored, so "no" means "do
+    not remember that" and writing nothing is exactly right.
+
+    A VERIFICATION candidate asks about something already in the profile, so
+    "no" means "what you have recorded is wrong about me" - and writing nothing
+    left that value active, reaching every prompt PIP assembles, after the user
+    had explicitly disowned it. The system asked, was told, and carried on
+    asserting it. Rejecting one now retires the field.
+
+    Retired rather than corrected, because a rejection says what is wrong and
+    not what is right. The replacement is the user's to give, through
+    /memory/correct, and inventing one from a "no" would be guessing. The row is
+    soft-deleted, so it is recoverable if the rejection was a misclick.
+
+    Nothing is logged to the contradiction logs on either path, unlike run()'s
+    DISCARD path. That logs because the Observer keeps inferring something the
+    stored value contradicts, and the count of those is the evidence the
+    behavioral override accumulates before asking the user. A user saying "no"
+    is the opposite signal - counting it toward a trigger whose whole purpose is
+    to ask them again would make each rejection push the system closer to
+    re-asking.
     """
     candidate = candidate_store.get_memory_candidate(conn, candidate_id)
     if candidate is None or candidate["state"] != "pending":
         raise LookupError("pending memory candidate not found")
+
+    retired = False
+    if candidate.get("origin") == verification.ORIGIN:
+        retired = profile_store.retire_profile_field(
+            conn, candidate["target_table"], candidate["field_name"]
+        )
+
     candidate_store.dismiss_memory_candidate(conn, candidate_id)
-    return {"status": "dismissed", "candidate_id": candidate_id}
+    return {"status": "dismissed", "candidate_id": candidate_id, "retired": retired}

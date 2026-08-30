@@ -1080,6 +1080,54 @@ def record_document_access(conn: sqlite3.Connection, document_paths) -> int:
     return moved
 
 
+# Tables a verification can retire a field from, and the contradiction log that
+# belongs to each. An allowlist rather than an f-string over whatever the
+# candidate row happens to say: the table name reaches SQL, and "it came from
+# our own code" is a weaker guarantee than not interpolating it at all.
+_RETIRABLE_TABLES = {
+    "preference_memory": ("preference_contradiction_log", "preference_id"),
+    "skill_memory": ("skill_contradiction_log", "skill_id"),
+}
+
+
+def retire_profile_field(conn: sqlite3.Connection, target_table: str, field_name: str) -> bool:
+    """
+    Marks one stored field deleted after the user has said it is wrong about
+    them. Returns whether a row actually changed.
+
+    Scoped to a single table, unlike soft_delete_profile_field, which takes a
+    bare field name and applies it to every table that has one - fine for a user
+    deleting "editor" from their profile, wrong here, where the candidate names
+    exactly one table and a same-named field elsewhere must not be collateral.
+
+    Soft, not hard: status = 'deleted' keeps the row, so this is recoverable and
+    consistent with every other deletion in this module.
+
+    The field's contradiction history goes with it, for the same reason
+    apply_verified_correction clears it on a correction. Those rows are keyed by
+    the profile row's id, and re-adding a field of the same name upserts onto
+    that same id - so stale behavioural evidence about a value the user has
+    disowned would attach itself to whatever replaces it.
+    """
+    handler = _RETIRABLE_TABLES.get(target_table)
+    if handler is None:
+        logger.warning(f"retire_profile_field: nothing to retire for target_table {target_table!r}")
+        return False
+    log_table, id_column = handler
+
+    row = conn.execute(
+        f"SELECT id FROM {target_table} WHERE name = ? AND status = 'active'", (field_name,)
+    ).fetchone()
+    if row is None:
+        return False
+
+    conn.execute(f"UPDATE {target_table} SET status = 'deleted' WHERE id = ?", (row["id"],))
+    conn.execute(f"DELETE FROM {log_table} WHERE {id_column} = ?", (row["id"],))
+    conn.commit()
+    logger.info(f"Retired {target_table}.{field_name} - the user said it was no longer right.")
+    return True
+
+
 def get_interaction_style_history(conn: sqlite3.Connection, limit: int = 50) -> list[dict[str, Any]]:
     """
     How the user's interaction style has changed over time, newest first.
