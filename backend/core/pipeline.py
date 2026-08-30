@@ -136,11 +136,20 @@ def run(
     output and logs to trace_log rather than propagating.
     """
     trace_id = trace.generate_trace_id()
-    # Security fix: this used to log the first 80 chars of the raw message
-    # text. trace_log.json is a plain JSON file on disk, outside the
-    # SQLCipher boundary the rest of "structured data" gets - message content
-    # (names, anything the user types) doesn't belong there in plaintext.
-    # Length is still useful for debugging without carrying the content.
+    # Logs the message's LENGTH, never its text.
+    #
+    # That began as a security fix. The trace used to carry the first 80 chars
+    # of the raw message, and it was written to backend/logs/trace_log.json - a
+    # plain file on disk, outside the SQLCipher boundary the rest of
+    # "structured data" gets - so names and anything else typed sat there in
+    # plaintext.
+    #
+    # That reason no longer holds: the trace lives in the encrypted database
+    # now (see core/trace.py), and the file is gone. Message text could be
+    # recorded here safely, so what remains is a choice rather than a
+    # constraint - a trace is read to find out which stages ran and what each
+    # retrieved, and a length answers that without keeping a second copy of
+    # every message the conversations/messages tables already hold.
     trace.stage_log(conn, trace_id, "pipeline", "ok", f"Starting pipeline for message ({len(user_message)} chars)")
 
     # Stage 0
