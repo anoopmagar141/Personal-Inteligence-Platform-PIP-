@@ -24,10 +24,16 @@
 # 5's embedding query (the only even mildly slow one of the three) blocking Stages 3
 # and 4's fast local DB reads for its duration, not the reverse.
 #
-# Conversation history is NOT persisted by this module - there is no message-
-# history table in schema.sql. The caller (eventually the /ws/chat handler) is
-# responsible for accumulating conversation_history across turns and passing it in
-# each call.
+# Conversation history is NOT persisted by this module. The caller - /ws/chat -
+# accumulates conversation_history across turns and passes it in on each call.
+#
+# It IS persisted, just not here: schema.sql has had conversations and messages
+# tables since chat history gained a sidebar, and ws_chat writes every turn to
+# them as it happens. This comment used to say no such table existed and name
+# the handler as a future arrival, which mattered beyond tidiness - startup
+# recovery of an unobserved session depends on those tables, and a reader
+# trusting this note would have concluded that rebuilding a lost transcript was
+# impossible.
 
 import logging
 from typing import Any, Callable, Generator, Optional, Union
@@ -100,7 +106,7 @@ def _gate_providers(conn, trace_id: str, providers: list[BaseLLMProvider]) -> li
             stage_08.run(conn, provider_id, requested_scope="full_inference")
             gated.append(provider)
         except stage_08.ProviderConsentError as e:
-            trace.stage_log(trace_id, "stage_08_provider_gate", "error", f"{provider_id} blocked", error_detail=str(e))
+            trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", f"{provider_id} blocked", error_detail=str(e))
             logger.warning(f"Pipeline: provider '{provider_id}' blocked by Stage 8: {e}")
     return gated
 
@@ -135,7 +141,7 @@ def run(
     # SQLCipher boundary the rest of "structured data" gets - message content
     # (names, anything the user types) doesn't belong there in plaintext.
     # Length is still useful for debugging without carrying the content.
-    trace.stage_log(trace_id, "pipeline", "ok", f"Starting pipeline for message ({len(user_message)} chars)")
+    trace.stage_log(conn, trace_id, "pipeline", "ok", f"Starting pipeline for message ({len(user_message)} chars)")
 
     # Stage 0
     try:
@@ -144,7 +150,7 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: Stage 0 raised unexpectedly, failing open: {e}")
         gap_result = {"warm_start_level": "none", "context_depth_modifier": 0}
-    trace.stage_log(trace_id, "stage_00_gap_detector", "ok", f"warm_start_level={gap_result['warm_start_level']}")
+    trace.stage_log(conn, trace_id, "stage_00_gap_detector", "ok", f"warm_start_level={gap_result['warm_start_level']}")
 
     # Stage 1
     try:
@@ -152,7 +158,7 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: Stage 1 raised unexpectedly, failing open: {e}")
         intent_result = {"category": "general_knowledge", "skip_rag": False, "retrieval_hint": ""}
-    trace.stage_log(trace_id, "stage_01_intent_classifier", "ok", f"category={intent_result['category']}")
+    trace.stage_log(conn, trace_id, "stage_01_intent_classifier", "ok", f"category={intent_result['category']}")
 
     # Stage 2
     try:
@@ -162,13 +168,13 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: Stage 2 raised unexpectedly, defaulting to LLM-only: {e}")
         router_result = {"retrieval_priority": [], "provider_preference": "local"}
-    trace.stage_log(trace_id, "stage_02_router", "ok", f"priority={router_result['retrieval_priority']}")
+    trace.stage_log(conn, trace_id, "stage_02_router", "ok", f"priority={router_result['retrieval_priority']}")
 
     # Response Cache (Part 7.1) - positioned here (between Stage 2 and Stage 7)
     # deliberately: a hit skips Stages 3-9 entirely, not just Stage 9's LLM call.
     cached = response_cache.get(user_message, project_id)
     if cached is not None:
-        trace.stage_log(trace_id, "response_cache", "ok", "cache hit, skipping Stages 3-9")
+        trace.stage_log(conn, trace_id, "response_cache", "ok", "cache hit, skipping Stages 3-9")
         cache_hint = dict(cached["stage_hints"])
         cache_hint["cache_hit"] = True
         yield {"type": "stage_hint", "data": cache_hint}
@@ -181,7 +187,7 @@ def run(
         )
         yield {"type": "pipeline_complete", "data": result}
         return
-    trace.stage_log(trace_id, "response_cache", "ok", "cache miss")
+    trace.stage_log(conn, trace_id, "response_cache", "ok", "cache miss")
 
     # Stages 3/4/5/6 - sequential here; see module docstring on parallelization.
     try:
@@ -189,14 +195,14 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: Stage 3 raised unexpectedly, returning empty: {e}")
         decision_entries = []
-    trace.stage_log(trace_id, "stage_03_decision_log_lookup", "ok", f"{len(decision_entries)} entries")
+    trace.stage_log(conn, trace_id, "stage_03_decision_log_lookup", "ok", f"{len(decision_entries)} entries")
 
     try:
         profile_fields = stage_04.run(conn, intent_result["category"], intent_result["retrieval_hint"])
     except Exception as e:
         logger.error(f"Pipeline: Stage 4 raised unexpectedly, returning empty: {e}")
         profile_fields = []
-    trace.stage_log(trace_id, "stage_04_memory_lookup", "ok", f"{len(profile_fields)} fields")
+    trace.stage_log(conn, trace_id, "stage_04_memory_lookup", "ok", f"{len(profile_fields)} fields")
 
     try:
         # ADR-002: Stage 5 always runs regardless of skip_rag - the Mechanism 2
@@ -206,7 +212,7 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: Stage 5 raised unexpectedly, returning empty: {e}")
         rag_result = {"chunks": [], "conflict_flag": False}
-    trace.stage_log(trace_id, "stage_05_rag_retrieval", "ok", f"{len(rag_result['chunks'])} chunks, conflict={rag_result['conflict_flag']}")
+    trace.stage_log(conn, trace_id, "stage_05_rag_retrieval", "ok", f"{len(rag_result['chunks'])} chunks, conflict={rag_result['conflict_flag']}")
 
     # Security fix: Stage 6 used to fire on trigger-keyword match alone, with no
     # consent check at all - the ONLY gate ever applied was to the LLM provider
@@ -224,13 +230,13 @@ def run(
             try:
                 stage_08.run(conn, "web_search", requested_scope="web_search_only")
             except stage_08.ProviderConsentError as e:
-                trace.stage_log(trace_id, "stage_08_provider_gate", "error", "web_search blocked", error_detail=str(e))
+                trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", "web_search blocked", error_detail=str(e))
                 logger.warning(f"Pipeline: web_search blocked by Stage 8: {e}")
             else:
                 web_results = stage_06.run(intent_result["retrieval_hint"] or user_message)
     except Exception as e:
         logger.error(f"Pipeline: Stage 6 raised unexpectedly, returning empty: {e}")
-    trace.stage_log(trace_id, "stage_06_web_search", "ok", f"{len(web_results)} results")
+    trace.stage_log(conn, trace_id, "stage_06_web_search", "ok", f"{len(web_results)} results")
 
     # Stage 7
     try:
@@ -249,12 +255,12 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: Stage 7 raised unexpectedly, falling back to minimal prompt: {e}")
         assembled = {"context": "", "messages": [{"role": "user", "content": user_message}]}
-    trace.stage_log(trace_id, "stage_07_context_assembly", "ok", "context assembled")
+    trace.stage_log(conn, trace_id, "stage_07_context_assembly", "ok", "context assembled")
 
     # Stage 8
     gated_providers = _gate_providers(conn, trace_id, providers or _default_providers(conn))
     if not gated_providers:
-        trace.stage_log(trace_id, "stage_08_provider_gate", "error", "no consented providers available")
+        trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", "no consented providers available")
         result = stage_10.run(
             trace_id,
             {"response_text": "", "status": "error", "error": "No consented provider available", "stage_hints": {}},
@@ -295,7 +301,7 @@ def run(
         elif event["type"] == "stopped":
             status = "stopped"
 
-    trace.stage_log(trace_id, "stage_09_llm_streaming", "error" if status == "error" else "ok", f"status={status}", error_detail=error or "")
+    trace.stage_log(conn, trace_id, "stage_09_llm_streaming", "error" if status == "error" else "ok", f"status={status}", error_detail=error or "")
 
     if status == "success":
         response_cache.set(

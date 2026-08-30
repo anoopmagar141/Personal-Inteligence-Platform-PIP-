@@ -104,7 +104,6 @@ async def run_observer_now(
     disconnect had actually triggered Observer, or why a run produced nothing.
     """
     trace_id = trace.generate_trace_id()
-    trace.stage_log(trace_id, "stage_11_observer", "ok", f"session-end run starting, {len(conversation_history)} messages")
     transcript = format_transcript(conversation_history)
 
     def _extract_and_mark() -> dict[str, Any]:
@@ -119,21 +118,35 @@ async def run_observer_now(
         # After run_session_end, so a raised extraction leaves observed_at NULL
         # and the conversation is retried by startup recovery rather than being
         # written off as handled.
-        outcome = observer.run_session_end(conn, transcript, provider, project_id)
+        # All three trace writes live in here rather than around the await.
+        # The trace log moved into the encrypted database, and conn is pinned to
+        # THIS executor thread - writing to it from the event loop, where these
+        # calls used to sit, is the SQLite thread-affinity bug this file already
+        # documents hitting in production. Keeping them inside also honours the
+        # constraint stated above: one executor round trip, no extra
+        # submissions on a disconnect path already known to wedge.
+        trace.stage_log(
+            conn, trace_id, "stage_11_observer", "ok",
+            f"session-end run starting, {len(conversation_history)} messages",
+        )
+        try:
+            outcome = observer.run_session_end(conn, transcript, provider, project_id)
+        except Exception as e:
+            trace.stage_log(
+                conn, trace_id, "stage_11_observer", "error",
+                "session-end run raised", error_detail=str(e),
+            )
+            raise
         if conversation_id:
             conversation_store.mark_observed(conn, conversation_id)
+        trace.stage_log(
+            conn, trace_id, "stage_11_observer", "ok",
+            f"{len(outcome['memory_results'])} memory candidates, "
+            f"{len(outcome['decision_results'])} decision candidates",
+        )
         return outcome
 
-    try:
-        result = await loop.run_in_executor(executor, _extract_and_mark)
-    except Exception as e:
-        trace.stage_log(trace_id, "stage_11_observer", "error", "session-end run raised", error_detail=str(e))
-        raise
-    trace.stage_log(
-        trace_id, "stage_11_observer", "ok",
-        f"{len(result['memory_results'])} memory candidates, {len(result['decision_results'])} decision candidates",
-    )
-    return result
+    return await loop.run_in_executor(executor, _extract_and_mark)
 
 
 async def enqueue_for_shutdown(loop, session: dict[str, Any]) -> None:

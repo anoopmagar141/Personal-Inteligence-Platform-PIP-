@@ -53,12 +53,6 @@ def db_conn(tmp_path, db_key):
 
 
 @pytest.fixture(autouse=True)
-def isolated_trace(tmp_path, monkeypatch):
-    monkeypatch.setattr(trace, "TRACE_LOG_PATH", tmp_path / "trace_log.json")
-    yield
-
-
-@pytest.fixture(autouse=True)
 def isolated_chroma(tmp_path, monkeypatch):
     # Stage 5 (RAG) is real, not mocked, in these pipeline tests - without this,
     # it would load the real embedding model against the real production
@@ -189,7 +183,9 @@ def test_stage_3_exception_does_not_crash_pipeline(db_conn, monkeypatch):
 
 def test_trace_log_records_every_stage(db_conn):
     pipeline.run_sync(db_conn, "hello", providers=[FakeProvider()])
-    entries = json.loads(trace.TRACE_LOG_PATH.read_text(encoding="utf-8"))
+    recent = trace.list_recent_traces(db_conn)
+    assert len(recent) == 1, "one pipeline run is one trace"
+    entries = trace.get_trace(db_conn, recent[0]["trace_id"])
     stages = {e["stage"] for e in entries}
     assert "stage_00_gap_detector" in stages
     assert "stage_01_intent_classifier" in stages
@@ -203,6 +199,13 @@ def test_trace_log_records_every_stage(db_conn):
     assert "stage_10_response_delivery" in stages
     # Every entry in one pipeline run shares the same trace_id.
     assert len({e["trace_id"] for e in entries}) == 1
+    # And they come back in the order the stages actually ran, which is the
+    # only thing that makes a trace readable.
+    assert [e["stage"] for e in entries][:3] == [
+        "pipeline",
+        "stage_00_gap_detector",
+        "stage_01_intent_classifier",
+    ]
 
 
 def test_mid_stream_provider_failure_still_finalizes_via_stage_10(db_conn):

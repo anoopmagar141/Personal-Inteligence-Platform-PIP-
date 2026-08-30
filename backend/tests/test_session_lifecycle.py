@@ -10,17 +10,6 @@ from backend.memory.profile_store import get_connection, initialize_schema
 from backend.providers.base_provider import BaseLLMProvider
 
 
-@pytest.fixture(autouse=True)
-def isolated_trace(tmp_path, monkeypatch):
-    # run_observer_now() logs to trace_log.json (added after finding live that
-    # Observer session-end runs had zero debugging visibility). Without this,
-    # every test here writes into the real backend/logs/trace_log.json instead
-    # of an isolated tmp_path - same class of test-pollution bug already found
-    # and fixed for ChromaDB paths elsewhere in this suite.
-    monkeypatch.setattr(trace, "TRACE_LOG_PATH", tmp_path / "trace_log.json")
-    yield
-
-
 class FakeProvider(BaseLLMProvider):
     def __init__(self, is_local=True):
         self._is_local = is_local

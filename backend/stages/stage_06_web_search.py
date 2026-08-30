@@ -11,8 +11,12 @@
 #
 # Scope note: the 3600s cache here is a stage-local safety net against redundant
 # real HTTP calls for repeated/similar queries within an hour. It is separate from
-# Part 7.1's broader Response Cache (core/response_cache.py, not built yet), which
-# caches by category across the whole pipeline, not just web search results.
+# Part 7.1's broader Response Cache (core/response_cache.py), which caches whole
+# responses by category between Stage 2 and Stage 7 - a hit there skips this stage
+# along with everything else from Stage 3 to Stage 9. The two do not overlap: that
+# cache is keyed on the user's message, this one on the search query Stage 1
+# derived from it, so a different question that produces the same query still
+# reuses these results.
 
 import logging
 import time

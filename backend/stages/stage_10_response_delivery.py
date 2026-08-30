@@ -27,15 +27,18 @@ def run(
     bookkeeping (e.g. appending to the next turn's conversation_history for
     Stage 7). This is the last pipeline stage - nothing here writes to memory,
     Decision Log, or any other store; those already happened (or didn't) earlier
-    in the pipeline. conn is accepted but unused for now - kept for interface
-    symmetry with the other stages and in case future delivery bookkeeping
-    (e.g. a message-history table) needs it; not exercised by this stage today.
+    in the pipeline. conn is what the terminal trace entry is written through -
+    the parameter was carried unused for a long time, documented as being kept
+    "in case future delivery bookkeeping needs it", and this is that use: the
+    trace log moved out of a plaintext JSON file and into the encrypted
+    database, so writing an entry now needs a connection.
     """
     status = collected.get("status", "error")
     response_text = collected.get("response_text", "")
 
     if status == "success":
         trace.stage_log(
+            conn,
             trace_id,
             "stage_10_response_delivery",
             "ok",
@@ -43,6 +46,7 @@ def run(
         )
     elif status == "stopped":
         trace.stage_log(
+            conn,
             trace_id,
             "stage_10_response_delivery",
             "ok",
@@ -50,6 +54,7 @@ def run(
         )
     else:
         trace.stage_log(
+            conn,
             trace_id,
             "stage_10_response_delivery",
             "error",
