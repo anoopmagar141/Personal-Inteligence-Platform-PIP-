@@ -339,6 +339,27 @@ MILESTONES: tuple[tuple[str, str, str | None, str | None], ...] = (
         "the URL, is no longer served.",
         None,
     ),
+    (
+        "2026-08-28",
+        "PIP's own development history lives in the decision log it searches, and the dates and "
+        "reasoning behind each entry are put in front of the model.",
+        "A system whose premise is that it remembers was answering every question about itself "
+        "from the prompt alone: the seven rows in the decision log were all pre-grounding Observer "
+        "confabulations, retracted wholesale, which left Stage 3 searching an empty table. The "
+        "history was never missing - it was in the repository, one commit body at a time - so it "
+        "was written in directly rather than inferred, as hand-written phase milestones plus one "
+        "entry per commit read from git at run time, each carrying the date the work actually "
+        "landed rather than the date it was backfilled. Seeding it then exposed three things an "
+        "empty log had hidden: created_at never reached the model, so the log could say what was "
+        "decided and never when; reasoning never reached it either, leaving the model to guess at "
+        "justifications that were sitting unread in the database, which is the exact gap that "
+        "invites invention; and Stage 3 returned every bareword match, so a general-knowledge "
+        "question pulled in 77 unrelated decisions. Dates now render on every entry, reasoning on "
+        "the top three by bm25 rank, and the block is capped at 12 and built up to the token "
+        "budget rather than built whole and truncated mid-sentence.",
+        "Routing the history through the Observer's extraction path, which would have inferred "
+        "reasoning from commit bodies that already state it first-hand.",
+    ),
 )
 
 

@@ -119,6 +119,11 @@ _PRIORITY_RANK = [
 # top three at ~45 words each leave room for a dozen more headline lines.
 _DECISIONS_WITH_REASONING = 3
 _REASONING_WORDS = 45
+# alternatives_considered is one short sentence, not a paragraph, so it costs a
+# fraction of what reasoning does per entry - which is why it is given a wider
+# window than _DECISIONS_WITH_REASONING rather than sharing it.
+_DECISIONS_WITH_ALTERNATIVES = 6
+_ALTERNATIVES_WORDS = 35
 
 
 class AssembledContext(TypedDict):
@@ -227,6 +232,17 @@ def _format_decisions(entries: list[dict[str, Any]], max_tokens: int) -> str:
     reasoning, unread, while the model is left to guess at the justification -
     exactly the gap that invites it to invent one.
 
+    alternatives_considered, so "why did we choose X" gets the thing X was
+    chosen over. This column was rendered nowhere at all, while holding the
+    most directly useful sentence in the row for exactly that question. Found
+    live: "why did we choose per-source token budgets instead of fixed
+    reservations?" answered "I do not have that recorded" against a row whose
+    alternatives column reads "Treating the per-source budgets as fixed
+    reservations, which cannot be made to sum correctly and would have starved
+    whichever source was listed last." The model was refusing to guess, which
+    is correct behaviour - it had simply never been shown the answer. Ten
+    active entries carry one, and none of them reached the prompt.
+
     Only the top few carry reasoning. Entries arrive bm25-ranked from Stage 3,
     so the first ones are the most relevant, and reasoning is far longer than
     decision_text - giving it to every entry would spend the whole budget on
@@ -264,6 +280,15 @@ def _format_decisions(entries: list[dict[str, Any]], max_tokens: int) -> str:
             else:
                 reasoning = " ".join(words)
             block.append(f"    why: {reasoning}")
+
+        alternatives = (entry.get("alternatives_considered") or "").strip()
+        if alternatives and position < _DECISIONS_WITH_ALTERNATIVES:
+            words = alternatives.split()
+            if len(words) > _ALTERNATIVES_WORDS:
+                alternatives = " ".join(words[:_ALTERNATIVES_WORDS]) + " ..."
+            else:
+                alternatives = " ".join(words)
+            block.append(f"    instead of: {alternatives}")
 
         cost = sum(_estimate_tokens(line) for line in block)
         if lines and used + cost > max_tokens:

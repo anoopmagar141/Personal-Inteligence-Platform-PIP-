@@ -362,6 +362,20 @@ def _sync_decision_fts(
     )
 
 
+# Digit <-> word for 0-20. See _build_fts5_match_query for why this exists and
+# why it stops at 20. One direction each way, so "14" adds "fourteen" and
+# "fourteen" adds "14"; a token that is neither is left alone.
+_NUMBER_WORDS = (
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+    "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+)
+_NUMBER_ALIASES: dict[str, str] = {}
+for _value, _word in enumerate(_NUMBER_WORDS):
+    _NUMBER_ALIASES[str(_value)] = _word
+    _NUMBER_ALIASES[_word] = str(_value)
+
+
 def _build_fts5_match_query(query: str) -> str | None:
     """
     Converts an arbitrary natural-language string into a safe FTS5 MATCH
@@ -383,11 +397,31 @@ def _build_fts5_match_query(query: str) -> str | None:
     surface the decision, while common words shared with nearly every entry
     ("we", "did") get bm25-penalized for low informativeness rather than needing
     a hand-maintained stopword list.
+
+    Numerals and number words are expanded into each other for the same
+    reason. FTS5 tokenizes "14" and "fourteen" as unrelated terms, but a log
+    written in prose says "fourteen ordered stages" while the question asking
+    about it says "14 stages" - so the entry holding the reasoning missed, and
+    a terse commit note that happened to contain the literal string "14-stage"
+    outranked it. Found live: "why we choose 14 stages ?" retrieved the
+    milestone that answers it only at rank 6, past the point where Stage 7
+    attaches reasoning, and the model correctly reported it had nothing
+    recorded. The expansion is capped at 0-20, which is the range this project
+    actually writes out in words (fourteen stages, eight stages, six outcomes);
+    beyond that both the log and the questions use digits, so mapping further
+    would add query terms that match nothing.
     """
     tokens = re.findall(r"\w+", query, flags=re.UNICODE)
     if not tokens:
         return None
-    return " OR ".join(f'"{token}"' for token in tokens)
+
+    expanded: list[str] = []
+    for token in tokens:
+        expanded.append(token)
+        alias = _NUMBER_ALIASES.get(token.lower())
+        if alias is not None and alias not in expanded:
+            expanded.append(alias)
+    return " OR ".join(f'"{token}"' for token in expanded)
 
 
 def _search_decisions_fts(

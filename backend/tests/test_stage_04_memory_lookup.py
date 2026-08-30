@@ -64,3 +64,12 @@ def test_fails_open_on_error(db_conn, monkeypatch):
 
     monkeypatch.setattr(stage_04.profile_store, "get_profile", _boom)
     assert stage_04.run(db_conn, "personal_question") == []
+
+
+def test_personal_question_retrieves_goals():
+    """
+    "what goals do I have?" classifies as personal_question. Without
+    goal_memory in that category's tables it returned everything except the
+    goals it names, and the model reported none recorded against a full table.
+    """
+    assert "goal_memory" in stage_04.tables_for_category("personal_question")

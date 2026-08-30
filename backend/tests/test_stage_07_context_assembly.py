@@ -286,3 +286,47 @@ def test_single_oversized_decision_is_truncated_rather_than_dropped():
     assert block.startswith("RELEVANT DECISIONS")
     assert block.endswith("...")
     assert stage_07._estimate_tokens(block) <= 600
+
+
+def test_alternatives_considered_reaches_the_prompt():
+    """
+    The column answering "why X instead of Y" was rendered nowhere, so a
+    question naming the rejected option got "I do not have that recorded"
+    from a row that stored the answer verbatim.
+    """
+    entries = [{
+        "created_at": "2026-08-18T12:00:00Z",
+        "decision_text": "Per-source context ceilings reconciled by overflow trimming.",
+        "reasoning": "Phase 8. The itemised budget summed to 6400 against a stated 6000.",
+        "alternatives_considered": "Fixed reservations, which cannot be made to sum correctly.",
+    }]
+    out = stage_07._format_decisions(entries, max_tokens=600)
+    assert "instead of: Fixed reservations" in out
+
+
+def test_alternatives_are_dropped_past_their_window():
+    entries = [
+        {
+            "created_at": "2026-08-18T12:00:00Z",
+            "decision_text": f"Decision {i}",
+            "alternatives_considered": f"Rejected option {i}",
+        }
+        for i in range(stage_07._DECISIONS_WITH_ALTERNATIVES + 2)
+    ]
+    out = stage_07._format_decisions(entries, max_tokens=4000)
+    assert "Rejected option 0" in out
+    last = stage_07._DECISIONS_WITH_ALTERNATIVES + 1
+    assert f"Rejected option {last}" not in out
+
+
+def test_alternatives_respect_the_token_budget():
+    entries = [
+        {
+            "created_at": "2026-08-18T12:00:00Z",
+            "decision_text": f"Decision {i}",
+            "alternatives_considered": " ".join(["word"] * 60),
+        }
+        for i in range(6)
+    ]
+    out = stage_07._format_decisions(entries, max_tokens=80)
+    assert stage_07._estimate_tokens(out) <= 80

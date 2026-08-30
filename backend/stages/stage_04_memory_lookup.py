@@ -22,11 +22,27 @@ logger = logging.getLogger(__name__)
 # Stage 1's project-status check, landing here rather than project_question -
 # without this, that phrasing still got zero real project data despite
 # clearly asking about one).
+#
+# goal_memory is in personal_question for the same reason, found the same way:
+# "what goals do I have?" classifies as personal_question (it is one - "my
+# goals" is as personal as "my skills"), and without this it retrieved
+# identity, preferences and projects but not the goals it literally names,
+# so the model correctly answered "I don't have that recorded" against eight
+# recorded goals. The bug was invisible while goal_memory was empty, because
+# "not looked up" and "the user has none" render identically - which is the
+# distinction tables_for_category() exists to preserve.
 _CATEGORY_TABLES = {
-    "personal_question": {"identity", "preference_memory", "interaction_style", "skill_memory", "active_projects"},
+    "personal_question": {"identity", "preference_memory", "interaction_style", "skill_memory", "active_projects", "goal_memory", "topic_interests"},
     "project_question": {"active_projects", "goal_memory", "interaction_style"},
     "project_continuation": {"active_projects", "goal_memory", "interaction_style"},
-    "coding_question": {"skill_memory", "preferred_tools", "interaction_style"},
+    "coding_question": {"skill_memory", "preferred_tools", "interaction_style", "document_access_patterns"},
+    # topic_interests and document_access_patterns are observational rather than
+    # stated, so they are looked up where knowing what the user keeps coming
+    # back to actually changes an answer - explaining something, or researching
+    # it - rather than being added to _DEFAULT_TABLES and charged to every
+    # prompt including one-off general knowledge.
+    "technical_explanation": {"interaction_style", "topic_interests"},
+    "research_request": {"interaction_style", "topic_interests", "document_access_patterns"},
 }
 _DEFAULT_TABLES = {"interaction_style"}
 
