@@ -85,6 +85,8 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # See schema.sql: skill contradictions are counted by session too, now that
     # anything writes them at all.
     ("skill_contradiction_log", "session_no", "INTEGER"),
+    # See schema.sql: what Stage 0 measures the warm-start gap from.
+    ("profile_meta", "previous_session_date", "TEXT"),
 )
 
 # Run once, immediately after the named column is first added, to give existing
@@ -99,6 +101,16 @@ _BACKFILLS: dict[str, str] = {
     # each one - minutes of blocking startup, re-extracting from transcripts
     # that were handled long ago. Recovery is meant for sessions genuinely lost
     # to a kill, which only accumulate one at a time.
+    # An upgraded database has no record of when the previous session ended, so
+    # this seeds from the value that was standing in for it: session_snapshot's
+    # date, the source Stage 0 read until now. One start on the old, slightly
+    # wrong number beats one start treated as a first-ever run, which would
+    # load no warm-start context at all.
+    "profile_meta.previous_session_date": (
+        "UPDATE profile_meta SET previous_session_date = "
+        "(SELECT snapshot_date FROM session_snapshot WHERE id = 1) "
+        "WHERE previous_session_date IS NULL"
+    ),
     # Every pending candidate predating this column came from the Observer -
     # the verification loop that writes the other value did not exist yet.
     "memory_candidates_pending.origin": (
@@ -1001,9 +1013,23 @@ def begin_session(conn: sqlite3.Connection) -> int | None:
     There is no way to make this function itself idempotent without a notion of
     session identity, which is the thing it exists to create.
     """
+    # Captured before last_session_date is overwritten, and taken from the
+    # messages table rather than from last_session_date itself, because the two
+    # answer different questions: last_session_date is when the previous session
+    # STARTED, while the last message is when it was last active. Measuring a
+    # gap from the start of a two-hour session overstates it by two hours.
+    #
+    # No message rows at all (a database that predates chat history, or a first
+    # ever session) falls back to last_session_date, which is the best available
+    # answer rather than a wrong one.
+    row = conn.execute("SELECT MAX(created_at) AS last_activity FROM messages").fetchone()
+    last_activity = row["last_activity"] if row else None
+
     cur = conn.execute(
-        "UPDATE profile_meta SET session_count = session_count + 1, last_session_date = ? WHERE id = 1",
-        (now_utc(),),
+        "UPDATE profile_meta SET session_count = session_count + 1, "
+        "previous_session_date = COALESCE(?, last_session_date), last_session_date = ? "
+        "WHERE id = 1",
+        (last_activity, now_utc()),
     )
     if cur.rowcount == 0:
         return None

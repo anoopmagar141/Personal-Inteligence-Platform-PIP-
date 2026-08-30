@@ -82,18 +82,51 @@ def _default_providers(conn) -> list[BaseLLMProvider]:
 
 
 def _load_last_session_timestamp(conn):
+    """
+    When the previous session was last active - what Stage 0 measures the
+    warm-start gap from.
+
+    Read from profile_meta.previous_session_date, which begin_session() captures
+    at the start of each session. It used to come from
+    session_snapshot.snapshot_date, and that was wrong in one direction only but
+    persistently: the Observer withholds a snapshot for a session with no
+    substantive turn ("hi" / "thanks" / "bye"), so a run of thin sessions left
+    the date frozen and the gap kept growing as though the user had been away
+    the whole time. Ten short check-ins over a fortnight read as a fortnight of
+    silence, and Stage 0 answered with a full warm start every time.
+
+    Deliberately NOT profile_meta.last_session_date, which is the obvious
+    candidate and is wrong: it is set on the first message of the CURRENT
+    session, which happens before the pipeline runs, so reading it here would
+    report a gap of zero on every message forever - warm start silently
+    disabled rather than merely inaccurate.
+
+    Falls back to snapshot_date while previous_session_date is still NULL, which
+    is the case only until the first session on an upgraded database completes
+    its migration backfill.
+    """
     from datetime import datetime, timezone
 
-    snapshot = session_snapshot.load_snapshot(conn)
-    if not snapshot or not snapshot.get("snapshot_date"):
-        return None
+    raw = None
     try:
-        dt = datetime.fromisoformat(snapshot["snapshot_date"].replace("Z", "+00:00"))
+        row = conn.execute("SELECT previous_session_date FROM profile_meta WHERE id = 1").fetchone()
+        raw = row["previous_session_date"] if row else None
+    except Exception as e:
+        logger.warning(f"Pipeline: could not read previous_session_date: {e}")
+
+    if not raw:
+        snapshot = session_snapshot.load_snapshot(conn)
+        raw = snapshot.get("snapshot_date") if snapshot else None
+    if not raw:
+        return None
+
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
     except Exception as e:
-        logger.warning(f"Pipeline: failed to parse session_snapshot.snapshot_date, treating as first run: {e}")
+        logger.warning(f"Pipeline: failed to parse the previous session date, treating as first run: {e}")
         return None
 
 

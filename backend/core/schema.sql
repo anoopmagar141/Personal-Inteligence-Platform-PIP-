@@ -12,6 +12,15 @@ CREATE TABLE IF NOT EXISTS profile_meta (
     constitution_version TEXT NOT NULL,
     first_session_date TEXT,
     last_session_date TEXT,
+    -- When the PREVIOUS session was last active, captured by begin_session()
+    -- before it overwrites last_session_date. Stage 0 measures the warm-start
+    -- gap from this.
+    --
+    -- It needs its own column because last_session_date is set on the first
+    -- message of the current session, which happens BEFORE the pipeline runs -
+    -- so by the time Stage 0 reads anything, last_session_date already says
+    -- "now" and every gap would measure zero.
+    previous_session_date TEXT,
     onboarding_complete INTEGER DEFAULT 0 CHECK (onboarding_complete IN (0, 1))
 );
 

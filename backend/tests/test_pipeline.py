@@ -289,3 +289,85 @@ def test_project_question_is_never_cached(db_conn):
     # actually run again, not served a cached first answer.
     assert second["response_text"] == "second answer"
     assert second["stage_hints"]["cache_hit"] is False
+
+
+# --- where Stage 0 measures the warm-start gap from -------------------------
+
+
+def _stamp(**kw):
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(**kw)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _seed_snapshot(conn, when):
+    conn.execute(
+        "INSERT INTO session_snapshot (id, topic, snapshot_date) VALUES (1, 'topic', ?) "
+        "ON CONFLICT(id) DO UPDATE SET snapshot_date = excluded.snapshot_date",
+        (when,),
+    )
+    conn.commit()
+
+
+def test_gap_is_measured_from_the_last_message_not_the_last_snapshot(db_conn):
+    """
+    The Observer withholds a snapshot for a session with no substantive turn, so
+    snapshot_date froze while short check-ins kept happening and the gap grew as
+    though the user had been away the whole time.
+    """
+    from backend.memory import conversation_store, profile_store
+
+    conversation_id = conversation_store.create_conversation(db_conn)
+    conversation_store.append_message(db_conn, conversation_id, "user", "hi")
+    db_conn.execute("UPDATE messages SET created_at = ?", (_stamp(hours=2),))
+    _seed_snapshot(db_conn, _stamp(days=9))
+    profile_store.complete_onboarding(db_conn, name="A", language_preference="English")
+
+    profile_store.begin_session(db_conn)
+
+    measured = pipeline._load_last_session_timestamp(db_conn)
+    assert measured is not None
+    from datetime import datetime, timezone
+    hours = (datetime.now(timezone.utc) - measured).total_seconds() / 3600
+    assert 1 < hours < 4, f"expected the 2h message gap, got {hours:.1f}h"
+
+
+def test_gap_does_not_collapse_to_zero_once_the_session_has_started(db_conn):
+    """
+    last_session_date is the obvious candidate and is wrong: ws_chat sets it on
+    the first message, BEFORE the pipeline runs, so reading it here would report
+    a gap of zero on every message and disable warm start entirely.
+    """
+    from backend.memory import conversation_store, profile_store
+
+    conversation_id = conversation_store.create_conversation(db_conn)
+    conversation_store.append_message(db_conn, conversation_id, "user", "earlier")
+    db_conn.execute("UPDATE messages SET created_at = ?", (_stamp(days=3),))
+    profile_store.complete_onboarding(db_conn, name="A", language_preference="English")
+
+    profile_store.begin_session(db_conn)
+
+    from datetime import datetime, timezone
+    measured = pipeline._load_last_session_timestamp(db_conn)
+    days = (datetime.now(timezone.utc) - measured).total_seconds() / 86400
+    assert days > 2, f"gap collapsed to {days:.2f} days - Stage 0 is reading the current session"
+
+
+def test_falls_back_to_the_snapshot_before_the_first_migrated_session(db_conn):
+    """
+    An upgraded database has previous_session_date NULL until its first session
+    begins. Degrading to the old source beats treating it as a first-ever run,
+    which would load no warm-start context at all.
+    """
+    _seed_snapshot(db_conn, _stamp(days=5))
+    db_conn.execute("UPDATE profile_meta SET previous_session_date = NULL WHERE id = 1")
+    db_conn.commit()
+
+    from datetime import datetime, timezone
+    measured = pipeline._load_last_session_timestamp(db_conn)
+    assert measured is not None
+    days = (datetime.now(timezone.utc) - measured).total_seconds() / 86400
+    assert 4 < days < 6
+
+
+def test_no_history_at_all_reads_as_a_first_run(db_conn):
+    assert pipeline._load_last_session_timestamp(db_conn) is None
