@@ -38,16 +38,6 @@ def _expect_session_info(ws) -> dict:
 
 
 @pytest.fixture(autouse=True)
-def isolated_trace(tmp_path, monkeypatch):
-    # Real disconnect/idle-timeout paths now log to trace_log.json via
-    # session_lifecycle.run_observer_now(). Without this, tests here would
-    # write into the real backend/logs/trace_log.json instead of an isolated
-    # tmp_path - same class of pollution bug already found for ChromaDB paths.
-    monkeypatch.setattr(trace, "TRACE_LOG_PATH", tmp_path / "trace_log.json")
-    yield
-
-
-@pytest.fixture(autouse=True)
 def no_real_observer_calls(monkeypatch):
     # Every message sent in these tests leaves conversation_history non-empty,
     # which now triggers a disconnect-time Observer run (session_lifecycle
@@ -490,3 +480,158 @@ def test_ws_chat_resuming_an_unknown_conversation_id_creates_a_new_one_lazily(mo
         info = _expect_session_info(ws)
         assert info["conversation_id"] is None
         assert info["messages"] == []
+
+
+# --- Session counting -------------------------------------------------------
+
+
+def _session_count(tmp_path) -> int:
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        row = conn.execute("SELECT session_count FROM profile_meta WHERE id = 1").fetchone()
+        return row["session_count"] if row else 0
+    finally:
+        conn.close()
+
+
+def _onboard(tmp_path) -> None:
+    from backend.memory import profile_store
+
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    finally:
+        conn.close()
+
+
+def test_ws_chat_counts_one_session_per_connection(monkeypatch, token, tmp_path):
+    """
+    Two messages on one connection are one session, not two - and a second
+    connection is a second session. profile_meta.session_count previously sat
+    at whatever onboarding wrote and never moved.
+    """
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+    _onboard(tmp_path)
+    assert _session_count(tmp_path) == 1
+
+    client = TestClient(server.app)
+    with client.websocket_connect(ws_url(token)) as ws:
+        _expect_session_info(ws)
+        ws.send_json({"message": "hello"})
+        assert ws.receive_json()["type"] == "session_info"
+        for _ in range(4):
+            ws.receive_json()
+        ws.send_json({"message": "again"})
+        assert ws.receive_json()["type"] == "stage_hint"
+
+    assert _session_count(tmp_path) == 2
+
+    with client.websocket_connect(ws_url(token)) as ws:
+        _expect_session_info(ws)
+        ws.send_json({"message": "new connection"})
+        # Second session_info first: this connection is creating its own
+        # conversation lazily, same as the one above did.
+        assert ws.receive_json()["type"] == "session_info"
+        assert ws.receive_json()["type"] == "stage_hint"
+
+    assert _session_count(tmp_path) == 3
+
+
+def test_ws_chat_does_not_count_a_connection_that_never_sends(monkeypatch, token, tmp_path):
+    """
+    A socket that opens and closes without a message produces no conversation
+    and no Observer pass, so it is not a session.
+    """
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+    _onboard(tmp_path)
+
+    client = TestClient(server.app)
+    with client.websocket_connect(ws_url(token)) as ws:
+        _expect_session_info(ws)
+
+    assert _session_count(tmp_path) == 1
+
+
+def test_ws_chat_counts_a_resumed_conversation_as_a_new_session(monkeypatch, token, tmp_path):
+    """
+    Resuming skips the lazy-conversation-creation branch, so counting there
+    would have missed it - but a resumed conversation is a fresh connection
+    with its own Observer pass at the end of it.
+    """
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+    _onboard(tmp_path)
+
+    from backend.memory import conversation_store
+
+    seed_conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    conversation_id = conversation_store.create_conversation(seed_conn)
+    conversation_store.append_message(seed_conn, conversation_id, "user", "earlier")
+    seed_conn.close()
+
+    client = TestClient(server.app)
+    with client.websocket_connect(f"{ws_url(token)}&conversation_id={conversation_id}") as ws:
+        _expect_session_info(ws)
+        ws.send_json({"message": "continuing"})
+        assert ws.receive_json()["type"] == "stage_hint"
+
+    assert _session_count(tmp_path) == 2
+
+
+def test_verification_loop_fires_on_the_thirtieth_session(monkeypatch, token, tmp_path):
+    """
+    End to end through the real connection path, because this is where a
+    periodic job dies: the loop can be perfectly correct and still never run if
+    nothing calls it. Session 29 is set up directly so the connection under test
+    is the 30th.
+    """
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+
+    from backend.memory import profile_store
+    from backend.stages import stage_13_profile_update as stage_13
+
+    seed = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    profile_store.complete_onboarding(seed, name="BatMan", language_preference="English")
+    seed.execute(
+        "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+        "VALUES ('answer_style', 'terse', 1, 'inferred', 'active')"
+    )
+    seed.execute("UPDATE profile_meta SET session_count = 29 WHERE id = 1")
+    seed.commit()
+    seed.close()
+
+    client = TestClient(server.app)
+    with client.websocket_connect(ws_url(token)) as ws:
+        _expect_session_info(ws)
+        ws.send_json({"message": "hello"})
+        assert ws.receive_json()["type"] == "session_info"
+        assert ws.receive_json()["type"] == "stage_hint"
+
+    check = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        assert check.execute("SELECT session_count FROM profile_meta WHERE id = 1").fetchone()[0] == 30
+        pending = stage_13.list_pending(check)
+        assert [p["field_name"] for p in pending] == ["answer_style"]
+        assert pending[0]["origin"] == "verification"
+    finally:
+        check.close()
+
+
+def test_proactive_route_reports_a_long_gap(monkeypatch, token, tmp_path):
+    import datetime
+
+    from backend.memory import profile_store
+
+    seed = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    profile_store.complete_onboarding(seed, name="BatMan", language_preference="English")
+    stamp = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=72)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    seed.execute("UPDATE profile_meta SET last_session_date = ? WHERE id = 1", (stamp,))
+    seed.commit()
+    seed.close()
+
+    client = TestClient(server.app)
+    response = client.get("/api/v1/proactive", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    assert [t["trigger"] for t in response.json()] == ["session_gap_exceeds_48h"]

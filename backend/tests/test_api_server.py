@@ -573,3 +573,172 @@ def test_lifespan_releases_the_lock_on_clean_shutdown(tmp_path, monkeypatch):
         assert int(lock_path.read_text()) == os.getpid()
 
     assert not lock_path.exists()
+
+
+# --- Memory candidate review queue -----------------------------------------
+
+
+def _park_memory_candidate(conn, validation_status="REQUIRES_CONFIRMATION"):
+    from backend.core.types import ValidationResult
+    from backend.stages import stage_13_profile_update as stage_13
+
+    candidate = {
+        "target_table": "preference_memory",
+        "field_name": "editor",
+        "proposed_value": "vim",
+        "label": "inferred",
+        "evidence_count": 2,
+        "evidence_text": "Used hjkl repeatedly",
+    }
+    assert stage_13.run(conn, candidate, ValidationResult(validation_status, "test")) == "pending"
+    return server.api_get_pending_memory(conn)[0]["id"]
+
+
+def test_pending_memory_api_confirm(conn):
+    assert server.api_get_pending_memory(conn) == []
+    candidate_id = _park_memory_candidate(conn)
+
+    pending = server.api_get_pending_memory(conn)
+    assert len(pending) == 1
+    assert pending[0]["target_table"] == "preference_memory"
+    assert pending[0]["validation_status"] == "REQUIRES_CONFIRMATION"
+
+    confirmed = server.api_confirm_pending_memory(conn, candidate_id)
+    assert confirmed["status"] == "resolved"
+    assert server.api_get_pending_memory(conn) == []
+    assert server.api_get_profile_field(conn, "editor")["value"] == "vim"
+
+
+def test_pending_memory_api_dismiss(conn):
+    candidate_id = _park_memory_candidate(conn, "TIER_2_REQUIRED")
+
+    assert server.api_dismiss_pending_memory(conn, candidate_id)["status"] == "dismissed"
+    assert server.api_get_pending_memory(conn) == []
+    assert server.api_get_profile_field(conn, "editor") is None
+
+
+def test_status_reports_pending_memory_count(conn):
+    assert server.api_status(conn)["pending_memory"] == 0
+    _park_memory_candidate(conn)
+    assert server.api_status(conn)["pending_memory"] == 1
+
+
+def test_rest_pending_memory_routes_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as setup_conn:
+        _park_memory_candidate(setup_conn)
+
+    listed = client.get("/api/v1/memory/pending", headers=headers)
+    assert listed.status_code == 200
+    candidate_id = listed.json()[0]["id"]
+
+    assert client.get("/api/v1/status", headers=headers).json()["pending_memory"] == 1
+
+    confirmed = client.post(f"/api/v1/memory/pending/{candidate_id}/confirm", headers=headers)
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "resolved"
+    assert client.get("/api/v1/memory/pending", headers=headers).json() == []
+
+    # Already resolved - gone from the queue, so 404, not a silent second write.
+    again = client.post(f"/api/v1/memory/pending/{candidate_id}/confirm", headers=headers)
+    assert again.status_code == 404
+
+
+def test_rest_pending_memory_confirm_reports_unapplicable_as_422(tmp_path, monkeypatch):
+    """
+    A candidate the write path cannot accept must not be reported as a missing
+    candidate - it is still sitting in the queue. An immutable identity field is
+    the durable example; this used to use a goal, back when goal candidates were
+    unapplicable for a reason that was a bug rather than a rule.
+    """
+    from backend.core.types import ValidationResult
+    from backend.stages import stage_13_profile_update as stage_13
+
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as setup_conn:
+        stage_13.run(
+            setup_conn,
+            {
+                "target_table": "identity",
+                "field_name": "name",
+                "proposed_value": "Bruce",
+                "label": "explicit",
+                "evidence_count": 3,
+                "evidence_text": "User said so",
+            },
+            ValidationResult("REQUIRES_CONFIRMATION", "gated_field"),
+        )
+
+    candidate_id = client.get("/api/v1/memory/pending", headers=headers).json()[0]["id"]
+    response = client.post(f"/api/v1/memory/pending/{candidate_id}/confirm", headers=headers)
+    assert response.status_code == 422
+    assert len(client.get("/api/v1/memory/pending", headers=headers).json()) == 1
+
+
+# --- trace read API ---------------------------------------------------------
+# The trace answers "why did PIP reply like that". It was being written to a
+# file no interface read; moving it into the database without a way to read it
+# back would only have changed where it was unreachable from.
+
+
+def test_api_list_and_get_trace(conn):
+    from backend.core import trace
+
+    trace_id = trace.generate_trace_id()
+    trace.stage_log(conn, trace_id, "stage_01_intent_classifier", "ok", "classified")
+    trace.stage_log(conn, trace_id, "stage_09_llm_streaming", "error", "failed", error_detail="boom")
+
+    listed = server.api_list_traces(conn)
+    assert len(listed) == 1
+    assert listed[0]["trace_id"] == trace_id
+    assert listed[0]["entries"] == 2
+    assert listed[0]["errors"] == 1
+
+    entries = server.api_get_trace(conn, trace_id)
+    assert [e["stage"] for e in entries] == ["stage_01_intent_classifier", "stage_09_llm_streaming"]
+
+
+def test_api_get_trace_unknown_id_raises(conn):
+    with pytest.raises(ValueError):
+        server.api_get_trace(conn, "not-a-real-trace")
+
+
+def test_rest_trace_routes_round_trip(tmp_path, monkeypatch):
+    from backend.core import trace
+
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    seed = server.open_app_connection(str(tmp_path / "pip.db"))
+    trace_id = trace.generate_trace_id()
+    trace.stage_log(seed, trace_id, "stage_01_intent_classifier", "ok", "classified")
+    seed.close()
+
+    client = TestClient(server.app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    listed = client.get("/api/v1/trace", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()[0]["trace_id"] == trace_id
+
+    detail = client.get(f"/api/v1/trace/{trace_id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()[0]["stage"] == "stage_01_intent_classifier"
+
+    assert client.get("/api/v1/trace/nope", headers=headers).status_code == 404

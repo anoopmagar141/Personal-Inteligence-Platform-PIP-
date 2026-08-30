@@ -8,10 +8,17 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from backend.config.settings import get_settings
-from backend.core import auth, instance_lock, pipeline, session_lifecycle
-from backend.memory import conversation_store, decision_log, profile_store, vector_store
+from backend.core import auth, instance_lock, pipeline, proactive, session_lifecycle, trace
+from backend.memory import (
+    conversation_store,
+    decision_log,
+    profile_store,
+    vector_store,
+    verification,
+)
 from backend.providers.ollama_provider import OllamaProvider
 from backend.stages import stage_08_provider_gate as provider_gate
+from backend.stages import stage_13_profile_update as stage_13
 from backend.stages.stage_08_provider_gate import ProviderConsentError
 from shared.ws_spec import ChatRequest, PipelineCompleteEvent, WSChatEvent
 
@@ -115,11 +122,24 @@ def api_status(conn) -> dict[str, Any]:
     pending_count = conn.execute(
         "SELECT COUNT(*) FROM decision_candidates_pending WHERE state = 'pending'"
     ).fetchone()[0]
+    # Memory candidates the constitution requires a user decision on. Reported
+    # alongside pending_decisions so a client can badge both from one call -
+    # without it, the only way to discover there is memory waiting on you is to
+    # already know the endpoint exists and poll it.
+    pending_memory_count = conn.execute(
+        "SELECT COUNT(*) FROM memory_candidates_pending WHERE state = 'pending'"
+    ).fetchone()[0]
     return {
         "status": "ok",
         "onboarding_complete": bool(meta["onboarding_complete"]) if meta else False,
+        # Exposed so the counter is observable rather than only inferable from
+        # its effects - and because the memory verification loop, when it is
+        # built, needs to know where in the 30-session cycle it is.
+        "session_count": meta["session_count"] if meta else 0,
+        "last_session_date": meta["last_session_date"] if meta else None,
         "active_decisions": decision_count,
         "pending_decisions": pending_count,
+        "pending_memory": pending_memory_count,
     }
 
 
@@ -153,6 +173,22 @@ def api_correct_memory(conn, payload: dict[str, Any]) -> dict[str, str]:
 def api_delete_profile_field(conn, field: str) -> dict[str, Any]:
     deleted = profile_store.soft_delete_profile_field(conn, field)
     return {"status": "deleted" if deleted else "not_found", "field": field}
+
+
+def api_get_interaction_style_history(conn, limit: int = 50) -> list[dict[str, Any]]:
+    return profile_store.get_interaction_style_history(conn, limit=limit)
+
+
+def api_get_pending_memory(conn):
+    return stage_13.list_pending(conn)
+
+
+def api_confirm_pending_memory(conn, candidate_id: int):
+    return stage_13.resolve_pending(conn, candidate_id)
+
+
+def api_dismiss_pending_memory(conn, candidate_id: int):
+    return stage_13.dismiss_pending(conn, candidate_id)
 
 
 def api_create_decision(conn, payload: dict[str, Any]) -> dict[str, Any]:
@@ -413,6 +449,39 @@ def _resolve_connection_state(conn, conversation_id: Optional[str]) -> tuple[str
     return model_name, None, "New chat", []
 
 
+def api_list_traces(conn, limit: int = 20) -> list[dict[str, Any]]:
+    return trace.list_recent_traces(conn, limit=limit)
+
+
+def api_get_trace(conn, trace_id: str) -> list[dict[str, Any]]:
+    entries = trace.get_trace(conn, trace_id)
+    if not entries:
+        raise ValueError(f"no trace with id {trace_id}")
+    return entries
+
+
+def api_proactive(conn) -> list[dict[str, Any]]:
+    return proactive.evaluate(conn)
+
+
+def start_session(conn) -> int | None:
+    """
+    Everything that happens once, at the start of a session: count it, then run
+    any governance work that becomes due because of the count.
+
+    One function so ws_chat makes ONE executor round trip for the lot - conn is
+    pinned to that connection's single worker thread, and this file already
+    documents what splitting one logical step into several submissions cost
+    last time (see _resolve_connection_state).
+
+    Verification failures are swallowed by run_if_due itself; begin_session is
+    a single UPDATE. Neither can stop a chat from opening.
+    """
+    session_no = profile_store.begin_session(conn)
+    verification.run_if_due(conn, session_no)
+    return session_no
+
+
 def api_ingest_document(conn, payload: dict[str, Any]) -> dict[str, Any]:
     file_path = payload.get("file_path")
     if not file_path:
@@ -636,6 +705,14 @@ try:
             def _catch_up_blocking() -> None:
                 conn = _conn()
                 try:
+                    # Cheap (one UPDATE), and it belongs before the drain rather
+                    # than after: the drain can run for minutes, and a goal that
+                    # went stale while the app was closed should be marked by
+                    # the time the first turn assembles context, not after.
+                    profile_store.decay_stale_goals(conn)
+                    # trace.hard_delete_after_days, which nothing enforced while
+                    # traces lived in a file that only ever grew.
+                    trace.purge_old_entries(conn)
                     recovered = session_lifecycle.recover_unobserved_conversations(conn)
                     if recovered:
                         logger.info(
@@ -821,6 +898,13 @@ try:
             executor, _resolve_connection_state, conn, requested_conversation_id
         )
         conversation_history: list[dict[str, str]] = list(resumed_messages)
+        # profile_meta.session_count is bumped once per connection, on the first
+        # real message - see profile_store.begin_session() for why there and not
+        # on connect or at session end. Resuming a past conversation still
+        # starts a new session: it is a new connection with its own Observer
+        # pass at the end of it, so this flag is per-connection and is
+        # deliberately not tied to whether conversation_id already existed.
+        session_counted = False
         session_id = id(websocket)
         await _session_registry.register(session_id, conn, executor, conversation_history)
 
@@ -883,6 +967,10 @@ try:
                 if not user_message:
                     await websocket.send_json({"type": "error", "data": "message is required"})
                     continue
+
+                if not session_counted:
+                    session_counted = True
+                    await loop.run_in_executor(executor, start_session, conn)
 
                 # Lazy conversation creation: see _resolve_connection_state's
                 # docstring - a brand-new connection arrives here with
@@ -992,6 +1080,13 @@ try:
         with _conn() as conn:
             return api_get_profile_field(conn, field)
 
+    # The only profile field that keeps a history at all. It was recorded from
+    # three places and readable from none.
+    @app.get(f"{BASE_PREFIX}/memory/interaction-style/history")
+    def get_interaction_style_history(limit: int = 50):
+        with _conn() as conn:
+            return api_get_interaction_style_history(conn, limit=limit)
+
     @app.post(f"{BASE_PREFIX}/memory/correct")
     def correct_memory(payload: dict[str, Any]):
         with _conn() as conn:
@@ -1001,6 +1096,67 @@ try:
     def delete_profile_field(field: str):
         with _conn() as conn:
             return api_delete_profile_field(conn, field)
+
+    # Mirrors /decision/pending's shape deliberately: the two review queues are
+    # the same interaction (PIP proposes, the user accepts or rejects) and a
+    # client should not have to learn two idioms for it. "confirm" rather than
+    # "promote" because a memory candidate is not moved into another table -
+    # it is applied to the profile as a user-attested value.
+    # The trace log is the answer to "why did PIP reply like that" - which stages
+    # ran, what each retrieved, where a run failed. It was being written to a
+    # file no interface read, so the answer existed and was unreachable; moving
+    # it into the database without a way to get it back out would only have
+    # changed where it was unreachable from.
+    @app.get(f"{BASE_PREFIX}/trace")
+    def list_traces(limit: int = 20):
+        with _conn() as conn:
+            return api_list_traces(conn, limit=limit)
+
+    @app.get(f"{BASE_PREFIX}/trace/{{trace_id}}")
+    def get_trace(trace_id: str):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_get_trace(conn, trace_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
+
+    # Read-only: reports which allowed proactive triggers are currently firing
+    # and does not act on any of them. Deciding whether to raise something with
+    # the user is the client's call - keeping that decision out of the backend
+    # is what keeps proactive_triggers.forbidden (model judgment of relevance or
+    # urgency) structurally impossible here rather than merely discouraged.
+    @app.get(f"{BASE_PREFIX}/proactive")
+    def get_proactive():
+        with _conn() as conn:
+            return api_proactive(conn)
+
+    @app.get(f"{BASE_PREFIX}/memory/pending")
+    def get_pending_memory():
+        with _conn() as conn:
+            return api_get_pending_memory(conn)
+
+    @app.post(f"{BASE_PREFIX}/memory/pending/{{candidate_id}}/confirm")
+    def confirm_pending_memory(candidate_id: int):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_confirm_pending_memory(conn, candidate_id)
+            except LookupError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
+            except ValueError as exc:
+                # The candidate exists but cannot be applied - a 404 here would
+                # send the caller hunting for a row that is still in the queue.
+                raise HTTPException(status_code=422, detail=str(exc))
+
+    @app.post(f"{BASE_PREFIX}/memory/pending/{{candidate_id}}/dismiss")
+    def dismiss_pending_memory(candidate_id: int):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_dismiss_pending_memory(conn, candidate_id)
+            except LookupError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
 
     @app.post(f"{BASE_PREFIX}/decision/create")
     def create_decision(payload: dict[str, Any]):
