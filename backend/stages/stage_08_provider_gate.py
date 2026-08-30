@@ -26,11 +26,22 @@
 #       "none" always blocks regardless of user_consented.)
 #   7. All checks pass → return the consent row for Stage 9 downstream use.
 #
-# This stage is standalone and unit-testable: it receives an open sqlite3
+# This stage is standalone and unit-testable: it receives an open database
 # connection and a provider_id string, and either returns cleanly or raises.
-# It does NOT wire into any pipeline orchestrator (matches stage_01 precedent).
+#
+# conn is deliberately untyped, as it is in every other stage. ADR-025 (Clean
+# Architecture / Dependency Rule) forbids backend/stages and backend/api from
+# depending directly on the database, ChromaDB or Ollama drivers, and
+# scripts/pre-commit enforces it. This file used to take that dependency for a
+# single `conn: <driver>.Connection` annotation - the whole coupling the rule
+# exists to prevent, acquired for a type hint. The hook never fired because the
+# violation predated it and nothing had staged this file since; any commit
+# touching it would have been rejected.
+#
+# Note for anyone tempted to spell the driver name out above: the hook greps the
+# whole file, comments included, so naming it here would trip the very rule this
+# comment is describing.
 
-import sqlite3
 from dataclasses import dataclass
 
 
@@ -57,7 +68,7 @@ _FULL_INFERENCE_SCOPES = {"full_inference"}
 
 
 def run(
-    conn: sqlite3.Connection,
+    conn,
     provider_id: str,
     requested_scope: str = "full_inference",
 ) -> ConsentRecord:
