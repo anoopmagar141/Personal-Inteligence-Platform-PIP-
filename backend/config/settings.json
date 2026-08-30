@@ -22,8 +22,6 @@
   },
   "memory": {
     "goal_decay_inactive_days": 14,
-    "behavioral_override_sessions": 3,
-    "behavioral_override_days": 14,
     "verification_loop_frequency_sessions": 30,
     "verification_loop_sample_size": 3
   },
