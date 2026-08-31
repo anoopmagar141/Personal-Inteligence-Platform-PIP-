@@ -1087,15 +1087,29 @@ try:
         with _conn() as conn:
             return api_get_interaction_style_history(conn, limit=limit)
 
+    # 422, not a bare 500: correct_profile_field refuses the three identity
+    # fields by design, and "immutable identity fields cannot be edited after
+    # onboarding" IS the answer to why an edit did not take. Uncaught, that
+    # sentence never leaves the server and a client can only report that
+    # something unspecified went wrong. Same reasoning, same status code as
+    # /memory/pending/{candidate_id}/confirm above.
     @app.post(f"{BASE_PREFIX}/memory/correct")
     def correct_memory(payload: dict[str, Any]):
+        from fastapi import HTTPException
         with _conn() as conn:
-            return api_correct_memory(conn, payload)
+            try:
+                return api_correct_memory(conn, payload)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
 
     @app.delete(f"{BASE_PREFIX}/memory/profile/{{field}}")
     def delete_profile_field(field: str):
+        from fastapi import HTTPException
         with _conn() as conn:
-            return api_delete_profile_field(conn, field)
+            try:
+                return api_delete_profile_field(conn, field)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
 
     # Mirrors /decision/pending's shape deliberately: the two review queues are
     # the same interaction (PIP proposes, the user accepts or rejects) and a
@@ -1168,10 +1182,18 @@ try:
         with _conn() as conn:
             return api_search_decisions(conn, q=q, state=state, project_id=project_id)
 
+    # update_decision_state() rejects an unknown state, and rejects retracting
+    # without a reason - ADR-022 keeps the row forever, so the reason is what
+    # tells a later reader "this was a fabrication we cleaned up" from "this
+    # was real and we changed our mind". Both refusals are worth reading.
     @app.patch(f"{BASE_PREFIX}/decision/{{decision_id}}/state")
     def update_decision_state(decision_id: int, payload: dict[str, Any]):
+        from fastapi import HTTPException
         with _conn() as conn:
-            return api_update_decision_state(conn, decision_id, payload)
+            try:
+                return api_update_decision_state(conn, decision_id, payload)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
 
     @app.get(f"{BASE_PREFIX}/decision/pending")
     def get_pending():
@@ -1200,8 +1222,12 @@ try:
 
     @app.patch(f"{BASE_PREFIX}/projects/{{project_id}}/status")
     def update_project_status(project_id: str, payload: dict[str, Any]):
+        from fastapi import HTTPException
         with _conn() as conn:
-            return api_update_project_status(conn, project_id, payload)
+            try:
+                return api_update_project_status(conn, project_id, payload)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
 
     @app.post(f"{BASE_PREFIX}/projects/{{project_id}}/activate")
     def activate_project(project_id: str):

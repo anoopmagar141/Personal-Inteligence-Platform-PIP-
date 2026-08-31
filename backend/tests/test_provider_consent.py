@@ -25,8 +25,10 @@ SEED_PATH = os.path.join(
     os.path.dirname(__file__), "..", "..", "config", "provider_consent.json"
 )
 
-# consent_scope values as defined in docs/PIP_MASTER_REFERENCE.md line 717
-# "scope_values": ["full_inference", "web_search_only", "embedding_only", "none"]
+# The constitution's scope_values. Kept as a literal on purpose: this list is
+# what server.VALID_CONSENT_SCOPES is checked AGAINST, so importing that set
+# here would make the test agree with itself no matter what either one said.
+# See backend/core/constitutional.json for the constitutional side.
 CONSTITUTIONAL_SCOPE_VALUES = ["full_inference", "web_search_only", "embedding_only", "none"]
 
 

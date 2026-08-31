@@ -742,3 +742,168 @@ def test_rest_trace_routes_round_trip(tmp_path, monkeypatch):
     assert detail.json()[0]["stage"] == "stage_01_intent_classifier"
 
     assert client.get("/api/v1/trace/nope", headers=headers).status_code == 404
+
+
+# --- refusal reporting on the write routes -----------------------------------
+# Four routes call into write paths that refuse work by raising ValueError, and
+# none of them caught it: the refusal reached the client as a bare 500 with the
+# reason stripped off. That reason is not incidental detail here - "immutable
+# identity fields cannot be edited after onboarding" and "reason is required"
+# are the entire answer to why an edit did not take, and a client that cannot
+# read them can only say something unspecified went wrong. Same treatment and
+# same status code as /memory/pending/{candidate_id}/confirm above.
+
+
+def _client_with_token(tmp_path, monkeypatch):
+    """The TestClient + auth-header setup every REST test in this file repeats."""
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+    return TestClient(server.app), {"Authorization": f"Bearer {token}"}
+
+
+def test_rest_memory_correct_reports_immutable_field_as_422(tmp_path, monkeypatch):
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/v1/memory/correct",
+        headers=headers,
+        json={"field": "name", "value": "Bruce"},
+    )
+
+    assert response.status_code == 422
+    assert "immutable identity fields" in response.json()["detail"]
+
+
+def test_rest_memory_correct_still_accepts_a_mutable_field(tmp_path, monkeypatch):
+    """The guard must refuse the three identity fields and nothing else."""
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/v1/memory/correct",
+        headers=headers,
+        json={"field": "answer_depth", "value": "brief"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "updated"}
+
+
+def test_rest_profile_delete_reports_immutable_field_as_422(tmp_path, monkeypatch):
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+
+    response = client.delete("/api/v1/memory/profile/timezone", headers=headers)
+
+    assert response.status_code == 422
+    assert "immutable identity fields" in response.json()["detail"]
+
+
+def test_rest_profile_delete_of_an_absent_field_is_not_an_error(tmp_path, monkeypatch):
+    """
+    A field that is not there is reported as not_found in the body, not as a
+    refusal - deleting something already gone is the state the caller wanted.
+    """
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+
+    response = client.delete("/api/v1/memory/profile/never_existed", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "not_found"
+
+
+def test_rest_decision_state_reports_a_missing_reason_as_422(tmp_path, monkeypatch):
+    """
+    Retracting without a reason is refused by update_decision_state() because
+    ADR-022 keeps the row forever, and state alone cannot tell a later reader
+    "this was a fabrication we cleaned up" from "we changed our mind".
+    """
+    from backend.memory import decision_log
+
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as setup_conn:
+        decision_id = decision_log.insert_decision(setup_conn, text="Use FastAPI")
+
+    response = client.patch(
+        f"/api/v1/decision/{decision_id}/state",
+        headers=headers,
+        json={"state": "abandoned", "reason": "   "},
+    )
+
+    assert response.status_code == 422
+    assert "reason is required" in response.json()["detail"]
+
+
+def test_rest_decision_state_reports_an_unknown_state_as_422(tmp_path, monkeypatch):
+    from backend.memory import decision_log
+
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as setup_conn:
+        decision_id = decision_log.insert_decision(setup_conn, text="Use FastAPI")
+
+    response = client.patch(
+        f"/api/v1/decision/{decision_id}/state",
+        headers=headers,
+        json={"state": "deleted", "reason": "no longer true"},
+    )
+
+    assert response.status_code == 422
+    assert "invalid decision state" in response.json()["detail"]
+
+
+def test_rest_decision_state_retraction_with_a_reason_is_persisted(tmp_path, monkeypatch):
+    from backend.memory import decision_log
+
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as setup_conn:
+        decision_id = decision_log.insert_decision(setup_conn, text="Use FastAPI")
+
+    response = client.patch(
+        f"/api/v1/decision/{decision_id}/state",
+        headers=headers,
+        json={"state": "abandoned", "reason": "PIP invented this one"},
+    )
+    assert response.status_code == 200
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as read_conn:
+        row = read_conn.execute(
+            "SELECT state, state_reason FROM decision_log WHERE id = ?", (decision_id,)
+        ).fetchone()
+    assert row["state"] == "abandoned"
+    assert row["state_reason"] == "PIP invented this one"
+
+
+def test_rest_project_status_reports_an_unknown_status_as_422(tmp_path, monkeypatch):
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as setup_conn:
+        project_id = profile_store.create_project(setup_conn, "PIP")
+
+    response = client.patch(
+        f"/api/v1/projects/{project_id}/status",
+        headers=headers,
+        json={"status": "deleted"},
+    )
+
+    assert response.status_code == 422
+    assert "invalid project status" in response.json()["detail"]
+
+
+def test_rest_project_status_archives_a_project(tmp_path, monkeypatch):
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as setup_conn:
+        project_id = profile_store.create_project(setup_conn, "PIP")
+
+    response = client.patch(
+        f"/api/v1/projects/{project_id}/status",
+        headers=headers,
+        json={"status": "archived"},
+    )
+    assert response.status_code == 200
+
+    listed = client.get("/api/v1/projects", headers=headers).json()
+    assert [p["status"] for p in listed if p["project_id"] == project_id] == ["archived"]
