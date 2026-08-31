@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from backend.api import server
 from backend.core import auth, trace
+from backend.memory import vector_store
 
 
 @pytest.fixture(autouse=True)
@@ -35,6 +36,21 @@ def _expect_session_info(ws) -> dict:
     event = ws.receive_json()
     assert event["type"] == "session_info"
     return event["data"]
+
+
+@pytest.fixture(autouse=True)
+def isolated_chroma(tmp_path, monkeypatch):
+    # These tests were running against the real data/chroma directory - the
+    # developer's own vector store - because this file never got the isolation
+    # fixture test_api_server.py has. Nothing here queries RAG (pipeline.run is
+    # faked throughout), but the app's startup path opens the store, so a test
+    # run touched real data and two runs at once contended on the same SQLite
+    # file underneath it. Same class of pollution bug this suite already fixed
+    # for ChromaDB paths elsewhere; this file was simply missed.
+    monkeypatch.setattr(vector_store, "CHROMA_DB_PATH", str(tmp_path / "chroma"))
+    monkeypatch.setattr(vector_store, "_client", None)
+    monkeypatch.setattr(vector_store, "_collection", None)
+    yield
 
 
 @pytest.fixture(autouse=True)
@@ -162,52 +178,43 @@ def test_ws_chat_accumulates_conversation_history_across_turns(monkeypatch, toke
     assert not any(m["content"] == "second" for m in captured_history[1])
 
 
-def _closing_tracker_monkeypatch(monkeypatch):
-    # sqlite3.Connection's methods are read-only C-extension attributes - can't
-    # monkeypatch .close directly onto the instance. Wrap it in a delegating proxy
-    # instead, same workaround needed for sqlcipher3.dbapi2.Connection elsewhere
-    # in this test suite.
-    closed = {"value": False}
+def test_disconnect_cleanup_never_wedges_the_server(monkeypatch, token):
+    """
+    What the disconnect path actually guarantees - which is not what this test
+    used to assert.
 
-    class ClosingTracker:
-        def __init__(self, real_conn):
-            self._real = real_conn
+    It used to wait for conn.close() to be observed. server.py bounds that call
+    with asyncio.wait_for(..., timeout=5.0) and ABANDONS it on timeout,
+    deliberately and with a comment saying so: a cleanup step must never hang
+    the connection's handler, and the OS reclaiming the fd is an acceptable
+    backstop for a local single-user app. So "the connection was closed" is not
+    a promise this system makes, and asserting it fails whenever the machine is
+    busy enough that the executor thread misses that 5s budget.
 
-        def close(self):
-            closed["value"] = True
-            self._real.close()
+    Measured: the old assertion failed at 80s under a loaded suite, having
+    passed in ~9s four times running on an idle one. Raising its timeout - which
+    is what I tried first - cannot fix that, because the close may correctly
+    never happen at all. The sibling test below had already reached the same
+    conclusion for the after-activity case and asserts something else instead.
 
-        def __getattr__(self, name):
-            return getattr(self._real, name)
-
-    real_conn_fn = server.open_app_connection
-
-    def tracking_conn(*args, **kwargs):
-        return ClosingTracker(real_conn_fn(*args, **kwargs))
-
-    monkeypatch.setattr(server, "open_app_connection", tracking_conn)
-    return closed
-
-
-def test_ws_chat_connection_closes_db_on_disconnect_with_no_activity(monkeypatch, token):
-    # A connection that never sends a message (no DB writes at all) closes
-    # its conn reliably - this is the scenario this test covers. See
-    # test_ws_chat_connection_after_activity_reaches_disconnect_cleanup below
-    # for why the "sent a real message first" scenario isn't asserted the
-    # same way.
-    closed = _closing_tracker_monkeypatch(monkeypatch)
-
+    What IS guaranteed is that the handler finishes and the server stays usable.
+    That is the bug the 5s bound was added to prevent ("the bug this guards is
+    the entire ASGI task wedging"), it is not covered anywhere else, and it is
+    deterministic: if the disconnect had wedged the ASGI task or its executor,
+    the second connection below would hang or fail instead of completing a turn.
+    """
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
     client = TestClient(server.app)
+
     with client.websocket_connect(ws_url(token)) as ws:
         _expect_session_info(ws)
-        # No message sent.
+        # Connect and drop without sending anything.
 
-    import time
-    deadline = time.monotonic() + 15.0
-    while not closed["value"] and time.monotonic() < deadline:
-        time.sleep(0.05)
-
-    assert closed["value"] is True
+    with client.websocket_connect(ws_url(token)) as ws:
+        _expect_session_info(ws)
+        ws.send_json({"message": "still alive?"})
+        assert ws.receive_json()["type"] == "session_info"
+        assert ws.receive_json()["type"] == "stage_hint"
 
 
 def test_ws_chat_connection_after_activity_reaches_disconnect_cleanup(monkeypatch, token):
@@ -346,7 +353,16 @@ def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch, to
 
         # The registry was handed the SAME list object ws_chat mutates, not a
         # copy - so it stays live-updated without ws_chat needing to re-register.
-        assert history_ref == [
+        #
+        # A PREFIX, not equality. That same liveness is why: waiting for the
+        # second turn's stage_hint proves the first turn's appends have landed,
+        # but it does not stop the second turn landing its own. With a fake
+        # pipeline that returns instantly, turn two can finish and append its
+        # user message before this line runs - which is exactly how this failed
+        # under a loaded machine, asserting two entries against a list that had
+        # grown to three. The first two are fixed once turn one is done; what
+        # follows them is a race with no winner worth picking.
+        assert history_ref[:2] == [
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "Hello there "},
         ]
