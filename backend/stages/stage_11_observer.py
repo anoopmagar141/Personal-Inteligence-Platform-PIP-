@@ -728,34 +728,73 @@ def run_session_end(
     # prior-session context just because this particular session was thin
     # ("hi" / "thanks" / "bye"). Leaving the last good snapshot in place is
     # strictly better than overwriting it with an empty one.
+    # Isolated from the candidate loops below rather than sharing their fate.
+    # Snapshot and candidates are independent products of one extraction: a
+    # snapshot that fails to persist is a lost recap, and it must not also cost
+    # the memory and decision candidates that were extracted alongside it.
     if output["session_snapshot"].get("topic"):
-        session_snapshot.write_snapshot(conn, output["session_snapshot"])
+        try:
+            session_snapshot.write_snapshot(conn, output["session_snapshot"])
+        except Exception as e:
+            logger.error(f"Observer: session snapshot write failed, continuing with candidates: {e}")
 
     enforcer = ConstitutionEnforcer(CONSTITUTION_PATH)
     memory_results = []
     for candidate in output["memory_candidates"]:
-        # Reinforcement must happen before validation and be visible to the write:
-        # a single-pass extraction can only ever produce evidence_count=1 on its
-        # own, so without this, repeat observations across sessions would never
-        # accumulate and would keep failing Stage 12's tiered thresholds forever.
-        candidate = stage_12.reinforce_evidence(conn, candidate)
-        validation_result = stage_12.run(conn, candidate, enforcer)
-        outcome = stage_13.run(conn, candidate, validation_result)
+        # Per-candidate isolation, and the reason is not hypothetical. A None
+        # confidence reaching the enforcer's conflict check raised TypeError
+        # here, and with nothing between that raise and the caller it escaped
+        # run_session_end entirely - the WS handler logged "session transcript
+        # discarded" and the ENTIRE session was lost: every other memory
+        # candidate, every decision candidate, all of it, over one bad row.
+        # That specific bug is fixed (constitution_enforcer.py), but the blast
+        # radius was the real defect: these three calls run arbitrary
+        # extraction output against the constitution, the profile store and
+        # the DB, and one candidate failing is a reason to drop that candidate,
+        # never the session around it.
+        #
+        # Recorded as a result rather than skipped silently - the count in
+        # session_lifecycle's log line stays honest about how many candidates
+        # were handled, and "ERROR"/"failed" is visible to anyone reading the
+        # outcome instead of a candidate that simply vanished. "failed" is the
+        # outcome Stage 13 already uses for a candidate that could not be
+        # written, so no reader needs a new value to understand this one.
+        try:
+            # Reinforcement must happen before validation and be visible to the write:
+            # a single-pass extraction can only ever produce evidence_count=1 on its
+            # own, so without this, repeat observations across sessions would never
+            # accumulate and would keep failing Stage 12's tiered thresholds forever.
+            candidate = stage_12.reinforce_evidence(conn, candidate)
+            validation_result = stage_12.run(conn, candidate, enforcer)
+            outcome = stage_13.run(conn, candidate, validation_result)
+            status = validation_result.status
+        except Exception as e:
+            logger.error(
+                f"Observer: candidate {candidate.get('target_table')}."
+                f"{candidate.get('field_name')} failed, dropping it and continuing: {e}"
+            )
+            status, outcome = "ERROR", "failed"
         memory_results.append({
             "candidate": candidate,
-            "validation_status": validation_result.status,
+            "validation_status": status,
             "outcome": outcome,
         })
 
     decision_results = []
     for dc in output["decision_candidates"]:
-        result = decision_log.route_observer_decision(
-            conn,
-            text=dc["decision_text"],
-            signals_found=dc["signals_found"],
-            raw_quote=dc["raw_quote"],
-            project_id=project_id,
-        )
+        # Same isolation, same reason: one unroutable decision must not take
+        # the rest of the session's decisions down with it.
+        try:
+            result = decision_log.route_observer_decision(
+                conn,
+                text=dc["decision_text"],
+                signals_found=dc["signals_found"],
+                raw_quote=dc["raw_quote"],
+                project_id=project_id,
+            )
+        except Exception as e:
+            logger.error(f"Observer: decision candidate failed, dropping it and continuing: {e}")
+            result = {"status": "failed", "error": str(e), "decision_text": dc.get("decision_text")}
         decision_results.append(result)
 
     return {

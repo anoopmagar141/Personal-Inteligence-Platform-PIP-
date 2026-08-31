@@ -756,3 +756,64 @@ def test_capping_keeps_the_end_of_the_session(monkeypatch):
     assert "turn 0" not in capped
     for line in capped.splitlines():
         assert line.startswith("User: turn ")
+
+
+def test_run_session_end_survives_one_failing_candidate(db_conn, monkeypatch):
+    """
+    A candidate that blows up mid-route must cost that candidate and nothing
+    else. Before per-candidate isolation, the raise escaped run_session_end
+    and the caller logged "session transcript discarded" - every other memory
+    candidate AND every decision candidate in the same session went with it.
+    Found live: a None confidence reaching the enforcer's conflict check
+    raised TypeError on every disconnect, so nothing was ever learned.
+    """
+    response = {
+        "memory_candidates": [
+            {
+                "target_table": "preference_memory",
+                "field_name": "answer_style",
+                "proposed_value": "concise",
+                "label": "explicit",
+                "evidence_text": "keep it short when you answer",
+            },
+            {
+                "target_table": "preference_memory",
+                "field_name": "preferred_tools",
+                "proposed_value": "Neovim",
+                "label": "explicit",
+                "evidence_text": "switched to Neovim last month",
+            },
+        ],
+        "decision_candidates": VALID_RESPONSE["decision_candidates"],
+        "session_snapshot": VALID_RESPONSE["session_snapshot"],
+    }
+
+    real_run = observer.stage_12.run
+
+    def exploding_run(conn, candidate, enforcer):
+        if candidate.get("field_name") == "answer_style":
+            raise TypeError("'>' not supported between instances of 'NoneType' and 'float'")
+        return real_run(conn, candidate, enforcer)
+
+    monkeypatch.setattr(observer.stage_12, "run", exploding_run)
+
+    # Both evidence_text quotes have to appear verbatim, or run()'s grounding
+    # check drops the candidate before it ever reaches the loop under test.
+    transcript = VALID_TRANSCRIPT + "User: and keep it short when you answer.\n"
+
+    provider = FakeProvider(response_text=json.dumps(response))
+    result = observer.run_session_end(db_conn, transcript, provider)
+
+    # The failing candidate is recorded as failed, not silently dropped.
+    assert len(result["memory_results"]) == 2
+    poisoned = next(r for r in result["memory_results"] if r["candidate"]["field_name"] == "answer_style")
+    assert poisoned["validation_status"] == "ERROR"
+    assert poisoned["outcome"] == "failed"
+
+    # Everything else in the same session still went through.
+    survivor = next(r for r in result["memory_results"] if r["candidate"]["field_name"] == "preferred_tools")
+    assert survivor["validation_status"] != "ERROR"
+
+    assert len(result["decision_results"]) == 1
+    assert result["decision_results"][0]["status"] == "logged"
+    assert session_snapshot.load_snapshot(db_conn)["topic"] == "Choosing a web framework"
