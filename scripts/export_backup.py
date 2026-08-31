@@ -39,6 +39,7 @@ mechanism, kept because it costs nothing.
 
 import argparse
 import getpass
+import hmac
 import os
 import pathlib
 import sys
@@ -59,6 +60,12 @@ KEY_PATH = DATA_DIR / "db_key.txt"
 # FTS5 keeps shadow tables whose row counts are an implementation detail of the
 # index, not user data - comparing them across an export proves nothing.
 _FTS_SHADOW_SUFFIXES = ("_data", "_idx", "_docsize", "_content", "_config")
+
+
+def _ensure_repo_on_path() -> None:
+    """backend.core.db_key lives above this script's directory, not beside it."""
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
 
 
 def _sql_quote(value: str) -> str:
@@ -89,7 +96,7 @@ def resolve_live_key() -> str:
     if KEY_PATH.exists():
         return KEY_PATH.read_text(encoding="utf-8").strip()
 
-    sys.path.insert(0, str(REPO_ROOT))
+    _ensure_repo_on_path()
     from backend.core import db_key as db_key_module
 
     if not db_key_module.salt_path().exists():
@@ -105,21 +112,61 @@ def resolve_live_key() -> str:
     return db_key_module.derive_key_from_stored_salt(password)
 
 
-def prompt_backup_password() -> str:
+def _is_live_secret(candidate: str, live_key: str) -> bool:
     """
-    A SEPARATE password for the backup, entered twice.
+    Whether `candidate` is the live secret, in either of the two forms it takes.
 
-    Separate on purpose: the whole value of this file is that it survives the
-    loss or compromise of the live key. Reusing the live password would make the
-    backup exactly as compromised as the thing it is meant to outlive.
+    The live secret wears two faces and a real check has to catch both. Under
+    the random-key model it IS the 64-char hex key, which someone might paste
+    straight out of db_key.txt. Under the password model the user has never seen
+    that hex - they know a password, which only becomes the key after the KDF.
+    So comparing the typed string directly catches the first case and nothing
+    else; catching the second means loading the salt and deriving.
+
+    That derivation costs a full PBKDF2 pass, which is deliberately slow (see
+    KDF_ITERATIONS). Paid once, at a prompt the user is already sitting at.
+    """
+    if hmac.compare_digest(candidate.strip(), live_key):
+        return True
+
+    _ensure_repo_on_path()
+    from backend.core import db_key as db_key_module
+
+    try:
+        derived = db_key_module.derive_key_from_stored_salt(candidate)
+    except Exception:
+        # No salt, or an unreadable one: there is no password model here for the
+        # entry to collide with, so the direct comparison above was the whole test.
+        return False
+    return hmac.compare_digest(derived, live_key)
+
+
+def prompt_backup_password(live_key: str) -> str:
+    """
+    The password this backup file is encrypted under, entered twice.
+
+    It has to differ from the LIVE password, and the prompt says so, because the
+    whole value of this file is that it survives the loss or compromise of the
+    live key. Reusing the live password would make the backup exactly as
+    compromised as the thing it is meant to outlive.
+
+    It does NOT have to differ from your previous backups, and the wording is
+    careful about that after the earlier phrasing ("New password for this
+    backup") read as "invent a fresh one every run". Nothing here tracks past
+    exports; one backup password, reused forever, is the intended usage. Two
+    secrets total, not one per file.
 
     getpass, so it is never echoed, never in shell history, never in a log.
     """
-    first = getpass.getpass("New password for this backup (not the live one): ")
+    first = getpass.getpass("Password for this backup file (same one every time is fine): ")
     if not first:
         sys.exit("ERROR: an empty backup password would leave the file unencrypted in practice.")
-    if first == os.environ.get("PIP_DB_KEY", object()):
-        sys.exit("ERROR: that is the live key. Use a different password for the backup.")
+    if _is_live_secret(first, live_key):
+        sys.exit(
+            "ERROR: that is the live database secret. The backup needs a different one - "
+            "the point of this file is to stay safe if the live key is lost or stolen, and "
+            "sharing a password with it gives up exactly that."
+        )
     second = getpass.getpass("Repeat it: ")
     if first != second:
         sys.exit("ERROR: the two entries do not match. Nothing was written.")
@@ -193,11 +240,15 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     live_key = resolve_live_key()
-    backup_password = prompt_backup_password()
 
     src = sqlcipher3.connect(str(db_path))
     try:
         src.execute(f"PRAGMA key = {_hex_key_pragma(live_key)}")
+
+        # Prove the live key opens the database before asking for anything else.
+        # SQLCipher defers the real check to first page access - PRAGMA key alone
+        # always "succeeds" - so this has to touch the schema, and the table list
+        # it reads is one the export needs anyway.
         try:
             names = table_names(src)
         except Exception:
@@ -209,6 +260,12 @@ def main() -> None:
         compared = comparable_tables(names)
         expected = row_counts(src, compared)
         print(f"  {len(names)} tables, {sum(expected.values())} rows across {len(compared)} compared tables")
+
+        # Only now is it worth the user's time to choose a backup password: the
+        # line just printed is proof the live password was right. Prompting for
+        # it first meant one typo up there cost three entries before anything
+        # admitted the first was wrong.
+        backup_password = prompt_backup_password(live_key)
 
         try:
             src.execute("PRAGMA wal_checkpoint(TRUNCATE)")
