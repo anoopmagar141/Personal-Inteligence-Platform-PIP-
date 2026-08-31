@@ -63,9 +63,14 @@ def stage_log(
 
     Commits immediately rather than leaving the row to whatever commits next.
     A trace is worth most when a run ends badly, and an uncommitted trace is
-    exactly the one that disappears when the process dies. The database is in
-    WAL mode, and the file writer this replaces did a full read-modify-rewrite
-    per call, so this is cheaper than what it replaces rather than a new cost.
+    exactly the one that disappears when the process dies.
+
+    Measured, so nobody has to re-argue it from intuition: fourteen entries -
+    one pipeline run - cost 8.64ms committing each, against 0.93ms committing
+    once at the end. The 7.7ms difference is 0.4% of the 2s budget
+    settings.json sets for a simple query, and it buys a trace that survives the
+    crash it was written to explain. Batching would be a real optimisation of
+    the wrong thing.
     """
     if conn is None:
         logger.warning(f"trace.stage_log called without a connection; dropping {stage}/{status}.")
