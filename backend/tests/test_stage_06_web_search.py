@@ -85,3 +85,52 @@ def test_different_queries_cache_independently():
     results_b = stage_06.run("current weather", search_fn=fake_search)
     assert results_a[0]["title"] == "latest news"
     assert results_b[0]["title"] == "current weather"
+
+
+# --- the total ceiling ------------------------------------------------------
+# timeout_seconds is handed to the search client and covers ONE request; the
+# client may try several backends and each gets its own budget, so the total was
+# unbounded. Measured: a real search passed timeout_seconds=10 returned after
+# 15.4s. This stage sits on the request path.
+
+
+def test_a_hanging_search_is_abandoned_at_the_ceiling(monkeypatch):
+    import time as _time
+
+    monkeypatch.setattr(stage_06, "_total_timeout_seconds", lambda: 1)
+
+    def never_returns(query, limit, timeout):
+        _time.sleep(60)
+        return [{"title": "too late"}]
+
+    started = _time.perf_counter()
+    assert stage_06.run("q", search_fn=never_returns) == []
+    assert _time.perf_counter() - started < 10, "the ceiling did not bound the wait"
+
+
+def test_the_abandoned_worker_cannot_block_process_exit():
+    """
+    A daemon thread, not a ThreadPoolExecutor worker. Its threads are
+    non-daemon and the interpreter joins them at exit, so abandoning a hung
+    search there still held the process open - measured at five minutes in a
+    test that had correctly abandoned the search at 30s. ADR-033 already says
+    shutdown cannot wait on slow work.
+    """
+    import threading as _threading
+
+    before = {t.name for t in _threading.enumerate()}
+    stage_06.run("q", search_fn=lambda *a: [{"title": "x", "url": "u", "snippet": "s"}])
+    workers = [t for t in _threading.enumerate()
+               if t.name == "stage06-web-search" and t.name not in before]
+    assert all(t.daemon for t in workers), "a non-daemon worker would delay shutdown"
+
+
+def test_a_slow_but_finishing_search_still_returns_its_results(monkeypatch):
+    monkeypatch.setattr(stage_06, "_total_timeout_seconds", lambda: 5)
+
+    def slow(query, limit, timeout):
+        import time as _t
+        _t.sleep(0.3)
+        return [{"title": "worth waiting for", "url": "u", "snippet": "s"}]
+
+    assert stage_06.run("patient query", search_fn=slow)[0]["title"] == "worth waiting for"

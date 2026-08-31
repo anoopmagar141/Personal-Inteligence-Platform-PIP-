@@ -52,7 +52,8 @@
   "web_search": {
     "provider": "duckduckgo",
     "result_limit": 3,
-    "timeout_seconds": 10
+    "timeout_seconds": 10,
+    "total_timeout_seconds": 30
   },
   "database": {
     "kdf_algorithm": "PBKDF2_HMAC_SHA512",

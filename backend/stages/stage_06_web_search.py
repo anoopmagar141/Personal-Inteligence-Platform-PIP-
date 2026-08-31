@@ -19,14 +19,34 @@
 # reuses these results.
 
 import logging
+import threading
 import time
 from typing import Any, Callable, Optional
 
+from backend.config.settings import get_settings
 from backend.stages.stage_01_intent_classifier import EXTERNAL_INFO_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 3600
+
+
+def _total_timeout_seconds() -> int:
+    """
+    A ceiling on the whole search, distinct from the per-request timeout.
+
+    They are genuinely different numbers. timeout_seconds is handed to the
+    search client and applies to one request; the client may try several
+    backends, and each attempt gets its own budget - so the total is unbounded
+    no matter what that value says. Measured here: a search passed
+    timeout_seconds=10 returned after 15.4 seconds, and this stage sits on the
+    request path, so an external service having a bad day could hold up a
+    response for as long as it liked.
+
+    An explicit setting rather than a multiple of the per-request one, because
+    any multiplier would be a number invented to look principled.
+    """
+    return int(get_settings()["web_search"].get("total_timeout_seconds", 30))
 
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
@@ -80,11 +100,46 @@ def run(
         return cached
 
     fn = search_fn or _duckduckgo_search
-    try:
-        results = fn(query, result_limit, timeout_seconds)
-    except Exception as e:
-        logger.error(f"Stage 6 web search failed, returning empty: {e}")
+
+    # Run it on a DAEMON thread so a slow search can be abandoned rather than
+    # waited out. The search client is a compiled extension doing its own DNS
+    # and connect, so there is no Python-level timeout to reach into it with -
+    # the only lever from here is to stop waiting.
+    #
+    # A daemon thread specifically, not ThreadPoolExecutor. Its workers are
+    # non-daemon and the interpreter joins them at exit, so abandoning a hung
+    # search there still blocks the process from shutting down - measured, a
+    # test abandoned a search at 30s exactly as intended and then sat for five
+    # minutes waiting for the worker before it could exit. ADR-033 already says
+    # shutdown cannot wait on slow work; this is the same rule.
+    #
+    # The thread finishes on its own once the search returns. Abandoning means
+    # abandoning: waiting for it to notice would reintroduce the delay this
+    # exists to bound, the same posture the WebSocket disconnect path takes with
+    # a stuck conn.close().
+    outcome: dict[str, Any] = {}
+
+    def _worker() -> None:
+        try:
+            outcome["results"] = fn(query, result_limit, timeout_seconds)
+        except Exception as exc:  # noqa: BLE001 - reported on the main thread
+            outcome["error"] = exc
+
+    ceiling = _total_timeout_seconds()
+    worker = threading.Thread(target=_worker, name="stage06-web-search", daemon=True)
+    worker.start()
+    worker.join(timeout=ceiling)
+
+    if worker.is_alive():
+        logger.error(
+            f"Stage 6 web search exceeded {ceiling}s, returning empty. The stage "
+            f"fails open by design, so the answer proceeds without it."
+        )
         return []
+    if "error" in outcome:
+        logger.error(f"Stage 6 web search failed, returning empty: {outcome['error']}")
+        return []
+    results = outcome.get("results", [])
 
     _cache_set(query, results)
     return results
