@@ -271,3 +271,65 @@ def test_rag_tunables_come_from_settings_not_from_duplicated_literals():
     assert vector_store.DEFAULT_SIMILARITY_THRESHOLD == rag["similarity_threshold"]
     assert vector_store.DEFAULT_TOP_K == rag["top_k_results"]
     assert vector_store.DEFAULT_MAX_DOCUMENT_SIZE_MB == rag["max_document_size_mb"]
+
+
+# --- how the embedding model is loaded --------------------------------------
+# Loading it used to contact the HuggingFace Hub on every call to check a model
+# that is pinned by name and already cached. Measured on the dev machine: 87.22s
+# with that check, 0.24s without - the weights themselves read in under a
+# second. It is also an outbound call a local-first application should not be
+# making at all.
+
+
+def test_model_is_loaded_from_local_disk(monkeypatch):
+    """The normal path: no network, whatever the network is doing."""
+    calls = []
+
+    class FakeModel:
+        def __init__(self, name, device=None, local_files_only=False):
+            calls.append(local_files_only)
+
+    monkeypatch.setattr(vector_store, "_model", None)
+    monkeypatch.setattr(vector_store, "SentenceTransformer", FakeModel)
+
+    vector_store._get_model()
+
+    assert calls == [True], "the model must be requested offline first"
+
+
+def test_a_missing_cache_falls_back_to_downloading_once(monkeypatch):
+    """
+    The branch that keeps a fresh clone working. Without it, offline-first would
+    turn "model not downloaded yet" into a hard failure on first run.
+    """
+    calls = []
+
+    class FakeModel:
+        def __init__(self, name, device=None, local_files_only=False):
+            calls.append(local_files_only)
+            if local_files_only:
+                raise OSError("not in the local cache")
+
+    monkeypatch.setattr(vector_store, "_model", None)
+    monkeypatch.setattr(vector_store, "SentenceTransformer", FakeModel)
+
+    vector_store._get_model()
+
+    assert calls == [True, False], "offline first, then one real download"
+
+
+def test_the_model_is_loaded_once_per_process(monkeypatch):
+    calls = []
+
+    class FakeModel:
+        def __init__(self, name, device=None, local_files_only=False):
+            calls.append(local_files_only)
+
+    monkeypatch.setattr(vector_store, "_model", None)
+    monkeypatch.setattr(vector_store, "SentenceTransformer", FakeModel)
+
+    vector_store._get_model()
+    vector_store._get_model()
+    vector_store._get_model()
+
+    assert len(calls) == 1

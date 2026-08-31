@@ -138,9 +138,40 @@ def _get_collection():
 
 
 def _get_model() -> SentenceTransformer:
+    """
+    The embedding model, loaded once per process, from local disk when possible.
+
+    local_files_only=True is worth a great deal more than it looks. Without it,
+    SentenceTransformer contacts the HuggingFace Hub to check for updates on
+    every load - even though the model is pinned by name and already cached -
+    and that call has to complete before PIP can embed anything.
+
+    Measured on this machine: 87.22s to load with the check, 0.24s without. The
+    weights themselves read in under a second; the rest was one network round
+    trip. The cause was local (huggingface.co advertises 8 IPv6 addresses, this
+    machine has no working IPv6 route, and each attempt burned its timeout
+    before falling back to IPv4) but the lesson is not: a pinned, cached model
+    should not need the network to load, and any network it does touch can be
+    slow or absent on someone else's machine.
+
+    It also removes an outbound call this application should not have been
+    making. PIP is local-first by design - its threat model treats other local
+    processes as untrusted - and it was quietly reaching a CDN on every start.
+
+    The fallback keeps a fresh machine working: no cached copy means
+    local_files_only raises, and that one time we fetch it properly. So the
+    first run downloads, and every run after is offline and fast.
+    """
     global _model
     if _model is None:
-        _model = SentenceTransformer(EMBEDDING_MODEL_NAME, device="cpu")
+        try:
+            _model = SentenceTransformer(EMBEDDING_MODEL_NAME, device="cpu", local_files_only=True)
+        except Exception as e:
+            logger.info(
+                f"Embedding model {EMBEDDING_MODEL_NAME} is not in the local cache "
+                f"({type(e).__name__}); downloading it once."
+            )
+            _model = SentenceTransformer(EMBEDDING_MODEL_NAME, device="cpu")
     return _model
 
 
