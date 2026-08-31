@@ -817,3 +817,36 @@ def test_run_session_end_survives_one_failing_candidate(db_conn, monkeypatch):
     assert len(result["decision_results"]) == 1
     assert result["decision_results"][0]["status"] == "logged"
     assert session_snapshot.load_snapshot(db_conn)["topic"] == "Choosing a web framework"
+
+
+def test_prompt_teaches_active_projects_by_example_not_only_by_name():
+    """
+    active_projects was added to APPROVED_MEMORY_FIELDS and to the schema enum,
+    but the OUTPUT FORMAT block still illustrated only preference_memory and
+    skill_memory - and a model copies the example far more readily than it
+    reads the list. Measured against llama3.1:8b on a transcript whose first
+    line is "I started a new project called Halo, it's a note-taking app in
+    Rust": active_projects was proposed in 1 of 6 runs. The model reliably
+    emitted a skill, a goal, or a topic instead - all true, none of them the
+    project - so a project the user named in plain words could not be learned.
+    With the example and the two rules below, 5 of 6, and 0 fabricated projects
+    across 8 runs of two project-free control transcripts.
+
+    Asserted on the prompt text because that is the only deterministic handle;
+    the behaviour it buys is measured live, not here.
+    """
+    prefix = observer._EXTRACTION_PROMPT_PREFIX
+
+    output_format = prefix.split("OUTPUT FORMAT:", 1)[1]
+    assert '"target_table": "active_projects"' in output_format, (
+        "a table the example never demonstrates is one the model rarely emits"
+    )
+
+    # The example must not name a project a real transcript could not contain,
+    # or the model has a ready-made answer to copy when it has no real one.
+    assert "Halo" not in prefix
+
+    assert "record it" in prefix and "active_projects" in prefix
+    assert "not the menu of" in prefix, (
+        "the example is a shape, not the set of tables worth emitting"
+    )

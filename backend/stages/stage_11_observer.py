@@ -172,6 +172,14 @@ RULES:
     If you cannot find the user's own words to copy, omit the candidate.
   - The angle-bracketed text in the example below describes what to put
     there. Never copy those descriptions into your answer.
+  - When the user names something they are building or working on, record it
+    in active_projects. A project is not covered by recording a goal about
+    it, a topic of interest in it, or a skill used on it - those are
+    different facts, and emitting them instead leaves the project itself
+    unrecorded. Emit active_projects as well as, not instead of, those.
+  - The OUTPUT FORMAT below shows the SHAPE of a candidate, not the menu of
+    tables worth emitting. Any table in the approved list above is equally
+    expected; do not favour the ones the example happens to illustrate.
 
 APPROVED MEMORY FIELDS - target_table must be one of these exact names:
 __APPROVED_FIELDS__
@@ -193,6 +201,14 @@ OUTPUT FORMAT:
       "field_name": "Rust",
       "proposed_value": "0.8",
       "label": "inferred",
+      "evidence_count": 1,
+      "evidence_text": "<the user's own words, copied exactly from the conversation>"
+    },
+    {
+      "target_table": "active_projects",
+      "field_name": "Orchard",
+      "proposed_value": "a household inventory tracker",
+      "label": "explicit",
       "evidence_count": 1,
       "evidence_text": "<the user's own words, copied exactly from the conversation>"
     }
