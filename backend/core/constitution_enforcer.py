@@ -130,7 +130,26 @@ class ConstitutionEnforcer:
         if existing_val is not None:
             proposed_val = candidate.get("proposed_value")
             if existing_val != proposed_val:
-                existing_conf = self._field_value(existing_field, "confidence", 1.0)
+                # `or 1.0`, not a bare default: _field_value's default only
+                # applies when the key is ABSENT, and topic_interests supplies
+                # the key with a literal None (it has no confidence column -
+                # the field is unscored, not low-confidence). That None reached
+                # this comparison and raised TypeError, which propagated all
+                # the way out of run_session_end and killed the whole Observer
+                # pass - "Disconnect Observer run failed, session transcript
+                # discarded" in the server log, on every session that produced
+                # a repeat topic candidate whose proposed_value differed at all
+                # from the recorded topic name. Nothing was learned from any of
+                # those sessions.
+                #
+                # Unscored resolves to 1.0 for the same reason absent does:
+                # this branch decides whether an overwrite needs the user's
+                # confirmation, and "we have no confidence score for what is
+                # already there" is a reason to ask, not a reason to overwrite
+                # silently.
+                existing_conf = self._field_value(existing_field, "confidence")
+                if existing_conf is None:
+                    existing_conf = 1.0
                 if existing_conf > 0.7:
                     return ValidationResult.TIER_2_REQUIRED("high_confidence_conflict")
 

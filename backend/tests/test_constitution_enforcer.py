@@ -225,3 +225,34 @@ def test_behavioral_override(enforcer):
     }
     res = enforcer.validate(candidate_override, existing, profile_age_weeks=1)
     assert res.status == "PROMPT_RECONCILIATION"
+
+
+def test_unscored_existing_confidence_escalates_instead_of_raising(enforcer):
+    """
+    topic_interests has no confidence column, so Stage 12 hands the enforcer a
+    row with confidence explicitly None. _field_value's default only fires on a
+    MISSING key, so that None used to reach `existing_conf > 0.7` and raise
+    TypeError - which escaped run_session_end and discarded the entire session
+    transcript, not just the one candidate ("Disconnect Observer run failed,
+    session transcript discarded: '>' not supported between instances of
+    'NoneType' and 'float'").
+    """
+    existing = {
+        "current_value": "pip",
+        "source_label": "explicit",
+        "confidence": None,
+        "evidence_count": 5,
+        "behavioral_signal_count": 0,
+        "first_contradiction_date": None,
+    }
+    candidate: MemoryCandidate = {
+        "target_table": "topic_interests",
+        "field_name": "pip",
+        "proposed_value": "PIP project",
+        "label": "explicit",
+        "evidence_count": 5,
+        "evidence_text": "im working on pip project",
+    }
+    res = enforcer.validate(candidate, existing, profile_age_weeks=8)
+    assert res.status == "TIER_2_REQUIRED"
+    assert res.reason == "high_confidence_conflict"
