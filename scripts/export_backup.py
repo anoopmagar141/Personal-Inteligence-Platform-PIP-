@@ -44,13 +44,12 @@ import pathlib
 import sys
 from datetime import datetime, timezone
 
-try:
-    import sqlcipher3
-except ImportError:  # pragma: no cover - environment guard, not logic
-    sys.exit(
-        "ERROR: sqlcipher3 is not installed, so an encrypted database cannot be read.\n"
-        "       pip install -r requirements.txt"
-    )
+# Fail with the interpreter you used, not a wrong install instruction.
+import _venv
+
+_venv.require("sqlcipher3")
+
+import sqlcipher3
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 DATA_DIR = REPO_ROOT / "data"

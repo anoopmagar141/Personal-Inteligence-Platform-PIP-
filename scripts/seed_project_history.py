@@ -72,6 +72,11 @@ Usage
 
 from __future__ import annotations
 
+# Fail with the interpreter you used, not a wrong install instruction.
+import _venv
+
+_venv.require("sqlcipher3")
+
 import argparse
 import datetime as dt
 import os

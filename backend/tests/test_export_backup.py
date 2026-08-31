@@ -9,6 +9,7 @@ backups exist for: surviving the compromise or loss of that key.
 
 import importlib.util
 import pathlib
+import sys
 
 import pytest
 
@@ -21,8 +22,18 @@ BACKUP_PASSWORD = "a-different-password"
 
 
 def _load_script():
-    """scripts/ is not a package, so the module is loaded by path."""
+    """
+    scripts/ is not a package, so the module is loaded by path.
+
+    Running `python scripts/export_backup.py` puts scripts/ at sys.path[0],
+    which is how the script reaches its sibling _venv helper. Loading by path
+    does not, so put it there - otherwise this fixture fails on an import that
+    works perfectly well in the only way the script is actually invoked.
+    """
     root = pathlib.Path(__file__).parent.parent.parent
+    scripts_dir = str(root / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
     spec = importlib.util.spec_from_file_location("export_backup", root / "scripts" / "export_backup.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

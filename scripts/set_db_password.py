@@ -40,6 +40,11 @@ database, changing nothing. Useful for confirming you remember it.
 
 from __future__ import annotations
 
+# Fail with the interpreter you used, not a wrong install instruction.
+import _venv
+
+_venv.require("sqlcipher3")
+
 import argparse
 import getpass
 import os

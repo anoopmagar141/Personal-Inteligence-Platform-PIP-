@@ -51,6 +51,11 @@ Idempotent: if pip.db is already encrypted, it reports that and exits 0.
 
 from __future__ import annotations
 
+# Fail with the interpreter you used, not a wrong install instruction.
+import _venv
+
+_venv.require("sqlcipher3")
+
 import argparse
 import os
 import re

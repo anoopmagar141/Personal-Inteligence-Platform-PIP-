@@ -6,8 +6,8 @@ One-time migration: seeds the provider_consent table in an existing
 seed_provider_consent() existed in profile_store.py.
 
 Safe to run against any DB:
-  - If provider_consent already has rows → no-op (idempotent).
-  - If provider_consent is empty → inserts the default rows from
+  - If provider_consent already has rows -> no-op (idempotent).
+  - If provider_consent is empty -> inserts the default rows from
     config/provider_consent.json.
 
 Usage (from repo root):
@@ -15,6 +15,11 @@ Usage (from repo root):
 
 Default DB path: data/pip.db (matches the local dev default).
 """
+
+# Fail with the interpreter you used, not a wrong install instruction.
+import _venv
+
+_venv.require("sqlcipher3")
 
 import argparse
 import sqlite3
@@ -56,7 +61,7 @@ def main():
     print(f"provider_consent rows before: {before}")
 
     if before > 0:
-        print("Table already seeded — no-op. Exiting.")
+        print("Table already seeded - no-op. Exiting.")
         conn.close()
         return
 
