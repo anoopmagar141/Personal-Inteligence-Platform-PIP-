@@ -68,6 +68,7 @@ class _DocumentsViewState extends State<DocumentsView> {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.xl),
       child: ConstrainedBox(
@@ -81,7 +82,7 @@ class _DocumentsViewState extends State<DocumentsView> {
               description: 'Files PIP has read into its memory (RAG). Supported: PDF, Markdown, text, Python, JSON, HTML.',
             ),
             if (_error != null) ...[
-              Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 12.5)),
+              Text(_error!, style: TextStyle(color: pip.danger, fontSize: 12.5)),
               const SizedBox(height: AppSpacing.sm),
             ],
             if (_documents != null)
@@ -108,19 +109,19 @@ class _DocumentsViewState extends State<DocumentsView> {
                                   children: [
                                     Text(
                                       _fileName('${doc['file_path']}'),
-                                      style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: AppColors.text),
+                                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: pip.text),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       '${doc['chunk_count']} chunks · ingested ${doc['ingested_at']}',
-                                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                      style: TextStyle(fontSize: 12, color: pip.textMuted),
                                     ),
                                   ],
                                 ),
                               ),
                               GhostButton(
                                 label: 'Remove',
-                                color: AppColors.danger,
+                                color: pip.danger,
                                 onTap: () => _delete('${doc['file_path']}'),
                               ),
                             ],
@@ -133,16 +134,16 @@ class _DocumentsViewState extends State<DocumentsView> {
             SectionCard(
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Add a document for PIP to remember.',
-                      style: TextStyle(fontSize: 13.5, color: AppColors.textMuted),
+                      style: TextStyle(fontSize: 13.5, color: pip.textMuted),
                     ),
                   ),
                   FilledButton(
                     onPressed: _uploading ? null : _pickAndUpload,
                     child: _uploading
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentOn))
+                        ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: pip.accentOn))
                         : const Text('Upload'),
                   ),
                 ],

@@ -17,6 +17,9 @@ data/db_key.txt
 data/salt.bin
 data/documents/
 data/pip.lock
+# Which theme the Flutter client was last set to. Runtime state chosen on
+# this machine, same family as api_token.txt - not a project setting.
+data/ui_theme.txt
 data/backend.log
 data/backend.err.log
 backend/logs/

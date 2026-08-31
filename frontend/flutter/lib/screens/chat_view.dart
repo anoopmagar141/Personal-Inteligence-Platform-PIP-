@@ -13,6 +13,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api_client.dart';
 import '../theme.dart';
@@ -25,6 +26,12 @@ class _ChatMessage {
   const _ChatMessage(this.role, this.content, {this.stopped = false});
 }
 
+/// Enter-to-send, as an intent so Shift+Enter can still reach the TextField
+/// and insert a newline instead.
+class _SendIntent extends Intent {
+  const _SendIntent();
+}
+
 class ChatView extends StatefulWidget {
   final ApiClient api;
   final WsChatClient chatClient;
@@ -32,12 +39,13 @@ class ChatView extends StatefulWidget {
   const ChatView({super.key, required this.api, required this.chatClient, required this.activeProjectId});
 
   @override
-  State<ChatView> createState() => _ChatViewState();
+  State<ChatView> createState() => ChatViewState();
 }
 
-class _ChatViewState extends State<ChatView> {
+class ChatViewState extends State<ChatView> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  final _inputFocus = FocusNode();
   final List<_ChatMessage> _transcript = [];
   StreamSubscription? _subscription;
 
@@ -48,6 +56,19 @@ class _ChatViewState extends State<ChatView> {
 
   String? _activeConversationId;
   List<dynamic>? _conversations;
+
+  /// Width below which the stage-hint panel stops being worth 240px of a
+  /// window, and below which the conversation list stops being worth 220.
+  ///
+  /// The shell's own sidebar is 216 (72 collapsed) and this screen adds 460
+  /// more, so at the runner's default 1280x720 the conversation itself gets
+  /// about 600px - and nothing stops the window being dragged narrower than
+  /// the fixed chrome, at which point the row overflows outright. Neither
+  /// panel is dropped without replacement: both stay reachable from the
+  /// composer, because a panel that silently vanishes at some width is worse
+  /// than one that was never offered.
+  static const _hintsBreakpoint = 940.0;
+  static const _conversationsBreakpoint = 640.0;
 
   @override
   void initState() {
@@ -152,6 +173,10 @@ class _ChatViewState extends State<ChatView> {
     // first would let a fresh _send() race ahead of that event arriving.
   }
 
+  /// Public so the shell's Ctrl+N binding can reach it without this view
+  /// having to know a shell exists.
+  void newChat() => _newChat();
+
   void _newChat() {
     if (_activeConversationId == null && _transcript.isEmpty) return; // already a fresh, empty chat
     setState(() {
@@ -162,6 +187,7 @@ class _ChatViewState extends State<ChatView> {
       _activeConversationId = null;
     });
     widget.chatClient.switchConversation(null);
+    _inputFocus.requestFocus();
   }
 
   void _switchTo(String conversationId) {
@@ -198,77 +224,202 @@ class _ChatViewState extends State<ChatView> {
     _subscription?.cancel();
     _controller.dispose();
     _scrollController.dispose();
+    _inputFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _showConversationsDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: SizedBox(
+          width: 320,
+          height: 420,
+          child: _ConversationSidebar(
+            conversations: _conversations,
+            activeConversationId: _activeConversationId,
+            bordered: false,
+            onNewChat: () {
+              Navigator.of(dialogContext).pop();
+              _newChat();
+            },
+            onSelect: (id) {
+              Navigator.of(dialogContext).pop();
+              _switchTo(id);
+            },
+            onDelete: _delete,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showHintsDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: SizedBox(width: 320, child: _hintPanelContents()),
+        ),
+      ),
+    );
+  }
+
+  /// The stage-hint list itself, so the inline panel and the narrow-window
+  /// dialog cannot drift apart.
+  Widget _hintPanelContents() {
+    final pip = context.pip;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const TagLabel('Last response'),
+        const SizedBox(height: AppSpacing.md),
+        if (_lastStageHint == null)
+          Text('No response yet.', style: TextStyle(fontSize: 12.5, color: pip.textFaint))
+        else
+          for (final entry in _lastStageHint!.entries) _HintRow(label: entry.key, value: entry.value == true),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _ConversationSidebar(
-          conversations: _conversations,
-          activeConversationId: _activeConversationId,
-          onNewChat: _newChat,
-          onSelect: _switchTo,
-          onDelete: _delete,
-        ),
-        Expanded(
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  children: [
-                    for (final message in _transcript) _MessageBubble(message: message),
-                    if (_isStreaming) _MessageBubble(message: _ChatMessage('assistant', _streamingText)),
-                  ],
-                ),
+    final pip = context.pip;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showConversations = constraints.maxWidth >= _conversationsBreakpoint;
+        final showHints = constraints.maxWidth >= _hintsBreakpoint;
+        return Row(
+          children: [
+            if (showConversations)
+              _ConversationSidebar(
+                conversations: _conversations,
+                activeConversationId: _activeConversationId,
+                onNewChat: _newChat,
+                onSelect: _switchTo,
+                onDelete: _delete,
               ),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        style: const TextStyle(fontSize: 14.5, color: AppColors.text),
-                        decoration: const InputDecoration(hintText: 'Ask PIP anything...'),
-                        onSubmitted: (_) => _send(),
-                        enabled: !_isStreaming,
-                      ),
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ListView(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      children: [
+                        for (final message in _transcript) _MessageBubble(message: message),
+                        if (_isStreaming) _MessageBubble(message: _ChatMessage('assistant', _streamingText)),
+                      ],
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    _isStreaming
-                        ? _SendButton(enabled: true, onTap: _stop, icon: Icons.stop_rounded, color: AppColors.danger)
-                        : _SendButton(enabled: true, onTap: _send, icon: Icons.arrow_forward),
-                  ],
-                ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    decoration: BoxDecoration(border: Border(top: BorderSide(color: pip.border))),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (!showConversations) ...[
+                          _IconAction(
+                            icon: Icons.forum_outlined,
+                            tooltip: 'Conversations',
+                            onTap: _showConversationsDialog,
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                        ],
+                        Expanded(
+                          child: Shortcuts(
+                            shortcuts: const {
+                              // Enter sends; Shift+Enter falls through to the
+                              // TextField and inserts a newline. The field is
+                              // multi-line now, so without this binding Enter
+                              // would only ever add a line and never send.
+                              SingleActivator(LogicalKeyboardKey.enter): _SendIntent(),
+                            },
+                            child: Actions(
+                              actions: {
+                                _SendIntent: CallbackAction<_SendIntent>(
+                                  onInvoke: (_) {
+                                    _send();
+                                    return null;
+                                  },
+                                ),
+                              },
+                              child: TextField(
+                                controller: _controller,
+                                focusNode: _inputFocus,
+                                style: TextStyle(fontSize: 14.5, color: pip.text),
+                                decoration: const InputDecoration(hintText: 'Ask PIP anything...'),
+                                minLines: 1,
+                                maxLines: 5,
+                                enabled: !_isStreaming,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (!showHints) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          _IconAction(
+                            icon: Icons.insights_outlined,
+                            tooltip: 'How this answer was built',
+                            onTap: _showHintsDialog,
+                          ),
+                        ],
+                        const SizedBox(width: AppSpacing.sm),
+                        _isStreaming
+                            ? _SendButton(enabled: true, onTap: _stop, icon: Icons.stop_rounded, color: pip.danger)
+                            : _SendButton(enabled: true, onTap: _send, icon: Icons.arrow_forward),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
+            if (showHints)
+              Container(
+                width: 240,
+                decoration: BoxDecoration(
+                  color: pip.surface,
+                  border: Border(left: BorderSide(color: pip.border)),
+                ),
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: _hintPanelContents(),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// A small square icon button, standing in for a panel the window is too
+/// narrow to show inline.
+class _IconAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _IconAction({required this.icon, required this.tooltip, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: pip.surfaceRaised,
+        borderRadius: AppRadius.sm,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: AppRadius.sm,
+          child: Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            child: Icon(icon, size: 18, color: pip.textMuted),
           ),
         ),
-        Container(
-          width: 240,
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            border: Border(left: BorderSide(color: AppColors.border)),
-          ),
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const TagLabel('Last response'),
-              const SizedBox(height: AppSpacing.md),
-              if (_lastStageHint == null)
-                const Text('No response yet.', style: TextStyle(fontSize: 12.5, color: AppColors.textFaint))
-              else
-                for (final entry in _lastStageHint!.entries) _HintRow(label: entry.key, value: entry.value == true),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -282,22 +433,31 @@ class _ConversationSidebar extends StatelessWidget {
   final VoidCallback onNewChat;
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onDelete;
+
+  /// False when this is shown in a dialog on a narrow window, where the fixed
+  /// width and the right-hand border belong to the dialog instead.
+  final bool bordered;
+
   const _ConversationSidebar({
     required this.conversations,
     required this.activeConversationId,
     required this.onNewChat,
     required this.onSelect,
     required this.onDelete,
+    this.bordered = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return Container(
-      width: 220,
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(right: BorderSide(color: AppColors.border)),
-      ),
+      width: bordered ? 220 : null,
+      decoration: bordered
+          ? BoxDecoration(
+              color: pip.surface,
+              border: Border(right: BorderSide(color: pip.border)),
+            )
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -310,9 +470,9 @@ class _ConversationSidebar extends StatelessWidget {
             child: conversations == null
                 ? const SizedBox.shrink()
                 : conversations!.isEmpty
-                    ? const Padding(
+                    ? Padding(
                         padding: EdgeInsets.all(AppSpacing.md),
-                        child: Text('No conversations yet.', style: TextStyle(fontSize: 12, color: AppColors.textFaint)),
+                        child: Text('No conversations yet.', style: TextStyle(fontSize: 12, color: pip.textFaint)),
                       )
                     : ListView(
                         padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
@@ -349,13 +509,14 @@ class _ConversationRowState extends State<_ConversationRow> {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
         child: Material(
-          color: widget.selected ? AppColors.accentSoft : Colors.transparent,
+          color: widget.selected ? pip.accentSoft : Colors.transparent,
           borderRadius: AppRadius.sm,
           child: InkWell(
             onTap: widget.onTap,
@@ -371,7 +532,7 @@ class _ConversationRowState extends State<_ConversationRow> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 13,
-                        color: widget.selected ? AppColors.accent : AppColors.text,
+                        color: widget.selected ? pip.accent : pip.text,
                         fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
@@ -380,9 +541,9 @@ class _ConversationRowState extends State<_ConversationRow> {
                     InkWell(
                       onTap: widget.onDelete,
                       borderRadius: AppRadius.sm,
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(2),
-                        child: Icon(Icons.close, size: 14, color: AppColors.textFaint),
+                        child: Icon(Icons.close, size: 14, color: pip.textFaint),
                       ),
                     ),
                 ],
@@ -402,21 +563,22 @@ class _HintRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 9),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: pip.border))),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
-            child: Text(label, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+            child: Text(label, style: TextStyle(fontSize: 12.5, color: pip.textMuted)),
           ),
           Text(
             value ? 'Yes' : 'No',
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
-              color: value ? AppColors.accent : AppColors.textFaint,
+              color: value ? pip.accent : pip.textFaint,
             ),
           ),
         ],
@@ -429,13 +591,16 @@ class _SendButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
   final IconData icon;
-  final Color color;
-  const _SendButton({required this.enabled, required this.onTap, required this.icon, this.color = AppColors.accent});
+  /// Null means the palette's accent - a default argument has to be a
+  /// compile-time constant, which a theme-resolved color cannot be.
+  final Color? color;
+  const _SendButton({required this.enabled, required this.onTap, required this.icon, this.color});
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return Material(
-      color: enabled ? color : AppColors.surfaceRaised,
+      color: enabled ? (color ?? pip.accent) : pip.surfaceRaised,
       borderRadius: AppRadius.sm,
       child: InkWell(
         onTap: enabled ? onTap : null,
@@ -444,7 +609,7 @@ class _SendButton extends StatelessWidget {
           width: 40,
           height: 40,
           alignment: Alignment.center,
-          child: Icon(icon, size: 18, color: enabled ? AppColors.accentOn : AppColors.textFaint),
+          child: Icon(icon, size: 18, color: enabled ? pip.accentOn : pip.textFaint),
         ),
       ),
     );
@@ -457,13 +622,14 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     if (message.role == 'system') {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Center(
           child: Text(
             message.content,
-            style: const TextStyle(color: AppColors.danger, fontSize: 12.5),
+            style: TextStyle(color: pip.danger, fontSize: 12.5),
           ),
         ),
       );
@@ -475,16 +641,18 @@ class _MessageBubble extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: isUser
-              ? BoxDecoration(color: AppColors.accentSoft, borderRadius: AppRadius.md)
+              ? BoxDecoration(color: pip.accentSoft, borderRadius: AppRadius.md)
               : null,
-          child: Text(
+          // Selectable so an answer can actually be copied out - the whole
+          // point of some of them is that they are worth keeping.
+          child: SelectableText(
             message.content,
-            style: const TextStyle(fontSize: 14.5, height: 1.5, color: AppColors.text),
+            style: TextStyle(fontSize: 14.5, height: 1.5, color: pip.text),
           ),
         ),
         if (message.stopped) ...[
           const SizedBox(height: 4),
-          const Text('Stopped', style: TextStyle(fontSize: 11, color: AppColors.textFaint, fontStyle: FontStyle.italic)),
+          Text('Stopped', style: TextStyle(fontSize: 11, color: pip.textFaint, fontStyle: FontStyle.italic)),
         ],
       ],
     );
@@ -514,17 +682,18 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return Container(
       width: 26,
       height: 26,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: isUser ? AppColors.surfaceRaised : AppColors.accent,
+        color: isUser ? pip.surfaceRaised : pip.accent,
         shape: BoxShape.circle,
       ),
       child: isUser
-          ? const Icon(Icons.person_outline, size: 15, color: AppColors.textMuted)
-          : const Text('P', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accentOn)),
+          ? Icon(Icons.person_outline, size: 15, color: pip.textMuted)
+          : Text('P', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: pip.accentOn)),
     );
   }
 }

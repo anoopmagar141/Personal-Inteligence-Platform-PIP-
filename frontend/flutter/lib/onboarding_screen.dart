@@ -81,6 +81,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -90,9 +91,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Container(
               padding: const EdgeInsets.all(AppSpacing.xl),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: pip.surface,
                 borderRadius: AppRadius.lg,
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: pip.border),
               ),
               child: Form(
                 key: _formKey,
@@ -100,16 +101,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const TagLabel('Setup', color: AppColors.accent),
+                  TagLabel('Setup', color: pip.accent),
                   const SizedBox(height: AppSpacing.sm),
-                  const Text(
+                  Text(
                     'Welcome to PIP',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.text),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: pip.text),
                   ),
                   const SizedBox(height: AppSpacing.xs),
-                  const Text(
+                  Text(
                     'A few questions before we start. Name, language, and timezone are locked once set.',
-                    style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.5),
+                    style: TextStyle(fontSize: 12, color: pip.textMuted, height: 1.5),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   TextFormField(
@@ -171,13 +172,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: FilledButton(
                       onPressed: _submitting ? null : _submit,
                       child: _submitting
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentOn))
+                          ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: pip.accentOn))
                           : const Text('Complete setup'),
                     ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: AppSpacing.sm),
-                    Text(_error!, style: const TextStyle(fontSize: 12, color: AppColors.danger)),
+                    Text(_error!, style: TextStyle(fontSize: 12, color: pip.danger)),
                   ],
                 ],
                 ),

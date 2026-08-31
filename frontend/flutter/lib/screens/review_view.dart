@@ -147,6 +147,7 @@ class _ReviewViewState extends State<ReviewView> {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return RefreshIndicator(
       onRefresh: _load,
       child: SingleChildScrollView(
@@ -164,7 +165,7 @@ class _ReviewViewState extends State<ReviewView> {
                     'trusting a memory it has never had confirmed. Nothing here is stored until you say so.',
               ),
               if (_error != null)
-                Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 12.5)),
+                Text(_error!, style: TextStyle(color: pip.danger, fontSize: 12.5)),
               _sectionTitle('Memory'),
               _memorySection(),
               const SizedBox(height: AppSpacing.lg),
@@ -182,7 +183,7 @@ class _ReviewViewState extends State<ReviewView> {
 
   Widget _sectionTitle(String text) => Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-        child: TagLabel(text, color: AppColors.text, size: 13),
+        child: TagLabel(text, color: context.pip.text, size: 13),
       );
 
   Widget _memorySection() {
@@ -202,6 +203,7 @@ class _ReviewViewState extends State<ReviewView> {
   }
 
   Widget _memoryCard(Map<String, dynamic> candidate) {
+    final pip = context.pip;
     final id = candidate['id'] as int;
     final key = 'memory:$id';
     final isCheck = candidate['origin'] == 'verification';
@@ -225,16 +227,16 @@ class _ReviewViewState extends State<ReviewView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TagLabel(question, color: AppColors.textMuted, size: 11.5),
+            TagLabel(question, color: pip.textMuted, size: 11.5),
             const SizedBox(height: 6),
             RichText(
               text: TextSpan(
-                style: const TextStyle(fontSize: 14.5, color: AppColors.text),
+                style: TextStyle(fontSize: 14.5, color: pip.text),
                 children: [
                   TextSpan(text: '$label · '),
                   TextSpan(
                     text: '${candidate['field_name']}',
-                    style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.accent),
+                    style: TextStyle(fontWeight: FontWeight.w700, color: pip.accent),
                   ),
                   TextSpan(text: ': ${candidate['proposed_value']}'),
                 ],
@@ -246,7 +248,7 @@ class _ReviewViewState extends State<ReviewView> {
             ],
             if (explanation.isNotEmpty) ...[
               const SizedBox(height: 6),
-              Text(explanation, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+              Text(explanation, style: TextStyle(fontSize: 11.5, color: pip.textMuted)),
             ],
             const SizedBox(height: AppSpacing.md),
             _actions(
@@ -278,6 +280,7 @@ class _ReviewViewState extends State<ReviewView> {
   }
 
   Widget _decisionCard(Map<String, dynamic> candidate) {
+    final pip = context.pip;
     final id = candidate['id'] as int;
     final key = 'decision:$id';
     final quote = '${candidate['raw_quote'] ?? ''}';
@@ -288,9 +291,9 @@ class _ReviewViewState extends State<ReviewView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const TagLabel('Was this a decision you made?', color: AppColors.textMuted, size: 11.5),
+            TagLabel('Was this a decision you made?', color: pip.textMuted, size: 11.5),
             const SizedBox(height: 6),
-            Text('${candidate['decision_text']}', style: const TextStyle(fontSize: 14.5, color: AppColors.text)),
+            Text('${candidate['decision_text']}', style: TextStyle(fontSize: 14.5, color: pip.text)),
             if (quote.isNotEmpty) ...[
               const SizedBox(height: 8),
               _Quote(quote),
@@ -299,7 +302,7 @@ class _ReviewViewState extends State<ReviewView> {
             Text(
               'confidence ${(candidate['confidence'] as num).toStringAsFixed(2)} · '
               'signals: ${signals.isEmpty ? 'none' : signals}',
-              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 11, color: pip.textMuted),
             ),
             const SizedBox(height: AppSpacing.md),
             _actions(
@@ -315,6 +318,7 @@ class _ReviewViewState extends State<ReviewView> {
   }
 
   Widget _proactiveSection() {
+    final pip = context.pip;
     if (_proactive == null) return const _Loading();
     if (_proactive!.isEmpty) {
       return const EmptyState(
@@ -332,12 +336,12 @@ class _ReviewViewState extends State<ReviewView> {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline, size: 16, color: AppColors.accent),
+                  Icon(Icons.info_outline, size: 16, color: pip.accent),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       _describeTrigger(raw as Map<String, dynamic>),
-                      style: const TextStyle(fontSize: 13, color: AppColors.text),
+                      style: TextStyle(fontSize: 13, color: pip.text),
                     ),
                   ),
                 ],
@@ -354,6 +358,7 @@ class _ReviewViewState extends State<ReviewView> {
     required Future<void> Function() onConfirm,
     required Future<void> Function() onReject,
   }) {
+    final pip = context.pip;
     final busy = _busy.contains(key);
     final error = _itemErrors[key];
     return Column(
@@ -364,24 +369,24 @@ class _ReviewViewState extends State<ReviewView> {
             FilledButton(
               onPressed: busy ? null : () => _act(key, onConfirm),
               child: busy
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentOn),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: pip.accentOn),
                     )
                   : Text(confirmLabel),
             ),
             const SizedBox(width: AppSpacing.sm),
             GhostButton(
               label: 'No',
-              color: AppColors.textMuted,
+              color: pip.textMuted,
               onTap: busy ? null : () => _act(key, onReject),
             ),
           ],
         ),
         if (error != null) ...[
           const SizedBox(height: AppSpacing.sm),
-          Text(error, style: const TextStyle(fontSize: 11.5, color: AppColors.danger)),
+          Text(error, style: TextStyle(fontSize: 11.5, color: pip.danger)),
         ],
       ],
     );
@@ -396,12 +401,13 @@ class _Quote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return Container(
       padding: const EdgeInsets.only(left: AppSpacing.sm),
-      decoration: const BoxDecoration(
-        border: Border(left: BorderSide(color: AppColors.border, width: 2)),
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: pip.border, width: 2)),
       ),
-      child: Text(text, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted, height: 1.4)),
+      child: Text(text, style: TextStyle(fontSize: 12.5, color: pip.textMuted, height: 1.4)),
     );
   }
 }

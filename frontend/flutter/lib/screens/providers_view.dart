@@ -1,9 +1,11 @@
 // Matches frontend/web/app.js's providers flow: table + consent grant/revoke.
 // Same known simplification as the web client: "Grant consent" always
-// requests "full_inference" scope regardless of provider type - a valid
-// request (VALID_CONSENT_SCOPES accepts it), just not the most precise
-// default. See docs/PIP_MASTER_REFERENCE.md's web client section for why
-// this wasn't tightened up.
+// requests "full_inference" scope regardless of provider type. That is a
+// valid request - backend/api/server.py's VALID_CONSENT_SCOPES accepts it -
+// but it is the broadest of the four scopes rather than the narrowest one
+// that would do, so a provider that only ever needs embeddings is consented
+// for inference too. Still open; the scope picker this wants is a UI change,
+// not a backend one.
 
 import 'package:flutter/material.dart';
 
@@ -83,8 +85,9 @@ class _ProvidersViewState extends State<ProvidersView> {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     if (_error != null) {
-      return Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger)));
+      return Center(child: Text(_error!, style: TextStyle(color: pip.danger)));
     }
     if (_providers == null) return const Center(child: CircularProgressIndicator());
 
@@ -116,9 +119,9 @@ class _ProvidersViewState extends State<ProvidersView> {
                   for (final provider in _providers!)
                     DataRow(cells: [
                       DataCell(Text('${provider['provider_id']}')),
-                      DataCell(TagLabel(provider['is_cloud'] == true ? 'cloud' : 'local', color: provider['is_cloud'] == true ? AppColors.textMuted : AppColors.accent)),
+                      DataCell(TagLabel(provider['is_cloud'] == true ? 'cloud' : 'local', color: provider['is_cloud'] == true ? pip.textMuted : pip.accent)),
                       DataCell(Text(_consentLabel(provider))),
-                      DataCell(Text('${provider['consent_scope'] ?? '-'}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted))),
+                      DataCell(Text('${provider['consent_scope'] ?? '-'}', style: TextStyle(fontSize: 12, color: pip.textMuted))),
                       DataCell(_actionButton(provider)),
                     ]),
                 ],
@@ -139,47 +142,49 @@ class _ProvidersViewState extends State<ProvidersView> {
   }
 
   Widget _actionButton(dynamic provider) {
+    final pip = context.pip;
     if (provider['is_cloud'] != true) {
-      return const TagLabel('n/a (local)', color: AppColors.textFaint);
+      return TagLabel('n/a (local)', color: pip.textFaint);
     }
     final consented = provider['user_consented'] == true && provider['revoked'] != true;
     final providerId = provider['provider_id'] as String;
     if (consented) {
-      return GhostButton(label: 'Revoke', color: AppColors.danger, onTap: () => _revoke(providerId));
+      return GhostButton(label: 'Revoke', color: pip.danger, onTap: () => _revoke(providerId));
     }
     return GhostButton(label: 'Grant consent', onTap: () => _grant(providerId));
   }
 
   Widget _buildModelPicker() {
+    final pip = context.pip;
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Expanded(
-                child: TagLabel('Local model', color: AppColors.text, size: 12),
+              Expanded(
+                child: TagLabel('Local model', color: pip.text, size: 12),
               ),
               if (_switchingModel)
                 const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Which Ollama model PIP uses for chat and Observer (ADR-033: same model for both).',
-            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+            style: TextStyle(fontSize: 12.5, color: pip.textMuted),
           ),
           const SizedBox(height: AppSpacing.md),
           if (_modelError != null) ...[
-            Text(_modelError!, style: const TextStyle(fontSize: 12.5, color: AppColors.danger)),
+            Text(_modelError!, style: TextStyle(fontSize: 12.5, color: pip.danger)),
             const SizedBox(height: AppSpacing.sm),
           ],
           if (_models == null)
             const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
           else if (_models!.isEmpty)
-            const Text(
+            Text(
               'No models found. Is Ollama running, and have you pulled a model (e.g. `ollama pull llama3.1:8b`)?',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textFaint),
+              style: TextStyle(fontSize: 12.5, color: pip.textFaint),
             )
           else
             DropdownButtonFormField<String>(

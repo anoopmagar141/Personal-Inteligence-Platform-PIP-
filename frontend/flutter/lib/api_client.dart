@@ -101,8 +101,17 @@ class ApiClient {
 
   Future<List<dynamic>> getProfile() async => await get('/memory/profile') as List<dynamic>;
 
-  Future<List<dynamic>> searchDecisions([String query = '']) async {
-    final result = await get('/decision/search', query: query.isEmpty ? null : {'q': query});
+  /// [state] is an exact match on the backend side, not a filter that can be
+  /// widened - list_decisions()/search_decisions() both take a single state and
+  /// default to 'active'. Passing it explicitly is what makes a retracted
+  /// decision reachable at all: without it the log silently shows only what is
+  /// still active, and a decision retracted through the UI would appear to
+  /// have been deleted by it.
+  Future<List<dynamic>> searchDecisions([String query = '', String state = 'active']) async {
+    final result = await get('/decision/search', query: {
+      if (query.isNotEmpty) 'q': query,
+      'state': state,
+    });
     return result as List<dynamic>;
   }
 
@@ -194,6 +203,62 @@ class ApiClient {
   /// relevance or urgency here, so this is a plain read of what is currently
   /// true, never a ranked feed.
   Future<List<dynamic>> getProactive() async => await get('/proactive') as List<dynamic>;
+
+  // --- Profile editing ----------------------------------------------------
+  // The read half of the profile has been here since the first version; these
+  // are the write half. Both refuse the three identity fields server-side
+  // (name / language_preference / timezone are settled at onboarding), and
+  // both report that refusal as a 422 whose detail is the sentence explaining
+  // it - which is why ApiException.detail exists and why these do not try to
+  // pre-empt the rule client-side. Part 14.4: the backend decides.
+
+  Future<void> correctMemory(String field, String value) async {
+    await post('/memory/correct', {'field': field, 'value': value});
+  }
+
+  /// Soft delete - ADR-022 keeps the row and flips its status, so this is a
+  /// retraction rather than an erasure. Returns the backend's own report of
+  /// whether anything matched ({'status': 'deleted' | 'not_found'}).
+  Future<Map<String, dynamic>> deleteProfileField(String field) async =>
+      await delete('/memory/profile/${Uri.encodeComponent(field)}') as Map<String, dynamic>;
+
+  // --- State transitions --------------------------------------------------
+
+  /// [reason] is required by the backend for 'superseded' and 'abandoned' and
+  /// is stored verbatim for every state including 'active': the log outlives
+  /// the retraction, and state alone cannot tell a later reader "this was a
+  /// fabrication we cleaned up" from "this was real and we changed our mind".
+  Future<void> updateDecisionState(
+    int decisionId, {
+    required String state,
+    required String reason,
+    int? supersededBy,
+  }) async {
+    await patch('/decision/$decisionId/state', {
+      'state': state,
+      'reason': reason,
+      'superseded_by': ?supersededBy,
+    });
+  }
+
+  Future<void> updateProjectStatus(String projectId, String status) async {
+    await patch('/projects/$projectId/status', {'status': status});
+  }
+
+  // --- Trace --------------------------------------------------------------
+  // "Why did PIP reply like that" - which stages ran, what each retrieved,
+  // where a run failed. The backend moved this out of a plaintext file and
+  // into the database specifically so it could be read back; until now
+  // nothing read it, so the answer was still unreachable from any interface.
+
+  /// Summary rows, newest first: {trace_id, started_at, entries, errors}.
+  Future<List<dynamic>> listTraces({int limit = 20}) async =>
+      await get('/trace', query: {'limit': '$limit'}) as List<dynamic>;
+
+  /// One run's stages in recorded order:
+  /// {id, trace_id, timestamp, stage, status, message, error_detail}.
+  Future<List<dynamic>> getTrace(String traceId) async =>
+      await get('/trace/${Uri.encodeComponent(traceId)}') as List<dynamic>;
 
   Future<List<dynamic>> getConversations() async => await get('/conversations') as List<dynamic>;
 

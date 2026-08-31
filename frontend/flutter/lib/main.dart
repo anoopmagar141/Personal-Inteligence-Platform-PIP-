@@ -52,23 +52,80 @@ void main() {
   runApp(const PipApp());
 }
 
-class PipApp extends StatelessWidget {
+/// Where the chosen theme is remembered between launches.
+///
+/// A one-line file beside the token rather than a new package: the app already
+/// reads its data directory at startup, and shared_preferences would be a
+/// platform dependency carried for a single enum. Every failure path falls
+/// back to following the OS, so a missing, unreadable, or garbled file costs
+/// nothing.
+String get kThemePrefPath => '${_dataDir()}/ui_theme.txt';
+
+ThemeMode _readThemeMode() {
+  try {
+    final file = File(kThemePrefPath);
+    if (!file.existsSync()) return ThemeMode.system;
+    return switch (file.readAsStringSync().trim()) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  } catch (_) {
+    return ThemeMode.system;
+  }
+}
+
+void _writeThemeMode(ThemeMode mode) {
+  try {
+    File(kThemePrefPath).writeAsStringSync(mode.name);
+  } catch (_) {
+    // Not being able to remember the preference is not a reason to refuse to
+    // apply it for this session.
+  }
+}
+
+class PipApp extends StatefulWidget {
   const PipApp({super.key});
+
+  @override
+  State<PipApp> createState() => _PipAppState();
+}
+
+class _PipAppState extends State<PipApp> {
+  ThemeMode _themeMode = _readThemeMode();
+
+  /// Cycles system -> light -> dark -> system.
+  ///
+  /// "System" is a real third option rather than a tidy-up of two: Windows 11
+  /// has an app-theme setting, and following it is the right default for a
+  /// desktop app. Someone who wants to override it can, and gets to go back.
+  void _cycleTheme() {
+    setState(() {
+      _themeMode = switch (_themeMode) {
+        ThemeMode.system => ThemeMode.light,
+        ThemeMode.light => ThemeMode.dark,
+        ThemeMode.dark => ThemeMode.system,
+      };
+    });
+    _writeThemeMode(_themeMode);
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PIP',
       theme: AppTheme.light,
-      darkTheme: AppTheme.light,
-      themeMode: ThemeMode.light,
-      home: const AppRoot(),
+      darkTheme: AppTheme.dark,
+      themeMode: _themeMode,
+      home: AppRoot(themeMode: _themeMode, onCycleTheme: _cycleTheme),
     );
   }
 }
 
 class AppRoot extends StatefulWidget {
-  const AppRoot({super.key});
+  final ThemeMode themeMode;
+  final VoidCallback onCycleTheme;
+  const AppRoot({super.key, required this.themeMode, required this.onCycleTheme});
 
   @override
   State<AppRoot> createState() => _AppRootState();
@@ -153,6 +210,7 @@ class _AppRootState extends State<AppRoot> {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     switch (_state) {
       case _RootState.connecting:
         return _LoadingScreen(message: _statusMessage);
@@ -164,14 +222,14 @@ class _AppRootState extends State<AppRoot> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const TagLabel('Connection error', color: AppColors.danger, size: 12),
+                  TagLabel('Connection error', color: pip.danger, size: 12),
                   const SizedBox(height: AppSpacing.sm),
                   const Text("Can't reach PIP", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     _errorDetail ?? '',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                    style: TextStyle(fontSize: 12.5, color: pip.textMuted),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   FilledButton(onPressed: _connect, child: const Text('Retry')),
@@ -183,7 +241,11 @@ class _AppRootState extends State<AppRoot> {
       case _RootState.onboarding:
         return OnboardingScreen(api: api, onComplete: () => setState(() => _state = _RootState.ready));
       case _RootState.ready:
-        return HomeShell(api: api);
+        return HomeShell(
+          api: api,
+          themeMode: widget.themeMode,
+          onCycleTheme: widget.onCycleTheme,
+        );
     }
   }
 }
@@ -194,15 +256,16 @@ class _LoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pip = context.pip;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: pip.bg,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               'PIP',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 32, color: AppColors.accent),
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 32, color: pip.accent),
             ),
             const SizedBox(height: AppSpacing.lg),
             const SizedBox(
@@ -214,7 +277,7 @@ class _LoadingScreen extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 13, color: pip.textMuted),
             ),
           ],
         ),
