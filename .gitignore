@@ -8,6 +8,12 @@ data/pip.db-wal
 data/chroma/
 data/api_token.txt
 data/db_key.txt
+# Encrypted database backups (scripts/export_backup.py). Encrypted under a
+# user-chosen password is not the same as safe to publish - a .pipbak is a
+# complete copy of everything PIP knows, and a password is guessable in a way
+# a 256-bit key is not. Anywhere, not just data/, in case one is written to
+# the repo root by hand.
+*.pipbak
 data/salt.bin
 data/documents/
 data/pip.lock
