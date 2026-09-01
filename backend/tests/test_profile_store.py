@@ -478,3 +478,109 @@ def test_initialize_schema_rebuilds_a_stale_trace_log(tmp_path, db_key):
     columns = {r["name"] for r in reopened.execute("PRAGMA table_info(trace_log)")}
     reopened.close()
     assert "id" in columns
+
+
+# --- corrections land in the table that owns the field ------------------------
+# correct_profile_field() used to write to preference_memory unconditionally.
+# For a preference that was right; for anything else it was a silent wrong
+# answer - the write succeeded, nothing raised, and the field the user was
+# looking at did not change. A stray preference appeared beside it under the
+# same name. These pin each table to its own outcome.
+
+
+def test_correcting_a_skill_updates_the_skill_not_a_preference(conn):
+    profile_store.complete_onboarding(
+        conn, name="BatMan", language_preference="English", skills=["Python"]
+    )
+
+    profile_store.correct_profile_field(conn, "Python", "0.9")
+
+    corrected = profile_store.get_profile_field(conn, "Python")
+    assert corrected["table"] == "skill_memory"
+    assert float(corrected["value"]) == 0.9
+    assert corrected["source_label"] == "user_correction"
+    # The bug this replaces: a preference of the same name appearing instead.
+    assert conn.execute(
+        "SELECT COUNT(*) AS n FROM preference_memory WHERE name = 'Python'"
+    ).fetchone()["n"] == 0
+
+
+def test_a_skill_level_that_is_not_a_number_is_refused(conn):
+    profile_store.complete_onboarding(
+        conn, name="BatMan", language_preference="English", skills=["Python"]
+    )
+
+    # skill_memory.level is a REAL and SQLite would store the string happily,
+    # after which every comparison against the row means nothing.
+    with pytest.raises(ValueError, match="number between 0 and 1"):
+        profile_store.correct_profile_field(conn, "Python", "expert")
+
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        profile_store.correct_profile_field(conn, "Python", "4")
+
+    unchanged = profile_store.get_profile_field(conn, "Python")
+    assert float(unchanged["value"]) != 4
+
+
+def test_correcting_a_goal_updates_the_goal(conn):
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    conn.execute(
+        "INSERT INTO goal_memory (goal_text, evidence_count, confidence, created_at, updated_at) "
+        "VALUES ('finish chapter 4', 3, 0.6, ?, ?)",
+        (profile_store.now_utc(), profile_store.now_utc()),
+    )
+    conn.commit()
+    handle = next(r["field"] for r in profile_store.get_profile(conn) if r["table"] == "goal_memory")
+
+    profile_store.correct_profile_field(conn, handle, "finish chapters 4 and 5")
+
+    corrected = profile_store.get_profile_field(conn, handle)
+    assert corrected["value"] == "finish chapters 4 and 5"
+    assert conn.execute(
+        "SELECT COUNT(*) AS n FROM preference_memory WHERE name = ?", (handle,)
+    ).fetchone()["n"] == 0
+
+
+def test_correcting_the_interaction_style_records_it_in_the_history(conn):
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+
+    profile_store.correct_profile_field(conn, "interaction_style", "terse")
+    profile_store.correct_profile_field(conn, "interaction_style", "detailed")
+
+    assert profile_store.get_profile_field(conn, "interaction_style")["value"] == "detailed"
+    history = profile_store.get_interaction_style_history(conn)
+    # Newest first, and both changes kept - this is the profile's only audit
+    # trail, and the screen that reads it depends on the ordering.
+    assert [row["value"] for row in history][:2] == ["detailed", "terse"]
+
+
+def test_an_unrecorded_field_still_becomes_a_preference(conn):
+    """
+    The oldest behaviour of this function and the one several callers rely on:
+    correcting something PIP has never recorded is really just stating it, and
+    a preference is where a stated thing goes.
+    """
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+
+    profile_store.correct_profile_field(conn, "editor", "vim")
+
+    created = profile_store.get_profile_field(conn, "editor")
+    assert created["table"] == "preference_memory"
+    assert created["value"] == "vim"
+
+
+def test_a_set_membership_row_cannot_be_corrected_in_place(conn):
+    """
+    topic_interests and preferred_tools have no separate value to change - the
+    field IS the value - so a "correction" there is a delete plus an add, and
+    saying so is better than writing something that looks like an edit.
+    """
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    conn.execute(
+        "INSERT INTO topic_interests (topic, evidence_count, last_observed) VALUES ('rust', 2, ?)",
+        (profile_store.now_utc(),),
+    )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="Unsupported target_table"):
+        profile_store.correct_profile_field(conn, "rust", "golang")

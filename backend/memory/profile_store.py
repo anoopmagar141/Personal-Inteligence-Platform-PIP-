@@ -443,25 +443,48 @@ def get_profile_field(conn, field: str) -> dict[str, Any] | None:
 
 
 def correct_profile_field(conn, field: str, value: str) -> None:
+    """
+    Applies a correction the user made directly, to whichever table already
+    holds the field.
+
+    The table is looked up rather than passed in. A caller that named the
+    target table could name the wrong one, and there is no second source of
+    truth to check it against - get_profile() already knows where every field
+    lives, because it is what put the field on screen in the first place.
+
+    A field nobody has seen before becomes a preference. That is this
+    function's oldest behaviour and several callers depend on it: it is how a
+    preference gets created at all outside the Observer, and "correcting"
+    something PIP has never recorded is really just stating it.
+    """
     if field in {"name", "language_preference", "timezone"}:
         raise ValueError("immutable identity fields cannot be edited after onboarding")
 
-    if field == "interaction_style":
-        set_interaction_style(conn, value, source_label="user_correction", timestamp=now_utc())
-    else:
-        conn.execute(
-            """
-            INSERT INTO preference_memory (name, value, evidence_count, source_label, status)
-            VALUES (?, ?, 1, 'user_correction', 'active')
-            ON CONFLICT(name) DO UPDATE SET
-                value = excluded.value,
-                evidence_count = preference_memory.evidence_count + 1,
-                source_label = 'user_correction',
-                status = 'active'
-            """,
-            (field, value),
-        )
-    conn.commit()
+    existing = get_profile_field(conn, field)
+    target_table = existing["table"] if existing else "preference_memory"
+
+    if target_table == "skill_memory":
+        # skill_memory.level is a REAL, and SQLite would happily store the
+        # string "expert" in it - then every comparison against that row
+        # silently stops meaning anything. Rejected here, where the sentence
+        # can still reach the person who typed it.
+        try:
+            level = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"A skill level is a number between 0 and 1, not {value!r}."
+            ) from None
+        if not 0.0 <= level <= 1.0:
+            raise ValueError(f"A skill level must be between 0 and 1, not {level}.")
+        value = level
+
+    _write_profile_value(
+        conn,
+        target_table=target_table,
+        field=field,
+        value=value,
+        source_label="user_correction",
+    )
 
 
 GOAL_FIELD_PREFIX = "goal:"
@@ -702,10 +725,44 @@ def apply_verified_correction(
     else:
         raise ValueError(f"Invalid validation status for verified correction: {status}")
 
-    target_table = candidate.get("target_table")
-    field = candidate.get("field_name")
-    value = candidate.get("proposed_value")
+    _write_profile_value(
+        conn,
+        target_table=candidate.get("target_table"),
+        field=candidate.get("field_name"),
+        value=candidate.get("proposed_value"),
+        source_label=source_label,
+    )
 
+
+def _write_profile_value(
+    conn: sqlite3.Connection,
+    *,
+    target_table: str | None,
+    field: str | None,
+    value: Any,
+    source_label: str,
+) -> None:
+    """
+    Writes one value into whichever profile table owns it, at maximum
+    confidence, clearing whatever behavioural history contradicted it.
+
+    Split out of apply_verified_correction() so that a direct user correction
+    can reach it too. That function resolves a source_label from a Stage 12
+    validation status and is the only way this dispatch could be reached, so
+    correct_profile_field() - which has no validation result and never will -
+    carried its own hardcoded preference_memory INSERT instead. The result was
+    that correcting a skill wrote a preference of the same name and left the
+    skill untouched: not an error, just a silently wrong place.
+
+    The alternative was to hand this function a fabricated validation status
+    purely to get "user_correction" back out of it, which would have put a lie
+    in the audit trail to avoid a refactor.
+
+    Raises ValueError for a table with no in-place correction (the
+    set-membership tables - preferred_tools, topic_interests,
+    document_access_patterns - where a "correction" is a delete plus an add,
+    not an update).
+    """
     if target_table == "identity":
         if field in {"name", "language_preference", "timezone"}:
             raise ValueError("immutable identity fields cannot be edited after onboarding")
