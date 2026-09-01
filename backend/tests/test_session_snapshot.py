@@ -3,7 +3,12 @@ import time
 import pytest
 
 from backend.memory.profile_store import get_connection, initialize_schema
-from backend.memory.session_snapshot import SessionSnapshot, load_snapshot, write_snapshot
+from backend.memory.session_snapshot import (
+    SessionSnapshot,
+    clear_snapshot,
+    load_snapshot,
+    write_snapshot,
+)
 
 
 @pytest.fixture
@@ -48,6 +53,39 @@ def test_write_is_a_singleton_upsert(conn):
     write_snapshot(conn, second)
 
     assert load_snapshot(conn)["topic"] == "a completely different topic"
+    assert conn.execute("SELECT COUNT(*) FROM session_snapshot").fetchone()[0] == 1
+
+
+def test_clear_returns_the_store_to_its_genuine_empty_state(conn):
+    # A snapshot can be actively wrong rather than merely stale - one written
+    # from a conversation in which PIP failed to recall anything will be handed
+    # to every later session as established context. Clearing has to leave
+    # load_snapshot() reading None, not a row of empty strings that merely
+    # looks like none.
+    write_snapshot(conn, _sample())
+
+    assert clear_snapshot(conn) is True
+    assert load_snapshot(conn) is None
+    assert conn.execute("SELECT COUNT(*) FROM session_snapshot").fetchone()[0] == 0
+
+
+def test_clear_reports_honestly_when_there_was_nothing_to_clear(conn):
+    # False, so a caller can say "nothing to clear" rather than imply it undid
+    # something. This is the whole reason clear_snapshot returns a bool.
+    assert clear_snapshot(conn) is False
+
+
+def test_writing_after_a_clear_starts_clean(conn):
+    # The clear must not leave the singleton id in a state that blocks the next
+    # upsert - the next real session has to be able to write normally.
+    write_snapshot(conn, _sample())
+    clear_snapshot(conn)
+
+    fresh = _sample()
+    fresh["topic"] = "what the next real session was actually about"
+    write_snapshot(conn, fresh)
+
+    assert load_snapshot(conn)["topic"] == "what the next real session was actually about"
     assert conn.execute("SELECT COUNT(*) FROM session_snapshot").fetchone()[0] == 1
 
 
