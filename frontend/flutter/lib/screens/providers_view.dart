@@ -34,7 +34,17 @@ class ProvidersView extends StatefulWidget {
 
 class _ProvidersViewState extends State<ProvidersView> {
   List<dynamic>? _providers;
+
+  /// "The provider list could not be loaded" - a page that has nothing to
+  /// show. NOT where a failed grant goes: build() returns early on this, so
+  /// putting an action's failure here replaces the whole screen, list and
+  /// model picker included, with one sentence and no way back.
   String? _error;
+
+  /// Keyed by provider_id, so a refusal appears on the provider that caused
+  /// it. Consent is per provider and so is the reason it was refused.
+  final Map<String, String> _rowErrors = {};
+  final Set<String> _busy = {};
 
   List<dynamic>? _models; // null = loading, [] = loaded but empty (Ollama down or nothing pulled)
   String? _activeModel;
@@ -85,25 +95,40 @@ class _ProvidersViewState extends State<ProvidersView> {
     }
   }
 
+  /// One shape for both consent actions: mark the row busy, run the call,
+  /// reload on success, and on failure put the server's own sentence on that
+  /// row while leaving everything else on screen.
+  Future<void> _act(String providerId, Future<void> Function() action) async {
+    setState(() {
+      _busy.add(providerId);
+      _rowErrors.remove(providerId);
+    });
+    try {
+      await action();
+      await _load();
+    } catch (error) {
+      // The server names the scope it rejected and lists the ones it accepts.
+      // That sentence is more use than "grant failed" ever is.
+      if (mounted) setState(() => _rowErrors[providerId] = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy.remove(providerId));
+    }
+  }
+
   Future<void> _grant(String providerId) async {
     final scope = await showDialog<String>(
       context: context,
       builder: (context) => _ScopeDialog(providerId: providerId),
     );
     if (scope == null) return;
-    try {
-      await widget.api.grantConsent(providerId, scope);
-      await _load();
-    } catch (error) {
-      // The server names the scope it rejected and lists the ones it accepts.
-      // That sentence is more use than "grant failed" ever is.
-      if (mounted) setState(() => _error = error.toString());
-    }
+    await _act(providerId, () => widget.api.grantConsent(providerId, scope));
   }
 
   Future<void> _revoke(String providerId) async {
-    await widget.api.revokeConsent(providerId);
-    await _load();
+    // Was unguarded: a failed revoke threw into nothing and the row simply did
+    // not change, which reads exactly like a button that does not work. On a
+    // consent screen that is the worst possible thing to be unsure about.
+    await _act(providerId, () => widget.api.revokeConsent(providerId));
   }
 
   @override
@@ -173,11 +198,21 @@ class _ProvidersViewState extends State<ProvidersView> {
                     scope.isEmpty ? _consentLabel(provider) : '${_consentLabel(provider)} - $scope',
                     style: TextStyle(fontSize: 12, color: pip.textMuted),
                   ),
+                  if (_rowErrors[provider['provider_id']] != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _rowErrors[provider['provider_id']]!,
+                      style: TextStyle(fontSize: 11.5, color: pip.danger),
+                    ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            _actionButton(provider),
+            if (_busy.contains(provider['provider_id']))
+              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              _actionButton(provider),
           ],
         ),
       ),

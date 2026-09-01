@@ -56,6 +56,10 @@ class _ProjectsViewState extends State<ProjectsView> {
   List<dynamic>? _projects;
   String? _error;
 
+  /// Belongs to the create form, not to the page: build() returns early on
+  /// _error, so a rejected name would take the project list with it.
+  String? _createError;
+
   final Map<String, String> _rowErrors = {};
   final Set<String> _busy = {};
 
@@ -81,13 +85,21 @@ class _ProjectsViewState extends State<ProjectsView> {
 
   Future<void> _create() async {
     if (_nameController.text.trim().isEmpty) return;
-    await widget.api.createProject({
-      'name': _nameController.text.trim(),
-      'description': _descriptionController.text.trim(),
-    });
-    _nameController.clear();
-    _descriptionController.clear();
-    await _load();
+    try {
+      await widget.api.createProject({
+        'name': _nameController.text.trim(),
+        'description': _descriptionController.text.trim(),
+      });
+      // Cleared only on success. Wiping the fields after a failed create
+      // throws away what the user typed and leaves them nothing to retry
+      // with, on top of not telling them it failed.
+      _nameController.clear();
+      _descriptionController.clear();
+      setState(() => _createError = null);
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _createError = error.toString());
+    }
   }
 
   Future<void> _act(String projectId, Future<void> Function() action) async {
@@ -176,6 +188,10 @@ class _ProjectsViewState extends State<ProjectsView> {
                       FilledButton(onPressed: _create, child: const Text('Create')),
                     ],
                   ),
+                  if (_createError != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(_createError!, style: TextStyle(fontSize: 11.5, color: pip.danger)),
+                  ],
                 ],
               ),
             ),

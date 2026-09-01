@@ -20,6 +20,13 @@ class FakeApi extends ApiClient {
   List<dynamic> projects = [];
   final List<String> calls = [];
   Object? statusError;
+  Object? createError;
+
+  @override
+  Future<void> createProject(Map<String, dynamic> payload) async {
+    calls.add('create:${payload['name']}');
+    if (createError != null) throw createError!;
+  }
 
   @override
   Future<List<dynamic>> getProjects() async => projects;
@@ -73,6 +80,21 @@ void main() {
     expect(find.text('Archive'), findsOneWidget);
     expect(find.text('Complete'), findsOneWidget);
     expect(find.text('Work in this'), findsOneWidget);
+  });
+
+  testWidgets('a refused create keeps what was typed', (tester) async {
+    // Was unguarded, and cleared the fields unconditionally - so a failed
+    // create threw away the name and description AND said nothing, leaving
+    // nothing to retry with and no reason to retry it.
+    final harness = await pumpProjects(tester, []);
+    harness.api.createError = ApiException(422, '{"detail": "A project needs a name."}');
+
+    await tester.enterText(find.widgetWithText(TextField, 'Project name'), 'Thesis');
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('A project needs a name'), findsOneWidget);
+    expect(find.text('Thesis'), findsOneWidget);
   });
 
   testWidgets('offers only reopening on a shelved project', (tester) async {

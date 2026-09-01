@@ -210,9 +210,20 @@ class ChatViewState extends State<ChatView> {
   }
 
   Future<void> _delete(String conversationId) async {
-    await widget.api.deleteConversation(conversationId);
-    if (conversationId == _activeConversationId) _newChat();
-    await _loadConversations();
+    // Was unguarded, and this is the one delete with no error surface of its
+    // own - the sidebar is a list of titles. A conversation that refuses to
+    // delete has to say so somewhere, or it silently reappears on the next
+    // load and looks like the click was missed.
+    try {
+      await widget.api.deleteConversation(conversationId);
+      if (conversationId == _activeConversationId) _newChat();
+      await _loadConversations();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Couldn't delete that conversation: $error")),
+      );
+    }
   }
 
   void _scrollToBottom() {

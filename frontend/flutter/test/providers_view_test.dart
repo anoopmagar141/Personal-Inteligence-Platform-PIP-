@@ -19,6 +19,7 @@ class FakeApi extends ApiClient {
   List<dynamic> providers = [];
   final List<String> calls = [];
   Object? grantError;
+  Object? revokeError;
 
   @override
   Future<List<dynamic>> getProviders() async => providers;
@@ -38,6 +39,7 @@ class FakeApi extends ApiClient {
   @override
   Future<void> revokeConsent(String providerId) async {
     calls.add('revoke:$providerId');
+    if (revokeError != null) throw revokeError!;
   }
 }
 
@@ -144,7 +146,12 @@ void main() {
     expect(find.textContaining('n/a'), findsWidgets);
   });
 
-  testWidgets("a refused grant shows the server's sentence", (tester) async {
+  testWidgets("a refused grant reports on the row and keeps the screen", (tester) async {
+    // The earlier version of this test asserted only that the sentence was
+    // findable - and it was, on an otherwise blank page. A failed grant used
+    // to be written into the page-level _error that build() returns early on,
+    // so one refusal replaced the provider list, the model picker and the way
+    // back with a single line of red text.
     final api = await pumpProviders(tester, [provider('anthropic')]);
     api.grantError = ApiException(
       422,
@@ -159,5 +166,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Invalid consent_scope'), findsOneWidget);
+    // Everything that was on screen is still on screen.
+    expect(find.text('anthropic'), findsOneWidget);
+    expect(find.text('Providers'), findsOneWidget);
+    expect(find.text('Grant consent'), findsOneWidget);
+  });
+
+  testWidgets('a refused revoke says so instead of doing nothing visible', (tester) async {
+    // Revoke was unguarded: the exception went nowhere and the row simply did
+    // not change, which is indistinguishable from a button that does not
+    // work. On a consent screen that is the worst thing to be unsure about.
+    final api = await pumpProviders(
+      tester,
+      [provider('anthropic', consented: true, scope: 'full_inference')],
+    );
+    api.revokeError = ApiException(500, '{"detail": "database is locked"}');
+
+    await tester.tap(find.text('Revoke'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('database is locked'), findsOneWidget);
+    expect(find.text('anthropic'), findsOneWidget);
   });
 }

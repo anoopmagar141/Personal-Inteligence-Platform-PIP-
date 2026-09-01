@@ -19,9 +19,17 @@ class FakeApi extends ApiClient {
   List<dynamic> matches = [];
   final List<String> calls = [];
   Object? queryError;
+  Object? deleteError;
 
   @override
   Future<List<dynamic>> getDocuments() async => documents;
+
+  @override
+  Future<void> deleteDocument(String filePath) async {
+    calls.add('delete:$filePath');
+    if (deleteError != null) throw deleteError!;
+    documents = documents.where((d) => d['file_path'] != filePath).toList();
+  }
 
   @override
   Future<List<dynamic>> queryRag(String query, {double threshold = 0.6, String? projectId}) async {
@@ -124,6 +132,19 @@ void main() {
     expect(find.text('query is required'), findsOneWidget);
     // The document list is still there - a failed query is not a failed page.
     expect(find.textContaining('4 chunks'), findsOneWidget);
+  });
+
+  testWidgets('a refused delete says why, and the document stays listed', (tester) async {
+    // Was unguarded: the exception went nowhere, the list reloaded unchanged,
+    // and the row looked like it had ignored the click.
+    final api = await pumpDocuments(tester, documents: [document('notes.md')]);
+    api.deleteError = ApiException(422, '{"detail": "No active document at that path."}');
+
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No active document'), findsOneWidget);
+    expect(find.textContaining('notes.md'), findsWidgets);
   });
 
   testWidgets('the panel is offered even with nothing ingested yet', (tester) async {

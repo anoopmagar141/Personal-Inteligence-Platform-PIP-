@@ -75,8 +75,16 @@ class _DocumentsViewState extends State<DocumentsView> {
   }
 
   Future<void> _delete(String filePath) async {
-    await widget.api.deleteDocument(filePath);
-    await _load();
+    // Was unguarded. This screen already prints _error inline above the list
+    // rather than returning early on it, so a failure here is reportable
+    // without costing the page - it just had nowhere to go.
+    try {
+      await widget.api.deleteDocument(filePath);
+      setState(() => _error = null);
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
   }
 
   @override
