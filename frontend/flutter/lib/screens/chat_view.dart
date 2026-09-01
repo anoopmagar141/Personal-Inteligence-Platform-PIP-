@@ -16,14 +16,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api_client.dart';
+import '../markdown.dart';
 import '../theme.dart';
 import '../ws_chat_client.dart';
 
-class _ChatMessage {
+/// Public, unlike the rest of this file's helpers, so that
+/// test/chat_bubble_test.dart can build one directly.
+///
+/// The alternative was to reach the bubble through ChatView, which means
+/// feeding events into a WsChatClient - a socket client with no injection
+/// seam. Exposing a presentational widget is a smaller change to production
+/// code than adding a test-only door into the network layer.
+class ChatMessage {
   final String role; // 'user' | 'assistant' | 'system'
   final String content;
   final bool stopped; // true if this assistant turn was interrupted by the user
-  const _ChatMessage(this.role, this.content, {this.stopped = false});
+  const ChatMessage(this.role, this.content, {this.stopped = false});
 }
 
 /// Enter-to-send, as an intent so Shift+Enter can still reach the TextField
@@ -46,7 +54,7 @@ class ChatViewState extends State<ChatView> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   final _inputFocus = FocusNode();
-  final List<_ChatMessage> _transcript = [];
+  final List<ChatMessage> _transcript = [];
   StreamSubscription? _subscription;
 
   String _streamingText = '';
@@ -101,7 +109,7 @@ class ChatViewState extends State<ChatView> {
           if (messages.isNotEmpty) {
             _transcript
               ..clear()
-              ..addAll(messages.map((m) => _ChatMessage(m['role'] as String, m['content'] as String)));
+              ..addAll(messages.map((m) => ChatMessage(m['role'] as String, m['content'] as String)));
           }
         });
         _loadConversations(); // title/ordering may have changed
@@ -115,7 +123,7 @@ class ChatViewState extends State<ChatView> {
         return;
       case 'done':
         setState(() {
-          _transcript.add(_ChatMessage('assistant', _streamingText));
+          _transcript.add(ChatMessage('assistant', _streamingText));
           _streamingText = '';
           _isStreaming = false;
           _lastStageHint = _pendingStageHint;
@@ -125,7 +133,7 @@ class ChatViewState extends State<ChatView> {
         return;
       case 'error':
         setState(() {
-          _transcript.add(_ChatMessage('system', 'Error: ${event.data}'));
+          _transcript.add(ChatMessage('system', 'Error: ${event.data}'));
           _streamingText = '';
           _isStreaming = false;
           _lastStageHint = _pendingStageHint;
@@ -139,7 +147,7 @@ class ChatViewState extends State<ChatView> {
           // turn, not discarded - the user still read it, and it belongs in
           // conversation_history the same way the backend keeps it (Part
           // 15.2's server-side counterpart to this).
-          _transcript.add(_ChatMessage('assistant', _streamingText, stopped: true));
+          _transcript.add(ChatMessage('assistant', _streamingText, stopped: true));
           _streamingText = '';
           _isStreaming = false;
           _lastStageHint = _pendingStageHint;
@@ -155,7 +163,7 @@ class ChatViewState extends State<ChatView> {
     final text = _controller.text.trim();
     if (text.isEmpty || _isStreaming) return;
     setState(() {
-      _transcript.add(_ChatMessage('user', text));
+      _transcript.add(ChatMessage('user', text));
       _streamingText = '';
       _isStreaming = true;
     });
@@ -309,8 +317,8 @@ class ChatViewState extends State<ChatView> {
                       controller: _scrollController,
                       padding: const EdgeInsets.all(AppSpacing.lg),
                       children: [
-                        for (final message in _transcript) _MessageBubble(message: message),
-                        if (_isStreaming) _MessageBubble(message: _ChatMessage('assistant', _streamingText)),
+                        for (final message in _transcript) ChatMessageBubble(message: message),
+                        if (_isStreaming) ChatMessageBubble(message: ChatMessage('assistant', _streamingText)),
                       ],
                     ),
                   ),
@@ -616,9 +624,9 @@ class _SendButton extends StatelessWidget {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
-  final _ChatMessage message;
-  const _MessageBubble({required this.message});
+class ChatMessageBubble extends StatelessWidget {
+  final ChatMessage message;
+  const ChatMessageBubble({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -643,12 +651,25 @@ class _MessageBubble extends StatelessWidget {
           decoration: isUser
               ? BoxDecoration(color: pip.accentSoft, borderRadius: AppRadius.md)
               : null,
-          // Selectable so an answer can actually be copied out - the whole
-          // point of some of them is that they are worth keeping.
-          child: SelectableText(
-            message.content,
-            style: TextStyle(fontSize: 14.5, height: 1.5, color: pip.text),
-          ),
+          // Assistant replies are Markdown; the user's own message is not.
+          //
+          // That asymmetry is deliberate. A local model emits **bold**,
+          // backticks and fenced blocks constantly, and printing them raw
+          // makes a correct answer look worse than it is. What the USER typed
+          // is theirs, and re-rendering it would change what they said - a
+          // filename with asterisks in it would silently lose them, and they
+          // would have no way to tell.
+          //
+          // Both stay selectable: an answer is often the thing worth keeping.
+          child: isUser
+              ? SelectableText(
+                  message.content,
+                  style: TextStyle(fontSize: 14.5, height: 1.5, color: pip.text),
+                )
+              : MarkdownBody(
+                  source: message.content,
+                  baseStyle: TextStyle(fontSize: 14.5, height: 1.5, color: pip.text),
+                ),
         ),
         if (message.stopped) ...[
           const SizedBox(height: 4),
