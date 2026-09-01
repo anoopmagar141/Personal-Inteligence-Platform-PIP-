@@ -41,6 +41,18 @@ void main() {
     expect(phaseNamed(phases, 'ollama').detail, 'already running');
   });
 
+  test('drops a detail that only restates the label', () {
+    // "Backend listening / backend listening" is how this first shipped, and
+    // it was visible the moment the app was actually run. Three separate
+    // writers produce these strings, so the guard lives with the labels.
+    final phases = parseStartupProgress(line('ready', 'Backend listening'));
+    expect(phaseNamed(phases, 'ready').detail, isEmpty);
+
+    // A detail that adds something is kept.
+    final kept = parseStartupProgress(line('ready', 'already listening'));
+    expect(phaseNamed(kept, 'ready').detail, 'already listening');
+  });
+
   test('orders by the canonical list, not by the order lines arrived', () {
     final phases = parseStartupProgress([line('key'), line('ollama')].join('\n'));
     expect(phases.map((p) => p.id).take(2), ['ollama', 'key']);

@@ -744,7 +744,7 @@ try:
             # in the background precisely so nobody waits on it, and a launch
             # screen that listed it would reintroduce the two-minute hang that
             # backgrounding it removed.
-            startup_progress.report("ready", "backend listening")
+            startup_progress.report("ready")
 
             yield
 

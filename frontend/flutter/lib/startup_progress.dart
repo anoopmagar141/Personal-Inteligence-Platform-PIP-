@@ -77,7 +77,14 @@ List<StartupPhase> parseStartupProgress(String contents) {
     if (decoded is! Map) continue;
     final id = decoded['phase'];
     if (id is! String || id.isEmpty) continue;
-    reported[id] = '${decoded['detail'] ?? ''}';
+    final detail = '${decoded['detail'] ?? ''}';
+    // A detail that merely restates the label is noise - "Backend listening /
+    // backend listening" is how this first shipped. Dropped here rather than
+    // only fixed at the writers, because there are three of them (this file's
+    // labels, the PowerShell launcher, and the Python module) and nothing else
+    // makes them agree.
+    reported[id] =
+        detail.toLowerCase() == (startupPhaseLabels[id] ?? '').toLowerCase() ? '' : detail;
     order.add(id);
   }
 

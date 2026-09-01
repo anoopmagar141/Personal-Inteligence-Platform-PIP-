@@ -92,14 +92,14 @@ if (-not (Test-PortOpen 8765)) {
         -WindowStyle Hidden `
         -RedirectStandardOutput $stdoutLog `
         -RedirectStandardError $stderrLog
-    Write-Phase "backend" "starting PIP Core"
+    Write-Phase "backend" "uvicorn launched"
 } else {
     # Already listening - every phase this script would have reported happened
     # on an earlier launch, and the backend will not report its own again
     # either. Saying so keeps the splash honest about why it is about to
     # finish immediately.
     Write-Phase "backend" "already running"
-    Write-Phase "ready" "backend listening"
+    Write-Phase "ready" "already listening"
 }
 
 if (-not (Test-Path $flutterExe)) {
