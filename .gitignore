@@ -20,6 +20,8 @@ data/pip.lock
 # Which theme the Flutter client was last set to. Runtime state chosen on
 # this machine, same family as api_token.txt - not a project setting.
 data/ui_theme.txt
+# Startup phases for the launch screen, rewritten on every launch.
+data/startup.jsonl
 data/backend.log
 data/backend.err.log
 backend/logs/

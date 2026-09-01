@@ -30,6 +30,7 @@ import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'home_shell.dart';
 import 'onboarding_screen.dart';
+import 'startup_progress.dart';
 import 'theme.dart';
 
 String _dataDir() {
@@ -47,6 +48,11 @@ String _envOr(String key, String fallback) {
 final String kApiBase = _envOr('PIP_API_BASE', 'http://127.0.0.1:8765/api/v1');
 final String kWsUrl = _envOr('PIP_WS_URL', 'ws://127.0.0.1:8765/ws/chat');
 final String kTokenPath = '${_dataDir()}/api_token.txt';
+
+/// Where the launcher and the backend record what they are doing, for the
+/// launch screen to read. See lib/startup_progress.dart for why this is a file
+/// and not an endpoint.
+final String kStartupProgressPath = '${_dataDir()}/startup.jsonl';
 
 void main() {
   runApp(const PipApp());
@@ -138,6 +144,15 @@ class _AppRootState extends State<AppRoot> {
   _RootState _state = _RootState.connecting;
   String _statusMessage = 'Starting PIP...';
   String? _errorDetail;
+  List<StartupPhase> _phases = const [];
+
+  /// Anything in the progress file older than this belongs to a previous run.
+  ///
+  /// The launcher truncates the file, so under a normal double-click this
+  /// never triggers. It exists for the other ways the backend gets started -
+  /// run_dev.ps1, a bare uvicorn - where nothing clears it and the app would
+  /// otherwise open onto last week's completed checklist and call it progress.
+  final DateTime _startedAt = DateTime.now();
 
   // ~45s of retrying before giving up and showing a manual-retry screen -
   // generous enough to cover a cold uvicorn start plus a slow disk, but not
@@ -162,6 +177,7 @@ class _AppRootState extends State<AppRoot> {
     for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
       if (!mounted) return;
 
+      await _refreshPhases();
       final token = await _tryReadToken();
       if (token != null) {
         try {
@@ -183,6 +199,11 @@ class _AppRootState extends State<AppRoot> {
 
       if (!mounted) return;
       setState(() {
+        // Only ever a fallback now. When the progress file is being written
+        // the checklist below says what is actually happening, and this line
+        // is not shown at all - a counter cannot know whether a slow start is
+        // a decrypting database or a backend that never launched, and saying
+        // "still preparing things" to both was the whole problem.
         _statusMessage = attempt < 8
             ? 'Starting PIP...'
             : "Still preparing things - this can take a little longer on first launch...";
@@ -208,12 +229,28 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
+  /// Re-read on every attempt, in the same loop and for the same reason as the
+  /// token: both are written by another process after this one has already
+  /// started, so neither can be read once and cached.
+  Future<void> _refreshPhases() async {
+    try {
+      final file = File(kStartupProgressPath);
+      if (!await file.exists()) return;
+      if ((await file.lastModified()).isBefore(_startedAt)) return;
+      final phases = parseStartupProgress(await file.readAsString());
+      if (mounted && phases.isNotEmpty) setState(() => _phases = phases);
+    } catch (_) {
+      // No progress to show is the state this screen started in. A file that
+      // cannot be read costs the detail, not the launch.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pip = context.pip;
     switch (_state) {
       case _RootState.connecting:
-        return _LoadingScreen(message: _statusMessage);
+        return _LoadingScreen(message: _statusMessage, phases: _phases);
       case _RootState.error:
         return Scaffold(
           body: Center(
@@ -231,6 +268,17 @@ class _AppRootState extends State<AppRoot> {
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12.5, color: pip.textMuted),
                   ),
+                  // The phases that DID complete before it stalled. "PIP's
+                  // backend didn't respond" is the same sentence whether
+                  // Ollama never started or the database is still decrypting,
+                  // and the list is the only thing that separates them.
+                  if (_phases.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 320),
+                      child: _PhaseList(phases: _phases),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.lg),
                   FilledButton(onPressed: _connect, child: const Text('Retry')),
                 ],
@@ -252,7 +300,8 @@ class _AppRootState extends State<AppRoot> {
 
 class _LoadingScreen extends StatelessWidget {
   final String message;
-  const _LoadingScreen({required this.message});
+  final List<StartupPhase> phases;
+  const _LoadingScreen({required this.message, this.phases = const []});
 
   @override
   Widget build(BuildContext context) {
@@ -260,28 +309,103 @@ class _LoadingScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: pip.bg,
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'PIP',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 32, color: pip.accent),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: pip.textMuted),
-            ),
-          ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'PIP',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 32, color: pip.accent),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              // The checklist replaces the message rather than sitting under
+              // it. Both at once would be a real account of the startup next
+              // to a counter's guess about the same startup, and the guess
+              // would be the one that looked authoritative.
+              if (phases.isEmpty)
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: pip.textMuted),
+                )
+              else
+                _PhaseList(phases: phases),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+
+/// The startup checklist: what is done, what is happening, what is still to
+/// come. Used on the loading screen and again on the failure screen, where it
+/// is the only thing that says how far the launch actually got.
+class _PhaseList extends StatelessWidget {
+  final List<StartupPhase> phases;
+  const _PhaseList({required this.phases});
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final phase in phases)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 20,
+                  child: switch (phase.state) {
+                    StartupPhaseState.done => Icon(Icons.check, size: 14, color: pip.accent),
+                    StartupPhaseState.current => SizedBox(
+                        width: 11,
+                        height: 11,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: pip.accent),
+                      ),
+                    StartupPhaseState.pending => Icon(Icons.circle_outlined, size: 11, color: pip.textFaint),
+                  },
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        phase.label,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: phase.state == StartupPhaseState.current
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: phase.state == StartupPhaseState.pending ? pip.textFaint : pip.text,
+                        ),
+                      ),
+                      // The detail is where "already running" lives, which is
+                      // the difference between a fast launch and a broken one.
+                      if (phase.detail.isNotEmpty && phase.state != StartupPhaseState.pending)
+                        Text(
+                          phase.detail,
+                          style: TextStyle(fontSize: 11, color: pip.textFaint),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

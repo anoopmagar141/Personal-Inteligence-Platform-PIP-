@@ -7,11 +7,22 @@
 #
 # Deliberately does NOT wait for the backend to become ready before starting
 # the Flutter app - that wait belongs to the app's own splash screen
-# (AppRoot in main.dart), which already retries against the real backend
-# with its own "please wait" messaging. Keeping that logic in Flutter, not
-# here, matches this project's "frontend has zero intelligence... but a
-# frontend is still allowed to wait on its own connections" split: this
-# script's only job is starting processes, nothing about readiness.
+# (AppRoot in main.dart), which retries against the real backend. Keeping that
+# logic in Flutter, not here, matches this project's "frontend has zero
+# intelligence... but a frontend is still allowed to wait on its own
+# connections" split: this script's only job is starting processes, nothing
+# about readiness.
+#
+# It does, however, REPORT what it is starting. The splash screen used to pick
+# between two sentences based on a retry counter, so it said "Still preparing
+# things" after eight seconds whether the database was being decrypted or
+# nothing was running at all. The phases below are the ones only this script
+# can see - Ollama and the password - because they happen before uvicorn
+# exists to answer anything. backend/core/startup_progress.py takes over from
+# the lock onwards, appending to the same file.
+#
+# Truncated first, so a launch screen cannot read the last run's phases and
+# show a finished checklist before anything has happened.
 #
 # PIP_DATA_DIR is the one thing the app needs told, not guessed - it reads
 # its token from $dataDir\api_token.txt at runtime (not baked in at build
@@ -27,8 +38,29 @@ function Test-PortOpen($portNum) {
     return Test-NetConnection -ComputerName 127.0.0.1 -Port $portNum -InformationLevel Quiet -WarningAction SilentlyContinue
 }
 
+$progressFile = Join-Path $dataDir "startup.jsonl"
+
+# Appends one phase for the splash screen to read. Silent on failure for the
+# same reason the Python side is: a launch screen is a courtesy, and failing a
+# launch because the courtesy could not be written inverts the priority.
+function Write-Phase($phase, $detail) {
+    try {
+        $entry = @{ phase = $phase; detail = $detail; at = (Get-Date).ToUniversalTime().ToString("s") + "Z" }
+        Add-Content -Path $progressFile -Value ($entry | ConvertTo-Json -Compress) -Encoding utf8
+    } catch { }
+}
+
+New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+try { Set-Content -Path $progressFile -Value "" -Encoding utf8 } catch { }
+
 if (-not (Test-PortOpen 11434)) {
     Start-Process ollama -ArgumentList "serve" -WindowStyle Hidden
+    Write-Phase "ollama" "started"
+} else {
+    # Reported rather than skipped. A phase the splash never receives would sit
+    # unresolved on screen, and "already running" is a true and useful thing to
+    # be told - it is the difference between a fast launch and a broken one.
+    Write-Phase "ollama" "already running"
 }
 
 if (-not (Test-PortOpen 8765)) {
@@ -49,6 +81,7 @@ if (-not (Test-PortOpen 8765)) {
     # the app starts.
     . (Join-Path $PSScriptRoot "_db_key.ps1")
     if (-not (Set-PipDbKey -Root $root)) { exit 1 }
+    Write-Phase "key" "database key derived"
 
     $venvPython = Join-Path $root ".venv\Scripts\python.exe"
     $stdoutLog = Join-Path $dataDir "backend.log"
@@ -59,6 +92,14 @@ if (-not (Test-PortOpen 8765)) {
         -WindowStyle Hidden `
         -RedirectStandardOutput $stdoutLog `
         -RedirectStandardError $stderrLog
+    Write-Phase "backend" "starting PIP Core"
+} else {
+    # Already listening - every phase this script would have reported happened
+    # on an earlier launch, and the backend will not report its own again
+    # either. Saying so keeps the splash honest about why it is about to
+    # finish immediately.
+    Write-Phase "backend" "already running"
+    Write-Phase "ready" "backend listening"
 }
 
 if (-not (Test-Path $flutterExe)) {

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from backend.config.settings import get_settings
-from backend.core import auth, instance_lock, pipeline, proactive, session_lifecycle, trace
+from backend.core import auth, instance_lock, pipeline, proactive, session_lifecycle, startup_progress, trace
 from backend.memory import (
     conversation_store,
     decision_log,
@@ -672,6 +672,7 @@ try:
         # Raises loudly (AlreadyRunningError) rather than continuing, same
         # "fail loud, not silent" posture as the SQLCipher wrong-key check.
         instance_lock.acquire()
+        startup_progress.report("lock", "no other copy of PIP is running")
         # Before anything can log a request URL - the /ws/chat handshake carries
         # the token in its query string and uvicorn logs the full path.
         install_log_redaction()
@@ -737,6 +738,13 @@ try:
             # the only place this value is meant to be read from.
             auth.get_or_create_token(_token_path())
             logger.info(f"PIP is ready. API token file: {_token_path() or auth.TOKEN_PATH}")
+            # Last thing before serving, so the launch screen turns this into
+            # "listening" only when a request would genuinely be answered. The
+            # catch-up task started above is deliberately NOT reported: it runs
+            # in the background precisely so nobody waits on it, and a launch
+            # screen that listed it would reintroduce the two-minute hang that
+            # backgrounding it removed.
+            startup_progress.report("ready", "backend listening")
 
             yield
 
@@ -905,8 +913,25 @@ try:
         # pass at the end of it, so this flag is per-connection and is
         # deliberately not tied to whether conversation_id already existed.
         session_counted = False
+        # Whether this connection has produced a turn no Observer pass has seen.
+        #
+        # The three session-end triggers below used to fire on
+        # `conversation_history` being non-empty, and a RESUMED conversation
+        # arrives with that already full - so opening a past chat in the
+        # sidebar and clicking away re-ran the whole ~130s Observer pass over a
+        # transcript that had already been observed, having learned nothing new.
+        # Found in the trace log: four such passes in one afternoon, two of them
+        # 11 seconds apart, none with a single new message between them. The
+        # expensive part is not the wasted minutes - it is that each pass
+        # rewrites session_snapshot, so "what were we doing last time" could be
+        # answered with a summary of a conversation from days ago, freshly
+        # re-observed by a click.
+        #
+        # A dict rather than a bare bool because the registry holds it by
+        # reference for the shutdown path (see enqueue_for_shutdown).
+        session_state = {"has_unobserved_turns": False}
         session_id = id(websocket)
-        await _session_registry.register(session_id, conn, executor, conversation_history)
+        await _session_registry.register(session_id, conn, executor, conversation_history, session_state)
 
         # Sent once, before the main loop - not part of the per-turn
         # stage_hint -> token* -> (done|error|stopped) sequence (Part 14.3).
@@ -947,7 +972,7 @@ try:
                     # Rule 3: 10-min idle triggers Observer session-end. There's
                     # time here (nothing else is waiting on this connection), so
                     # run it now rather than persist-and-defer.
-                    if conversation_history:
+                    if session_state["has_unobserved_turns"]:
                         try:
                             await session_lifecycle.run_observer_now(
                                 loop, executor, conn, conversation_history,
@@ -956,6 +981,10 @@ try:
                             )
                         except Exception as e:
                             logger.error(f"Idle-timeout Observer run failed, session transcript discarded: {e}")
+                        # Cleared here already; the flag has to follow it, or the
+                        # disconnect trigger would observe the same turns again
+                        # (and rewrite the snapshot from an empty transcript).
+                        session_state["has_unobserved_turns"] = False
                         conversation_history.clear()
                     continue
 
@@ -999,6 +1028,7 @@ try:
                 )
 
                 conversation_history.append({"role": "user", "content": user_message})
+                session_state["has_unobserved_turns"] = True
                 await loop.run_in_executor(
                     executor, conversation_store.append_message, conn, conversation_id, "user", user_message
                 )
@@ -1027,7 +1057,7 @@ try:
             # handler's snapshot() may have already captured (and be enqueuing)
             # this same session - a best-effort, not a perfectly atomic guarantee,
             # for a single local process serving one user.
-            if conversation_history and not _session_registry.shutting_down:
+            if session_state["has_unobserved_turns"] and not _session_registry.shutting_down:
                 try:
                     # conversation_id marks it observed inside the same executor
                     # call (see run_observer_now) - deliberately not a second
