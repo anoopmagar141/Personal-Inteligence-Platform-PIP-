@@ -171,6 +171,54 @@ async def test_enqueue_for_shutdown_noop_on_a_resumed_conversation_nobody_added_
     assert pending == []
 
 
+@pytest.mark.asyncio
+async def test_enqueue_for_shutdown_persists_only_the_turns_this_session_added(executor_conn):
+    # pending_observer stores a transcript and nothing else, so there is no
+    # second column to carry an offset in - the resumed history has to be
+    # sliced off here or the next startup's drain re-reads it and counts it as
+    # evidence under a session number from a different day.
+    conn, executor = executor_conn
+    loop = asyncio.get_event_loop()
+
+    session = {
+        "conn": conn,
+        "executor": executor,
+        "conversation_history": [
+            {"role": "user", "content": "said this last week"},
+            {"role": "assistant", "content": "noted last week"},
+            {"role": "user", "content": "and this is today"},
+        ],
+        "session_state": {"has_unobserved_turns": True, "observed_prefix": 2},
+    }
+    await session_lifecycle.enqueue_for_shutdown(loop, session)
+
+    pending = await loop.run_in_executor(executor, pending_observer.list_pending, conn)
+    assert len(pending) == 1
+    transcript = pending[0]["session_transcript"]
+    assert "and this is today" in transcript
+    assert "said this last week" not in transcript
+
+
+@pytest.mark.asyncio
+async def test_enqueue_for_shutdown_noop_when_the_slice_is_empty(executor_conn):
+    # has_unobserved_turns says a turn was added; observed_prefix says every
+    # message is old. That combination should not reach pending_observer with
+    # an empty transcript for the drain to extract from.
+    conn, executor = executor_conn
+    loop = asyncio.get_event_loop()
+
+    session = {
+        "conn": conn,
+        "executor": executor,
+        "conversation_history": [{"role": "user", "content": "all of it is old"}],
+        "session_state": {"has_unobserved_turns": True, "observed_prefix": 1},
+    }
+    await session_lifecycle.enqueue_for_shutdown(loop, session)
+
+    pending = await loop.run_in_executor(executor, pending_observer.list_pending, conn)
+    assert pending == []
+
+
 def test_drain_pending_on_startup_processes_existing_entries(db_conn):
     pending_observer.enqueue(db_conn, "User: left over from a shutdown\nAssistant: ok")
 
