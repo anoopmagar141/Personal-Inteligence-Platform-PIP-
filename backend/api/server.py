@@ -8,7 +8,16 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from backend.config.settings import get_settings
-from backend.core import auth, instance_lock, pipeline, proactive, session_lifecycle, startup_progress, trace
+from backend.core import (
+    auth,
+    instance_lock,
+    pinned_executor,
+    pipeline,
+    proactive,
+    session_lifecycle,
+    startup_progress,
+    trace,
+)
 from backend.memory import (
     conversation_store,
     decision_log,
@@ -880,7 +889,15 @@ try:
         # be touched from this one thread for the rest of the connection's
         # lifetime (see stream_pipeline_to_websocket's docstring for why - found
         # live, a real crash, not a defensive guess).
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        #
+        # PinnedExecutor rather than ThreadPoolExecutor(max_workers=1), which
+        # this used to be: both give one thread, only one gives a DAEMON
+        # thread, and the disconnect path below abandons a conn.close() that it
+        # documents as able to never return. A non-daemon worker left inside
+        # that call cannot be abandoned at all - the interpreter joins it before
+        # exiting - so the process that stopped waiting for it still could not
+        # shut down. See pinned_executor.py for the measurement.
+        executor = pinned_executor.PinnedExecutor(name=f"pip-ws-{id(websocket)}")
         conn = await loop.run_in_executor(executor, _conn)
         # observer_model_name: resolved once here, not re-queried from the
         # idle-timeout/disconnect paths below - see _default_observer_provider's
@@ -1084,6 +1101,12 @@ try:
             # backstop for the local single-user server this is, and the
             # bug this guards is the entire ASGI task wedging, not a leaked
             # connection silently accumulating across many disconnects.
+            #
+            # That backstop only holds because the worker is a daemon thread
+            # (pinned_executor). It was written when this was a
+            # ThreadPoolExecutor, whose non-daemon worker the interpreter joins
+            # before exiting - so "the OS reclaims it on process exit" was
+            # describing an exit the abandoned call was itself preventing.
             try:
                 await asyncio.wait_for(loop.run_in_executor(executor, conn.close), timeout=5.0)
             except asyncio.TimeoutError:
