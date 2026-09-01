@@ -290,6 +290,136 @@ def test_run_session_end_reinforces_evidence_across_simulated_sessions(db_conn):
     assert row["evidence_count"] == 2  # written value reflects reinforcement, not just the check
 
 
+# --- Re-reading a resumed conversation is not corroboration ---------------
+#
+# A resumed conversation arrives carrying its whole history, and that history
+# is handed to the Observer on purpose - the closing turns of a resumed chat
+# rarely stand alone. But an already-extracted turn coming past a second time
+# is the user being QUOTED, not the user repeating themselves, and Stage 12
+# could not tell: it stamps every extraction with the current session_no, so a
+# re-read looked like independent corroboration from a new session. Two
+# sessions is the week_3_4 auto-write threshold.
+
+_RESUMED_HISTORY = (
+    "User: I switched to Neovim last month and I am not going back\n"
+    "Assistant: Noted.\n"
+)
+_NEW_TURNS = (
+    "User: anyway, what is a hash table?\n"
+    "Assistant: A structure mapping keys to values.\n"
+)
+
+
+def _neovim_response(evidence: str) -> str:
+    return json.dumps({
+        "memory_candidates": [{
+            "target_table": "preference_memory",
+            "field_name": "preferred_tools",
+            "proposed_value": "Neovim",
+            "label": "explicit",
+            "evidence_text": evidence,
+        }],
+        "decision_candidates": [],
+        "session_snapshot": {},
+    })
+
+
+def test_a_signal_only_in_the_resumed_history_is_not_counted_again(db_conn):
+    provider = FakeProvider(response_text=_neovim_response("switched to Neovim last month"))
+
+    result = observer.run_session_end(
+        db_conn,
+        _RESUMED_HISTORY + _NEW_TURNS,
+        provider,
+        unobserved_transcript=_NEW_TURNS,
+    )
+
+    assert result["memory_results"] == []
+    logged = db_conn.execute(
+        "SELECT COUNT(*) AS n FROM memory_observation_log WHERE proposed_value = 'Neovim'"
+    ).fetchone()
+    assert logged["n"] == 0, "a re-read was recorded as an observation"
+
+
+def test_the_same_signal_restated_in_the_new_turns_still_counts(db_conn):
+    # The other direction, and the reason this is a grounding check rather than
+    # a blanket "drop anything seen before": saying it again IS corroboration.
+    restated = _NEW_TURNS + "User: and Neovim is still my editor of choice\nAssistant: Noted.\n"
+    provider = FakeProvider(response_text=_neovim_response("Neovim is still my editor of choice"))
+
+    result = observer.run_session_end(
+        db_conn,
+        _RESUMED_HISTORY + restated,
+        provider,
+        unobserved_transcript=restated,
+    )
+
+    assert len(result["memory_results"]) == 1
+    logged = db_conn.execute(
+        "SELECT COUNT(*) AS n FROM memory_observation_log WHERE proposed_value = 'Neovim'"
+    ).fetchone()
+    assert logged["n"] == 1
+
+
+def test_a_decision_only_in_the_resumed_history_is_not_logged_again(db_conn):
+    # Decisions route to their own store, so they need their own guard - the
+    # same re-read would otherwise re-file a settled decision under today.
+    history = "User: we are going with FastAPI for the backend\nAssistant: Good choice.\n"
+    provider = FakeProvider(response_text=json.dumps({
+        "memory_candidates": [],
+        "decision_candidates": [{
+            "decision_text": "Chose FastAPI for the backend",
+            "signals_found": ["commitment_language"],
+            "raw_quote": "we are going with FastAPI for the backend",
+        }],
+        "session_snapshot": {},
+    }))
+
+    result = observer.run_session_end(
+        db_conn, history + _NEW_TURNS, provider, unobserved_transcript=_NEW_TURNS
+    )
+
+    assert result["decision_results"] == []
+
+
+def test_without_an_unobserved_transcript_everything_still_counts(db_conn):
+    # The default, and what a fresh conversation and the startup drain both
+    # pass. Nothing about those paths changed.
+    provider = FakeProvider(response_text=_neovim_response("switched to Neovim last month"))
+
+    result = observer.run_session_end(db_conn, _RESUMED_HISTORY + _NEW_TURNS, provider)
+
+    assert len(result["memory_results"]) == 1
+
+
+def test_a_throwaway_reply_to_an_old_chat_cannot_overwrite_the_snapshot(db_conn):
+    # The snapshot gate counts substantive turns, and a resumed conversation
+    # carries any number of them from sessions it was already summarised from.
+    # Measured on the new turns, one idle reply is not a session with an arc.
+    _standing_snapshot(db_conn)
+    long_history = "".join(
+        f"User: this is substantive turn number {i} of the earlier session\nAssistant: ok\n"
+        for i in range(5)
+    )
+    new_turn = "User: thanks for that, appreciated\nAssistant: Any time.\n"
+    provider = FakeProvider(response_text=json.dumps({
+        "memory_candidates": [],
+        "decision_candidates": [],
+        "session_snapshot": {
+            "topic": "saying thanks",
+            "open_problems": [],
+            "last_decisions": [],
+            "suggested_next_step": "",
+        },
+    }))
+
+    observer.run_session_end(
+        db_conn, long_history + new_turn, provider, unobserved_transcript=new_turn
+    )
+
+    assert session_snapshot.load_snapshot(db_conn)["topic"] == "Wiring the RAG retrieval stage"
+
+
 # --- Decision candidates that are really the assistant's own text (found live) ---
 
 

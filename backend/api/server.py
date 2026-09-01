@@ -8,7 +8,16 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from backend.config.settings import get_settings
-from backend.core import auth, instance_lock, pipeline, proactive, session_lifecycle, startup_progress, trace
+from backend.core import (
+    auth,
+    instance_lock,
+    pinned_executor,
+    pipeline,
+    proactive,
+    session_lifecycle,
+    startup_progress,
+    trace,
+)
 from backend.memory import (
     conversation_store,
     decision_log,
@@ -672,6 +681,19 @@ try:
         # Raises loudly (AlreadyRunningError) rather than continuing, same
         # "fail loud, not silent" posture as the SQLCipher wrong-key check.
         instance_lock.acquire()
+        # Cleared on the way IN, not just set on the way out. shutting_down
+        # gates the disconnect-time Observer run, and _session_registry is a
+        # module-level singleton - so once any app lifespan had ended, the flag
+        # stayed True for the life of the interpreter and every later
+        # disconnect silently skipped the Observer.
+        #
+        # One process serving one user never noticed: it runs a single lifespan
+        # and then exits. The test suite runs dozens in one interpreter, which
+        # is where it surfaced - a test asserting that a disconnect triggers the
+        # Observer passed alone and failed inside its own file, because an
+        # earlier test's TestClient had already latched the flag. Any such
+        # assertion after the first one was not testing anything.
+        _session_registry.shutting_down = False
         startup_progress.report("lock", "no other copy of PIP is running")
         # Before anything can log a request URL - the /ws/chat handshake carries
         # the token in its query string and uvicorn logs the full path.
@@ -880,7 +902,15 @@ try:
         # be touched from this one thread for the rest of the connection's
         # lifetime (see stream_pipeline_to_websocket's docstring for why - found
         # live, a real crash, not a defensive guess).
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        #
+        # PinnedExecutor rather than ThreadPoolExecutor(max_workers=1), which
+        # this used to be: both give one thread, only one gives a DAEMON
+        # thread, and the disconnect path below abandons a conn.close() that it
+        # documents as able to never return. A non-daemon worker left inside
+        # that call cannot be abandoned at all - the interpreter joins it before
+        # exiting - so the process that stopped waiting for it still could not
+        # shut down. See pinned_executor.py for the measurement.
+        executor = pinned_executor.PinnedExecutor(name=f"pip-ws-{id(websocket)}")
         conn = await loop.run_in_executor(executor, _conn)
         # observer_model_name: resolved once here, not re-queried from the
         # idle-timeout/disconnect paths below - see _default_observer_provider's
@@ -929,7 +959,16 @@ try:
         #
         # A dict rather than a bare bool because the registry holds it by
         # reference for the shutdown path (see enqueue_for_shutdown).
-        session_state = {"has_unobserved_turns": False}
+        # observed_prefix: how many of the messages above this connection was
+        # handed rather than produced. A resumed conversation starts with its
+        # whole history, and those turns were already extracted from, under
+        # their own session number, on the day they were said. The Observer is
+        # still shown them - the closing turns of a resumed chat rarely stand
+        # alone - but they must not be counted as fresh evidence a second time.
+        session_state = {
+            "has_unobserved_turns": False,
+            "observed_prefix": len(resumed_messages),
+        }
         session_id = id(websocket)
         await _session_registry.register(session_id, conn, executor, conversation_history, session_state)
 
@@ -978,6 +1017,7 @@ try:
                                 loop, executor, conn, conversation_history,
                                 _default_observer_provider(observer_model_name),
                                 conversation_id=conversation_id,
+                                observed_prefix=session_state["observed_prefix"],
                             )
                         except Exception as e:
                             logger.error(f"Idle-timeout Observer run failed, session transcript discarded: {e}")
@@ -985,6 +1025,11 @@ try:
                         # disconnect trigger would observe the same turns again
                         # (and rewrite the snapshot from an empty transcript).
                         session_state["has_unobserved_turns"] = False
+                        # And the prefix with it: the history it counted into is
+                        # gone, so anything typed after this point starts at 0.
+                        # Left at its old value it would slice away the first N
+                        # turns of the NEXT stretch of conversation.
+                        session_state["observed_prefix"] = 0
                         conversation_history.clear()
                     continue
 
@@ -1067,6 +1112,7 @@ try:
                         loop, executor, conn, conversation_history,
                         _default_observer_provider(observer_model_name),
                         conversation_id=conversation_id,
+                        observed_prefix=session_state["observed_prefix"],
                     )
                 except Exception as e:
                     logger.error(f"Disconnect Observer run failed, session transcript discarded: {e}")
@@ -1084,6 +1130,12 @@ try:
             # backstop for the local single-user server this is, and the
             # bug this guards is the entire ASGI task wedging, not a leaked
             # connection silently accumulating across many disconnects.
+            #
+            # That backstop only holds because the worker is a daemon thread
+            # (pinned_executor). It was written when this was a
+            # ThreadPoolExecutor, whose non-daemon worker the interpreter joins
+            # before exiting - so "the OS reclaims it on process exit" was
+            # describing an exit the abandoned call was itself preventing.
             try:
                 await asyncio.wait_for(loop.run_in_executor(executor, conn.close), timeout=5.0)
             except asyncio.TimeoutError:

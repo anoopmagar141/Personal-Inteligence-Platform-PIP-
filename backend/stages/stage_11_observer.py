@@ -482,6 +482,72 @@ def _quote_is_grounded(raw_quote: str, transcript_lower: str) -> bool:
     return normalized in transcript_lower
 
 
+def _only_candidates_stated_this_session(
+    output: ObserverOutput, unobserved_transcript: str
+) -> ObserverOutput:
+    """
+    Drops candidates whose evidence lies in turns an earlier session already
+    had its own Observer pass over.
+
+    A resumed conversation arrives with its whole history, and that history is
+    what the model is shown - deliberately, because the last few turns rarely
+    make sense without it. But being SHOWN a turn again is not the user saying
+    it again, and Stage 12 could not tell the difference: reinforce_evidence()
+    stamps every extraction with the current session_no, so re-reading a
+    conversation under a new session made a signal look independently observed
+    twice, and the stored-value branch adds its own +1 on top. Two sessions of
+    evidence is the week_3_4 auto-write threshold. So reopening an old chat and
+    typing anything at all could write a preference the user stated exactly
+    once, without them ever repeating it - which inverts what evidence_count is
+    for. The constitution counts corroboration; this was counting re-reads.
+
+    Deterministic, and deliberately not a prompt instruction: "only report what
+    is new" is precisely the kind of self-report ADR-005 and every grounding
+    check in this file already decline to trust. The same _quote_is_grounded()
+    that decides whether a quote exists at all is simply asked a narrower
+    question - does it exist in the part that is new.
+
+    Safe against _cap_transcript(), which keeps the END of a long transcript:
+    the unobserved turns ARE the end, so capping can only ever remove turns
+    from the already-observed side. There is no case where a candidate is
+    grounded in the new turns but capped out of the text checked here.
+
+    The snapshot is untouched. It summarises the conversation, and a recap
+    built from the last few turns alone would be worse for the same reason the
+    model is shown the history in the first place.
+    """
+    unobserved_lower = unobserved_transcript.lower()
+
+    memory_candidates = []
+    for candidate in output["memory_candidates"]:
+        if _quote_is_grounded(candidate["evidence_text"], unobserved_lower):
+            memory_candidates.append(candidate)
+        else:
+            logger.info(
+                "Observer: dropping memory candidate whose evidence is only in "
+                f"already-observed turns (re-read, not restated): "
+                f"{candidate['target_table']}.{candidate['field_name']}="
+                f"{candidate['proposed_value']!r}"
+            )
+
+    decision_candidates = []
+    for candidate in output["decision_candidates"]:
+        if _quote_is_grounded(candidate["raw_quote"], unobserved_lower):
+            decision_candidates.append(candidate)
+        else:
+            logger.info(
+                "Observer: dropping decision candidate whose quote is only in "
+                f"already-observed turns (re-read, not restated): "
+                f"{candidate['decision_text']!r}"
+            )
+
+    return {
+        "memory_candidates": memory_candidates,
+        "decision_candidates": decision_candidates,
+        "session_snapshot": output["session_snapshot"],
+    }
+
+
 def _substantive_user_turns(transcript: str, min_words: int = 4) -> int:
     """
     How many user turns carry at least min_words. The counting half of
@@ -777,6 +843,8 @@ def run_session_end(
     transcript: str,
     provider: BaseLLMProvider,
     project_id: Optional[str] = None,
+    *,
+    unobserved_transcript: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Full Observer session-end flow: extract -> write snapshot immediately -> reinforce
@@ -788,8 +856,24 @@ def run_session_end(
     Does NOT handle idle-timeout/SIGINT triggering or pending_observer draining -
     those are process-lifecycle concerns that need a running server (Phase 8). This
     is what a caller invokes once it has already decided the session has ended.
+
+    unobserved_transcript is the tail of `transcript` holding only the turns
+    this session actually added - what a RESUMED conversation contributes, as
+    opposed to the history it arrived carrying. Candidates are extracted from
+    the whole transcript (the model needs the context) but only counted as
+    evidence if they are grounded in that tail; see
+    _only_candidates_stated_this_session for why re-reading is not
+    corroborating. None means the whole transcript is new, which is the case
+    for a fresh conversation and for the startup drain, and leaves every
+    existing caller behaving exactly as before.
     """
     output = run(transcript, provider, conn)
+
+    # Before the snapshot gate below, not after: that gate asks whether this
+    # session arrived somewhere, and a pass that produced nothing but re-reads
+    # has not.
+    if unobserved_transcript is not None:
+        output = _only_candidates_stated_this_session(output, unobserved_transcript)
 
     # An empty-topic snapshot means run() withheld it as ungrounded (no
     # substantive user turn to summarize) - persisting it anyway would
@@ -805,7 +889,13 @@ def run_session_end(
     # Snapshot and candidates are independent products of one extraction: a
     # snapshot that fails to persist is a lost recap, and it must not also cost
     # the memory and decision candidates that were extracted alongside it.
-    if _snapshot_may_overwrite_the_standing_one(transcript, output):
+    # Measured on the new turns, not the whole transcript: a resumed
+    # conversation carries any number of substantive turns it was already
+    # summarised from, and counting those would let one throwaway reply to an
+    # old chat overwrite the standing snapshot.
+    if _snapshot_may_overwrite_the_standing_one(
+        transcript if unobserved_transcript is None else unobserved_transcript, output
+    ):
         try:
             session_snapshot.write_snapshot(conn, output["session_snapshot"])
         except Exception as e:

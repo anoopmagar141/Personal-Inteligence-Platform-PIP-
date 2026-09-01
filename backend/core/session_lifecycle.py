@@ -86,6 +86,7 @@ async def run_observer_now(
     provider: BaseLLMProvider,
     project_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
+    observed_prefix: int = 0,
 ) -> dict[str, Any]:
     """
     Runs Stage 11's full session-end flow on the connection's own dedicated
@@ -114,6 +115,23 @@ async def run_observer_now(
     trace_id = trace.generate_trace_id()
     transcript = format_transcript(conversation_history)
 
+    # observed_prefix is how many of these messages the connection was HANDED
+    # rather than produced - a resumed conversation arrives with its history
+    # already loaded. The Observer is given the whole transcript, because the
+    # closing turns of a resumed chat rarely stand alone, but only the tail is
+    # allowed to count as evidence: being shown a turn again is not the user
+    # saying it again. See stage_11's _only_candidates_stated_this_session.
+    #
+    # 0 (the default) means every message here is this session's own, which is
+    # true of a fresh conversation and of the startup drain - and passing None
+    # keeps that path on its long-standing behaviour rather than routing it
+    # through a filter it does not need.
+    unobserved = (
+        format_transcript(conversation_history[observed_prefix:])
+        if observed_prefix
+        else None
+    )
+
     def _extract_and_mark() -> dict[str, Any]:
         # Marking happens inside this same executor call rather than as a
         # second `await run_in_executor(...)` at the call site. Both callers
@@ -138,7 +156,9 @@ async def run_observer_now(
             f"session-end run starting, {len(conversation_history)} messages",
         )
         try:
-            outcome = observer.run_session_end(conn, transcript, provider, project_id)
+            outcome = observer.run_session_end(
+                conn, transcript, provider, project_id, unobserved_transcript=unobserved
+            )
         except Exception as e:
             trace.stage_log(
                 conn, trace_id, "stage_11_observer", "error",
@@ -178,7 +198,15 @@ async def enqueue_for_shutdown(loop, session: dict[str, Any]) -> None:
         return
     if not history:
         return
-    transcript = format_transcript(history)
+    # Only the turns this connection actually added. pending_observer stores a
+    # transcript and nothing else, so there is no second column to carry an
+    # offset in - and enqueueing the resumed history along with them would hand
+    # the next startup's drain the same re-read this path exists to avoid,
+    # counted under a session number from a different day.
+    observed_prefix = (state or {}).get("observed_prefix", 0)
+    transcript = format_transcript(history[observed_prefix:])
+    if not transcript:
+        return
     await loop.run_in_executor(
         session["executor"], pending_observer.enqueue, session["conn"], transcript
     )

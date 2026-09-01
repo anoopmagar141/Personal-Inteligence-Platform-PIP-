@@ -274,9 +274,10 @@ def test_idle_timeout_triggers_observer_and_clears_history(monkeypatch, token):
     observer_calls = []
 
     async def fake_run_observer_now(
-        loop, executor, conn, conversation_history, provider, project_id=None, conversation_id=None
+        loop, executor, conn, conversation_history, provider, project_id=None,
+        conversation_id=None, observed_prefix=0,
     ):
-        observer_calls.append(list(conversation_history))
+        observer_calls.append((list(conversation_history), observed_prefix))
         return {"memory_results": [], "decision_results": []}
 
     monkeypatch.setattr(server.session_lifecycle, "run_observer_now", fake_run_observer_now)
@@ -297,10 +298,14 @@ def test_idle_timeout_triggers_observer_and_clears_history(monkeypatch, token):
             time.sleep(0.05)
 
     assert len(observer_calls) == 1
-    assert observer_calls[0] == [
+    history, observed_prefix = observer_calls[0]
+    assert history == [
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "Hello there "},
     ]
+    # A fresh connection was handed nothing, so every turn here is its own and
+    # all of it counts as evidence.
+    assert observed_prefix == 0
 
 
 def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch, token):
@@ -375,6 +380,31 @@ def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch, to
         ]
 
     assert calls["unregistered"] == session_id
+
+
+def test_lifespan_startup_clears_a_previous_runs_shutdown_flag(monkeypatch, tmp_path):
+    """
+    shutting_down gates the disconnect-time Observer run, and the registry is a
+    module-level singleton. Setting it at shutdown without clearing it at
+    startup made it a one-way latch for the life of the interpreter: after any
+    lifespan had ended, every later disconnect skipped the Observer.
+
+    One process serving one user never noticed - it runs a single lifespan and
+    exits. The suite runs dozens in one interpreter, which is where it showed:
+    a test asserting a disconnect triggers the Observer passed alone and failed
+    inside its own file.
+    """
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token"))
+
+    server._session_registry.shutting_down = True  # as a previous lifespan left it
+
+    with TestClient(server.app):
+        assert server._session_registry.shutting_down is False
+
+    # And set again on the way out, which is the half that always worked.
+    assert server._session_registry.shutting_down is True
 
 
 def test_app_startup_drains_pending_observer(monkeypatch, tmp_path):
@@ -491,6 +521,73 @@ def test_ws_chat_resumes_a_known_conversation_id(monkeypatch, token, tmp_path):
             {"role": "user", "content": "earlier question"},
             {"role": "assistant", "content": "earlier answer"},
         ]
+
+
+def test_resuming_marks_the_carried_history_as_already_observed(monkeypatch, token, tmp_path):
+    """
+    The turns a resumed connection is HANDED must not be counted as evidence a
+    second time - they were extracted from, under their own session number, on
+    the day they were said. The Observer is still shown them (a resumed chat's
+    closing turns rarely stand alone); observed_prefix is what tells it where
+    this session's own contribution starts.
+    """
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+
+    from backend.memory import conversation_store
+    seed_conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    conversation_id = conversation_store.create_conversation(seed_conn)
+    conversation_store.append_message(seed_conn, conversation_id, "user", "said this last week")
+    conversation_store.append_message(seed_conn, conversation_id, "assistant", "answered last week")
+    seed_conn.close()
+
+    observer_calls = []
+
+    async def fake_run_observer_now(
+        loop, executor, conn, conversation_history, provider, project_id=None,
+        conversation_id=None, observed_prefix=0,
+    ):
+        observer_calls.append((list(conversation_history), observed_prefix))
+        return {"memory_results": [], "decision_results": []}
+
+    monkeypatch.setattr(server.session_lifecycle, "run_observer_now", fake_run_observer_now)
+
+    # `with TestClient(...)`, not a bare TestClient: the disconnect-time
+    # Observer is gated on _session_registry.shutting_down, which lifespan
+    # STARTUP clears. Without the lifespan this test passes alone and fails
+    # after any test that ran one - see the registry's flag for why that was a
+    # real bug and not just a test-setup detail.
+    with TestClient(server.app) as client, client.websocket_connect(
+        f"/ws/chat?token={token}&conversation_id={conversation_id}"
+    ) as ws:
+        _expect_session_info(ws)
+        ws.send_json({"message": "and this is today"})
+        for _ in range(4):
+            ws.receive_json()
+        # Sync on the next turn's first event, so the first turn's appends have
+        # landed before the disconnect - same reasoning as the registry test.
+        ws.send_json({"message": "second"})
+        assert ws.receive_json()["type"] == "stage_hint"
+
+    # The disconnect Observer runs in the handler's finally block, which the
+    # `with` exiting only STARTS - polling is what the idle-timeout test above
+    # does for the same reason. Asserting straight after the block passed this
+    # test when run alone and failed it inside the file, which is the shape of
+    # a race, not of a bug in what it is testing.
+    import time
+    deadline = time.monotonic() + 5.0
+    while not observer_calls and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+    assert len(observer_calls) == 1
+    history, observed_prefix = observer_calls[0]
+    assert observed_prefix == 2, "the two carried turns were not marked as already observed"
+    # The whole transcript still goes to the Observer - the prefix says what
+    # may COUNT, not what may be read.
+    assert history[:2] == [
+        {"role": "user", "content": "said this last week"},
+        {"role": "assistant", "content": "answered last week"},
+    ]
+    assert len(history) > 2
 
 
 def test_ws_chat_resuming_an_unknown_conversation_id_creates_a_new_one_lazily(monkeypatch, token):
