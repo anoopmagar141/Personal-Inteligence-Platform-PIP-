@@ -441,6 +441,81 @@ def test_reinforcement_does_not_move_within_a_single_session(db_conn):
     assert first["evidence_count"] == second["evidence_count"] == third["evidence_count"] == 1
 
 
+def _store(db_conn, count, value="terse"):
+    """The profile row Stage 13 would have written, at a given evidence_count."""
+    db_conn.execute("DELETE FROM preference_memory WHERE name = 'answer_style'")
+    db_conn.execute(
+        "INSERT INTO preference_memory (name, value, evidence_count, source_label, status) "
+        "VALUES ('answer_style', ?, ?, 'explicit', 'active')",
+        (value, count),
+    )
+    db_conn.commit()
+
+
+def test_a_second_pass_in_one_session_does_not_increment_a_stored_count_again(db_conn):
+    """
+    The same invariant as test_reinforcement_does_not_move_within_a_single_session
+    above, on the branch that did not honour it. That test only ever reached the
+    never-stored path, where sessions are counted directly; once a row exists,
+    the count came from stored + 1 and a second pass added 1 to a row the first
+    pass had already had written.
+
+    The second pass is not a retry. drain_pending_on_startup() processes every
+    queued transcript in one loop before any new session begins, so two queued
+    sessions mentioning the same preference are two passes under one session_no
+    - with Stage 13's write in between, which is what made the double count
+    reachable rather than merely theoretical.
+    """
+    profile_store.begin_session(db_conn)
+    _store(db_conn, 2)
+
+    first = reinforce_evidence(db_conn, _signal())
+    assert first["evidence_count"] == 3
+
+    _store(db_conn, first["evidence_count"])  # Stage 13 writes after every candidate
+    second = reinforce_evidence(db_conn, _signal())
+
+    assert second["evidence_count"] == 3, "one session was counted twice"
+
+
+def test_the_next_session_still_increments_a_stored_count(db_conn):
+    """
+    The other half: collapsing repeats within a session must not collapse the
+    sessions themselves, or nothing could ever accumulate.
+    """
+    profile_store.begin_session(db_conn)
+    _store(db_conn, 2)
+    first = reinforce_evidence(db_conn, _signal())
+    _store(db_conn, first["evidence_count"])
+
+    profile_store.begin_session(db_conn)
+    second = reinforce_evidence(db_conn, _signal())
+
+    assert second["evidence_count"] == 4
+
+
+def test_an_unstamped_observation_is_never_treated_as_a_repeat(db_conn):
+    """
+    session_no is NULL only before onboarding creates profile_meta, and
+    _observed_sessions counts each such row as its own session via
+    COALESCE(session_no, -id). The repeat check has to agree with that, or the
+    two halves of the same function disagree about the same rows.
+    """
+    # The fixture creates profile_meta, so remove it to reach the state this
+    # is about: observations made before onboarding ever ran.
+    db_conn.execute("DELETE FROM profile_meta WHERE id = 1")
+    db_conn.commit()
+    assert profile_store.current_session_no(db_conn) is None
+    _store(db_conn, 2)
+
+    first = reinforce_evidence(db_conn, _signal())
+    _store(db_conn, first["evidence_count"])
+    second = reinforce_evidence(db_conn, _signal())
+
+    assert first["evidence_count"] == 3
+    assert second["evidence_count"] == 4
+
+
 def test_reinforcement_is_scoped_to_the_exact_value(db_conn):
     _observe_across_sessions(db_conn, 3, proposed_value="terse")
     other = _observe_across_sessions(db_conn, 1, proposed_value="verbose")
