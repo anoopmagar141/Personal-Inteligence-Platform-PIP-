@@ -1,15 +1,22 @@
 // Behaviour tests for the Profile screen, now that it can write.
 //
-// The interesting cases are all about NOT offering an action the backend
-// cannot honour, because each failure mode is silent in a different way:
+// The interesting cases are about NOT offering an action the backend cannot
+// honour, because each failure mode is silent in a different way:
 //
 //   * identity rows are refused server-side, so an edit button on one would
 //     always fail;
-//   * a skill row would not be refused at all - correct_profile_field() writes
-//     to preference_memory unconditionally, so "correcting" a skill would
-//     appear to succeed while filing a new preference and leaving the skill
-//     exactly as wrong as it was. That is the worst of the three, and the only
-//     one no error message would ever reveal.
+//   * set-membership rows (topic_interests, preferred_tools,
+//     document_access_patterns) have no separate value to edit into - the
+//     field IS the value - so there is nothing an in-place correction could
+//     mean, and the backend says so.
+//
+// Skills used to be in that second group for a worse reason: correcting one
+// was not refused at all, because correct_profile_field() wrote to
+// preference_memory unconditionally. The edit appeared to succeed while
+// filing a new preference of the same name and leaving the skill exactly as
+// wrong as it was - the only failure here that no error message would ever
+// reveal. The backend now routes by table, so skills and goals are editable
+// and the tests below pin that instead.
 //
 // The endpoints themselves are covered by the Python suite.
 
@@ -23,12 +30,19 @@ class FakeApi extends ApiClient {
   FakeApi() : super('http://127.0.0.1:8765/api/v1');
 
   List<dynamic> fields = [];
+  List<dynamic> styleHistory = [];
   final List<String> calls = [];
   Object? correctError;
   String deleteStatus = 'deleted';
 
   @override
   Future<List<dynamic>> getProfile() async => fields;
+
+  @override
+  Future<List<dynamic>> getInteractionStyleHistory({int limit = 50}) async {
+    calls.add('style-history');
+    return styleHistory;
+  }
 
   @override
   Future<void> correctMemory(String field, String value) async {
@@ -76,17 +90,28 @@ void main() {
       expect(capability.note, 'set at onboarding');
     });
 
-    test('does not offer to correct a skill', () {
-      // correct_profile_field() writes to preference_memory, so this would
-      // file a stray preference and leave the skill untouched - a silent
-      // wrong answer rather than a visible refusal.
-      expect(profileRowCapability('skill_memory').canEdit, isFalse);
-      expect(profileRowCapability('skill_memory').canDelete, isTrue);
+    test('offers both on the tables the correction endpoint can route to', () {
+      for (final table in ['preference_memory', 'skill_memory', 'goal_memory']) {
+        expect(profileRowCapability(table).canEdit, isTrue, reason: '$table should be editable');
+        expect(profileRowCapability(table).canDelete, isTrue, reason: '$table should be deletable');
+      }
     });
 
-    test('offers both on a preference, which is what the endpoint writes', () {
-      expect(profileRowCapability('preference_memory').canEdit, isTrue);
-      expect(profileRowCapability('preference_memory').canDelete, isTrue);
+    test('does not offer to correct a set-membership row', () {
+      // The field is the value in these tables, so there is nothing to edit
+      // into. _write_profile_value() raises for them rather than inventing an
+      // update, and the UI should not ask in the first place.
+      for (final table in ['topic_interests', 'preferred_tools', 'document_access_patterns']) {
+        expect(profileRowCapability(table).canEdit, isFalse, reason: '$table should not be editable');
+        expect(profileRowCapability(table).canDelete, isTrue, reason: '$table should be deletable');
+      }
+    });
+
+    test('offers history only on the one row that has any', () {
+      // interaction_style_history is the profile's only audit trail.
+      expect(profileRowCapability('interaction_style').hasHistory, isTrue);
+      expect(profileRowCapability('preference_memory').hasHistory, isFalse);
+      expect(profileRowCapability('identity').hasHistory, isFalse);
     });
 
     test('offers edit but not delete on interaction_style', () {
@@ -111,11 +136,62 @@ void main() {
     expect(find.textContaining('set at onboarding'), findsOneWidget);
   });
 
-  testWidgets('a skill can be forgotten but not corrected', (tester) async {
-    await pumpProfile(tester, [row('skill_memory', 'Python', '0.7')]);
+  testWidgets('a skill can be corrected, and says what a level is', (tester) async {
+    final api = await pumpProfile(tester, [row('skill_memory', 'Python', '0.7')]);
+
+    expect(find.text('Forget'), findsOneWidget);
+    await tester.tap(find.text('Correct'));
+    await tester.pumpAndSettle();
+
+    // skill_memory.level is a REAL. Someone typing "expert" would be refused
+    // by the backend, so the dialog says what is wanted before they try.
+    expect(find.textContaining('number from 0 to 1'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '0.9');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('correct:Python=0.9'));
+  });
+
+  testWidgets('a topic interest can only be forgotten', (tester) async {
+    await pumpProfile(tester, [row('topic_interests', 'rust', 'rust')]);
 
     expect(find.text('Forget'), findsOneWidget);
     expect(find.text('Correct'), findsNothing);
+  });
+
+  testWidgets('the interaction style offers its history', (tester) async {
+    await pumpProfile(tester, [row('interaction_style', 'interaction_style', 'terse')]);
+
+    expect(find.text('History'), findsOneWidget);
+  });
+
+  testWidgets('the style history reads the backend, newest first', (tester) async {
+    final api = await pumpProfile(tester, [row('interaction_style', 'interaction_style', 'detailed')]);
+    api.styleHistory = [
+      {'value': 'detailed', 'changed_at': '2026-08-30T10:00:00Z'},
+      {'value': 'terse', 'changed_at': '2026-07-01T10:00:00Z'},
+    ];
+
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('style-history'));
+    expect(find.text('terse'), findsOneWidget);
+    expect(find.text('2026-07-01T10:00:00Z'), findsOneWidget);
+  });
+
+  testWidgets('an unchanged style says so rather than showing an empty list', (tester) async {
+    // interaction_style_history only gains a row when the value CHANGES, so a
+    // style set once at onboarding genuinely has nothing to show. That is not
+    // an error and must not read like one.
+    await pumpProfile(tester, [row('interaction_style', 'interaction_style', 'terse')]);
+
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No changes recorded'), findsOneWidget);
   });
 
   testWidgets('correcting a preference sends the new value to the backend', (tester) async {

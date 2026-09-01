@@ -130,6 +130,16 @@ class ApiClient {
 
   Future<List<dynamic>> getProviders() async => await get('/providers') as List<dynamic>;
 
+  /// The scopes backend/api/server.py's VALID_CONSENT_SCOPES accepts, narrowest
+  /// first. 'none' is a valid scope but is deliberately absent: granting
+  /// "none" sets user_consented while consenting to nothing, which is what
+  /// revoke already says without the ambiguity.
+  static const consentScopes = <String, String>{
+    'embedding_only': 'Embeddings only - text is sent to be turned into vectors, and nothing else.',
+    'web_search_only': 'Web search only - search queries leave this machine, your conversation does not.',
+    'full_inference': 'Full inference - your prompts and assembled context are sent to the provider.',
+  };
+
   Future<void> grantConsent(String providerId, String scope) async {
     await post('/providers/$providerId/consent', {'consent_scope': scope});
   }
@@ -221,6 +231,31 @@ class ApiClient {
   /// whether anything matched ({'status': 'deleted' | 'not_found'}).
   Future<Map<String, dynamic>> deleteProfileField(String field) async =>
       await delete('/memory/profile/${Uri.encodeComponent(field)}') as Map<String, dynamic>;
+
+  /// How the recorded interaction style has changed over time, newest first:
+  /// {value, changed_at}.
+  ///
+  /// interaction_style is the only profile field with any history at all -
+  /// every other table keeps its current value and nothing else - which makes
+  /// this the one place PIP can show that a setting was once something else
+  /// rather than just asserting what it is now.
+  Future<List<dynamic>> getInteractionStyleHistory({int limit = 50}) async =>
+      await get('/memory/interaction-style/history', query: {'limit': '$limit'}) as List<dynamic>;
+
+  /// What RAG would actually retrieve for [query], without asking PIP anything:
+  /// {chunk_text, file_path, chunk_index, similarity}, already filtered by
+  /// [threshold] server-side.
+  ///
+  /// [threshold] is exposed rather than left at the backend's 0.6 default
+  /// because the question people actually bring here is "why did PIP not use
+  /// my document" - and an empty result at 0.6 with near-misses at 0.3 is the
+  /// answer, where an empty result alone is not.
+  Future<List<dynamic>> queryRag(String query, {double threshold = 0.6, String? projectId}) async =>
+      await post('/rag/query', {
+        'query': query,
+        'threshold': threshold,
+        'project_id': ?projectId,
+      }) as List<dynamic>;
 
   // --- State transitions --------------------------------------------------
 

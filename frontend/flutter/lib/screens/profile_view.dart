@@ -31,10 +31,14 @@ import '../theme.dart';
 /// This mirrors two backend functions rather than guessing:
 ///
 ///   * `correct_profile_field()` refuses name/language_preference/timezone
-///     outright, special-cases interaction_style, and otherwise writes to
-///     **preference_memory** - so offering "edit" on a skill would not update
-///     the skill, it would quietly file a new preference under the same name.
-///     Every existing caller of it passes a preference or interaction_style.
+///     outright and otherwise routes the write to whichever table already
+///     holds the field. It used to write to preference_memory unconditionally,
+///     which is why "edit" was once offered on preferences alone: correcting a
+///     skill would have filed a new preference of the same name and left the
+///     skill untouched. Now that it dispatches properly, skills and goals are
+///     editable too. The set-membership tables still are not - the field IS
+///     the value there, so an in-place edit has no meaning and the backend
+///     refuses it.
 ///   * `soft_delete_profile_field()` flips status on skill_memory,
 ///     preference_memory, preferred_tools, topic_interests,
 ///     document_access_patterns, and goal_memory (via its `goal:<id>` handle).
@@ -42,27 +46,31 @@ import '../theme.dart';
 ///
 /// active_projects is deliberately in neither: projects have their own screen,
 /// where archiving one is a status change rather than a memory retraction.
-({bool canEdit, bool canDelete, String? note}) profileRowCapability(String table) {
+({bool canEdit, bool canDelete, bool hasHistory, String? note}) profileRowCapability(String table) {
   switch (table) {
     case 'identity':
-      return (canEdit: false, canDelete: false, note: 'set at onboarding');
+      return (canEdit: false, canDelete: false, hasHistory: false, note: 'set at onboarding');
     case 'interaction_style':
-      return (canEdit: true, canDelete: false, note: null);
+      // The only row with a past. interaction_style_history gains a row on
+      // every change and is the one audit trail the profile has.
+      return (canEdit: true, canDelete: false, hasHistory: true, note: null);
     case 'preference_memory':
-      return (canEdit: true, canDelete: true, note: null);
     case 'skill_memory':
     case 'goal_memory':
+      return (canEdit: true, canDelete: true, hasHistory: false, note: null);
     case 'preferred_tools':
     case 'topic_interests':
     case 'document_access_patterns':
-      return (canEdit: false, canDelete: true, note: null);
+      // The field is the value here, so there is nothing to edit into - a
+      // correction is a delete plus whatever PIP observes next.
+      return (canEdit: false, canDelete: true, hasHistory: false, note: null);
     case 'active_projects':
-      return (canEdit: false, canDelete: false, note: 'managed on Projects');
+      return (canEdit: false, canDelete: false, hasHistory: false, note: 'managed on Projects');
     default:
       // An unfamiliar table gets no write affordances rather than a guess. A
       // new profile table is a backend change, and this is the safe way to
       // find out about it.
-      return (canEdit: false, canDelete: false, note: null);
+      return (canEdit: false, canDelete: false, hasHistory: false, note: null);
   }
 }
 
@@ -126,7 +134,14 @@ class _ProfileViewState extends State<ProfileView> {
     final field = '${row['field']}';
     final saved = await showDialog<String>(
       context: context,
-      builder: (context) => _CorrectFieldDialog(field: field, initialValue: '${row['value']}'),
+      builder: (context) => _CorrectFieldDialog(
+        field: field,
+        initialValue: '${row['value']}',
+        // A skill's value is skill_memory.level, a number. Saying so beats
+        // letting someone type "expert" and meet a refusal for it - the
+        // backend does reject it, but a hint is cheaper than a round trip.
+        hint: row['table'] == 'skill_memory' ? 'A number from 0 to 1 - how well you know it.' : null,
+      ),
     );
     if (saved == null || saved.isEmpty) return;
     await _act(field, () => widget.api.correctMemory(field, saved));
@@ -164,6 +179,59 @@ class _ProfileViewState extends State<ProfileView> {
         throw Exception('PIP had no active record under "$field" to forget.');
       }
     });
+  }
+
+  /// interaction_style_history was written from three separate places in
+  /// profile_store.py and read by nothing - "an audit trail that recorded
+  /// every change and could not answer a single question about them", in that
+  /// module's own words. A read function was added to fix that and still had
+  /// no caller. This is the caller.
+  Future<void> _showStyleHistory() async {
+    List<dynamic>? history;
+    String? failure;
+    try {
+      history = await widget.api.getInteractionStyleHistory();
+    } catch (e) {
+      failure = e.toString();
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'How your answer style has changed',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        content: SizedBox(
+          width: 380,
+          child: failure != null
+              ? Text(failure, style: TextStyle(fontSize: 12.5, color: context.pip.danger))
+              : history!.isEmpty
+                  // Not an error, and worth saying plainly: the table only
+                  // gains a row when the value CHANGES, so a style set once at
+                  // onboarding and never revised genuinely has nothing to show.
+                  ? Text(
+                      'No changes recorded. PIP has had the same read on this since it was first set.',
+                      style: TextStyle(fontSize: 13, color: context.pip.textMuted, height: 1.5),
+                    )
+                  : ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (var i = 0; i < history.length; i++)
+                          _HistoryRow(
+                            value: '${history[i]['value']}',
+                            changedAt: '${history[i]['changed_at']}',
+                            // Newest first, per the backend's own ordering.
+                            current: i == 0,
+                          ),
+                      ],
+                    ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -269,6 +337,10 @@ class _ProfileViewState extends State<ProfileView> {
                     const SizedBox(width: AppSpacing.sm),
                     GhostButton(label: 'Forget', color: pip.danger, onTap: () => _delete(row)),
                   ],
+                  if (capability.hasHistory) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    GhostButton(label: 'History', color: pip.textMuted, onTap: _showStyleHistory),
+                  ],
                 ],
               ],
             ),
@@ -293,7 +365,11 @@ class _ProfileViewState extends State<ProfileView> {
 class _CorrectFieldDialog extends StatefulWidget {
   final String field;
   final String initialValue;
-  const _CorrectFieldDialog({required this.field, required this.initialValue});
+
+  /// What this particular field expects, when that is not obvious from the
+  /// value already in the box. Null for the ordinary free-text case.
+  final String? hint;
+  const _CorrectFieldDialog({required this.field, required this.initialValue, this.hint});
 
   @override
   State<_CorrectFieldDialog> createState() => _CorrectFieldDialogState();
@@ -329,7 +405,7 @@ class _CorrectFieldDialogState extends State<_CorrectFieldDialog> {
           TextField(
             controller: _controller,
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Value'),
+            decoration: InputDecoration(labelText: 'Value', helperText: widget.hint),
             onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
           ),
         ],
@@ -341,6 +417,39 @@ class _CorrectFieldDialogState extends State<_CorrectFieldDialog> {
           child: const Text('Save'),
         ),
       ],
+    );
+  }
+}
+
+/// One recorded interaction-style value, and when it took effect.
+class _HistoryRow extends StatelessWidget {
+  final String value;
+  final String changedAt;
+  final bool current;
+  const _HistoryRow({required this.value, required this.changedAt, required this.current});
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: pip.border))),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: current ? FontWeight.w600 : FontWeight.w400,
+                color: current ? pip.accent : pip.text,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(changedAt, style: TextStyle(fontSize: 11, color: pip.textFaint)),
+        ],
+      ),
     );
   }
 }

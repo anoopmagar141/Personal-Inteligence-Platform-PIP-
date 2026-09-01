@@ -1,11 +1,23 @@
-// Matches frontend/web/app.js's providers flow: table + consent grant/revoke.
-// Same known simplification as the web client: "Grant consent" always
-// requests "full_inference" scope regardless of provider type. That is a
-// valid request - backend/api/server.py's VALID_CONSENT_SCOPES accepts it -
-// but it is the broadest of the four scopes rather than the narrowest one
-// that would do, so a provider that only ever needs embeddings is consented
-// for inference too. Still open; the scope picker this wants is a UI change,
-// not a backend one.
+// Providers: consent, scope, and which local model PIP runs.
+//
+// "Grant consent" used to send full_inference for every provider, in this
+// client and in the web prototype before it. That was always a VALID request -
+// backend/api/server.py's VALID_CONSENT_SCOPES accepts it - but it was the
+// broadest of the four scopes rather than the narrowest one that would do, so
+// a provider that only ever needed embeddings was consented for inference on
+// your whole assembled context.
+//
+// The constitution puts a hard stop at stage_8_before_network_call and treats
+// scope as the thing being enforced there. Sending one scope for everything
+// left that machinery real but unused: the gate would faithfully enforce a
+// permission nobody had actually chosen. Granting is now an explicit choice
+// among the three scopes that mean something, with no preselection - picking
+// a default here would be this screen making the least-privilege decision on
+// the user's behalf, which is the decision the gate exists to leave to them.
+//
+// "none" is a valid scope and is deliberately not offered: it would set
+// user_consented while consenting to nothing, which is what Revoke already
+// says without the ambiguity.
 
 import 'package:flutter/material.dart';
 
@@ -74,8 +86,19 @@ class _ProvidersViewState extends State<ProvidersView> {
   }
 
   Future<void> _grant(String providerId) async {
-    await widget.api.grantConsent(providerId, 'full_inference');
-    await _load();
+    final scope = await showDialog<String>(
+      context: context,
+      builder: (context) => _ScopeDialog(providerId: providerId),
+    );
+    if (scope == null) return;
+    try {
+      await widget.api.grantConsent(providerId, scope);
+      await _load();
+    } catch (error) {
+      // The server names the scope it rejected and lists the ones it accepts.
+      // That sentence is more use than "grant failed" ever is.
+      if (mounted) setState(() => _error = error.toString());
+    }
   }
 
   Future<void> _revoke(String providerId) async {
@@ -105,28 +128,56 @@ class _ProvidersViewState extends State<ProvidersView> {
             ),
             _buildModelPicker(),
             const SizedBox(height: AppSpacing.lg),
-            SectionCard(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('PROVIDER')),
-                  DataColumn(label: Text('TYPE')),
-                  DataColumn(label: Text('CONSENT')),
-                  DataColumn(label: Text('SCOPE')),
-                  DataColumn(label: Text('')),
-                ],
-                rows: [
-                  for (final provider in _providers!)
-                    DataRow(cells: [
-                      DataCell(Text('${provider['provider_id']}')),
-                      DataCell(TagLabel(provider['is_cloud'] == true ? 'cloud' : 'local', color: provider['is_cloud'] == true ? pip.textMuted : pip.accent)),
-                      DataCell(Text(_consentLabel(provider))),
-                      DataCell(Text('${provider['consent_scope'] ?? '-'}', style: TextStyle(fontSize: 12, color: pip.textMuted))),
-                      DataCell(_actionButton(provider)),
-                    ]),
+            // Cards, not a DataTable. Five columns plus an action button did
+            // not fit the 720px this screen is constrained to, and the cell
+            // holding the button ended up somewhere a tap could not reach it -
+            // the control was visible and inert. Every other list in this app
+            // is a card for the same reason, and it survives a narrow window.
+            for (final provider in _providers!) _providerCard(provider as Map<String, dynamic>),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _providerCard(Map<String, dynamic> provider) {
+    final pip = context.pip;
+    final isCloud = provider['is_cloud'] == true;
+    final scope = '${provider['consent_scope'] ?? ''}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: SectionCard(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          '${provider['provider_id']}',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: pip.text),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      TagLabel(isCloud ? 'cloud' : 'local', color: isCloud ? pip.textMuted : pip.accent, size: 10.5),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    // The scope is the part worth reading: "granted" alone
+                    // does not say what was granted.
+                    scope.isEmpty ? _consentLabel(provider) : '${_consentLabel(provider)} - $scope',
+                    style: TextStyle(fontSize: 12, color: pip.textMuted),
+                  ),
                 ],
               ),
             ),
+            const SizedBox(width: AppSpacing.sm),
+            _actionButton(provider),
           ],
         ),
       ),
@@ -209,5 +260,76 @@ class _ProvidersViewState extends State<ProvidersView> {
     if (gb >= 0.1) return '${gb.toStringAsFixed(1)} GB';
     final mb = bytes / (1024 * 1024);
     return '${mb.toStringAsFixed(0)} MB';
+  }
+}
+
+/// The consent prompt. One row per scope, each saying what actually leaves
+/// this machine under it - the only detail that makes the choice a real one.
+class _ScopeDialog extends StatefulWidget {
+  final String providerId;
+  const _ScopeDialog({required this.providerId});
+
+  @override
+  State<_ScopeDialog> createState() => _ScopeDialogState();
+}
+
+class _ScopeDialogState extends State<_ScopeDialog> {
+  /// Nothing preselected on purpose - see the note at the top of this file.
+  String? _scope;
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return AlertDialog(
+      title: Text(
+        'What may ${widget.providerId} receive?',
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This is a cloud provider, so it is blocked until you say otherwise. '
+              'Pick the narrowest option that does what you need - PIP enforces it '
+              'before any network call, and you can revoke it at any time.',
+              style: TextStyle(fontSize: 12.5, color: pip.textMuted, height: 1.5),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            RadioGroup<String>(
+              groupValue: _scope,
+              onChanged: (value) => setState(() => _scope = value),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final entry in ApiClient.consentScopes.entries)
+                    RadioListTile<String>(
+                      value: entry.key,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        entry.key,
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: pip.text),
+                      ),
+                      subtitle: Text(
+                        entry.value,
+                        style: TextStyle(fontSize: 12, color: pip.textMuted, height: 1.4),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _scope == null ? null : () => Navigator.of(context).pop(_scope),
+          child: const Text('Grant'),
+        ),
+      ],
+    );
   }
 }
