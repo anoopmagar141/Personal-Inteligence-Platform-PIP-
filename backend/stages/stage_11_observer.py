@@ -482,6 +482,65 @@ def _quote_is_grounded(raw_quote: str, transcript_lower: str) -> bool:
     return normalized in transcript_lower
 
 
+def _substantive_user_turns(transcript: str, min_words: int = 4) -> int:
+    """
+    How many user turns carry at least min_words. The counting half of
+    _has_any_substantive_user_turn, split out because two different questions
+    are asked of the same signal: "is there anything real here at all" (>= 1,
+    below) and "did this session go anywhere" (>= 2, see
+    _snapshot_may_overwrite_the_standing_one).
+    """
+    count = 0
+    for line in transcript.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("user:"):
+            content = stripped.split(":", 1)[1].strip()
+            if len(content.split()) >= min_words:
+                count += 1
+    return count
+
+
+def _snapshot_may_overwrite_the_standing_one(transcript: str, output: ObserverOutput) -> bool:
+    """
+    Whether THIS session's snapshot has earned the right to replace the last
+    one. session_snapshot is a singleton: writing is destroying, and there is
+    no version behind it to fall back to.
+
+    The old gate was "topic is non-empty", which withheld a snapshot only for a
+    session that was pure acknowledgment. Found live, and the failure is
+    circular in a way that gets worse each time it happens: the user opened a
+    new chat and asked "what we were doing last time in pip project", PIP
+    answered "I don't have that recorded", and the Observer then dutifully
+    summarised THAT two-message exchange over the standing snapshot as
+
+        topic: retrieving information about the pip project
+        open_problems: ['User wants to recall previous conversation about pip project']
+        suggested_next_step: Try searching previous conversations or ask for clarification
+
+    So a failure to recall became the thing recalled, the session it failed to
+    recall was destroyed in the process, and the NEXT attempt would be answered
+    with a description of the previous attempt. Every retry ratchets the real
+    content further out of reach - and a user whose recall just failed retries,
+    which is precisely when this fires.
+
+    A session earns the write by having arrived somewhere: it produced a
+    candidate (something was learned), or it had more than one substantive user
+    turn (it had an arc, not just a question and an answer). A single question
+    that taught nothing is the one shape that must never overwrite a real
+    session - it carries strictly less than what it would destroy.
+
+    Counted on the uncapped transcript, unlike run()'s own gate: a session long
+    enough for _cap_transcript to bite unquestionably went somewhere, so the
+    only direction this errs is permissive, on exactly the sessions that need
+    no protecting.
+    """
+    if not output["session_snapshot"].get("topic"):
+        return False
+    if output["memory_candidates"] or output["decision_candidates"]:
+        return True
+    return _substantive_user_turns(transcript) >= 2
+
+
 def _has_any_substantive_user_turn(transcript: str, min_words: int = 4) -> bool:
     """
     Companion gate for session_snapshot, which has no per-item raw_quote to
@@ -495,13 +554,7 @@ def _has_any_substantive_user_turn(transcript: str, min_words: int = 4) -> bool:
     not requiring lengthy user turns - "let's go with FastAPI" (4 words) is
     exactly the kind of short-but-real turn that should still pass.
     """
-    for line in transcript.splitlines():
-        stripped = line.strip()
-        if stripped.lower().startswith("user:"):
-            content = stripped.split(":", 1)[1].strip()
-            if len(content.split()) >= min_words:
-                return True
-    return False
+    return _substantive_user_turns(transcript, min_words) >= 1
 
 
 def _as_string_list(value: Any) -> list[str]:
@@ -743,12 +796,16 @@ def run_session_end(
     # clobber the last REAL snapshot with nothing, discarding legitimate
     # prior-session context just because this particular session was thin
     # ("hi" / "thanks" / "bye"). Leaving the last good snapshot in place is
-    # strictly better than overwriting it with an empty one.
+    # strictly better than overwriting it with an empty one. That is now the
+    # first of the conditions in _snapshot_may_overwrite_the_standing_one,
+    # which extends the same reasoning to a thin session that DOES produce a
+    # topic - see it for the live failure that showed an empty topic was not
+    # the only way to overwrite something real with nothing.
     # Isolated from the candidate loops below rather than sharing their fate.
     # Snapshot and candidates are independent products of one extraction: a
     # snapshot that fails to persist is a lost recap, and it must not also cost
     # the memory and decision candidates that were extracted alongside it.
-    if output["session_snapshot"].get("topic"):
+    if _snapshot_may_overwrite_the_standing_one(transcript, output):
         try:
             session_snapshot.write_snapshot(conn, output["session_snapshot"])
         except Exception as e:

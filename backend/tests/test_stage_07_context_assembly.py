@@ -101,11 +101,44 @@ def test_empty_session_snapshot_produces_no_section():
     assert "SESSION SNAPSHOT" not in result["context"]
 
 
-def test_context_depth_modifier_zero_drops_snapshot_entirely():
+def test_context_depth_modifier_zero_drops_snapshot_when_live_history_covers_it():
+    # The premise modifier=0 rests on: the user never really left, and the
+    # conversation they are still in already carries the recap.
     snapshot = {"topic": "Building inventory sync", "last_decisions": [], "open_problems": [], "suggested_next_step": ""}
-    result = stage_07.run("q", session_snapshot=snapshot, context_depth_modifier=0)
+    result = stage_07.run(
+        "q",
+        session_snapshot=snapshot,
+        context_depth_modifier=0,
+        conversation_history=[{"role": "user", "content": "earlier in this same chat"}],
+    )
     assert "SESSION SNAPSHOT" not in result["context"]
     assert "Building inventory sync" not in result["context"]
+
+
+def test_context_depth_modifier_zero_keeps_snapshot_in_a_fresh_conversation():
+    # A new chat window is a new session, so Stage 0 reports a sub-hour gap and
+    # hands down modifier=0 - but there is no history in this conversation for
+    # the recap to be redundant WITH. Dropping it here is what made "what we
+    # were doing last time" unanswerable within an hour of the last message.
+    snapshot = {"topic": "Building inventory sync", "last_decisions": [], "open_problems": [], "suggested_next_step": ""}
+    result = stage_07.run("q", session_snapshot=snapshot, context_depth_modifier=0, conversation_history=[])
+    assert "SESSION SNAPSHOT" in result["context"]
+    assert "Building inventory sync" in result["context"]
+
+
+def test_continuation_question_keeps_snapshot_even_mid_conversation():
+    # Asked outright, the snapshot is the answer - a live history does not make
+    # it redundant, it just means the gap was short.
+    snapshot = {"topic": "Building inventory sync", "last_decisions": [], "open_problems": [], "suggested_next_step": ""}
+    result = stage_07.run(
+        "what were we doing last time?",
+        session_snapshot=snapshot,
+        context_depth_modifier=0,
+        conversation_history=[{"role": "user", "content": "earlier in this same chat"}],
+        category="project_continuation",
+    )
+    assert "SESSION SNAPSHOT" in result["context"]
+    assert "Building inventory sync" in result["context"]
 
 
 def test_context_depth_modifier_two_matches_default_fixed_budget():

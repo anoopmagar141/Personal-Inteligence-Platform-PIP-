@@ -149,6 +149,28 @@ async def test_enqueue_for_shutdown_noop_on_empty_history(executor_conn):
     assert pending == []
 
 
+@pytest.mark.asyncio
+async def test_enqueue_for_shutdown_noop_on_a_resumed_conversation_nobody_added_to(executor_conn):
+    # A resumed conversation arrives with its history already full, so a
+    # non-empty history is not evidence this connection did anything. Stopping
+    # the server with a past chat merely open on screen used to enqueue it, and
+    # the next startup drained that into a real Observer pass that rewrote
+    # session_snapshot from a conversation the user had only looked at.
+    conn, executor = executor_conn
+    loop = asyncio.get_event_loop()
+
+    session = {
+        "conn": conn,
+        "executor": executor,
+        "conversation_history": [{"role": "user", "content": "resumed from days ago"}],
+        "session_state": {"has_unobserved_turns": False},
+    }
+    await session_lifecycle.enqueue_for_shutdown(loop, session)
+
+    pending = await loop.run_in_executor(executor, pending_observer.list_pending, conn)
+    assert pending == []
+
+
 def test_drain_pending_on_startup_processes_existing_entries(db_conn):
     pending_observer.enqueue(db_conn, "User: left over from a shutdown\nAssistant: ok")
 

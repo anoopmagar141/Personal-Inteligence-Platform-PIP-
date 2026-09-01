@@ -318,8 +318,8 @@ def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch, to
 
     calls = {"registered": None, "unregistered": None}
 
-    async def fake_register(session_id, conn, executor, conversation_history):
-        calls["registered"] = (session_id, conversation_history)
+    async def fake_register(session_id, conn, executor, conversation_history, session_state=None):
+        calls["registered"] = (session_id, conversation_history, session_state)
 
     async def fake_unregister(session_id):
         calls["unregistered"] = session_id
@@ -335,7 +335,8 @@ def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch, to
         for _ in range(4):
             ws.receive_json()
         assert calls["registered"] is not None
-        session_id, history_ref = calls["registered"]
+        session_id, history_ref, state_ref = calls["registered"]
+        assert state_ref is not None
 
         # The 4 received events end at "done", but ws_chat only appends to
         # conversation_history (and persists it to conversation_store) after
@@ -350,6 +351,12 @@ def test_ws_chat_registers_and_unregisters_with_session_registry(monkeypatch, to
         # guarantees the first turn's append already happened.
         ws.send_json({"message": "second"})
         assert ws.receive_json()["type"] == "stage_hint"
+
+        # Handed over by reference like the history is, and flipped by the same
+        # append the sync above waits for. Shutdown reads it to tell a
+        # connection that added turns from one that only had a past
+        # conversation open on screen - the latter must not be re-observed.
+        assert state_ref["has_unobserved_turns"] is True
 
         # The registry was handed the SAME list object ws_chat mutates, not a
         # copy - so it stays live-updated without ws_chat needing to re-register.

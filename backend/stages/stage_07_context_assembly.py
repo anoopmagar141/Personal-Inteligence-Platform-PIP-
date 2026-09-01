@@ -368,9 +368,10 @@ def run(
     session_snapshot allocation" per the glossary) - it scales
     session_snapshot_tokens by modifier/2, so modifier=2 (the 24h-7d "summary"
     gap) reproduces the original fixed budget exactly, modifier=0 (<1h "none")
-    drops the snapshot entirely (the live conversation_history already covers
-    that gap, a snapshot recap would be redundant), and modifier=3 (>7d "full")
-    gets 1.5x the base budget for a longer-absence recap. Defaults to 2 so any
+    drops the snapshot (the live conversation_history already covers that gap,
+    a snapshot recap would be redundant) unless nothing is actually covering it
+    - see the floor at the top of the body - and modifier=3 (>7d "full") gets
+    1.5x the base budget for a longer-absence recap. Defaults to 2 so any
     caller that doesn't pass it (tests, direct callers) keeps the pre-existing
     fixed-budget behavior unchanged.
 
@@ -381,7 +382,29 @@ def run(
     try:
         budget = get_settings()["pipeline"]
 
+        # modifier=0 (a gap under an hour) zeroes the snapshot on the premise
+        # that the live conversation is already carrying the recap. Found live,
+        # in the one case where that premise does not hold: a new chat opened
+        # minutes after the previous one, asked "what we were doing last time in
+        # pip project", answered "I don't have that recorded". Every new chat
+        # window is its own session (one WS connection each, begin_session on
+        # its first message), so previous_session_date is always minutes old and
+        # Stage 0 always returns 0 - while a brand-new conversation starts with
+        # an empty history, so nothing was carrying the recap the modifier
+        # assumed redundant. The snapshot is the only section that can answer
+        # that question, and it was budgeted to zero on every attempt inside the
+        # hour - deterministically, not intermittently.
+        #
+        # So the floor applies exactly where the premise fails: no live history
+        # to lean on, or the user asking for the recap outright
+        # (project_continuation is Stage 1's category for "continue" / "where
+        # were we" / "last time" - the question this section exists to answer;
+        # withholding it there is the same defect as refusing from an empty
+        # profile). max(), not an override, so modifier=3's wider window for a
+        # long absence still wins.
         snapshot_budget = int(budget["session_snapshot_tokens"] * (context_depth_modifier / 2))
+        if category == "project_continuation" or not conversation_history:
+            snapshot_budget = max(snapshot_budget, budget["session_snapshot_tokens"])
 
         # category is optional so existing callers (tests, direct users) keep
         # working unchanged; without it, empty tables are simply omitted as

@@ -44,12 +44,20 @@ class SessionRegistry:
         self._sessions: dict[int, dict[str, Any]] = {}
         self.shutting_down = False
 
-    async def register(self, session_id: int, conn, executor, conversation_history: list) -> None:
+    async def register(
+        self, session_id: int, conn, executor, conversation_history: list,
+        session_state: Optional[dict[str, Any]] = None,
+    ) -> None:
         async with self._lock:
             self._sessions[session_id] = {
                 "conn": conn,
                 "executor": executor,
                 "conversation_history": conversation_history,
+                # Held by reference, so the handler flipping it is visible here
+                # at shutdown. Optional so a caller that does not track it (the
+                # tests, anything predating it) keeps the old always-enqueue
+                # behaviour rather than silently enqueueing nothing.
+                "session_state": session_state,
             }
 
     async def unregister(self, session_id: int) -> None:
@@ -155,8 +163,19 @@ async def enqueue_for_shutdown(loop, session: dict[str, Any]) -> None:
     Observer synchronously - shutdown cannot wait for a ~130s-class pass per
     open connection (ADR-033 condition 2). Drained for real on next startup.
     No-ops if the session has no unprocessed conversation yet.
+
+    "Unprocessed" is the connection having added a turn, not its history being
+    non-empty. A RESUMED conversation starts full, so the old check enqueued an
+    already-observed transcript whenever the server was stopped with a past
+    chat merely open on screen - and the next startup drained it into a real
+    Observer pass that rewrote session_snapshot from a conversation the user
+    had only looked at. Same defect the disconnect and idle triggers carried;
+    fixing two of the three would just move which one does it.
     """
     history = session["conversation_history"]
+    state = session.get("session_state")
+    if state is not None and not state.get("has_unobserved_turns"):
+        return
     if not history:
         return
     transcript = format_transcript(history)

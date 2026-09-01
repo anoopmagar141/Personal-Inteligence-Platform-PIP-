@@ -483,6 +483,96 @@ def test_run_session_end_does_not_overwrite_a_real_snapshot_with_a_withheld_one(
     assert written["topic"] == "Choosing a web framework"
 
 
+def _standing_snapshot(conn):
+    session_snapshot.write_snapshot(conn, {
+        "topic": "Wiring the RAG retrieval stage",
+        "open_problems": ["chunk overlap still guessy"],
+        "last_decisions": ["Chose Chroma over FAISS"],
+        "suggested_next_step": "Tune the similarity threshold",
+        "snapshot_date": "2026-08-01T00:00:00Z",
+    })
+
+
+def test_a_failed_recall_does_not_overwrite_the_session_it_failed_to_recall(db_conn):
+    # The live case, reproduced exactly. The user opens a new chat, asks what
+    # they were doing last time, PIP cannot answer - and the Observer then
+    # summarises that two-message failure over the very snapshot that was
+    # supposed to answer it. Left unguarded, each retry destroys more of the
+    # record than the one before, and a user whose recall just failed retries.
+    _standing_snapshot(db_conn)
+
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [],
+        "session_snapshot": {
+            "topic": "retrieving information about the pip project",
+            "open_problems": ["User wants to recall previous conversation about pip project"],
+            "last_decisions": [],
+            "suggested_next_step": "Try searching previous conversations or ask for clarification",
+        },
+    }
+    transcript = (
+        "User: what we were doing last time in pip project\n"
+        "Assistant: I don't have that recorded.\n"
+    )
+    observer.run_session_end(db_conn, transcript, FakeProvider(response_text=json.dumps(response)))
+
+    assert session_snapshot.load_snapshot(db_conn)["topic"] == "Wiring the RAG retrieval stage"
+
+
+def test_a_single_turn_session_that_learned_something_may_still_snapshot(db_conn):
+    # One turn is not disqualifying on its own - a candidate is proof the
+    # session arrived somewhere, which is what the gate actually asks.
+    _standing_snapshot(db_conn)
+
+    response = {
+        "memory_candidates": [{
+            "target_table": "preference_memory",
+            "field_name": "preferred_tools",
+            "proposed_value": "Neovim",
+            "label": "explicit",
+            "evidence_text": "switched to Neovim last month",
+        }],
+        "decision_candidates": [],
+        "session_snapshot": {
+            "topic": "Editor setup",
+            "open_problems": [],
+            "last_decisions": [],
+            "suggested_next_step": "port the keybindings",
+        },
+    }
+    transcript = "User: I switched to Neovim last month for everything\nAssistant: Noted.\n"
+    observer.run_session_end(db_conn, transcript, FakeProvider(response_text=json.dumps(response)))
+
+    assert session_snapshot.load_snapshot(db_conn)["topic"] == "Editor setup"
+
+
+def test_a_session_with_a_real_arc_may_snapshot_without_producing_candidates(db_conn):
+    # Two substantive turns and nothing extracted is a real working session
+    # whose recap is worth keeping - the gate must not require a candidate.
+    _standing_snapshot(db_conn)
+
+    response = {
+        "memory_candidates": [],
+        "decision_candidates": [],
+        "session_snapshot": {
+            "topic": "Debugging the WebSocket disconnect path",
+            "open_problems": [],
+            "last_decisions": [],
+            "suggested_next_step": "check the executor queue",
+        },
+    }
+    transcript = (
+        "User: the disconnect handler seems to hang sometimes\n"
+        "Assistant: Let's look at the executor.\n"
+        "User: it only happens after a database write\n"
+        "Assistant: That narrows it down.\n"
+    )
+    observer.run_session_end(db_conn, transcript, FakeProvider(response_text=json.dumps(response)))
+
+    assert session_snapshot.load_snapshot(db_conn)["topic"] == "Debugging the WebSocket disconnect path"
+
+
 # --- Constrained output (response_format) ---
 #
 # The prompt asked for "valid JSON only" and _extract_json() cleaned up
