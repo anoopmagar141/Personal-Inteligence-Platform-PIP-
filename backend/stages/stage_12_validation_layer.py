@@ -264,6 +264,52 @@ def _observed_sessions(conn, candidate: MemoryCandidate) -> int:
         return 0
 
 
+def _already_counted_this_session(conn, candidate: MemoryCandidate) -> bool:
+    """
+    Whether this signal had an observation in the CURRENT session before the
+    one _record_observation just wrote for this call.
+
+    _observed_sessions() collapses repeats within a session by construction -
+    it counts sessions, not rows. The stored-value branch below does not: it
+    adds 1 to whatever the profile row holds, and a second pass in the same
+    session reads a row the first pass has already had written, so it adds 1
+    again. Two passes, one session, +2.
+
+    Not hypothetical, and not a retry either. drain_pending_on_startup()
+    processes every queued transcript in one loop, before any new session has
+    begun, so two queued sessions that both mention the same preference are two
+    passes under ONE session_no. Startup recovery fills that queue from every
+    conversation an unclean shutdown left unobserved, so the batch is routinely
+    larger than one.
+
+    An unstamped observation (session_no NULL, from before onboarding created
+    profile_meta) is never a repeat: _observed_sessions counts each of those as
+    its own session via COALESCE(session_no, -id), and contradicting that here
+    would make the two halves disagree about the same rows.
+
+    Fails open to False - the old, over-counting behaviour - because a broken
+    read of the log must not silently stop reinforcement altogether. Same
+    direction _observed_sessions fails in.
+    """
+    session_no = profile_store.current_session_no(conn)
+    if session_no is None:
+        return False
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS observations FROM memory_observation_log "
+            "WHERE target_table = ? AND field_name = ? AND proposed_value = ? "
+            "AND session_no = ?",
+            (candidate.get("target_table"), candidate.get("field_name"),
+             str(candidate.get("proposed_value")), session_no),
+        ).fetchone()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to check this session's observations: {e}")
+        return False
+    # > 1, not > 0: _record_observation has already written this call's own row.
+    return bool(row) and int(row["observations"]) > 1
+
+
 def reinforce_evidence(conn, candidate: MemoryCandidate) -> MemoryCandidate:
     """
     Part 8.6's REINFORCEMENT step: a signal seen in more than one session is
@@ -283,9 +329,11 @@ def reinforce_evidence(conn, candidate: MemoryCandidate) -> MemoryCandidate:
         evidence_count never leaving 1. The call site in Stage 11 already
         claimed this function prevented that; it could not, because there was
         nowhere for the first observation to live.
-      - Stored value matches -> max(stored + 1, distinct sessions). Never lower
-        than the old behaviour, and the log acts as a floor for a row whose
-        stored count was reset (a soft-deleted field can come back at 1).
+      - Stored value matches -> max(stored + 1, distinct sessions), where the
+        + 1 is this session's own contribution and is added at most once per
+        session however many passes that session makes. The log acts as a floor
+        for a row whose stored count was reset (a soft-deleted field can come
+        back at 1).
       - Stored value differs -> unchanged, deliberately. That is a conflicting
         observation, not a repeat one, and reinforcing it would make a single
         contradicting session look MORE confident rather than less. Conflicts
@@ -323,7 +371,10 @@ def reinforce_evidence(conn, candidate: MemoryCandidate) -> MemoryCandidate:
         return candidate
 
     reinforced = dict(candidate)
-    reinforced["evidence_count"] = max(existing["evidence_count"] + 1, observed_sessions)
+    # +1 for THIS session, once - see _already_counted_this_session for the
+    # second pass in one session that used to add it twice.
+    increment = 0 if _already_counted_this_session(conn, candidate) else 1
+    reinforced["evidence_count"] = max(existing["evidence_count"] + increment, observed_sessions)
     return reinforced
 
 def run(conn, candidate: MemoryCandidate, enforcer: ConstitutionEnforcer) -> ValidationResult:
