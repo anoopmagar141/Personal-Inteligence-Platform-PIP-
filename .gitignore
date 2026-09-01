@@ -25,6 +25,11 @@ data/startup.jsonl
 data/backend.log
 data/backend.err.log
 backend/logs/
+# Scratch database from backend/tests/test_schema.py, which names it with a
+# RELATIVE path - so it is written wherever pytest was invoked from, which is
+# normally the repo root rather than a tmp_path. The glob covers SQLite's
+# -journal/-wal/-shm siblings, which is what actually turned up untracked.
+test_pip.db*
 .venv/
 .vs/
 .pytest_cache/
