@@ -157,18 +157,34 @@ def test_run_fails_open_on_invalid_json(db_conn):
     assert result["session_snapshot"]["topic"] == ""
 
 
-def test_run_fails_open_on_provider_unavailable(db_conn):
+def test_run_raises_rather_than_failing_open_when_the_provider_is_unreachable(db_conn):
+    # This used to assert an empty result, and that assertion was the bug.
+    # An empty output is indistinguishable from "this session held nothing
+    # worth remembering", and every caller read it that way: drain() called
+    # mark_completed() on a transcript the model never saw, and
+    # _extract_and_mark() went on to stamp the conversation observed. Confirmed
+    # live against a real database with Ollama down - the recovered session was
+    # retired with nothing extracted.
     provider = FakeProvider(raise_error=ProviderUnavailableError("ollama down"))
-    result = observer.run("transcript", provider, db_conn)
-    assert result["memory_candidates"] == []
-    assert result["decision_candidates"] == []
-    assert result["session_snapshot"]["topic"] == ""
+    with pytest.raises(observer.ObserverUnavailableError):
+        observer.run("transcript", provider, db_conn)
 
 
-def test_run_fails_open_on_provider_execution_error(db_conn):
+def test_run_raises_when_the_provider_errors_out(db_conn):
     provider = FakeProvider(raise_error=ProviderExecutionError("bad response"))
+    with pytest.raises(observer.ObserverUnavailableError):
+        observer.run("transcript", provider, db_conn)
+
+
+def test_run_still_fails_open_when_the_model_answers_with_junk(db_conn):
+    # The counterpart to the two above, and deliberately NOT symmetrical with
+    # them. The model was reached and answered - it just answered badly. Making
+    # that retryable would put an un-parseable transcript back on the queue to
+    # fail again on every future start, blocking the drain permanently.
+    provider = FakeProvider(response_text="still not json")
     result = observer.run("transcript", provider, db_conn)
     assert result["memory_candidates"] == []
+    assert result["session_snapshot"]["topic"] == ""
 
 
 def test_run_coerces_non_string_snapshot_list_items(db_conn):

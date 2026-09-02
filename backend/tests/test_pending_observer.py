@@ -100,4 +100,62 @@ def test_failed_entries_are_never_hard_deleted(db_conn):
 
 def test_drain_with_nothing_pending_is_a_noop(db_conn):
     result = pending_observer.drain(db_conn, lambda t: (_ for _ in ()).throw(AssertionError("should not run")))
-    assert result == {"completed": [], "failed": []}
+    assert result == {"completed": [], "deferred": [], "failed": []}
+
+
+# --- "could not be attempted" is not "attempted and failed" ------------------
+
+
+def test_a_retryable_error_leaves_the_row_queued_instead_of_failing_it(db_conn):
+    # 'failed' is terminal here - _list_for_drain only picks up 'pending' and
+    # 'processing' - so filing an unreachable LLM as failed loses the
+    # transcript just as surely as dropping it.
+    entry_id = pending_observer.enqueue(db_conn, "User: something worth learning\nAssistant: noted")
+
+    def unreachable(transcript):
+        raise pending_observer.RetryableError("ollama is not up yet")
+
+    result = pending_observer.drain(db_conn, unreachable)
+
+    assert result["completed"] == []
+    assert result["failed"] == []
+    assert [d["id"] for d in result["deferred"]] == [entry_id]
+
+    row = db_conn.execute(
+        "SELECT status, error_detail FROM pending_observer WHERE id = ?", (entry_id,)
+    ).fetchone()
+    assert row["status"] == "processing", "a deferred row must stay pickup-able"
+    assert row["error_detail"] is None
+
+
+def test_a_deferred_entry_is_processed_by_the_next_drain(db_conn):
+    # The whole point: the work has not happened yet, so it must still happen.
+    entry_id = pending_observer.enqueue(db_conn, "User: something worth learning\nAssistant: noted")
+
+    pending_observer.drain(db_conn, lambda t: (_ for _ in ()).throw(
+        pending_observer.RetryableError("ollama is not up yet")
+    ))
+
+    processed = []
+    result = pending_observer.drain(db_conn, lambda t: processed.append(t))
+
+    assert result["completed"] == [entry_id]
+    assert processed == ["User: something worth learning\nAssistant: noted"]
+    row = db_conn.execute(
+        "SELECT status FROM pending_observer WHERE id = ?", (entry_id,)
+    ).fetchone()
+    assert row["status"] == "completed"
+
+
+def test_a_deferral_does_not_block_the_other_entries(db_conn):
+    first = pending_observer.enqueue(db_conn, "first transcript")
+    second = pending_observer.enqueue(db_conn, "second transcript")
+
+    def defer_the_first(transcript):
+        if transcript == "first transcript":
+            raise pending_observer.RetryableError("ollama is not up yet")
+
+    result = pending_observer.drain(db_conn, defer_the_first)
+
+    assert result["completed"] == [second]
+    assert [d["id"] for d in result["deferred"]] == [first]

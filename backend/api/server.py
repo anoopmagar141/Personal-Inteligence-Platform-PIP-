@@ -779,8 +779,17 @@ try:
                     result = session_lifecycle.drain_pending_on_startup(
                         conn, _default_observer_provider(pipeline.get_active_model_name(conn))
                     )
-                    if result["completed"] or result["failed"]:
+                    if result["completed"] or result["deferred"] or result["failed"]:
                         logger.info(f"Startup pending_observer drain: {result}")
+                    if result["deferred"]:
+                        # Almost always "Ollama was not up yet" - launch_pip.ps1
+                        # starts it alongside this process without waiting. The
+                        # rows stay queued and are retried on the next start,
+                        # so this is a notice, not an error.
+                        logger.info(
+                            f"{len(result['deferred'])} queued session(s) could not be processed "
+                            f"yet and remain queued for the next start."
+                        )
                 except Exception as e:
                     # Fail open - catch-up must never stop the app working.
                     logger.error(f"Startup catch-up failed, continuing anyway: {e}")
@@ -1054,7 +1063,14 @@ try:
                                 observed_prefix=session_state["observed_prefix"],
                             )
                         except Exception as e:
-                            logger.error(f"Idle-timeout Observer run failed, session transcript discarded: {e}")
+                            # Not discarded, which is what this used to claim:
+                            # run_observer_now only marks the conversation
+                            # observed after a successful extraction, so a
+                            # raise here leaves the high-water mark where it
+                            # was and startup recovery picks these turns up.
+                            # The in-memory copy is cleared below; the messages
+                            # themselves were committed per turn.
+                            logger.error(f"Idle-timeout Observer run failed, left for startup recovery: {e}")
                         # Cleared here already; the flag has to follow it, or the
                         # disconnect trigger would observe the same turns again
                         # (and rewrite the snapshot from an empty transcript).
@@ -1158,7 +1174,10 @@ try:
                         observed_prefix=session_state["observed_prefix"],
                     )
                 except Exception as e:
-                    logger.error(f"Disconnect Observer run failed, session transcript discarded: {e}")
+                    # Same as the idle path above: the mark is not advanced on a
+                    # failed extraction, so these turns are recovered on the
+                    # next start rather than lost.
+                    logger.error(f"Disconnect Observer run failed, left for startup recovery: {e}")
             # Bounded, not a bare await: found live, a connection that did any
             # DB writes during its life (conversation history persistence)
             # can leave this specific run_in_executor(conn.close) submission

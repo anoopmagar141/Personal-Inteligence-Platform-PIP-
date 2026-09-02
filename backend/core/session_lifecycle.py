@@ -271,6 +271,15 @@ def drain_pending_on_startup(conn, provider: BaseLLMProvider) -> dict[str, list]
     """
 
     def observer_runner(transcript: str) -> None:
-        observer.run_session_end(conn, transcript, provider)
+        try:
+            observer.run_session_end(conn, transcript, provider)
+        except observer.ObserverUnavailableError as e:
+            # The queue owns retry semantics and deliberately knows nothing
+            # about Stage 11 (see pending_observer's module note), so the
+            # translation lives here - this is the one module that imports
+            # both. Without it the drain would file an unreachable Ollama as
+            # permanently 'failed', which loses the transcript just as surely
+            # as dropping it.
+            raise pending_observer.RetryableError(str(e)) from e
 
     return pending_observer.drain(conn, observer_runner)

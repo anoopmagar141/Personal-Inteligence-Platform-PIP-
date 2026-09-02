@@ -318,6 +318,39 @@ class ObserverLocalProviderError(Exception):
     """Raised when Observer is given a non-local provider (ADR-033 Rule 4)."""
 
 
+class ObserverUnavailableError(Exception):
+    """
+    Raised when the LLM could not be reached or errored out, so no extraction
+    happened at all.
+
+    Distinct from an extraction that ran and found nothing, and the distinction
+    is the entire point. run() used to fail open here, returning an empty
+    output that was indistinguishable from "this session contained nothing
+    worth remembering" - and every caller believed it:
+
+      - pending_observer.drain() saw no exception, called mark_completed(), and
+        retired the queued transcript. Its own docstring says "observer_runner
+        must raise on failure"; the function wired into it did not.
+      - run_observer_now()'s _extract_and_mark() went on to mark_observed(),
+        stamping the conversation as learned-from.
+
+    So an unreachable Ollama silently consumed the transcript and advanced the
+    high-water mark past turns nothing had ever read. Confirmed live: a
+    recovered conversation was retired with zero candidates extracted, having
+    never reached the model.
+
+    That state is common rather than exotic. launch_pip.ps1 starts Ollama and
+    the backend concurrently and deliberately does not wait for readiness, so
+    startup catch-up can beat Ollama to being reachable - and after the crash
+    or force-kill that recovery exists for, Ollama is usually not up yet.
+
+    Failing open is right for a live per-message path, where a chat turn must
+    not break because the Observer cannot run. It is wrong for the queue whose
+    only job is not losing a transcript. Raising lets each caller choose, and
+    they now do.
+    """
+
+
 class ObserverOutput(TypedDict):
     memory_candidates: list[dict[str, Any]]
     decision_candidates: list[dict[str, Any]]
@@ -760,11 +793,19 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
         messages = [{"role": "user", "content": _EXTRACTION_PROMPT_PREFIX + transcript}]
         raw_text = "".join(provider.chat(messages, **kwargs))
     except (ProviderUnavailableError, ProviderExecutionError) as e:
-        logger.error(f"Observer LLM call failed, failing open: {e}")
-        return _empty_output()
+        # Raised, not failed open - see ObserverUnavailableError. Nothing was
+        # extracted because nothing was asked, and a caller that cannot tell
+        # that from "found nothing" throws the transcript away.
+        raise ObserverUnavailableError(f"Observer LLM call failed: {e}") from e
 
     parsed = _extract_json(raw_text)
     if parsed is None:
+        # Still fails open, deliberately, and NOT as ObserverUnavailableError.
+        # The model was reached and answered - it just answered badly. Treating
+        # that as retryable would put an un-parseable transcript back on the
+        # queue to fail again on every future start, a poison pill that blocks
+        # the drain forever. A session lost to one bad response is the smaller
+        # harm than a queue that can never empty.
         logger.error("Observer output was not valid JSON, failing open")
         return _empty_output()
 
