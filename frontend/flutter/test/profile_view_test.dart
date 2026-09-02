@@ -127,6 +127,71 @@ void main() {
     });
   });
 
+  group('presentation', () {
+    test('a goal shows its text, not its synthetic handle', () {
+      // goal_memory's key is the "goal:<id>" handle get_profile() invents so
+      // the UI has something stable to send back. It is addressing, not
+      // content - and heading the row with it buried nine real goals behind
+      // "goal:1".."goal:9".
+      final content = profileRowContent(
+        row('goal_memory', 'goal:1', 'Thesis objective: demonstrate a working governance layer'),
+      );
+      expect(content.title, startsWith('Thesis objective'));
+      expect(content.detail, isNull);
+    });
+
+    test('a set-membership row says its word once', () {
+      // field == value for these tables, which is how "data privacy / data
+      // privacy" ended up on screen twice.
+      final content = profileRowContent(row('topic_interests', 'data privacy', 'data privacy'));
+      expect(content.title, 'data privacy');
+      expect(content.detail, isNull);
+    });
+
+    test('an ordinary field is humanised with its value beneath', () {
+      final content = profileRowContent(row('preference_memory', 'answer_style', 'adaptive'));
+      expect(content.title, 'Answer style');
+      expect(content.detail, 'adaptive');
+    });
+
+    test('labels are capitalised consistently, paths are left alone', () {
+      // "Language preference" next to a lowercase "name" and "timezone" is the
+      // inconsistency this fixes - it was only capitalising when there was an
+      // underscore to replace.
+      expect(humaniseFieldName('language_preference'), 'Language preference');
+      expect(humaniseFieldName('name'), 'Name');
+      expect(humaniseFieldName('timezone'), 'Timezone');
+      // Already capital, so the same rule is a no-op rather than a special case.
+      expect(humaniseFieldName('Python'), 'Python');
+      // User text, not an identifier: a document path stays byte-for-byte.
+      expect(humaniseFieldName('D:/notes/thesis.md'), 'D:/notes/thesis.md');
+    });
+
+    testWidgets('groups rows under headings a person would recognise', (tester) async {
+      await pumpProfile(tester, [
+        row('identity', 'name', 'BatMan', confidence: 1.0, source: 'explicit'),
+        row('goal_memory', 'goal:1', 'Finish chapter 4'),
+        row('topic_interests', 'rust', 'rust'),
+      ]);
+
+      expect(find.text('You'), findsOneWidget);
+      expect(find.text('Goals'), findsOneWidget);
+      expect(find.text('Topics you keep returning to'), findsOneWidget);
+      // The raw table name is no longer a label on every single row.
+      expect(find.text('goal_memory'), findsNothing);
+      expect(find.text('topic_interests'), findsNothing);
+    });
+
+    testWidgets('a table this build has never heard of still gets a section', (tester) async {
+      // A profile screen that silently omits part of the profile is the one
+      // thing it must never be.
+      await pumpProfile(tester, [row('brand_new_table', 'thing', 'value')]);
+
+      expect(find.text('brand_new_table'), findsOneWidget);
+      expect(find.text('value'), findsOneWidget);
+    });
+  });
+
   testWidgets('shows no write affordances on an identity row', (tester) async {
     await pumpProfile(tester, [row('identity', 'name', 'BatMan', confidence: 1.0, source: 'explicit')]);
 

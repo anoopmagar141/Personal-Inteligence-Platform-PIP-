@@ -13,6 +13,21 @@
 // Deletion is soft (ADR-022: the row stays, its status flips), so these are
 // retractions rather than erasures.
 //
+// LAYOUT. This was one flat list of identical rows, each headed by the
+// backend's own `field` key. That reads fine for a preference called
+// answer_style and badly for everything else: goal_memory's key is the
+// synthetic handle "goal:1", so the nine goals - the most substantial thing
+// PIP knows - appeared as goal:1..goal:9 with their actual text squeezed into
+// a value column and clipped. The set-membership tables were worse again,
+// printing "data privacy" twice because for those the field IS the value.
+//
+// So rows are grouped by table under a heading a person would recognise, and
+// each row renders in the shape its data actually has: a goal shows its text,
+// a set-membership row shows its one word once, everything else shows a
+// humanised label with the value under it. That is presentation only - no
+// row is dropped, reordered within its group, or reinterpreted, and a table
+// this build has never heard of still gets a section under its own raw name.
+//
 // Part 14.4 (frontend has zero intelligence) still holds: nothing here decides
 // what is true, ranks a field, or edits a value on your behalf. What it does
 // encode is which endpoint can service which row - API knowledge, the same
@@ -72,6 +87,67 @@ import '../theme.dart';
       // find out about it.
       return (canEdit: false, canDelete: false, hasHistory: false, note: null);
   }
+}
+
+/// The order sections appear in, and what to call each one.
+///
+/// Ordered by how much it tells you about the person rather than
+/// alphabetically or by table name: who they are, how they want to be spoken
+/// to, what they are trying to do, then the smaller inferred material.
+const profileSections = <String, String>{
+  'identity': 'You',
+  'interaction_style': 'How you like answers',
+  'goal_memory': 'Goals',
+  'active_projects': 'Projects',
+  'skill_memory': 'Skills',
+  'preference_memory': 'Preferences',
+  'preferred_tools': 'Tools you use',
+  'topic_interests': 'Topics you keep returning to',
+  'document_access_patterns': 'Documents you lean on',
+};
+
+/// Tables whose `field` and `value` are the same string - membership in a set,
+/// not a key with a value. Printing both is how "data privacy / data privacy"
+/// happened.
+const _setMembershipTables = {
+  'topic_interests',
+  'preferred_tools',
+  'document_access_patterns',
+};
+
+/// What to show as a row's heading, and what (if anything) belongs under it.
+///
+/// Pure, so the decision can be tested without pumping a widget.
+({String title, String? detail}) profileRowContent(Map<String, dynamic> row) {
+  final table = '${row['table']}';
+  final field = '${row['field']}';
+  final value = '${row['value']}';
+
+  // A goal's key is the synthetic "goal:<id>" handle get_profile() invents to
+  // give the UI something stable to send back. It is addressing, not content -
+  // the text is the goal.
+  if (table == 'goal_memory') return (title: value, detail: null);
+
+  if (_setMembershipTables.contains(table) || field == value) {
+    return (title: field, detail: null);
+  }
+
+  return (title: humaniseFieldName(field), detail: value);
+}
+
+/// answer_style -> "Answer style", name -> "Name".
+///
+/// Anything carrying a path separator is left exactly as written: a document
+/// path and a skill are the user's own text, not an identifier to prettify.
+/// Capitalising is safe for the rest because a value that is already capital
+/// ("Python") is unchanged by it - which is not true of the underscore
+/// substitution, hence both rules rather than one.
+String humaniseFieldName(String field) {
+  if (field.isEmpty) return field;
+  if (field.contains('/') || field.contains(r'\') || field.contains(':')) return field;
+  final words = field.replaceAll('_', ' ').trim();
+  if (words.isEmpty) return field;
+  return words[0].toUpperCase() + words.substring(1);
 }
 
 class ProfileView extends StatefulWidget {
@@ -245,9 +321,14 @@ class _ProfileViewState extends State<ProfileView> {
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.xl),
         physics: const AlwaysScrollableScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        // Bounded like every other screen here. Unbounded, a goal that runs to
+        // two sentences was being set as one 1500px line, which is past the
+        // width any prose stays readable at - and this screen is mostly prose.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 820),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             const PageHeader(
               eyebrow: 'Memory',
               title: 'Profile',
@@ -261,12 +342,62 @@ class _ProfileViewState extends State<ProfileView> {
                     description: 'PIP fills this in as it learns about you through conversation.',
                   )
                 : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final raw in _fields!) _row(raw as Map<String, dynamic>),
+                      for (final group in _grouped()) _section(group.key, group.value),
                     ],
                   ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  /// Rows bucketed by table, in profileSections order, with anything
+  /// unrecognised kept at the end under its own name. Order WITHIN a group is
+  /// the backend's, untouched.
+  List<MapEntry<String, List<Map<String, dynamic>>>> _grouped() {
+    final buckets = <String, List<Map<String, dynamic>>>{};
+    for (final raw in _fields!) {
+      final row = raw as Map<String, dynamic>;
+      buckets.putIfAbsent('${row['table']}', () => []).add(row);
+    }
+
+    final ordered = <MapEntry<String, List<Map<String, dynamic>>>>[];
+    for (final table in profileSections.keys) {
+      final rows = buckets.remove(table);
+      if (rows != null && rows.isNotEmpty) ordered.add(MapEntry(table, rows));
+    }
+    // Whatever is left is a table added to the backend since this build. It
+    // gets a section rather than vanishing - a profile screen that silently
+    // omits part of the profile is the one thing it must never be.
+    buckets.forEach((table, rows) => ordered.add(MapEntry(table, rows)));
+    return ordered;
+  }
+
+  Widget _section(String table, List<Map<String, dynamic>> rows) {
+    final pip = context.pip;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: 2),
+            child: Row(
+              children: [
+                Text(
+                  profileSections[table] ?? table,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: pip.text),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text('${rows.length}', style: TextStyle(fontSize: 11.5, color: pip.textFaint)),
+              ],
+            ),
+          ),
+          for (final row in rows) _row(row),
+        ],
       ),
     );
   }
@@ -278,7 +409,8 @@ class _ProfileViewState extends State<ProfileView> {
     final capability = profileRowCapability(table);
     final busy = _busy.contains(field);
     final rowError = _rowErrors[field];
-    final confidence = row['confidence'] != null ? (row['confidence'] as num).toStringAsFixed(2) : null;
+    final content = profileRowContent(row);
+    final confidence = row['confidence'] is num ? (row['confidence'] as num).toDouble() : null;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
@@ -294,31 +426,43 @@ class _ProfileViewState extends State<ProfileView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Selectable, and never truncated. A goal runs to a
+                      // couple of sentences and is the most substantial thing
+                      // on this screen; clipping it to keep rows a uniform
+                      // height would hide the content to tidy the container.
+                      SelectableText(
+                        content.title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: pip.text,
+                          height: 1.4,
+                        ),
+                      ),
+                      if (content.detail != null) ...[
+                        const SizedBox(height: 3),
+                        SelectableText(
+                          content.detail!,
+                          style: TextStyle(fontSize: 13.5, color: pip.textMuted, height: 1.4),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
                       Row(
                         children: [
+                          if (confidence != null) ...[
+                            _ConfidenceMeter(value: confidence),
+                            const SizedBox(width: AppSpacing.sm),
+                          ],
                           Flexible(
                             child: Text(
-                              field,
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: pip.text),
+                              [
+                                '${row['source_label'] ?? 'unknown source'}',
+                                if (capability.note != null) capability.note!,
+                              ].join(' · '),
+                              style: TextStyle(fontSize: 11, color: pip.textFaint),
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.sm),
-                          TagLabel(table, color: pip.textFaint, size: 10.5),
                         ],
-                      ),
-                      const SizedBox(height: 4),
-                      SelectableText(
-                        '${row['value']}',
-                        style: TextStyle(fontSize: 13.5, color: pip.textMuted, height: 1.4),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        [
-                          if (confidence != null) 'confidence $confidence',
-                          '${row['source_label'] ?? 'unknown source'}',
-                          if (capability.note != null) capability.note!,
-                        ].join(' · '),
-                        style: TextStyle(fontSize: 11, color: pip.textFaint),
                       ),
                     ],
                   ),
@@ -450,6 +594,52 @@ class _HistoryRow extends StatelessWidget {
           Text(changedAt, style: TextStyle(fontSize: 11, color: pip.textFaint)),
         ],
       ),
+    );
+  }
+}
+
+
+/// How confident PIP is in one row, as a bar plus the number.
+///
+/// The number stays because this project's whole argument is that its
+/// confidence is inspectable rather than vibes - "0.18" is a claim someone
+/// may want to challenge, and a bar alone cannot be challenged. The bar is
+/// there because a column of bare floats is not scannable, which is what the
+/// screen looked like before.
+class _ConfidenceMeter extends StatelessWidget {
+  final double value;
+  const _ConfidenceMeter({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    final clamped = value.clamp(0.0, 1.0);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 34,
+          height: 4,
+          decoration: BoxDecoration(color: pip.surfaceRaised, borderRadius: BorderRadius.circular(2)),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: clamped,
+            child: Container(
+              decoration: BoxDecoration(
+                // Low confidence is stated, not coloured as an error - an
+                // inferred 0.18 is PIP being honest, not something wrong.
+                color: pip.accent.withValues(alpha: clamped < 0.4 ? 0.45 : 1.0),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          clamped.toStringAsFixed(2),
+          style: TextStyle(fontSize: 11, color: pip.textFaint, fontFamily: AppTheme.mono),
+        ),
+      ],
     );
   }
 }
