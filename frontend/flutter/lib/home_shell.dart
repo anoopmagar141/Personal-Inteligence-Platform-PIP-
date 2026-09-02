@@ -260,6 +260,14 @@ class _HomeShellState extends State<HomeShell> {
                   // pointed at clears the pointer rather than leaving new
                   // conversation filed against a project just put away.
                   onActivate: (id) => setState(() => _activeProjectId = id),
+                  // The shell owns both halves of "start a chat here": which
+                  // tab is showing, and telling the chat to begin a fresh
+                  // conversation. ProjectsView knows neither, and should not.
+                  onStartChat: (id) {
+                    setState(() => _activeProjectId = id);
+                    _selectTab(0);
+                    _chatKey.currentState?.newChat();
+                  },
                 ),
                 DocumentsView(api: widget.api, activeProjectId: _activeProjectId),
                 ProvidersView(api: widget.api),

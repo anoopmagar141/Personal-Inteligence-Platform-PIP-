@@ -51,13 +51,14 @@ Map<String, dynamic> project(String id, String name, {String status = 'active'})
       'last_active': '2026-08-31T10:00:00Z',
     };
 
-Future<({FakeApi api, List<String?> activations})> pumpProjects(
+Future<({FakeApi api, List<String?> activations, List<String> chatStarts})> pumpProjects(
   WidgetTester tester,
   List<dynamic> projects, {
   String? activeProjectId,
 }) async {
   final api = FakeApi()..projects = projects;
   final activations = <String?>[];
+  final chatStarts = <String>[];
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
@@ -65,12 +66,13 @@ Future<({FakeApi api, List<String?> activations})> pumpProjects(
           api: api,
           activeProjectId: activeProjectId,
           onActivate: activations.add,
+          onStartChat: chatStarts.add,
         ),
       ),
     ),
   );
   await tester.pumpAndSettle();
-  return (api: api, activations: activations);
+  return (api: api, activations: activations, chatStarts: chatStarts);
 }
 
 void main() {
@@ -86,15 +88,58 @@ void main() {
     // Was unguarded, and cleared the fields unconditionally - so a failed
     // create threw away the name and description AND said nothing, leaving
     // nothing to retry with and no reason to retry it.
+    //
+    // The form is a dialog now, so "kept" means kept across reopening it: the
+    // controllers live on the screen's State rather than the dialog's, which
+    // is what makes the text survive the route being popped.
     final harness = await pumpProjects(tester, []);
     harness.api.createError = ApiException(422, '{"detail": "A project needs a name."}');
 
+    await tester.tap(find.widgetWithText(FilledButton, 'New project'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Project name'), 'Thesis');
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Create'));
     await tester.pumpAndSettle();
 
+    expect(harness.api.calls, contains('create:Thesis'));
     expect(find.textContaining('A project needs a name'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'New project'));
+    await tester.pumpAndSettle();
     expect(find.text('Thesis'), findsOneWidget);
+  });
+
+  testWidgets('will not create a project with no name', (tester) async {
+    final harness = await pumpProjects(tester, []);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'New project'));
+    await tester.pumpAndSettle();
+
+    final create = find.widgetWithText(FilledButton, 'Create');
+    expect(tester.widget<FilledButton>(create).onPressed, isNull);
+    expect(harness.api.calls, isEmpty);
+  });
+
+  testWidgets('search narrows the grid without claiming the projects are gone', (tester) async {
+    // "No projects yet" here would be a claim about the database when the only
+    // thing that happened is a filter.
+    await pumpProjects(tester, [project('p1', 'PIP'), project('p2', 'Side quest')]);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Search projects...'), 'side');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Side quest'), findsOneWidget);
+    expect(find.text('PIP'), findsNothing);
+
+    // A search that matches nothing is not the same claim as having no
+    // projects, and must not borrow that screen's wording.
+    await tester.enterText(find.widgetWithText(TextField, 'Search projects...'), 'zzz');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Nothing matches'), findsOneWidget);
+    expect(find.textContaining('Clear the search'), findsOneWidget);
+    expect(find.text('No projects yet'), findsNothing);
   });
 
   testWidgets('offers only reopening on a shelved project', (tester) async {
@@ -175,5 +220,64 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('invalid project status'), findsOneWidget);
+  });
+
+  testWidgets('starting a chat here activates the project first, then opens it', (tester) async {
+    // Order matters: the new conversation is filed against whatever project
+    // the BACKEND currently has active, so opening the chat before activation
+    // lands would file it against the previous project.
+    final harness = await pumpProjects(tester, [project('p1', 'PIP')]);
+
+    await tester.tap(find.text('New chat'));
+    await tester.pumpAndSettle();
+
+    expect(harness.api.calls, contains('activate:p1'));
+    expect(harness.activations, ['p1']);
+    expect(harness.chatStarts, ['p1']);
+  });
+
+  testWidgets('a shelved project is not offered a new chat', (tester) async {
+    // Starting fresh work in something archived or finished is a contradiction
+    // - reopen it first, which is the button that is there.
+    await pumpProjects(tester, [project('p1', 'Old thing', status: 'archived')]);
+
+    expect(find.text('New chat'), findsNothing);
+    expect(find.text('Reopen'), findsOneWidget);
+  });
+
+  testWidgets('deleting asks first and explains that nothing filed is lost', (tester) async {
+    final harness = await pumpProjects(tester, [project('p1', 'pip')]);
+
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete this project?'), findsOneWidget);
+    // The wording has to be honest: this is a retraction, and the rows that
+    // point at this project keep pointing at it.
+    expect(find.textContaining('is kept and still points at it'), findsOneWidget);
+    expect(harness.api.calls, isEmpty);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(harness.api.calls, contains('status:p1=deleted'));
+  });
+
+  testWidgets('cancelling the delete changes nothing', (tester) async {
+    final harness = await pumpProjects(tester, [project('p1', 'pip')]);
+
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(harness.api.calls, isEmpty);
+  });
+
+  testWidgets('a shelved project can still be deleted', (tester) async {
+    // The duplicate you want gone is usually one you already archived.
+    await pumpProjects(tester, [project('p1', 'pip', status: 'archived')]);
+
+    expect(find.text('Delete'), findsOneWidget);
   });
 }
