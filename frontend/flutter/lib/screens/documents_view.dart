@@ -29,13 +29,19 @@ class _DocumentsViewState extends State<DocumentsView> {
   String? _searchError;
   bool _searching = false;
 
-  /// The similarity floor sent to /rag/query. The backend defaults to 0.6, and
-  /// this is a control rather than a constant because the question people
-  /// bring to this screen is "why did PIP not use my document" - nothing at
-  /// 0.6 with near-misses at 0.3 answers that, where nothing at 0.6 alone does
-  /// not. Starts at the backend's own default, so the first result set is what
-  /// a real question would actually have retrieved.
-  double _threshold = 0.6;
+  /// The similarity floor sent to /rag/query. A control rather than a constant
+  /// because the question people bring to this screen is "why did PIP not use
+  /// my document" - nothing at 0.6 with near-misses at 0.3 answers that, where
+  /// nothing at 0.6 alone does not.
+  ///
+  /// Null until GET /rag/defaults answers, and read from there rather than
+  /// written here. It used to start at a hand-written 0.6 with a comment
+  /// claiming that was the backend's default - true only for as long as nobody
+  /// edited rag.similarity_threshold in settings.json, and nothing would have
+  /// failed on the day they did. The panel's whole claim is that it shows what
+  /// a real question would have retrieved, so the one number it must not guess
+  /// is the threshold retrieval actually runs at.
+  double? _threshold;
 
   @override
   void initState() {
@@ -46,9 +52,33 @@ class _DocumentsViewState extends State<DocumentsView> {
   Future<void> _load() async {
     try {
       final documents = await widget.api.getDocuments();
-      if (mounted) setState(() => _documents = documents);
+      // Only on the first load: re-reading it on every refresh would stamp on
+      // a threshold the user has since dragged somewhere else.
+      final threshold = _threshold ?? await _loadThreshold();
+      if (mounted) {
+        setState(() {
+          _documents = documents;
+          _threshold = threshold;
+        });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
+  /// The backend's own retrieval floor, or null if it could not be read.
+  ///
+  /// A failure here leaves the search panel disabled rather than falling back
+  /// to a literal. Guessing would restore exactly the bug this call removes,
+  /// and quietly: the slider would show a plausible number, the results would
+  /// look like Stage 5's, and nothing on screen would say otherwise.
+  Future<double?> _loadThreshold() async {
+    try {
+      final defaults = await widget.api.getRagDefaults();
+      return (defaults['similarity_threshold'] as num).toDouble();
+    } catch (error) {
+      if (mounted) setState(() => _searchError = 'Could not read the retrieval settings: $error');
+      return null;
     }
   }
 
@@ -102,13 +132,14 @@ class _DocumentsViewState extends State<DocumentsView> {
   /// system could answer and no interface would ask.
   Future<void> _search() async {
     final query = _searchController.text.trim();
-    if (query.isEmpty) return;
+    final threshold = _threshold;
+    if (query.isEmpty || threshold == null) return;
     setState(() {
       _searching = true;
       _searchError = null;
     });
     try {
-      final matches = await widget.api.queryRag(query, threshold: _threshold);
+      final matches = await widget.api.queryRag(query, threshold: threshold);
       if (mounted) setState(() => _matches = matches);
     } catch (error) {
       if (mounted) setState(() => _searchError = error.toString());
@@ -238,7 +269,9 @@ class _DocumentsViewState extends State<DocumentsView> {
               ),
               const SizedBox(width: AppSpacing.sm),
               FilledButton(
-                onPressed: _searching ? null : _search,
+                // Also disabled until the backend's threshold arrives - a
+                // search run before then would have to invent one.
+                onPressed: _searching || _threshold == null ? null : _search,
                 child: _searching
                     ? SizedBox(
                         width: 16,
@@ -255,11 +288,14 @@ class _DocumentsViewState extends State<DocumentsView> {
               Text('Minimum similarity', style: TextStyle(fontSize: 12, color: pip.textMuted)),
               Expanded(
                 child: Slider(
-                  value: _threshold,
+                  value: _threshold ?? 0,
                   max: 0.9,
                   divisions: 18,
-                  label: _threshold.toStringAsFixed(2),
-                  onChanged: (value) => setState(() => _threshold = value),
+                  label: _threshold?.toStringAsFixed(2) ?? '',
+                  // A null onChanged is how a Slider renders as unavailable,
+                  // which is what it is until /rag/defaults says where the
+                  // backend's floor sits.
+                  onChanged: _threshold == null ? null : (value) => setState(() => _threshold = value),
                   // Re-runs only once the drag settles, and only if a search
                   // has already been made - dragging the slider before asking
                   // anything has nothing to re-run.
@@ -271,7 +307,7 @@ class _DocumentsViewState extends State<DocumentsView> {
               SizedBox(
                 width: 36,
                 child: Text(
-                  _threshold.toStringAsFixed(2),
+                  _threshold?.toStringAsFixed(2) ?? '--',
                   style: TextStyle(fontSize: 12, color: pip.textMuted, fontFamily: AppTheme.mono),
                 ),
               ),
@@ -285,7 +321,7 @@ class _DocumentsViewState extends State<DocumentsView> {
             const SizedBox(height: AppSpacing.sm),
             if (_matches!.isEmpty)
               Text(
-                'Nothing above ${_threshold.toStringAsFixed(2)}. Lower the threshold to see what '
+                'Nothing above ${_threshold!.toStringAsFixed(2)}. Lower the threshold to see what '
                 'came closest - if the answer is in a document at all, it will surface further down.',
                 style: TextStyle(fontSize: 12.5, color: pip.textFaint, height: 1.5),
               )

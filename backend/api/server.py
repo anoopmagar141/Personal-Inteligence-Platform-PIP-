@@ -527,6 +527,17 @@ def api_upload_document(conn, filename: str, content: bytes, project_id: str | N
 
 
 def api_query_rag(conn, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Retrieval on its own, with no pipeline and no model around it - what the
+    Documents screen previews before anyone asks PIP a question.
+
+    An omitted threshold stays None so vector_store resolves it from
+    config/settings.json, the way Stage 5 does. It used to default to a literal
+    0.6 here, which matched rag.similarity_threshold only by coincidence: raise
+    that setting and the preview would quietly keep retrieving at 0.6, showing
+    passages the pipeline would have dropped. A preview that disagrees with the
+    thing it previews is worse than no preview.
+    """
     query_text = payload.get("query")
     if not query_text:
         raise ValueError("query is required")
@@ -534,8 +545,31 @@ def api_query_rag(conn, payload: dict[str, Any]) -> list[dict[str, Any]]:
         conn,
         query_text,
         project_id=payload.get("project_id"),
-        threshold=payload.get("threshold", 0.6),
+        threshold=payload.get("threshold"),
     )
+
+
+def api_rag_defaults() -> dict[str, float | int]:
+    """
+    The retrieval settings a /rag/query with no threshold would be answered at.
+
+    Exists because a client cannot otherwise know them. rag.similarity_threshold
+    lives in config/settings.json, is resolved inside vector_store, and never
+    crosses the API - so the Documents screen, which needs a starting value for
+    its slider, had a hand-written 0.6 and a comment claiming it matched the
+    backend. Nothing checked that claim, and editing settings.json would not
+    have updated it.
+
+    Read from vector_store's own constants rather than re-reading settings.json
+    here. Those constants bind at import, so a settings edit mid-process changes
+    neither them nor what query() actually uses - re-reading the file would
+    report a threshold retrieval is not running at, which is the failure this
+    endpoint exists to remove, reintroduced one level up.
+    """
+    return {
+        "similarity_threshold": vector_store.DEFAULT_SIMILARITY_THRESHOLD,
+        "top_k_results": vector_store.DEFAULT_TOP_K,
+    }
 
 
 def api_list_documents(conn) -> list[dict[str, Any]]:
@@ -1423,6 +1457,10 @@ try:
                 return api_query_rag(conn, payload)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc))
+
+    @app.get(f"{BASE_PREFIX}/rag/defaults")
+    def rag_defaults():
+        return api_rag_defaults()
 
     @app.get(f"{BASE_PREFIX}/rag/documents")
     def list_documents():

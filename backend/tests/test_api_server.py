@@ -256,6 +256,40 @@ def test_rag_api_missing_query_raises(conn):
         server.api_query_rag(conn, {})
 
 
+def test_rag_api_omitted_threshold_defers_to_settings(conn, monkeypatch):
+    """
+    An omitted threshold must reach vector_store as None, not as a literal
+    copied into the endpoint - that is what makes the Documents preview and the
+    Stage 5 retrieval it previews read the same rag.similarity_threshold.
+    """
+    captured = {}
+
+    def fake_query(_conn, query_text, project_id=None, threshold=None, top_k=None):
+        captured["threshold"] = threshold
+        return []
+
+    monkeypatch.setattr(server.vector_store, "query", fake_query)
+
+    server.api_query_rag(conn, {"query": "anything"})
+    assert captured["threshold"] is None
+
+    # An explicit threshold still overrides it - that is the slider's whole job.
+    server.api_query_rag(conn, {"query": "anything", "threshold": 0.25})
+    assert captured["threshold"] == 0.25
+
+
+def test_rag_defaults_report_what_retrieval_actually_uses():
+    """
+    The endpoint must report the same constants query() falls back to, not a
+    fresh read of settings.json - a client that starts its slider anywhere else
+    is previewing a threshold the pipeline is not retrieving at.
+    """
+    defaults = server.api_rag_defaults()
+
+    assert defaults["similarity_threshold"] == vector_store.DEFAULT_SIMILARITY_THRESHOLD
+    assert defaults["top_k_results"] == vector_store.DEFAULT_TOP_K
+
+
 def test_rag_api_delete_nonexistent_raises(conn):
     with pytest.raises(ValueError):
         server.api_delete_document(conn, "/no/such/file.txt")

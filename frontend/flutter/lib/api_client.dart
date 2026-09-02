@@ -242,18 +242,32 @@ class ApiClient {
   Future<List<dynamic>> getInteractionStyleHistory({int limit = 50}) async =>
       await get('/memory/interaction-style/history', query: {'limit': '$limit'}) as List<dynamic>;
 
+  /// {similarity_threshold, top_k_results} - the settings a /rag/query with no
+  /// threshold is answered at, straight from config/settings.json.
+  ///
+  /// Fetched rather than assumed. These are backend configuration, so any copy
+  /// kept on this side is correct only until someone edits the file, and no
+  /// build or test would catch the day it stops being.
+  Future<Map<String, dynamic>> getRagDefaults() async =>
+      await get('/rag/defaults') as Map<String, dynamic>;
+
   /// What RAG would actually retrieve for [query], without asking PIP anything:
   /// {chunk_text, file_path, chunk_index, similarity}, already filtered by
   /// [threshold] server-side.
   ///
-  /// [threshold] is exposed rather than left at the backend's 0.6 default
+  /// [threshold] is exposed rather than left at the backend's own default
   /// because the question people actually bring here is "why did PIP not use
   /// my document" - and an empty result at 0.6 with near-misses at 0.3 is the
   /// answer, where an empty result alone is not.
-  Future<List<dynamic>> queryRag(String query, {double threshold = 0.6, String? projectId}) async =>
+  ///
+  /// Omitting it is meaningful: the backend then resolves
+  /// rag.similarity_threshold itself, which is what a caller wanting "whatever
+  /// Stage 5 would have used" should send. Callers that want to show that
+  /// number before searching read it from [getRagDefaults].
+  Future<List<dynamic>> queryRag(String query, {double? threshold, String? projectId}) async =>
       await post('/rag/query', {
         'query': query,
-        'threshold': threshold,
+        'threshold': ?threshold,
         'project_id': ?projectId,
       }) as List<dynamic>;
 
