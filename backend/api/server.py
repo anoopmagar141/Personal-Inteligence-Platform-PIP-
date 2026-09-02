@@ -1054,7 +1054,16 @@ try:
                 # the real id promptly rather than only once the whole reply
                 # has already streamed in.
                 if conversation_id is None:
-                    conversation_id = await loop.run_in_executor(executor, conversation_store.create_conversation, conn)
+                    # WITH the project. conversations.project_id, its foreign
+                    # key to active_projects, list_conversations()'s filter and
+                    # create_conversation()'s parameter were all built; this
+                    # call - the only one the app ever reaches - left the
+                    # argument off, so every conversation the UI created was
+                    # filed against nothing while the client dutifully sent a
+                    # project_id on every message.
+                    conversation_id = await loop.run_in_executor(
+                        executor, conversation_store.create_conversation, conn, project_id
+                    )
                     await websocket.send_json({
                         "type": "session_info",
                         "data": {"conversation_id": conversation_id, "title": "New chat", "messages": []},

@@ -295,7 +295,20 @@ class ApiClient {
   Future<List<dynamic>> getTrace(String traceId) async =>
       await get('/trace/${Uri.encodeComponent(traceId)}') as List<dynamic>;
 
-  Future<List<dynamic>> getConversations() async => await get('/conversations') as List<dynamic>;
+  /// [projectId] narrows the list to one project's conversations.
+  ///
+  /// The backend has always supported it (list_conversations takes a
+  /// project_id) and this never passed one, so the sidebar was a single flat
+  /// pile no matter what you were working on. Null means every conversation,
+  /// which is a real choice rather than a fallback - a chat started with no
+  /// project selected belongs to no project, and has to stay reachable.
+  Future<List<dynamic>> getConversations({String? projectId}) async {
+    final result = await get(
+      '/conversations',
+      query: projectId == null ? null : {'project_id': projectId},
+    );
+    return result as List<dynamic>;
+  }
 
   Future<List<dynamic>> getConversationMessages(String conversationId) async =>
       await get('/conversations/$conversationId/messages') as List<dynamic>;

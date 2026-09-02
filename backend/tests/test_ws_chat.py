@@ -120,6 +120,59 @@ def test_ws_chat_accepts_connection_with_no_origin_header(monkeypatch, token):
     assert events[0]["type"] == "stage_hint"
 
 
+def test_a_lazily_created_conversation_is_filed_against_the_active_project(monkeypatch, token, tmp_path):
+    """
+    conversations.project_id, its foreign key to active_projects,
+    list_conversations()'s filter and create_conversation()'s parameter were
+    all built - and the one call the app actually reaches omitted the argument,
+    so every conversation the UI created was filed against nothing while the
+    client sent a project_id on every single message.
+    """
+    from backend.memory import conversation_store, profile_store
+
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as setup:
+        project_id = profile_store.create_project(setup, "PIP")
+
+    client = TestClient(server.app)
+    with client.websocket_connect(ws_url(token)) as ws:
+        _expect_session_info(ws)
+        ws.send_json({"message": "hello", "project_id": project_id})
+        created = _expect_session_info(ws)
+        [ws.receive_json() for _ in range(4)]
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as read:
+        rows = conversation_store.list_conversations(read, project_id=project_id)
+
+    assert [r["id"] for r in rows] == [created["conversation_id"]]
+
+
+def test_a_conversation_started_with_no_project_belongs_to_none(monkeypatch, token, tmp_path):
+    """
+    The other half: filing everything against whatever project happened to be
+    active would be as wrong as filing nothing. No project selected means the
+    column stays NULL, and the chat is reachable from "All chats" only.
+    """
+    from backend.memory import conversation_store, profile_store
+
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as setup:
+        project_id = profile_store.create_project(setup, "PIP")
+
+    client = TestClient(server.app)
+    with client.websocket_connect(ws_url(token)) as ws:
+        _expect_session_info(ws)
+        ws.send_json({"message": "hello"})
+        _expect_session_info(ws)
+        [ws.receive_json() for _ in range(4)]
+
+    with server.open_app_connection(str(tmp_path / "pip.db")) as read:
+        assert conversation_store.list_conversations(read, project_id=project_id) == []
+        assert len(conversation_store.list_conversations(read)) == 1
+
+
 def test_ws_chat_streams_events_and_hides_pipeline_complete(monkeypatch, token):
     monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events("Hi there"))
 

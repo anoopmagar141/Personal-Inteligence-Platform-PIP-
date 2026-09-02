@@ -65,6 +65,14 @@ class ChatViewState extends State<ChatView> {
   String? _activeConversationId;
   List<dynamic>? _conversations;
 
+  /// Whether the sidebar is scoped to the active project.
+  ///
+  /// Defaults to scoped when a project is selected, because that is the whole
+  /// point of selecting one. "All chats" exists because filtering strictly
+  /// would otherwise hide every conversation started before a project was
+  /// picked, with no way to find them again.
+  bool _scopedToProject = true;
+
   /// Width below which the stage-hint panel stops being worth 240px of a
   /// window, and below which the conversation list stops being worth 220.
   ///
@@ -87,12 +95,22 @@ class ChatViewState extends State<ChatView> {
 
   Future<void> _loadConversations() async {
     try {
-      final conversations = await widget.api.getConversations();
+      final scope = _scopedToProject ? widget.activeProjectId : null;
+      final conversations = await widget.api.getConversations(projectId: scope);
       if (mounted) setState(() => _conversations = conversations);
     } catch (_) {
       // Sidebar is a convenience, not the chat's critical path - a failed
       // list load just leaves it empty rather than blocking chat itself.
     }
+  }
+
+  @override
+  void didUpdateWidget(ChatView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Switching project on the Projects screen has to change what this list
+    // shows, or the scoping silently describes whichever project happened to
+    // be active when the view was first built.
+    if (oldWidget.activeProjectId != widget.activeProjectId) _loadConversations();
   }
 
   void _handleEvent(ChatEvent event) {
@@ -198,6 +216,15 @@ class ChatViewState extends State<ChatView> {
     _inputFocus.requestFocus();
   }
 
+  void _setScope(bool scoped) {
+    if (scoped == _scopedToProject) return;
+    setState(() {
+      _scopedToProject = scoped;
+      _conversations = null;
+    });
+    _loadConversations();
+  }
+
   void _switchTo(String conversationId) {
     if (conversationId == _activeConversationId) return;
     setState(() {
@@ -250,23 +277,35 @@ class ChatViewState extends State<ChatView> {
   Future<void> _showConversationsDialog() async {
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => Dialog(
-        child: SizedBox(
-          width: 320,
-          height: 420,
-          child: _ConversationSidebar(
-            conversations: _conversations,
-            activeConversationId: _activeConversationId,
-            bordered: false,
-            onNewChat: () {
-              Navigator.of(dialogContext).pop();
-              _newChat();
-            },
-            onSelect: (id) {
-              Navigator.of(dialogContext).pop();
-              _switchTo(id);
-            },
-            onDelete: _delete,
+      // StatefulBuilder because a dialog is its own route: the scope switch
+      // calls setState on the SCREEN, which does not rebuild anything inside
+      // here. Without it the list reloads correctly and the tab that triggered
+      // it stays visibly unselected.
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          child: SizedBox(
+            width: 320,
+            height: 420,
+            child: _ConversationSidebar(
+              conversations: _conversations,
+              activeConversationId: _activeConversationId,
+              hasProject: widget.activeProjectId != null,
+              scopedToProject: _scopedToProject,
+              onScopeChanged: (scoped) {
+                _setScope(scoped);
+                setDialogState(() {});
+              },
+              bordered: false,
+              onNewChat: () {
+                Navigator.of(dialogContext).pop();
+                _newChat();
+              },
+              onSelect: (id) {
+                Navigator.of(dialogContext).pop();
+                _switchTo(id);
+              },
+              onDelete: _delete,
+            ),
           ),
         ),
       ),
@@ -316,6 +355,9 @@ class ChatViewState extends State<ChatView> {
               _ConversationSidebar(
                 conversations: _conversations,
                 activeConversationId: _activeConversationId,
+                hasProject: widget.activeProjectId != null,
+                scopedToProject: _scopedToProject,
+                onScopeChanged: _setScope,
                 onNewChat: _newChat,
                 onSelect: _switchTo,
                 onDelete: _delete,
@@ -453,6 +495,12 @@ class _ConversationSidebar extends StatelessWidget {
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onDelete;
 
+  /// Whether a project is selected at all. With none, there is nothing to
+  /// scope to and the toggle would be a control with one setting.
+  final bool hasProject;
+  final bool scopedToProject;
+  final ValueChanged<bool> onScopeChanged;
+
   /// False when this is shown in a dialog on a narrow window, where the fixed
   /// width and the right-hand border belong to the dialog instead.
   final bool bordered;
@@ -460,6 +508,9 @@ class _ConversationSidebar extends StatelessWidget {
   const _ConversationSidebar({
     required this.conversations,
     required this.activeConversationId,
+    required this.hasProject,
+    required this.scopedToProject,
+    required this.onScopeChanged,
     required this.onNewChat,
     required this.onSelect,
     required this.onDelete,
@@ -484,14 +535,45 @@ class _ConversationSidebar extends StatelessWidget {
             padding: const EdgeInsets.all(AppSpacing.md),
             child: GhostButton(label: '+ New chat', onTap: onNewChat),
           ),
+          if (hasProject)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _ScopeTab(
+                      label: 'This project',
+                      selected: scopedToProject,
+                      onTap: () => onScopeChanged(true),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: _ScopeTab(
+                      label: 'All chats',
+                      selected: !scopedToProject,
+                      onTap: () => onScopeChanged(false),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const Divider(height: 1),
           Expanded(
             child: conversations == null
                 ? const SizedBox.shrink()
                 : conversations!.isEmpty
                     ? Padding(
-                        padding: EdgeInsets.all(AppSpacing.md),
-                        child: Text('No conversations yet.', style: TextStyle(fontSize: 12, color: pip.textFaint)),
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        child: Text(
+                          // Distinct wording, because these are different
+                          // facts: one is about the project, the other about
+                          // the whole database.
+                          hasProject && scopedToProject
+                              ? 'No chats in this project yet.'
+                              : 'No conversations yet.',
+                          style: TextStyle(fontSize: 12, color: pip.textFaint),
+                        ),
                       )
                     : ListView(
                         padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
@@ -726,6 +808,40 @@ class _Avatar extends StatelessWidget {
       child: isUser
           ? Icon(Icons.person_outline, size: 15, color: pip.textMuted)
           : Text('P', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: pip.accentOn)),
+    );
+  }
+}
+
+
+/// One half of the sidebar's scope switch.
+class _ScopeTab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ScopeTab({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return Material(
+      color: selected ? pip.accentSoft : Colors.transparent,
+      borderRadius: AppRadius.sm,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.sm,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected ? pip.accent : pip.textMuted,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
