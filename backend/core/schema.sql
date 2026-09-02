@@ -126,7 +126,10 @@ CREATE TABLE IF NOT EXISTS active_projects (
     project_id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     description TEXT,
-    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'archived', 'completed')),
+    -- 'deleted' is a retraction, not an erasure: ADR-022's rule for every other
+    -- memory table applies here too, and the row survives so that a decision or
+    -- a conversation still pointing at this project does not dangle.
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'archived', 'completed', 'deleted')),
     last_active TEXT NOT NULL
 );
 

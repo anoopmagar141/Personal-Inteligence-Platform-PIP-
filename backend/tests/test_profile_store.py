@@ -584,3 +584,118 @@ def test_a_set_membership_row_cannot_be_corrected_in_place(conn):
 
     with pytest.raises(ValueError, match="Unsupported target_table"):
         profile_store.correct_profile_field(conn, "rust", "golang")
+
+
+# --- retracting a project ----------------------------------------------------
+# Projects were the one thing with no way to take back. Archive and Complete
+# both say something about the work; neither says "this was a mistake", which
+# is what a duplicate created by a typo needs.
+
+
+def test_a_project_can_be_retracted_and_leaves_the_list(conn):
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    keep = profile_store.create_project(conn, "PIP")
+    typo = profile_store.create_project(conn, "pip")
+
+    profile_store.update_project_status(conn, typo, "deleted")
+
+    listed = [p["project_id"] for p in profile_store.list_projects(conn)]
+    assert listed == [keep]
+
+
+def test_a_retracted_project_is_still_there_to_point_at(conn):
+    """
+    Soft, like every other memory table. A decision or a conversation filed
+    against this project keeps a real row to reference - deleting it outright
+    would leave those dangling, which is the thing ADR-022 exists to avoid.
+    """
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+    project_id = profile_store.create_project(conn, "pip")
+
+    profile_store.update_project_status(conn, project_id, "deleted")
+
+    row = conn.execute(
+        "SELECT status FROM active_projects WHERE project_id = ?", (project_id,)
+    ).fetchone()
+    assert row["status"] == "deleted"
+
+
+def test_the_migration_does_not_unlink_conversations_from_their_project(tmp_path, db_key):
+    """
+    The hazard that makes this migration different from the trace_log one.
+
+    conversations.project_id REFERENCES active_projects ON DELETE SET NULL, and
+    foreign keys are ON. A rebuild that drops the old table with enforcement
+    live fires that rule and silently NULLs every conversation's project -
+    destroying exactly the relationship the table exists to hold, with no error
+    to notice.
+    """
+    import sqlite3
+
+    from backend.memory import conversation_store
+
+    db_path = tmp_path / "pip.db"
+    conn = profile_store.get_connection(str(db_path), db_key=db_key)
+
+    # A database on the OLD shape: status has no 'deleted', as every database
+    # created before this change does.
+    conn.executescript(
+        """
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE active_projects (
+            project_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            status TEXT DEFAULT 'active' CHECK (status IN ('active', 'archived', 'completed')),
+            last_active TEXT NOT NULL
+        );
+        CREATE TABLE conversations (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT 'New chat',
+            project_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            observed_at TEXT,
+            FOREIGN KEY (project_id) REFERENCES active_projects(project_id) ON DELETE SET NULL
+        );
+        """
+    )
+    now = profile_store.now_utc()
+    conn.execute(
+        "INSERT INTO active_projects (project_id, name, description, status, last_active) "
+        "VALUES ('p1', 'PIP', '', 'active', ?)",
+        (now,),
+    )
+    conn.execute(
+        "INSERT INTO conversations (id, title, project_id, created_at, updated_at) "
+        "VALUES ('c1', 'Thesis', 'p1', ?, ?)",
+        (now, now),
+    )
+    conn.commit()
+
+    assert profile_store.rebuild_active_projects_if_stale(conn) is True
+
+    still_linked = conn.execute("SELECT project_id FROM conversations WHERE id = 'c1'").fetchone()
+    assert still_linked["project_id"] == "p1", "the rebuild unlinked the conversation"
+    # And the point of the rebuild: the new value is now accepted.
+    profile_store.update_project_status(conn, "p1", "deleted")
+    assert conversation_store.list_conversations(conn, project_id="p1")[0]["id"] == "c1"
+    conn.close()
+
+
+def test_the_migration_runs_once_and_is_a_no_op_afterwards(conn):
+    # initialize_schema already ran it via the fixture, so the shape is current.
+    assert profile_store.rebuild_active_projects_if_stale(conn) is False
+    assert profile_store.rebuild_active_projects_if_stale(conn) is False
+
+
+def test_foreign_key_enforcement_survives_the_rebuild(tmp_path, db_key):
+    """
+    The pragma is turned off for the rebuild. Leaving it off would disable
+    referential integrity for the rest of that connection's life, which is a
+    quieter and worse bug than the one the rebuild was avoiding.
+    """
+    conn = profile_store.get_connection(str(tmp_path / "pip.db"), db_key=db_key)
+    profile_store.initialize_schema(conn)
+    assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    conn.close()

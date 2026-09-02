@@ -209,12 +209,68 @@ def rebuild_trace_log_if_stale(conn) -> bool:
     return True
 
 
+def rebuild_active_projects_if_stale(conn) -> bool:
+    """
+    Widens active_projects.status to allow 'deleted' on a database created
+    before that was a legal value.
+
+    SQLite cannot alter a CHECK constraint, so this is the same rebuild
+    rebuild_trace_log_if_stale() does, with one difference that matters much
+    more here: conversations.project_id REFERENCES active_projects ON DELETE
+    SET NULL, and foreign keys are ON (schema.sql line 5, and get_connection).
+    Dropping the table with enforcement live would fire that rule and quietly
+    unlink every conversation from its project - destroying exactly the data
+    this table exists to relate. So enforcement goes off for the rebuild and
+    back on afterwards, which is SQLite's own documented procedure, and the
+    pragma is set OUTSIDE the transaction because it is a no-op inside one.
+
+    Guarded by reading the stored DDL, so it runs once per database and is a
+    cheap sqlite_master read on every connection after that.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'active_projects'"
+    ).fetchone()
+    if row is None:
+        return False  # absent; schema.sql owns creating it
+    if "'deleted'" in (row["sql"] or ""):
+        return False  # already widened
+
+    logger.info("Rebuilding active_projects so a project can be retracted (status='deleted').")
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("BEGIN")
+    try:
+        conn.execute("""
+            CREATE TABLE active_projects_rebuilt (
+                project_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT,
+                status TEXT DEFAULT 'active'
+                    CHECK (status IN ('active', 'archived', 'completed', 'deleted')),
+                last_active TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            INSERT INTO active_projects_rebuilt (project_id, name, description, status, last_active)
+            SELECT project_id, name, description, status, last_active FROM active_projects
+        """)
+        conn.execute("DROP TABLE active_projects")
+        conn.execute("ALTER TABLE active_projects_rebuilt RENAME TO active_projects")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+    return True
+
+
 def initialize_schema(conn) -> None:
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
     conn.commit()
     apply_column_migrations(conn)
     rebuild_trace_log_if_stale(conn)
+    rebuild_active_projects_if_stale(conn)
     seed_provider_consent(conn)
 
 
@@ -565,13 +621,20 @@ def list_projects(conn) -> list[dict[str, Any]]:
     return [
         dict(row)
         for row in conn.execute(
-            "SELECT * FROM active_projects ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, last_active DESC"
+            # Retracted projects are excluded here rather than deleted from the
+            # table: a decision or conversation still pointing at one keeps a
+            # real row to point at, and nothing dangles.
+            "SELECT * FROM active_projects WHERE status != 'deleted' "
+            "ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, last_active DESC"
         )
     ]
 
 
 def update_project_status(conn, project_id: str, status: str) -> None:
-    if status not in {"active", "archived", "completed"}:
+    # 'deleted' is here with the rest rather than behind its own endpoint: it
+    # is a status like any other, and routing it separately would imply the row
+    # goes away, which it does not.
+    if status not in {"active", "archived", "completed", "deleted"}:
         raise ValueError("invalid project status")
     conn.execute(
         "UPDATE active_projects SET status = ?, last_active = ? WHERE project_id = ?",

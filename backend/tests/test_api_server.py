@@ -882,10 +882,13 @@ def test_rest_project_status_reports_an_unknown_status_as_422(tmp_path, monkeypa
     with server.open_app_connection(str(tmp_path / "pip.db")) as setup_conn:
         project_id = profile_store.create_project(setup_conn, "PIP")
 
+    # Not 'deleted', which this used to use: that became a legal status when
+    # projects gained a retraction, so the example had to move to one that is
+    # still genuinely invalid or the test would assert nothing.
     response = client.patch(
         f"/api/v1/projects/{project_id}/status",
         headers=headers,
-        json={"status": "deleted"},
+        json={"status": "binned"},
     )
 
     assert response.status_code == 422
