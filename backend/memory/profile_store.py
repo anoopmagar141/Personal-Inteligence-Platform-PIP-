@@ -1,9 +1,10 @@
 import datetime
 import logging
+import os
 import re
 import sqlite3
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Iterable
 
 from backend.config.settings import get_settings
@@ -264,6 +265,29 @@ def rebuild_active_projects_if_stale(conn) -> bool:
     return True
 
 
+_DEFAULT_DOCUMENTS_ROOT = Path(__file__).parent.parent.parent / "data" / "documents"
+
+
+def documents_root() -> Path:
+    """
+    Where ingested files live on THIS machine.
+
+    A function reading an override, not a constant, for the reason conftest
+    keeps a table of exactly these: a real path baked into a module is a path
+    the test suite writes to. This one already did - the first run of the
+    rebuild test put a notes.txt into the developer's actual data/documents/,
+    which is the same shape as the unisolated PIP_SALT_PATH that could have
+    destroyed the real database.
+
+    Deliberately not imported from vector_store, which owns the matching
+    constant for its ingestion sandbox: importing it here would pull chromadb
+    and sentence-transformers into every database open, and initialize_schema()
+    runs on every connection.
+    """
+    override = os.environ.get("PIP_DOCUMENTS_ROOT")
+    return Path(override) if override else _DEFAULT_DOCUMENTS_ROOT
+
+
 def initialize_schema(conn) -> None:
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
@@ -271,7 +295,145 @@ def initialize_schema(conn) -> None:
     apply_column_migrations(conn)
     rebuild_trace_log_if_stale(conn)
     rebuild_active_projects_if_stale(conn)
+    backfill_document_blobs(conn)
     seed_provider_consent(conn)
+
+
+def store_document_content(conn, document_id: int, content: bytes) -> None:
+    """
+    Keep the bytes of an ingested document inside the database.
+
+    Lives here rather than in vector_store because initialize_schema() calls
+    the backfill below on every connection, and vector_store cannot be
+    imported that early: it pulls in chromadb and sentence-transformers, which
+    is seconds of import time and a hard dependency on a machine that may be
+    doing nothing but opening a database. This is plain SQLite and a file
+    read; it needs neither.
+    """
+    conn.execute(
+        "INSERT INTO document_blobs (document_id, content, byte_size, stored_at) "
+        "VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(document_id) DO UPDATE SET "
+        "content = excluded.content, byte_size = excluded.byte_size, stored_at = excluded.stored_at",
+        (document_id, content, len(content), now_utc()),
+    )
+    conn.commit()
+
+
+def document_content(conn, document_id: int) -> bytes | None:
+    """The stored bytes, or None if this document predates them and has no file."""
+    row = conn.execute(
+        "SELECT content FROM document_blobs WHERE document_id = ?", (document_id,)
+    ).fetchone()
+    return bytes(row[0]) if row else None
+
+
+def documents_missing_content(conn) -> list[dict[str, Any]]:
+    """
+    Active documents whose bytes are not in the database.
+
+    One indexed anti-join, and on a healthy installation it returns nothing -
+    which is what makes calling it per connection affordable. Exposed rather
+    than kept private because the export needs it too: a backup that silently
+    omits a document is exactly the class of failure this whole feature
+    exists to prevent, so /export says so rather than discovering it on the
+    machine you are restoring onto.
+    """
+    return [
+        dict(row)
+        for row in conn.execute(
+            "SELECT d.id, d.file_path FROM documents d "
+            "LEFT JOIN document_blobs b ON b.document_id = d.id "
+            "WHERE d.status = 'active' AND b.document_id IS NULL"
+        )
+    ]
+
+
+def backfill_document_blobs(conn) -> int:
+    """
+    Store the bytes of any already-ingested document that predates this table.
+
+    Run from initialize_schema() for the reason every migration here is: a
+    database repairs itself on the next start, with nothing for the user to
+    remember to run. Somebody who ingested four documents last month and
+    upgrades today gets a complete backup without knowing anything changed.
+
+    A file that is no longer on disk is skipped, not an error. Its registry
+    row is still true - the document WAS ingested, and its chunks may still be
+    in the index - and failing a database open because a source file was moved
+    would be a spectacular overreaction. The gap stays visible through
+    documents_missing_content().
+
+    Returns how many were stored, so a caller that cares can say so.
+    """
+    stored = 0
+    for row in documents_missing_content(conn):
+        try:
+            content = Path(row["file_path"]).read_bytes()
+        except OSError:
+            continue
+        store_document_content(conn, row["id"], content)
+        stored += 1
+    return stored
+
+
+def materialise_documents(conn, *, into: Path | None = None) -> dict[str, list[str]]:
+    """
+    Write stored document bytes back to disk.
+
+    The other half of the round trip, and the step that makes a restore
+    complete: on a second machine the recorded paths point at files that have
+    never existed there, so the bytes have to land somewhere before anything
+    can re-embed them.
+
+    Written to `into` (the documents directory on THIS machine) under each
+    document's original file name, not to the absolute path recorded on the
+    old machine - that path may name a drive that does not exist here, and
+    writing to an arbitrary absolute path out of a restored database would be
+    a fine way to turn a backup file into an arbitrary-write primitive.
+
+    A document whose recorded file is already on disk is left completely alone -
+    not rewritten, and its registry row not repointed. That restraint is the
+    whole correctness condition here: this runs inside every index rebuild,
+    including rebuilds on the machine that ingested the files in the first
+    place, where every path is already valid and there is nothing to restore.
+    Acting on those would rewrite working paths to point somewhere else.
+    """
+    target = Path(into) if into else documents_root()
+
+    written: list[str] = []
+    skipped: list[str] = []
+    for row in conn.execute(
+        "SELECT d.id, d.file_path, b.content FROM documents d "
+        "JOIN document_blobs b ON b.document_id = d.id "
+        "WHERE d.status = 'active'"
+    ):
+        if Path(row["file_path"]).exists():
+            continue  # nothing to put back
+
+        # Under its own name in this machine's documents directory, never the
+        # absolute path recorded on the other machine: that path may name a
+        # drive this one does not have, and writing to an arbitrary absolute
+        # path out of a restored database would turn a backup file into an
+        # arbitrary-write primitive.
+        name = PurePath(row["file_path"].replace(chr(92), '/')).name
+        destination = target / name
+
+        if destination.exists():
+            # The file is here under its own name, but the registry points at
+            # where it used to live. Repoint rather than overwrite: the copy on
+            # disk is the user's, and may be newer than the backup's.
+            skipped.append(str(destination))
+        else:
+            target.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(bytes(row["content"]))
+            written.append(str(destination))
+
+        conn.execute(
+            "UPDATE documents SET file_path = ? WHERE id = ?", (str(destination), row["id"])
+        )
+    conn.commit()
+    return {"written": written, "skipped": skipped}
 
 
 def seed_provider_consent(conn, seed_path: Path | None = None) -> None:

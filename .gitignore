@@ -33,3 +33,18 @@ test_pip.db*
 .venv/
 .vs/
 .pytest_cache/
+
+# Profiles. Each one is somebody's whole encrypted database, a salt, a vector
+# index and their documents - the same four things already ignored at the top
+# of data/, just one directory down. profiles.json is the local index of them:
+# which profiles exist on THIS machine and which was opened last, which is
+# runtime state in the same family as api_token.txt.
+data/profiles.json
+data/profiles/
+
+# Superseded copies, moved aside rather than deleted by scripts/restore_backup.py
+# (previous database, salt, and vector index). Keeping them is deliberate - see
+# that script - but they are machine-local and a chroma directory runs to
+# megabytes, so they are kept on disk and out of history.
+data/*.superseded-*
+data/chroma.superseded-*/

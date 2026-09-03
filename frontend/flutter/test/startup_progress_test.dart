@@ -54,8 +54,12 @@ void main() {
   });
 
   test('orders by the canonical list, not by the order lines arrived', () {
+    // Asserted as relative position rather than as a fixed prefix. The prefix
+    // form broke the moment a phase was inserted between these two - which is a
+    // change to the launch sequence, not to the property being tested here.
     final phases = parseStartupProgress([line('key'), line('ollama')].join('\n'));
-    expect(phases.map((p) => p.id).take(2), ['ollama', 'key']);
+    final ids = phases.map((p) => p.id).toList();
+    expect(ids.indexOf('ollama'), lessThan(ids.indexOf('key')));
   });
 
   test('a skipped step is not left unresolved behind a later one', () {

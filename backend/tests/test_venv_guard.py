@@ -12,6 +12,7 @@ interpreter and leaves the original command failing identically. Nothing was
 missing; the command named the wrong Python.
 """
 
+import ast
 import importlib.util
 import pathlib
 import re
@@ -112,16 +113,22 @@ def test_every_script_needing_the_venv_carries_the_guard():
     would pass trivially - the guard call itself contains that string - and
     would miss exactly the scripts most likely to be added next.
 
-    derive_db_key.py is exempt: the launcher invokes it with the venv
-    interpreter by absolute path, so it cannot reach the failure, and its exit
-    codes are a contract scripts/_db_key.ps1 reads.
+    Underscore-prefixed files are exempt because they are helper modules, not
+    entry points - nobody runs `python scripts/_db.py`. They are imported by
+    scripts that do carry the guard, and the guard runs before the import, so
+    the check still holds where it matters. Guarding them as well would just
+    put the message behind an import that has already failed.
+
+    derive_db_key.py is exempt for a different reason: the launcher invokes it
+    with the venv interpreter by absolute path, so it cannot reach the failure,
+    and its exit codes are a contract scripts/_db_key.ps1 reads.
     """
-    exempt = {"derive_db_key.py", "_venv.py"}
+    exempt = {"derive_db_key.py"}
     needs_venv = re.compile(r"^\s*(?:from|import)\s+(?:backend|sqlcipher3)\b", re.MULTILINE)
 
     unguarded = []
     for path in sorted(SCRIPTS.glob("*.py")):
-        if path.name in exempt:
+        if path.name in exempt or path.name.startswith("_"):
             continue
         source = path.read_text(encoding="utf-8")
         if needs_venv.search(source) and "_venv.require" not in source:
@@ -142,3 +149,51 @@ def test_scripts_stay_ascii_so_windows_consoles_can_print_them():
             if any(ord(ch) > 127 for ch in line):
                 offenders.append(f"{path.name}:{lineno}")
     assert not offenders, f"non-ASCII will crash a cp1252 console: {offenders}"
+
+
+def test_no_script_opens_the_database_without_a_key():
+    """
+    profile_store.get_connection(path, None) does not mean "no key" - it means
+    "open this as plain SQLite". Against an encrypted database that SUCCEEDS,
+    and then fails on the first query with "file is not a database", naming
+    neither the password nor the migration that caused it.
+
+    Four scripts did exactly that once data/db_key.txt was replaced by
+    data/salt.bin: `key or None` resolved to None on every run. They now go
+    through scripts/_db.py, which resolves the key for whichever model is in
+    force and verifies it before handing back a connection.
+
+    Only a FALLBACK to None is a defect - `key or None`, which silently
+    degrades when key is empty. A literal None is a deliberate request for a
+    plaintext connection, and two scripts need one: set_db_password.py probes
+    whether the database is unencrypted, and migrate_encrypt_db.py opens the
+    plaintext original it is about to encrypt. Banning those too would flag
+    the two files whose job is handling unencrypted databases.
+
+    Checked through the AST rather than by text match. The first version of
+    this test matched the source line, and its first failure was _db.py's own
+    docstring - the file that FIXES the bug, flagged for quoting it. That is
+    the same defect the pre-commit hook had when it rejected a file for
+    describing the rule it documents, and the same answer applies: to tell
+    code from prose you need a parser, not a regex.
+    """
+    offenders = []
+    for path in sorted(SCRIPTS.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            if name != "get_connection" or len(node.args) < 2:
+                continue
+            key_arg = node.args[1]
+            falls_back_to_none = (
+                isinstance(key_arg, ast.BoolOp)
+                and isinstance(key_arg.op, ast.Or)
+                and isinstance(key_arg.values[-1], ast.Constant)
+                and key_arg.values[-1].value is None
+            )
+            if falls_back_to_none:
+                offenders.append(f"{path.name}:{key_arg.lineno}")
+    assert not offenders, f"passing None as the key opens an encrypted DB as plaintext: {offenders}"

@@ -79,9 +79,30 @@ if (-not (Test-PortOpen 8765)) {
     # own choice ("User types password at app launch"): a key that never
     # touches disk cannot be obtained without asking. The window closes once
     # the app starts.
+    # Which profile, before which password - the password only means anything
+    # once there is a salt to derive it against, and each profile has its own.
+    . (Join-Path $PSScriptRoot "_profiles.ps1")
+    $profilePaths = Select-PipProfile -Root $root
+    if ($profilePaths) {
+        Set-PipProfileEnvironment -Paths $profilePaths
+        Write-Phase "profile" $profilePaths.Name
+    }
+
     . (Join-Path $PSScriptRoot "_db_key.ps1")
     if (-not (Set-PipDbKey -Root $root)) { exit 1 }
     Write-Phase "key" "database key derived"
+
+    # Recorded only after the password worked, so the remembered profile is one
+    # that actually opened rather than one somebody picked and then failed to
+    # unlock. Through the module that owns the registry rather than by editing
+    # the JSON here, so there is one writer and one format.
+    if ($profilePaths) {
+        try {
+            & (Join-Path $root ".venv\Scripts\python.exe") -c `
+                "from backend.core import profiles; profiles.record_last_used('$($profilePaths.Slug)')" `
+                2>$null
+        } catch { }
+    }
 
     $venvPython = Join-Path $root ".venv\Scripts\python.exe"
     $stdoutLog = Join-Path $dataDir "backend.log"

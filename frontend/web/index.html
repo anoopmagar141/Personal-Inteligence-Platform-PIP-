@@ -11,6 +11,23 @@
 <!-- Part 14.4: frontend has zero intelligence, this is a thin renderer over
      the REST/WS API - it never talks to the DB, ChromaDB, or Ollama directly. -->
 
+<!-- The token used to ride in this page's URL (?token=...), which put a
+     full-access credential in the address bar and browser history. It is
+     pasted here once instead and held in sessionStorage for the tab. -->
+<div id="token-gate" class="screen hidden">
+  <div class="card">
+    <h1>Unlock PIP</h1>
+    <p class="muted">PIP is running locally and needs its API token. It is the whole contents of <code>data/api_token.txt</code>, and it is never shown in the address bar.</p>
+    <form id="token-form">
+      <label>API token
+        <input type="password" id="token-input" name="token" autocomplete="off" spellcheck="false" required>
+      </label>
+      <button type="submit">Unlock</button>
+      <p id="token-error" class="error hidden"></p>
+    </form>
+  </div>
+</div>
+
 <div id="onboarding" class="screen hidden">
   <div class="card">
     <h1>Welcome to PIP</h1>

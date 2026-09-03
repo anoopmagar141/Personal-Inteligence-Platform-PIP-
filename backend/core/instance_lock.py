@@ -44,17 +44,79 @@ def _lock_path() -> Path:
 
 
 def _pid_is_running(pid: int) -> bool:
+    """
+    Whether `pid` names a process that is still alive.
+
+    THE WINDOWS BRANCH ASKS THE EXIT CODE, NOT WHETHER THE PID OPENS
+    ---------------------------------------------------------------
+    It used to return True whenever OpenProcess() handed back a handle, which
+    is a different question and gets a different answer. Windows keeps the
+    process OBJECT alive while anyone holds a handle to it, so a process that
+    has already exited still opens successfully - and PowerShell's Stop-Process
+    leaves exactly such a handle behind, because it takes a Process object to do
+    its work. Measured: kill a child and OpenProcess still says True.
+
+    The visible cost was a lock that could never go stale on Windows. Kill the
+    backend, and every subsequent check read the dead pid as live: the merge and
+    restore scripts refused to run, and acquire()'s stale-lock takeover - the
+    branch that exists precisely because this project leaves locks around -
+    could not be reached. The advice it printed instead ("delete the lock file
+    if it's actually dead") was the user doing by hand what this function was
+    supposed to do for them.
+
+    GetExitCodeProcess answers the right question: STILL_ACTIVE means running,
+    anything else means it has exited and is only being kept addressable by
+    somebody's handle.
+
+    Two edges, both deliberate:
+
+      A process that genuinely exits with code 259 is indistinguishable from a
+      running one - that is Windows' own documented ambiguity in reserving
+      STILL_ACTIVE as a real exit code. Reading it as "running" is the safe way
+      round: the failure is refusing to take a lock that was free, not stealing
+      one that was held.
+
+      OpenProcess failing with ACCESS_DENIED means the process exists and is not
+      ours, which is running. That mirrors what the POSIX branch below already
+      does with PermissionError, and the old code got it wrong in the other
+      direction by treating any failure as death.
+
+    restype is set rather than left to default: a HANDLE is pointer-width, and
+    ctypes assumes a 32-bit int for an unannotated return, which truncates it on
+    64-bit Windows.
+    """
     if pid <= 0:
         return False
     if sys.platform == "win32":
         import ctypes
 
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if handle:
-            ctypes.windll.kernel32.CloseHandle(handle)
-            return True
-        return False
+        STILL_ACTIVE = 259
+        ERROR_ACCESS_DENIED = 5
+
+        # use_last_error, because ctypes.windll.kernel32.GetLastError() can be
+        # clobbered by ctypes' own bookkeeping between the call and the read.
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.GetExitCodeProcess.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)
+        ]
+
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return ctypes.get_last_error() == ERROR_ACCESS_DENIED
+
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                # Could not tell. Assume alive rather than take a lock that may
+                # still be held - see the note above on which way to fail.
+                return True
+            return code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
     else:
         try:
             os.kill(pid, 0)

@@ -92,6 +92,8 @@ import _venv
 
 _venv.require("sqlcipher3")
 
+import _db
+
 import argparse
 import os
 import pathlib
@@ -103,7 +105,6 @@ from backend.memory import profile_store  # noqa: E402
 
 ROOT = pathlib.Path(__file__).parent.parent
 DB_PATH = ROOT / "data" / "pip.db"
-KEY_PATH = ROOT / "data" / "db_key.txt"
 LOCK_PATH = ROOT / "data" / "pip.lock"
 
 SOURCE = "data/documents/PIP_OVERVIEW.md section 5"
@@ -150,10 +151,15 @@ GOALS: tuple[str, ...] = (
 
 
 def _connect():
-    key = os.environ.get("PIP_DB_KEY")
-    if not key and KEY_PATH.exists():
-        key = KEY_PATH.read_text(encoding="utf-8").strip()
-    return profile_store.get_connection(str(DB_PATH), key or None)
+    """
+    Delegated to scripts/_db.py so every script resolves the key one way.
+
+    This used to fall back to `key or None`, and None means "plain SQLite" to
+    get_connection() rather than "no key" - so after the password migration
+    removed data/db_key.txt it opened the encrypted database as an
+    unencrypted one and failed later with "file is not a database".
+    """
+    return _db.connect(DB_PATH)
 
 
 def _warn_if_running() -> None:

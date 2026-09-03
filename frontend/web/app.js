@@ -17,11 +17,67 @@ let pendingStageHints = null; // buffered, not rendered until "done"/"error"
 
 // Security fix: every /api/v1/* route and /ws/chat now require a token read
 // from data/api_token.txt (see backend/core/auth.py). Not printed by the
-// server (never logged) - the operator reads it from that file and passes
-// it in via this page's own URL, e.g. http://127.0.0.1:8765/?token=<token>.
-// Read once on load, carried in memory for the rest of the session only -
-// never written to localStorage/sessionStorage, so it doesn't outlive the tab.
-const API_TOKEN = new URLSearchParams(location.search).get("token") || "";
+// server, never logged - the operator reads it from that file.
+//
+// It used to arrive in this page's own URL (http://127.0.0.1:8765/?token=...).
+// That put a full-access credential in the address bar, in browser history,
+// and in the Referer of any outbound link - the same leak class the server's
+// uvicorn access-log redaction exists to close, and the reason this client was
+// once slated for deletion rather than repair. It is now typed into the page
+// once and kept in sessionStorage, which the address bar never shows and which
+// dies with the tab.
+//
+// A ?token= is still ACCEPTED, because existing shortcuts carry one, but it is
+// consumed rather than left lying there: stored, then stripped out of the
+// address bar with replaceState before anything else runs. That rewrites the
+// current history entry, so the credential does not survive in it either.
+const TOKEN_STORAGE_KEY = "pip_api_token";
+let API_TOKEN = "";
+
+// sessionStorage throws rather than returning null in a few browser
+// configurations (site data blocked, some private modes). A client that cannot
+// remember the token still works - it just asks again on the next load - so
+// every access here is allowed to fail quietly.
+function rememberToken(token) {
+  try {
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+  } catch {
+    /* asked for again next load */
+  }
+}
+
+function forgetToken() {
+  try {
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    /* nothing to forget */
+  }
+}
+
+function readStoredToken() {
+  const fromUrl = new URLSearchParams(location.search).get("token");
+  if (fromUrl) {
+    rememberToken(fromUrl);
+    const url = new URL(location.href);
+    url.searchParams.delete("token");
+    history.replaceState(null, "", url.pathname + url.search + url.hash);
+    return fromUrl;
+  }
+  try {
+    return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+// "ok" | "unauthorized" | "error". A network failure throws instead, and is
+// left to the caller - "PIP is not running" and "PIP refused this token" are
+// different problems and must not share a message.
+async function tokenStatus(token) {
+  const res = await fetch(`${API_BASE}/status`, { headers: { "Authorization": `Bearer ${token}` } });
+  if (res.status === 401) return "unauthorized";
+  return res.ok ? "ok" : "error";
+}
 
 // ---------------------------------------------------------------- API helpers
 
@@ -117,6 +173,10 @@ async function submitOnboarding(event) {
 
 function connectChat() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  // Still a query parameter, and deliberately so: browsers cannot set headers
+  // on a WebSocket connect, which is why ws_chat() reads ?token= itself. This
+  // is not the leak the page URL was - a WS URL is never shown in the address
+  // bar and never entered in history.
   ws = new WebSocket(`${proto}//${location.host}/ws/chat?token=${encodeURIComponent(API_TOKEN)}`);
   const statusEl = document.getElementById("connection-status");
 
@@ -548,6 +608,50 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// --------------------------------------------------------------- Token gate
+
+function showTokenGate(message) {
+  const gate = document.getElementById("token-gate");
+  gate.classList.remove("hidden");
+  if (message) {
+    const errorEl = document.getElementById("token-error");
+    errorEl.textContent = message;
+    errorEl.classList.remove("hidden");
+  }
+  document.getElementById("token-input").focus();
+}
+
+async function submitToken(event) {
+  event.preventDefault();
+  const input = document.getElementById("token-input");
+  const errorEl = document.getElementById("token-error");
+  const token = input.value.trim();
+  errorEl.classList.add("hidden");
+  if (!token) return;
+
+  let status;
+  try {
+    status = await tokenStatus(token);
+  } catch (err) {
+    errorEl.textContent = `Can't reach PIP: ${err.message}`;
+    errorEl.classList.remove("hidden");
+    return;
+  }
+  if (status !== "ok") {
+    errorEl.textContent = "PIP refused that token. It is the whole contents of data/api_token.txt.";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+
+  API_TOKEN = token;
+  rememberToken(token);
+  // Not left in the DOM either - the field holds the same credential the URL
+  // used to, and this screen is not shown again for the life of the tab.
+  input.value = "";
+  document.getElementById("token-gate").classList.add("hidden");
+  begin();
+}
+
 // --------------------------------------------------------------------- Init
 
 function startApp() {
@@ -561,6 +665,7 @@ function startApp() {
 }
 
 function setupEventListeners() {
+  document.getElementById("token-form").addEventListener("submit", submitToken);
   document.getElementById("onboarding-form").addEventListener("submit", submitOnboarding);
   document.getElementById("chat-form").addEventListener("submit", submitChatMessage);
   document.getElementById("decision-search-form").addEventListener("submit", submitDecisionSearch);
@@ -571,10 +676,41 @@ function setupEventListeners() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  setupEventListeners();
+function begin() {
   checkOnboarding().catch((err) => {
     console.error(err);
     document.body.innerHTML = `<div class="card" style="margin:40px auto;max-width:500px;"><h1>Can't reach PIP</h1><p>${escapeHtml(err.message)}</p></div>`;
   });
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  setupEventListeners();
+  API_TOKEN = readStoredToken();
+
+  // A stored token can stop working - data/api_token.txt is regenerated
+  // whenever it goes missing - and the page must ask again rather than strand
+  // the user on a generic "can't reach PIP" screen for what is really a stale
+  // credential. Checked before anything else runs so the WS connect in
+  // startApp() is never made with a token already known to be refused.
+  if (API_TOKEN) {
+    let status;
+    try {
+      status = await tokenStatus(API_TOKEN);
+    } catch (err) {
+      document.body.innerHTML = `<div class="card" style="margin:40px auto;max-width:500px;"><h1>Can't reach PIP</h1><p>${escapeHtml(err.message)}</p></div>`;
+      return;
+    }
+    if (status !== "ok") {
+      forgetToken();
+      API_TOKEN = "";
+      showTokenGate("That token is no longer accepted. Paste the current one from data/api_token.txt.");
+      return;
+    }
+  }
+
+  if (!API_TOKEN) {
+    showTokenGate();
+    return;
+  }
+  begin();
 });

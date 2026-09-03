@@ -465,3 +465,38 @@ BEFORE UPDATE OF decision_text ON decision_log
 BEGIN
     SELECT RAISE(ABORT, 'decision_text is write-once and cannot be modified');
 END;
+
+-- document_blobs Table
+--
+-- The bytes of every ingested document, so that a .pipbak is a complete copy of
+-- what PIP holds rather than a copy of everything except the source material.
+--
+-- Before this table, `documents` recorded that a file had been ingested - its
+-- path, its content hash, how many chunks it produced - and nothing anywhere
+-- held the file itself. Restoring onto a second machine therefore brought back
+-- the registry with no way to satisfy it: rebuild_from_sqlite() looked for each
+-- recorded path, found nothing, and reported every document missing. The
+-- profile, projects, decisions and conversations all arrived; RAG arrived
+-- empty, and the only repair was remembering to copy data/documents/ by hand on
+-- the day you were already restoring from a backup.
+--
+-- A separate table rather than a column on `documents`, because list_documents()
+-- does SELECT * and is called on every Documents screen load - putting a BLOB in
+-- that row would drag the whole corpus through a query that wants five columns.
+--
+-- This also closes the one place ADR-026's "no plaintext, one encrypted unit"
+-- does not hold. Ingested files sit in data/documents/ as ordinary readable
+-- files while every other byte PIP owns is inside SQLCipher; storing the content
+-- here puts it under the same encryption as the decisions and conversations that
+-- discuss it. The files on disk are not deleted - ingestion reads from them and
+-- the user put them there - but they are no longer the only copy.
+--
+-- Bounded by rag.max_document_size_mb (50MB), which ingest_document() already
+-- enforces before anything reaches here.
+CREATE TABLE IF NOT EXISTS document_blobs (
+    document_id INTEGER PRIMARY KEY,
+    content BLOB NOT NULL,
+    byte_size INTEGER NOT NULL,
+    stored_at TEXT NOT NULL,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);

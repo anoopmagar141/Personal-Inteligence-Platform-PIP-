@@ -28,6 +28,12 @@ import 'dart:convert';
 /// the place it would have occupied.
 const startupPhaseLabels = <String, String>{
   'ollama': 'Local model service',
+  // Written only when more than one profile exists, so on a single-profile
+  // installation this row never appears - the launcher does not report a
+  // choice nobody was offered. Its detail is the profile's name, which is
+  // the one thing worth seeing here: it is the last chance to notice you are
+  // opening the wrong person's data before it is decrypted and on screen.
+  'profile': 'Opening profile',
   'key': 'Unlocking your data',
   'backend': 'Starting PIP Core',
   'lock': 'Checking nothing else is running',

@@ -36,10 +36,37 @@ from sentence_transformers import SentenceTransformer
 
 from backend.config.settings import get_settings
 from backend.core.types import now_utc
+from backend.memory import profile_store
 
 logger = logging.getLogger(__name__)
 
-CHROMA_DB_PATH = str(Path(__file__).parent.parent.parent / "data" / "chroma")
+_DEFAULT_CHROMA_DB_PATH = str(Path(__file__).parent.parent.parent / "data" / "chroma")
+
+
+def chroma_path() -> str:
+    """
+    Where this profile's vector index lives.
+
+    PIP_CHROMA_PATH so each profile gets its own. Two profiles sharing one
+    Chroma directory would not leak content - chunk ids and metadata are keyed
+    with an HMAC of the live key, so one profile cannot address the other's
+    chunks - but they would accumulate in one directory forever, each profile
+    carrying dead weight it can neither read nor delete.
+
+    Read at call time rather than at import. An import-time constant cannot be
+    isolated by a fixture, because collection has already happened by the time
+    one runs - so putting the variable in conftest's table while reading it
+    once at import would have declared an isolation that did not exist.
+    """
+    return os.environ.get("PIP_CHROMA_PATH") or _DEFAULT_CHROMA_DB_PATH
+
+
+# Retained because the test suite and restore_backup.py monkeypatch and read
+# it by name. chroma_path() is what _get_client() actually consults, and it
+# prefers this module attribute when something has replaced it - so an
+# existing monkeypatch keeps working and an environment override keeps working,
+# without two sources of truth disagreeing at runtime.
+CHROMA_DB_PATH = _DEFAULT_CHROMA_DB_PATH
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 COLLECTION_NAME = "documents"
 
@@ -126,7 +153,10 @@ _model = None
 def _get_client():
     global _client
     if _client is None:
-        _client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+        # The module attribute wins when a test has replaced it; otherwise the
+        # environment, then the default.
+        path = CHROMA_DB_PATH if CHROMA_DB_PATH != _DEFAULT_CHROMA_DB_PATH else chroma_path()
+        _client = chromadb.PersistentClient(path=path)
     return _client
 
 
@@ -315,13 +345,26 @@ def ingest_document(
             "UPDATE documents SET content_hash = ?, chunk_count = ?, ingested_at = ?, project_id = ? WHERE id = ?",
             (content_hash, len(chunks), timestamp, project_id, existing["id"]),
         )
+        document_id = existing["id"]
     else:
-        conn.execute(
+        cursor = conn.execute(
             "INSERT INTO documents (project_id, file_path, content_hash, chunk_count, status, ingested_at) "
             "VALUES (?, ?, ?, ?, 'active', ?)",
             (project_id, file_path, content_hash, len(chunks), timestamp),
         )
+        document_id = cursor.lastrowid
     conn.commit()
+
+    # The bytes, not just the record of them. Without this the documents table
+    # describes files that only exist on the machine that ingested them, and a
+    # restore elsewhere brings back a registry nothing can satisfy.
+    #
+    # Read from disk again rather than reusing the extracted text: what belongs
+    # here is the FILE, byte for byte. _extract_text() returns the readable
+    # text of a PDF, which is not a PDF - storing that would restore something
+    # that no longer opens in the application it came from, and would re-chunk
+    # differently on the next rebuild.
+    profile_store.store_document_content(conn, document_id, resolved_path.read_bytes())
 
     return {"status": "ingested", "file_path": file_path, "chunk_count": len(chunks)}
 
@@ -434,17 +477,26 @@ def rebuild_from_sqlite(conn) -> dict[str, Any]:
     when a schema-version or document-count mismatch is detected between SQLite and
     ChromaDB (Part 11.1 rebuild-on-mismatch trigger).
     """
+    # Put back anything whose bytes we hold but whose file is not here. This is
+    # what makes a rebuild work on a restored machine: every recorded path
+    # points somewhere that has never existed on it, and re-embedding cannot
+    # start until the files do.
+    materialised = profile_store.materialise_documents(conn)
+
     active_docs = list_documents(conn)
     rebuilt, failed = [], []
 
     for doc in active_docs:
         try:
             if not Path(doc["file_path"]).exists():
-                failed.append({"file_path": doc["file_path"], "reason": "file not found on disk"})
+                failed.append({
+                    "file_path": doc["file_path"],
+                    "reason": "file not found on disk, and no stored copy in the database",
+                })
                 continue
             ingest_document(conn, doc["file_path"], doc["project_id"], force=True)
             rebuilt.append(doc["file_path"])
         except Exception as e:
             failed.append({"file_path": doc["file_path"], "reason": str(e)})
 
-    return {"rebuilt": rebuilt, "failed": failed}
+    return {"rebuilt": rebuilt, "failed": failed, "materialised": materialised["written"]}

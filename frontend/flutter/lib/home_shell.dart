@@ -13,6 +13,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api_client.dart';
+import 'main.dart' show kDataDir;
+import 'screens/backup_view.dart';
 import 'screens/chat_view.dart';
 import 'screens/decisions_view.dart';
 import 'screens/documents_view.dart';
@@ -40,7 +42,7 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  static const _tabs = ['Chat', 'Review', 'Profile', 'Decisions', 'Projects', 'Documents', 'Providers', 'Trace'];
+  static const _tabs = ['Chat', 'Review', 'Profile', 'Decisions', 'Projects', 'Documents', 'Providers', 'Backup', 'Trace'];
   static const _tabIcons = <IconData>[
     Icons.chat_bubble_outline,
     Icons.rule,
@@ -49,12 +51,14 @@ class _HomeShellState extends State<HomeShell> {
     Icons.folder_outlined,
     Icons.description_outlined,
     Icons.power_settings_new,
+    Icons.shield_outlined,
     Icons.timeline_outlined,
   ];
   static const _reviewIndex = 1;
-  static const _traceIndex = 7;
+  static const _backupIndex = 7;
+  static const _traceIndex = 8;
 
-  /// Ctrl+1..8 jump straight to a tab, in sidebar order. Eight tabs is enough
+  /// Ctrl+1..9 jump straight to a tab, in sidebar order. Nine tabs is enough
   /// that reaching for the mouse to check the review queue mid-thought is a
   /// real interruption, and the digits map to what the sidebar already shows
   /// rather than to a second thing to memorise.
@@ -70,6 +74,7 @@ class _HomeShellState extends State<HomeShell> {
           LogicalKeyboardKey.digit6,
           LogicalKeyboardKey.digit7,
           LogicalKeyboardKey.digit8,
+          LogicalKeyboardKey.digit9,
         ][i],
         control: true,
       ): _SelectTabIntent(i),
@@ -93,6 +98,16 @@ class _HomeShellState extends State<HomeShell> {
   // Same for Trace, and more sharply: a trace is written by every message, so
   // a view that only loaded at startup would be stale by the first reply.
   int _traceEpoch = 0;
+
+  /// Lets opening the Backup tab re-list what is on disk.
+  ///
+  /// A key rather than an epoch, unlike Review and Trace above, because the
+  /// thing that goes stale here is not a query this shell could re-issue: the
+  /// .pipbak files are written by a console window the app deliberately does
+  /// not watch (see backup_view.dart on why the export is not an endpoint), so
+  /// nothing arrives to tell it to look again. Re-listing when the tab is
+  /// opened is the moment the user expects the answer to be current.
+  final GlobalKey<BackupViewState> _backupKey = GlobalKey<BackupViewState>();
 
   @override
   void initState() {
@@ -129,6 +144,10 @@ class _HomeShellState extends State<HomeShell> {
       if (index == _reviewIndex) _reviewEpoch++;
       if (index == _traceIndex) _traceEpoch++;
     });
+    // Outside setState: BackupView lives in the IndexedStack and is already
+    // mounted, so this is a call on an existing state object rather than a
+    // rebuild of this shell.
+    if (index == _backupIndex) _backupKey.currentState?.refresh();
   }
 
   static String _wsUrlFromApiBase(String apiBase) {
@@ -271,6 +290,7 @@ class _HomeShellState extends State<HomeShell> {
                 ),
                 DocumentsView(api: widget.api, activeProjectId: _activeProjectId),
                 ProvidersView(api: widget.api),
+                BackupView(key: _backupKey, dataDir: kDataDir),
                 TraceView(api: widget.api, refreshToken: _traceEpoch),
               ],
             ),

@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from backend.memory import vector_store
 from backend.memory.profile_store import get_connection, initialize_schema
@@ -122,15 +124,69 @@ def test_rebuild_from_sqlite_reingests_active_documents(db_conn, sample_doc):
     assert len(vector_store.query(db_conn, "SQLCipher", threshold=0.1, top_k=3)) >= 1
 
 
-def test_rebuild_reports_missing_file_as_failed(db_conn, sample_doc, tmp_path):
+def test_rebuild_puts_back_a_deleted_file_from_the_stored_copy(db_conn, sample_doc):
+    """
+    This test used to assert the opposite, and the change is the feature.
+
+    Deleting the file used to cost the document: the rebuild looked for the
+    recorded path, found nothing, and reported it failed. Ingestion now stores
+    the bytes in document_blobs, so the rebuild writes the file back and
+    re-embeds it - which is what makes a restored backup work on a machine that
+    has never held these files, and incidentally makes an accidental deletion
+    survivable on the machine that has.
+    """
     vector_store.ingest_document(db_conn, sample_doc)
-    import os
     os.remove(sample_doc)
 
     result = vector_store.rebuild_from_sqlite(db_conn)
+
+    assert os.path.exists(sample_doc), "the file was not put back"
+    assert sample_doc in result["rebuilt"]
+    assert result["failed"] == []
+    assert len(vector_store.query(db_conn, "SQLCipher", threshold=0.1, top_k=3)) >= 1
+
+
+def test_rebuild_still_reports_a_document_with_no_stored_copy(db_conn, sample_doc):
+    """
+    The case that genuinely cannot be recovered, and must still be reported:
+    a document ingested before document_blobs existed, whose file has since
+    gone. Nothing holds its content, so the rebuild has nothing to work from.
+
+    Worth keeping as its own test rather than deleting with the old one - the
+    failure path still exists, and a rebuild that silently reported success for
+    a document it could not embed would be worse than the behaviour this
+    replaced.
+    """
+    vector_store.ingest_document(db_conn, sample_doc)
+    db_conn.execute("DELETE FROM document_blobs")
+    db_conn.commit()
+    os.remove(sample_doc)
+
+    result = vector_store.rebuild_from_sqlite(db_conn)
+
     assert result["rebuilt"] == []
     assert len(result["failed"]) == 1
     assert result["failed"][0]["file_path"] == sample_doc
+
+
+def test_a_rebuild_does_not_disturb_documents_whose_files_are_present(db_conn, sample_doc):
+    """
+    The restraint that makes materialise_documents safe to run inside every
+    rebuild, including on the machine that ingested the files.
+
+    An earlier version repointed every document at this machine's documents
+    directory whether or not anything was missing - which rewrote working paths,
+    and, because the documents root was not isolated in the test suite, wrote a
+    file into the developer's real data/documents/.
+    """
+    vector_store.ingest_document(db_conn, sample_doc)
+    before = db_conn.execute("SELECT file_path FROM documents").fetchone()["file_path"]
+
+    result = vector_store.rebuild_from_sqlite(db_conn)
+
+    after = db_conn.execute("SELECT file_path FROM documents").fetchone()["file_path"]
+    assert after == before, "a path that was already valid was rewritten"
+    assert result["materialised"] == []
 
 
 def test_unsupported_extension_raises(db_conn, isolated_documents_root):

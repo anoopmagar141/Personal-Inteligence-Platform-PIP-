@@ -20,6 +20,18 @@ _ISOLATED_PATHS = {
     "PIP_TOKEN_PATH": "api_token.txt",
     "PIP_SALT_PATH": "salt.bin",
     "PIP_STARTUP_PROGRESS_PATH": "startup.jsonl",
+    # Added after a rebuild test wrote a notes.txt into the developer's real
+    # data/documents/ - the exact omission the comment below warns about,
+    # committed by the change that added the override.
+    "PIP_DOCUMENTS_ROOT": "documents",
+    # The vector index, per profile. Read through vector_store.chroma_path()
+    # at call time precisely so that setting it here isolates something.
+    "PIP_CHROMA_PATH": "chroma",
+    # The data directory itself, not a file in it - "." resolves to tmp_path.
+    # profiles.py builds the registry path and every profile directory from
+    # this, so an unisolated test could register profiles in, or write profile
+    # directories into, the developer's real data/.
+    "PIP_DATA_DIR": ".",
 }
 
 
@@ -63,3 +75,4 @@ def isolated_data_dir(tmp_path, monkeypatch):
     """
     for variable, filename in _ISOLATED_PATHS.items():
         monkeypatch.setenv(variable, str(tmp_path / filename))
+

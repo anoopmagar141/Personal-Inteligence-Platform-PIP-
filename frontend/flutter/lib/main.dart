@@ -33,6 +33,11 @@ import 'onboarding_screen.dart';
 import 'startup_progress.dart';
 import 'theme.dart';
 
+/// The data directory, exported so screens that read it directly (Backup) get
+/// the same answer this file resolves at startup rather than deriving a second
+/// one.
+final String kDataDir = _dataDir();
+
 String _dataDir() {
   final override = Platform.environment['PIP_DATA_DIR'];
   if (override != null && override.isNotEmpty) return override;

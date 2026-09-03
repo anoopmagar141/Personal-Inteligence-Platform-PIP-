@@ -39,7 +39,18 @@ function Set-PipDbKey {
     param([Parameter(Mandatory = $true)][string]$Root)
 
     $dataDir = Join-Path $Root "data"
-    $saltPath = Join-Path $dataDir "salt.bin"
+
+    # PIP_SALT_PATH wins when the launcher has selected a profile. Every entry
+    # point in this project already honours that variable - it was added for
+    # test isolation and does the identical job here, pointing the derivation
+    # at one profile's salt instead of the installation's. Unset, this is the
+    # path it always was.
+    $saltPath = if ($env:PIP_SALT_PATH) { $env:PIP_SALT_PATH } else { Join-Path $dataDir "salt.bin" }
+
+    # The legacy random-key file is deliberately NOT per-profile. It only
+    # exists on installations that never migrated to a password, and a profile
+    # created after profiles existed is always on the password model - so a
+    # per-profile db_key.txt would be a path that can never be occupied.
     $legacyPath = Join-Path $dataDir "db_key.txt"
     $venvPython = Join-Path $Root ".venv\Scripts\python.exe"
     $deriveScript = Join-Path $Root "scripts\derive_db_key.py"

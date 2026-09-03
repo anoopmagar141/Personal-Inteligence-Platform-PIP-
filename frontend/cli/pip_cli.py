@@ -1,11 +1,16 @@
 import argparse
+import importlib.util
 import json
+import pathlib
 import sys
 from typing import Any, Callable
 from urllib import parse, request
 
 
 BASE_URL = "http://localhost:8765/api/v1"
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = REPO_ROOT / "scripts"
 
 
 def request_json(
@@ -61,7 +66,87 @@ def run_command(argv: list[str], *, base_url: str = BASE_URL, opener: Callable =
     if command == "/remove":
         return _remove(args, base_url=base_url, opener=opener)
 
+    # The two commands below take no opener and no base_url, and that is the
+    # whole design rather than an oversight. Every command above talks to the
+    # backend over REST; these run locally, in this process, against the
+    # database file directly.
+    #
+    # ADR-027 is explicit about why /export must not be an endpoint: the live
+    # connection is already open with the real key, so an HTTP route doing this
+    # work would let anything that can read data/api_token.txt - which is any
+    # process running as this user - obtain a complete copy of the database
+    # re-encrypted under a password of its own choosing, without ever knowing
+    # the live key. That is precisely the capability the password model exists
+    # to withhold. /restore inherits the argument and adds its own: it replaces
+    # the file the running backend has open, and refuses to run at all while
+    # PIP holds the lock.
+    #
+    # So the slash command is a front door to the script, not to the API. It
+    # grants no capability the person at this shell did not already have.
+    if command == "/export":
+        return _export(args)
+    if command == "/restore":
+        return _restore(args)
+
     raise ValueError(f"unknown command: {command}")
+
+
+def _load_script(name: str):
+    """
+    Load a module from scripts/, which is a directory and not a package.
+
+    scripts/ goes on sys.path first because each script reaches its sibling
+    _venv helper by plain import - that works when the script is the entry
+    point and sys.path[0] is its own directory, and not otherwise.
+
+    In-process rather than a subprocess, so getpass reads from the terminal the
+    user is already sitting at and the script's own prompts, warnings and
+    progress lines land where they expect them.
+    """
+    if str(SCRIPTS_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS_DIR))
+    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _export(args: list[str]) -> Any:
+    """
+    /export                      -> data/pip_backup_YYYYMMDD.pipbak, encrypted
+    /export --out PATH           -> the same, somewhere you chose
+    /export --readable --out P   -> a plaintext JSON dump, with a warning first
+
+    Flags pass straight through rather than being re-parsed here: one argument
+    parser for this command, in the script that owns it, so a flag can never
+    mean one thing typed as a slash command and another typed at a shell.
+    """
+    path = _load_script("export_backup").main(args)
+    return {"status": "exported", "file": str(path)}
+
+
+def _restore(args: list[str]) -> Any:
+    """
+    /restore              -> the newest .pipbak in data/
+    /restore FILE         -> that one
+
+    A bare first argument is the file, per the command's specified form. It is
+    translated to --from rather than added as a positional to the script, which
+    keeps `python scripts/restore_backup.py` reading exactly as its own
+    docstring has always documented it.
+    """
+    if args and not args[0].startswith("-"):
+        argv = ["--from", args[0], *args[1:]]
+    else:
+        argv = list(args)
+
+    code = _load_script("restore_backup").main(argv)
+    if code != 0:
+        # The script has already printed why and left the data directory
+        # untouched; this turns its exit code into the nonzero exit main()
+        # gives every other failure, rather than printing a cheerful status.
+        raise RuntimeError("restore did not complete - nothing was replaced")
+    return {"status": "restored"}
 
 
 def _profile(args: list[str], *, base_url: str, opener: Callable) -> Any:

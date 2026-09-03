@@ -1,7 +1,7 @@
 # PIP — Current State
 
-**Last updated:** 2026-08-26
-**Status:** Working, locally-run, single-user. Backend test suite: 453/453 passing.
+**Last updated:** 2026-09-02
+**Status:** Working, locally-run, single-user. Backend test suite: 839/839 passing.
 
 This is a living snapshot of what PIP actually is and does *right now*. For the
 original locked architecture spec and ADRs, see `PIP_ARCHITECTURE_PRD_ADR.md`
@@ -231,12 +231,25 @@ by a test. Only the salt lands on disk, and salts are not secret. An attacker
 with the disk gets ciphertext and a salt, and still needs a password that
 exists only in the user's head.
 
-> **STATUS ON THIS INSTALLATION: the migration has not been run.**
-> `data/db_key.txt` is still present and `data/salt.bin` does not exist — this
-> machine is still on the random key, with every limitation above applying in
-> full. To switch:
+> **STATUS ON THIS INSTALLATION: the migration HAS been run.**
+> `data/salt.bin` is present (16 bytes, written 2026-08-31) and
+> `data/db_key.txt` no longer exists, which is the state
+> `scripts/set_db_password.py` leaves behind on success — it removes the key
+> file only after the rekey is proven. `data/pip.db` does not begin with
+> `SQLite format 3`, so it is genuinely encrypted. The two `.pipbak` files dated
+> minutes earlier are what a careful person makes before running it.
+>
+> This paragraph said the opposite until 2026-09-02, and had done since the
+> migration was run. It matters more than a stale line usually would, because
+> everything downstream of it reasons about which model is active: the
+> paragraph told a reader they were on the weak model while the data directory
+> said otherwise, and the whole point of Part 10.1's "implemented is not the
+> same as active" is that this file is where that question gets answered. The
+> lesson is the one the encryption drift already taught once — **check the data
+> directory, do not trust the prose about it.**
+>
+> To re-run or verify:
 > ```
-> .venv\Scripts\python.exe scripts\set_db_password.py
 > .venv\Scripts\python.exe scripts\set_db_password.py --check
 > ```
 > **There is no recovery.** A forgotten password means the profile, decision log
@@ -518,7 +531,15 @@ and their quality has not been separately examined.
 | Launch screen showing real startup phases | Done |
 | Native Windows desktop app + one-click launcher | Done |
 | Encryption at rest (SQLCipher + ChromaDB), with in-place migration | Done |
-| Password-derived key (Part 10.1) | Implemented and tested; **migration not yet run on this installation** |
+| Backup export / restore — `/export`, `/restore [file]` (ADR-027) | Done |
+| Backup screen in the app — export button, backup list, restore instructions | Done — the button launches a console; ADR-027 keeps the export off the API |
+| Multiple profiles, each a separately encrypted database | Done — `scripts/new_profile.py`; the launcher asks which, and each has its own password. Switching needs a restart, which is the honest cost of the separation being cryptographic rather than a filter |
+| Desktop shortcuts (`scripts/install_shortcuts.ps1`) | Done — PIP, and "Restore PIP from backup", which cannot be a button in a running app |
+| Cross-machine continuity: install PIP elsewhere, `/restore`, everything present | Done — round trip proven end to end, including a write left in the `-wal` and the ingested documents themselves |
+| Document content stored in the DB (`document_blobs`) | Done — closes the one place ADR-026’s “no plaintext” did not hold, and makes a `.pipbak` self-sufficient |
+| Plaintext JSON dump — `/export --readable` | Done — no default path, refuses to write into `data/`, warns and waits for `yes` |
+| Password-derived key (Part 10.1) | Done — **migration has been run on this installation** (`salt.bin` present, `db_key.txt` gone) |
+| Export requires authentication | Done — `/export` demands the live password and proves it against the database; an inherited `PIP_DB_KEY` does not satisfy it |
 | Crash/force-kill recovery of unobserved sessions | Done |
 | Voice input | Not built |
 | Notifications/reminders | Not built |
@@ -528,8 +549,25 @@ and their quality has not been separately examined.
 
 ## 9. Testing
 
-Backend: **722 tests**, `pytest backend/tests/`. Frontend: **115 tests**,
+Backend: **839 tests**, `pytest backend/tests/`. Frontend: **144 tests**,
 `flutter analyze` / `flutter test` clean, and `flutter build windows` succeeds.
+
+`test_phase9_roundtrip.py` is worth naming for the same reason the palette test
+is. Every other backup test checks one leg of the journey against a live
+database that is still sitting there working, which is not the situation any of
+this exists for. That file writes a decision, leaves it in the `-wal` where a
+file-copy backup would miss it, exports, **destroys the database**, restores,
+and asks whether the uncheckpointed write came back. It also proves the row was
+genuinely WAL-resident first — by copying the `.db` file alone and finding it
+absent — because without that control, "the row came back" would pass just as
+happily on a row that had been checkpointed all along.
+
+One of its cases removes `PRAGMA wal_checkpoint(TRUNCATE)` from the export
+entirely and demands the row anyway. That is what keeps Part 10.2's claim
+honest: the checkpoint is defence in depth, and `sqlcipher_export()` reading
+through the page layer is what actually carries recent writes. Swap the export
+for a file copy and the checkpoint silently becomes load-bearing again; this is
+the test that would notice.
 
 Frontend coverage used to be the Review screen only. It now covers every screen
 that writes: Trace, Profile, Decisions, Projects, plus the palette. The last of
