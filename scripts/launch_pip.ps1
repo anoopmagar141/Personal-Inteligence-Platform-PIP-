@@ -32,7 +32,19 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $dataDir = Join-Path $root "data"
-$flutterExe = Join-Path $root "frontend\flutter\build\windows\x64\runner\Release\pip_flutter_client.exe"
+
+# Both of these differ between an installed copy and a source checkout, and for
+# the same reason: an install ships built artefacts where a checkout has a build
+# tree. _python.ps1 explains why the interpreter cannot simply be
+# ".venv\Scripts\python.exe" on a machine that is not the one it was made on.
+. (Join-Path $PSScriptRoot "_python.ps1")
+$pipPython = Get-PipPython -Root $root
+if (-not $pipPython) { Show-PipPythonMissing -Root $root; exit 1 }
+
+$flutterExe = Join-Path $root "app\pip_flutter_client.exe"
+if (-not (Test-Path $flutterExe)) {
+    $flutterExe = Join-Path $root "frontend\flutter\build\windows\x64\runner\Release\pip_flutter_client.exe"
+}
 
 function Test-PortOpen($portNum) {
     return Test-NetConnection -ComputerName 127.0.0.1 -Port $portNum -InformationLevel Quiet -WarningAction SilentlyContinue
@@ -98,16 +110,15 @@ if (-not (Test-PortOpen 8765)) {
     # the JSON here, so there is one writer and one format.
     if ($profilePaths) {
         try {
-            & (Join-Path $root ".venv\Scripts\python.exe") -c `
+            & $pipPython -c `
                 "from backend.core import profiles; profiles.record_last_used('$($profilePaths.Slug)')" `
                 2>$null
         } catch { }
     }
 
-    $venvPython = Join-Path $root ".venv\Scripts\python.exe"
     $stdoutLog = Join-Path $dataDir "backend.log"
     $stderrLog = Join-Path $dataDir "backend.err.log"
-    Start-Process $venvPython `
+    Start-Process $pipPython `
         -ArgumentList "-m", "uvicorn", "backend.api.server:app", "--host", "127.0.0.1", "--port", "8765" `
         -WorkingDirectory $root `
         -WindowStyle Hidden `
@@ -124,8 +135,10 @@ if (-not (Test-PortOpen 8765)) {
 }
 
 if (-not (Test-Path $flutterExe)) {
-    Write-Host "Flutter build not found at $flutterExe" -ForegroundColor Red
-    Write-Host "Run this first: cd frontend\flutter; flutter build windows" -ForegroundColor Yellow
+    Write-Host "PIP's application window was not found at $flutterExe" -ForegroundColor Red
+    Write-Host "In an installed copy, that means the extraction did not finish -" -ForegroundColor Yellow
+    Write-Host "unpack the download again into an empty folder." -ForegroundColor Yellow
+    Write-Host "In a source checkout: cd frontend\flutter; flutter build windows" -ForegroundColor Yellow
     exit 1
 }
 

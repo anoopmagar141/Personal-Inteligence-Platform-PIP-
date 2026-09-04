@@ -52,13 +52,15 @@ function Set-PipDbKey {
     # created after profiles existed is always on the password model - so a
     # per-profile db_key.txt would be a path that can never be occupied.
     $legacyPath = Join-Path $dataDir "db_key.txt"
-    $venvPython = Join-Path $Root ".venv\Scripts\python.exe"
+    . (Join-Path $PSScriptRoot "_python.ps1")
+    $pipPython = Get-PipPython -Root $Root
+    if (-not $pipPython) { Show-PipPythonMissing -Root $Root; return $false }
     $deriveScript = Join-Path $Root "scripts\derive_db_key.py"
 
     if (Test-Path $saltPath) {
         for ($attempt = 1; $attempt -le 3; $attempt++) {
             $password = Get-PipPasswordPlaintext "PIP database password"
-            $key = $password | & $venvPython $deriveScript
+            $key = $password | & $pipPython $deriveScript
             $code = $LASTEXITCODE
             $password = $null
 

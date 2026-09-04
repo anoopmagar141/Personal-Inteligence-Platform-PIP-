@@ -22,12 +22,23 @@ import pathlib
 import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# An installed copy of PIP ships a standalone interpreter in python\ rather
+# than a virtual environment, because a venv records an absolute path back to
+# the base install it was made from and so cannot be copied to another machine.
+# scripts/_python.ps1 carries the full reasoning; this is the same resolution
+# order, for the scripts that are invoked as Python rather than PowerShell.
+#
+# Portable first, for the reason given there: while a build is being tested
+# from inside the source tree both exist, and the copy under test is the one
+# whose failures matter.
+PORTABLE_PYTHON = REPO_ROOT / "python" / "python.exe"
 VENV_PYTHON = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
 VENV_PYTHON_POSIX = REPO_ROOT / ".venv" / "bin" / "python"
 
 
 def _venv_interpreter() -> pathlib.Path | None:
-    for candidate in (VENV_PYTHON, VENV_PYTHON_POSIX):
+    for candidate in (PORTABLE_PYTHON, VENV_PYTHON, VENV_PYTHON_POSIX):
         if candidate.exists():
             return candidate
     return None
@@ -71,7 +82,7 @@ def require(*modules: str) -> None:
     if venv is None:
         lines += [
             "",
-            "  No virtual environment was found at .venv, so the dependencies have",
+            "  No interpreter was found at python\\ or .venv, so the dependencies have",
             "  probably never been installed. From the repository root:",
             "",
             "      python -m venv .venv",

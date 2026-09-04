@@ -23,7 +23,8 @@
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-$venvPython = Join-Path $root ".venv\Scripts\python.exe"
+. (Join-Path $PSScriptRoot "_python.ps1")
+$pipPython = Get-PipPython -Root $root
 $dataDir = Join-Path $root "data"
 
 Write-Host ""
@@ -31,11 +32,8 @@ Write-Host "  PIP - Restore from backup" -ForegroundColor Cyan
 Write-Host "  ========================="
 Write-Host ""
 
-if (-not (Test-Path $venvPython)) {
-    Write-Host "  ERROR: no virtual environment at $venvPython" -ForegroundColor Red
-    Write-Host "         Create it with:  python -m venv .venv"
-    Write-Host "         then:            .venv\Scripts\python.exe -m pip install -r requirements.txt"
-    Write-Host ""
+if (-not $pipPython) {
+    Show-PipPythonMissing -Root $root
     Read-Host "  Press Enter to close"
     exit 1
 }
@@ -95,7 +93,7 @@ if (-not $haveBackupArg) {
 
 Push-Location $root
 try {
-    & $venvPython (Join-Path $root "scripts\restore_backup.py") @scriptArgs
+    & $pipPython (Join-Path $root "scripts\restore_backup.py") @scriptArgs
     $code = $LASTEXITCODE
 }
 finally {
