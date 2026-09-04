@@ -39,9 +39,11 @@ import logging
 from typing import Any, Callable, Generator, Optional, Union
 
 from backend.core import response_cache, trace
+from backend.memory import llm_endpoint_store
 from backend.memory import session_snapshot
 from backend.providers.base_provider import BaseLLMProvider
 from backend.providers.ollama_provider import OllamaProvider
+from backend.providers.openai_compatible_provider import OpenAICompatibleProvider
 from backend.stages import stage_00_gap_detector as stage_00
 from backend.stages import stage_01_intent_classifier as stage_01
 from backend.stages import stage_02_router as stage_02
@@ -77,8 +79,56 @@ def get_active_model_name(conn) -> str:
     return row["model_name"] if row else DEFAULT_MODEL_NAME
 
 
+# Where the local model sits in the fallback order, so a configured endpoint
+# can be placed either side of it. llm_endpoints.priority defaults to 100 -
+# behind this - because adding an endpoint must never silently start sending a
+# conversation off the machine. Someone who wants a cloud provider to lead has
+# to say so, by giving it a lower number than this.
+OLLAMA_PRIORITY = 50
+
+
 def _default_providers(conn) -> list[BaseLLMProvider]:
-    return [OllamaProvider(model_name=get_active_model_name(conn))]
+    """
+    The fallback chain: the local model, plus every endpoint the user has
+    configured and left enabled, in priority order.
+
+    Stage 9 tries these in sequence and moves on when one is unreachable, so
+    order is the whole of the policy here. Nothing in this function decides
+    whether a provider is ALLOWED - _gate_providers does that next, and it
+    fails closed - which is why an unconsented cloud endpoint can be built
+    here without being used.
+
+    A row that cannot be turned into a provider is skipped rather than raised
+    on. One malformed endpoint should cost the user that endpoint, not the
+    ability to hold a conversation, and the local model is usually still in
+    the list behind it.
+    """
+    ollama = OllamaProvider(model_name=get_active_model_name(conn))
+
+    configured: list[tuple[int, BaseLLMProvider]] = [(OLLAMA_PRIORITY, ollama)]
+    for row in llm_endpoint_store.list_endpoints(conn, enabled_only=True):
+        try:
+            configured.append((
+                row["priority"],
+                OpenAICompatibleProvider(
+                    model_name=row["model_name"],
+                    base_url=row["base_url"],
+                    provider_id=row["provider_id"],
+                    api_key=row["api_key"],
+                    is_local=bool(row["is_local"]),
+                    supports_response_format=bool(row["supports_response_format"]),
+                ),
+            ))
+        except Exception as e:
+            logger.warning(
+                f"Pipeline: skipping endpoint '{row.get('provider_id')}' - {e}"
+            )
+
+    # Sorted by priority only, and stably, so endpoints sharing a priority keep
+    # the order list_endpoints already put them in rather than being reordered
+    # by a tiebreak this function invented.
+    configured.sort(key=lambda pair: pair[0])
+    return [provider for _, provider in configured]
 
 
 def _load_last_session_timestamp(conn):

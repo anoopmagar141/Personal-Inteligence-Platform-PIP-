@@ -337,6 +337,46 @@ CREATE TABLE IF NOT EXISTS llm_settings (
     model_name TEXT NOT NULL
 );
 
+-- llm_endpoints Table
+--
+-- Every OpenAI-compatible endpoint the user has configured: llama.cpp, LM
+-- Studio, Jan, vLLM, or a cloud API. One row becomes one
+-- OpenAICompatibleProvider in the pipeline's fallback list.
+--
+-- WHY THE KEY LIVES HERE AND NOT IN A CONFIG FILE
+--
+-- config/ is read at startup and sits in plaintext beside the application, and
+-- an api_key is a credential that can spend the user's money. This database is
+-- SQLCipher-encrypted under a key derived from a password that is never
+-- written down (ADR-026, Part 10.1), which makes it the only place in the
+-- project where a secret can be kept at rest. A settings file would undo that
+-- for the sake of being easier to edit by hand.
+--
+-- WHY provider_id IS THE PRIMARY KEY
+--
+-- It is the same id stage_08 looks up in provider_consent, and the gate fails
+-- closed on an id with no row. Making it the primary key here means one
+-- endpoint is one consent decision - you cannot end up with two endpoints
+-- sharing an id where consenting to one silently consents to the other.
+--
+-- priority orders the fallback chain, ascending, against OLLAMA_PRIORITY in
+-- pipeline.py. A lower number than that runs before the local model, which is
+-- how somebody deliberately makes a cloud endpoint their primary; the default
+-- of 100 leaves it behind Ollama, so adding an endpoint never silently
+-- redirects a conversation off the machine.
+CREATE TABLE IF NOT EXISTS llm_endpoints (
+    provider_id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    api_key TEXT,
+    is_local INTEGER NOT NULL DEFAULT 0 CHECK (is_local IN (0, 1)),
+    supports_response_format INTEGER NOT NULL DEFAULT 0 CHECK (supports_response_format IN (0, 1)),
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    priority INTEGER NOT NULL DEFAULT 100,
+    created_at TEXT NOT NULL
+);
+
 -- conversations / messages Tables (added after the original numbered
 -- sequence, same reasoning as llm_settings above). Part 7's pipeline.py
 -- comment "there is no message-history table - the caller owns that state"
