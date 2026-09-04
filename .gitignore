@@ -48,3 +48,8 @@ data/profiles/
 # megabytes, so they are kept on disk and out of history.
 data/*.superseded-*
 data/chroma.superseded-*/
+
+# Manifests written by scripts/seed_demo_conversation.py - the ids one run
+# wrote, so --undo can remove exactly those. Machine-local, and naming rows in
+# a database that is itself not tracked.
+data/demo_seed_*.json

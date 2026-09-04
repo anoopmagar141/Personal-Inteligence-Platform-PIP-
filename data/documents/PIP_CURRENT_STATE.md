@@ -1,7 +1,7 @@
 # PIP — Current State
 
 **Last updated:** 2026-09-02
-**Status:** Working, locally-run, single-user. Backend test suite: 851/851 passing.
+**Status:** Working, locally-run, single-user. Backend test suite: 861/861 passing.
 
 This is a living snapshot of what PIP actually is and does *right now*. For the
 original locked architecture spec and ADRs, see `PIP_ARCHITECTURE_PRD_ADR.md`
@@ -550,7 +550,7 @@ and their quality has not been separately examined.
 
 ## 9. Testing
 
-Backend: **851 tests**, `pytest backend/tests/`. Frontend: **151 tests**,
+Backend: **861 tests**, `pytest backend/tests/`. Frontend: **151 tests**,
 `flutter analyze` / `flutter test` clean, and `flutter build windows` succeeds.
 
 `test_phase9_roundtrip.py` is worth naming for the same reason the palette test
