@@ -929,6 +929,21 @@ try:
             # trace.hard_delete_after_days, which nothing enforced while
             # traces lived in a file that only ever grew.
             trace.purge_old_entries(conn)
+            # Before the drain, not after: the drain is a ~130s-class LLM pass
+            # per queued session, and an empty vector index is the one fault
+            # here that silently degrades every answer the user is about to
+            # get. Repairing retrieval should not wait behind the Observer.
+            #
+            # Wrapped in its own try rather than sharing the block's: a
+            # rebuild that fails must not skip the Observer recovery below it.
+            # Fails open on purpose - a stale index costs answer quality, a
+            # raise here would cost the app its startup.
+            try:
+                rag = vector_store.rebuild_if_drifted(conn)
+                if not rag["ok"]:
+                    logger.info(f"Vector index rebuild: {rag.get('rebuild')}")
+            except Exception as e:
+                logger.error(f"Vector index consistency check failed, continuing: {e}")
             recovered = session_lifecycle.recover_unobserved_conversations(conn)
             if recovered:
                 logger.info(

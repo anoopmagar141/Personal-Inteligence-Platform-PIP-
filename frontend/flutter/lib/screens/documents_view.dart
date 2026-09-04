@@ -130,6 +130,16 @@ class _DocumentsViewState extends State<DocumentsView> {
   /// how close they were. POST /rag/query answers both and had no caller in
   /// either client - so "is my document actually reachable" was a question the
   /// system could answer and no interface would ask.
+  ///
+  /// Sends activeProjectId for the same reason it sends the backend's own
+  /// threshold rather than a local one: this panel's entire claim is that it
+  /// shows what a real question would have retrieved, and Stage 5 passes the
+  /// active project through to vector_store.query(), which filters on it.
+  /// Omitting it here searched every document regardless of project, so the
+  /// preview was strictly broader than the thing it previews - it could show a
+  /// passage in full, with a healthy score, that chat would never once
+  /// retrieve. An honest empty result is worth more than a reassuring wrong
+  /// one; that is the whole reason this panel exists.
   Future<void> _search() async {
     final query = _searchController.text.trim();
     final threshold = _threshold;
@@ -139,7 +149,11 @@ class _DocumentsViewState extends State<DocumentsView> {
       _searchError = null;
     });
     try {
-      final matches = await widget.api.queryRag(query, threshold: threshold);
+      final matches = await widget.api.queryRag(
+        query,
+        threshold: threshold,
+        projectId: widget.activeProjectId,
+      );
       if (mounted) setState(() => _matches = matches);
     } catch (error) {
       if (mounted) setState(() => _searchError = error.toString());
@@ -251,7 +265,12 @@ class _DocumentsViewState extends State<DocumentsView> {
           const SizedBox(height: 4),
           Text(
             'Runs retrieval on its own, without asking PIP anything. Shows the '
-            'passages a question would actually pull in, and how close each one is.',
+            'passages a question would actually pull in, and how close each one is.'
+            // Named on screen rather than only honoured in the request. The
+            // filter changes what comes back, so leaving it invisible would
+            // trade one misleading panel for another - results that look
+            // like the whole library and are not.
+            '${widget.activeProjectId == null ? '' : ' Scoped to the active project, the same way chat is.'}',
             style: TextStyle(fontSize: 12.5, color: pip.textMuted),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -322,7 +341,15 @@ class _DocumentsViewState extends State<DocumentsView> {
             if (_matches!.isEmpty)
               Text(
                 'Nothing above ${_threshold!.toStringAsFixed(2)}. Lower the threshold to see what '
-                'came closest - if the answer is in a document at all, it will surface further down.',
+                'came closest - if the answer is in a document at all, it will surface further down.'
+                // The second cause of an empty result, and the one the
+                // slider cannot fix. Narrower than it used to be: an
+                // unfiled document is reachable from every project now, so
+                // the only thing scoping still hides is a document filed
+                // under a DIFFERENT project - which no threshold will
+                // surface, and which someone would otherwise chase by
+                // dragging this slider to zero.
+                '${widget.activeProjectId == null ? '' : ' Documents filed under a different project stay out of reach at any threshold while this one is active.'}',
                 style: TextStyle(fontSize: 12.5, color: pip.textFaint, height: 1.5),
               )
             else

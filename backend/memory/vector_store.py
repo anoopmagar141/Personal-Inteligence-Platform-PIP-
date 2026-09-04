@@ -1,9 +1,15 @@
 # PIP Memory layer - Vector Store (ChromaDB)
 #
 # Startup Rebuild Trigger:
-# ChromaDB is NEVER authoritative. If ChromaDB drifts from SQLite (schema version mismatch
-# or document list discrepancy), a startup rebuild-on-mismatch trigger is fired to
-# clear ChromaDB and re-index from SQLite authoritative state.
+# ChromaDB is NEVER authoritative. If ChromaDB drifts from SQLite, a startup
+# rebuild-on-mismatch trigger re-indexes from SQLite's authoritative state.
+#
+# That trigger is check_consistency() -> rebuild_if_drifted(), called from
+# server.py's _catch_up_blocking(). Named here because this paragraph spent a long
+# time describing behavior that did not exist anywhere: the rebuild function was
+# written, was correct, and was reachable only from a backup restore. Anyone
+# reading this header had every reason to believe an emptied index would repair
+# itself, and for two days on a live installation it did not.
 #
 # SQLite's `documents` table (schema.sql table 19) is the source-of-truth registry of what
 # should be ingested. It stores metadata only (file_path, content_hash, chunk_count) - not
@@ -391,6 +397,16 @@ def delete_document(conn, file_path: str) -> bool:
 
 
 def list_documents(conn) -> list[dict[str, Any]]:
+    """
+    The REGISTRY of what should be indexed - metadata only, straight from
+    SQLite. chunk_count here is what ingestion recorded, not what ChromaDB
+    currently holds, and nothing in this function goes near the vector index.
+
+    Worth saying out loud because the Documents screen renders it as though it
+    were the index: "56 chunks" beside a file name reads as a fact about
+    retrieval, and stays on screen unchanged when the index behind it is
+    empty. check_consistency() below is the thing that can tell the difference.
+    """
     return [dict(r) for r in conn.execute("SELECT * FROM documents WHERE status = 'active'")]
 
 
@@ -416,7 +432,30 @@ def query(
         collection = _get_collection()
         query_embedding = _get_model().encode([query_text], convert_to_numpy=True).tolist()
 
-        where = {"project_id": project_id} if project_id else None
+        # A project-scoped query reaches that project's documents AND the
+        # unfiled ones - project_id "" as ingest_document writes it when no
+        # project was active.
+        #
+        # It used to be an equality match on the project alone, which quietly
+        # made every unfiled document unreachable the moment anyone activated
+        # a project. That is not a corner case: the Documents screen has no
+        # project picker, so it files an upload under whatever project happens
+        # to be active at the time, and "none" is what that is for anyone who
+        # uploads before organising their work. On this installation it was
+        # all four documents and all 85 chunks - PIP held them, listed them,
+        # reported their chunk counts, and could not retrieve one of them
+        # while a project was open.
+        #
+        # An unfiled document is not a document belonging to some other
+        # project; it is a general reference nobody has sorted yet, and the
+        # useful reading of "no project" is "any project". Documents that WERE
+        # filed stay scoped - the point is to stop treating absence of a label
+        # as a label.
+        where = (
+            {"$or": [{"project_id": project_id}, {"project_id": ""}]}
+            if project_id
+            else None
+        )
         results = collection.query(
             query_embeddings=query_embedding,
             n_results=top_k,
@@ -435,9 +474,19 @@ def query(
     fernet = _fernet(db_key) if db_key else None
 
     for doc, meta, distance in zip(docs[0], metadatas[0], distances[0]):
-        # Chroma's default space is L2 distance; convert to a 0-1 similarity-like score.
-        # cosine distance in [0,2] -> similarity = 1 - distance/2 stays in [0,1] for
-        # normalized embeddings (sentence-transformers embeddings are normalized).
+        # Chroma's default space is l2, which returns SQUARED euclidean distance.
+        # For unit vectors ||a-b||^2 = 2 - 2cos, so 1 - d/2 recovers cosine exactly -
+        # and all-MiniLM-L6-v2 ends in a Normalize module, so its output is unit
+        # length. Verified against chromadb 1.5.9: a pair with cosine 0.5403 comes
+        # back at distance 0.9194, and 1 - 0.9194/2 = 0.5403.
+        #
+        # This comment used to describe the space as cosine distance in [0,2], which
+        # is a different quantity that happens to produce the same formula, so the
+        # number was right for a reason that was not. Worth being exact about,
+        # because the fix is not symmetric: creating this collection with
+        # metadata={"hnsw:space": "cosine"} would make distance = 1 - cos, and this
+        # line would then report (1 + cos)/2 - every score wrong, none of them
+        # obviously so, and similarity_threshold silently meaning something else.
         similarity = 1 - (distance / 2)
         if similarity < threshold:
             continue
@@ -469,12 +518,122 @@ def query(
     return matches
 
 
+def _chunk_count_in_chroma(collection, file_path: str, db_key: Optional[str]) -> int:
+    """
+    How many chunks the index actually holds for one document.
+
+    Counted through the same key the write path writes under - the HMAC
+    file_key when encryption is on, the plain path when it is not - so this
+    asks the question retrieval asks, rather than a question that merely looks
+    like it. A chunk written under a different key is correctly counted as
+    absent here, because that is exactly what it is to query().
+    """
+    where = {"file_key": _file_key(db_key, file_path)} if db_key else {"file_path": file_path}
+    return len(collection.get(where=where, include=[]).get("ids") or [])
+
+
+def check_consistency(conn) -> dict[str, Any]:
+    """
+    Compares SQLite's documents registry against what ChromaDB actually holds.
+
+    This is the check the module header at the top of this file has always
+    said fires at startup. It did not exist. The consequence was not
+    theoretical: this installation's Chroma directory was moved aside during
+    the encryption migration (chunks written before PIP_DB_KEY existed cannot
+    be decrypted under it, so replacing the directory was right), the rebuild
+    that should have followed never ran, and PIP answered questions for two
+    days with an empty index. Stage 5 returned nothing every time, every
+    answer came from the Decision Log and profile alone, and the Documents
+    screen went on reporting 85 healthy chunks the whole time - because it
+    reads list_documents(), which is metadata (see its docstring).
+
+    Nothing failed loudly because nothing was failing: an empty index is
+    indistinguishable, from inside query(), from a question no document
+    happens to answer. That is what makes this worth a startup check rather
+    than a log line - the failure mode is silence, and silence is also what
+    success looks like.
+
+    Reported per document, not as one total. A total hides the case a check
+    like this most needs to catch: one document missing while another's count
+    absorbs the difference.
+    """
+    active = list_documents(conn)
+    if not active:
+        # Nothing registered means nothing to verify, and no reason to open a
+        # collection on a fresh install just to confirm it is empty.
+        return {"documents": 0, "indexed": 0, "expected": 0, "drifted": [], "ok": True}
+
+    collection = _get_collection()
+    db_key = _get_db_key()
+
+    drifted, indexed, expected = [], 0, 0
+    for doc in active:
+        want = doc["chunk_count"] or 0
+        expected += want
+        try:
+            have = _chunk_count_in_chroma(collection, doc["file_path"], db_key)
+        except Exception as e:
+            # Treat an unreadable count as drift rather than as agreement.
+            # Failing open here would mean failing silent, which is the whole
+            # bug this function exists to end.
+            logger.warning(f"Consistency check could not count chunks for {doc['file_path']}: {e}")
+            drifted.append({"file_path": doc["file_path"], "expected": want, "indexed": None})
+            continue
+        indexed += have
+        if have != want:
+            drifted.append({"file_path": doc["file_path"], "expected": want, "indexed": have})
+
+    return {
+        "documents": len(active),
+        "indexed": indexed,
+        "expected": expected,
+        "drifted": drifted,
+        "ok": not drifted,
+    }
+
+
+def rebuild_if_drifted(conn) -> dict[str, Any]:
+    """
+    The rebuild-on-mismatch trigger, finally wired to something.
+
+    rebuild_from_sqlite() has been correct and callable since it was written;
+    its only caller was scripts/restore_backup.py, so the drift it repairs got
+    repaired only when someone happened to restore a backup for an unrelated
+    reason. A recovery path nothing invokes is indistinguishable from one that
+    does not exist, and this file's own header describing it as automatic made
+    it worse than absent - it told every later reader the case was handled.
+
+    Returns the check result either way, with the rebuild's own result folded
+    in when one ran, so the caller can log what was found as well as what was
+    done.
+    """
+    report = check_consistency(conn)
+    if report["ok"]:
+        return report
+
+    logger.warning(
+        f"Vector index disagrees with the document registry "
+        f"({report['indexed']} chunks indexed, {report['expected']} expected across "
+        f"{report['documents']} document(s)); rebuilding."
+    )
+    report["rebuild"] = rebuild_from_sqlite(conn)
+    return report
+
+
 def rebuild_from_sqlite(conn) -> dict[str, Any]:
     """
-    Re-ingests every active document from its recorded file_path, and removes any
-    ChromaDB chunks for file_paths no longer marked active in SQLite. Called at startup
-    when a schema-version or document-count mismatch is detected between SQLite and
-    ChromaDB (Part 11.1 rebuild-on-mismatch trigger).
+    Re-ingests every active document from its recorded file_path. Called at startup
+    by rebuild_if_drifted() when the registry and the index disagree (Part 11.1
+    rebuild-on-mismatch trigger), and by scripts/restore_backup.py.
+
+    Does NOT remove chunks whose file_path is no longer active - this docstring
+    used to claim it did, and nothing did. delete_document() is what clears a
+    removed document's chunks, and it does so at the moment of removal, so the
+    orphans this would collect can only come from drift severe enough that a
+    rebuild is running anyway. Left as a known gap rather than silently
+    widened into a delete pass: this function runs unattended at startup now,
+    and unattended deletion of data the caller did not ask about is a bigger
+    promise than a rebuild should make.
     """
     # Put back anything whose bytes we hold but whose file is not here. This is
     # what makes a rebuild work on a restored machine: every recorded path

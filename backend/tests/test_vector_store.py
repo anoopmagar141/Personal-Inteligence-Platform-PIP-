@@ -389,3 +389,195 @@ def test_the_model_is_loaded_once_per_process(monkeypatch):
     vector_store._get_model()
 
     assert len(calls) == 1
+
+
+# --- Consistency check / rebuild-on-mismatch trigger ------------------------
+#
+# The regression these cover is not "the rebuild is broken" - it never was.
+# It is "nothing calls the rebuild", which no test could fail on while every
+# test invoked it by hand. check_consistency() is the piece that turns an
+# emptied index from a silent condition into a detectable one.
+
+
+def test_consistency_check_passes_on_a_freshly_ingested_document(db_conn, sample_doc):
+    vector_store.ingest_document(db_conn, sample_doc)
+
+    report = vector_store.check_consistency(db_conn)
+
+    assert report["ok"] is True
+    assert report["drifted"] == []
+    assert report["indexed"] == report["expected"] > 0
+
+
+def test_consistency_check_reports_an_emptied_index(db_conn, sample_doc):
+    """
+    The live failure, reproduced: SQLite still lists the document with its
+    chunk_count, ChromaDB holds nothing, and query() returns empty without
+    complaining - which is indistinguishable from a question no document
+    answers, and is why this went unnoticed for two days in real use.
+    """
+    vector_store.ingest_document(db_conn, sample_doc)
+    expected = vector_store.list_documents(db_conn)[0]["chunk_count"]
+    vector_store._get_collection().delete(where={"file_path": sample_doc})
+
+    report = vector_store.check_consistency(db_conn)
+
+    assert report["ok"] is False
+    assert report["indexed"] == 0
+    assert report["expected"] == expected
+    assert report["drifted"] == [
+        {"file_path": sample_doc, "expected": expected, "indexed": 0}
+    ]
+
+
+def test_consistency_check_is_quiet_when_nothing_is_registered(db_conn):
+    assert vector_store.check_consistency(db_conn) == {
+        "documents": 0, "indexed": 0, "expected": 0, "drifted": [], "ok": True
+    }
+
+
+def test_rebuild_if_drifted_repairs_an_emptied_index(db_conn, sample_doc):
+    vector_store.ingest_document(db_conn, sample_doc)
+    vector_store._get_collection().delete(where={"file_path": sample_doc})
+
+    report = vector_store.rebuild_if_drifted(db_conn)
+
+    assert report["ok"] is False  # what was FOUND, before the repair
+    assert sample_doc in report["rebuild"]["rebuilt"]
+    assert vector_store.check_consistency(db_conn)["ok"] is True
+    assert len(vector_store.query(db_conn, "SQLCipher", threshold=0.1, top_k=3)) >= 1
+
+
+def test_rebuild_if_drifted_does_nothing_when_the_index_agrees(db_conn, sample_doc, monkeypatch):
+    """
+    A startup check that re-embeds every document on every launch would be a
+    different bug wearing this one's clothes.
+    """
+    vector_store.ingest_document(db_conn, sample_doc)
+    called = []
+    monkeypatch.setattr(vector_store, "rebuild_from_sqlite", lambda conn: called.append(conn))
+
+    report = vector_store.rebuild_if_drifted(db_conn)
+
+    assert report["ok"] is True
+    assert "rebuild" not in report
+    assert called == []
+
+
+def test_a_chunk_written_under_another_key_counts_as_missing(db_conn, sample_doc, monkeypatch, db_key):
+    """
+    Precisely this installation's case. Chunks ingested before PIP_DB_KEY was
+    set are unreadable once it is, so retrieval sees nothing - and the check
+    has to agree with retrieval, not with the raw row count, or a rebuild that
+    is genuinely needed never fires.
+    """
+    vector_store.ingest_document(db_conn, sample_doc)  # plaintext, no key
+    assert vector_store.check_consistency(db_conn)["ok"] is True
+
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+
+    assert vector_store.check_consistency(db_conn)["ok"] is False
+    vector_store.rebuild_if_drifted(db_conn)
+    assert vector_store.check_consistency(db_conn)["ok"] is True
+
+
+# --- Project scoping -------------------------------------------------------
+#
+# The second wall in front of this installation's documents, and the quieter
+# one: the index can be perfectly healthy and still answer nothing, because
+# every chunk was filed under no project while chat ran scoped to one.
+
+
+@pytest.fixture
+def projects(db_conn):
+    """
+    Two real projects. documents.project_id is a foreign key onto
+    active_projects, so a made-up id is rejected at ingest - the scoping tests
+    have to file documents under projects that exist.
+    """
+    from backend.memory.profile_store import create_project
+
+    return (
+        create_project(db_conn, "Alpha"),
+        create_project(db_conn, "Beta"),
+    )
+
+
+@pytest.fixture
+def project_doc(isolated_documents_root):
+    doc_path = isolated_documents_root / "roadmap.txt"
+    doc_path.write_text(
+        "The migration to FastAPI is scheduled for the second sprint.",
+        encoding="utf-8",
+    )
+    return str(doc_path)
+
+
+def test_an_unfiled_document_is_reachable_from_a_scoped_query(db_conn, sample_doc):
+    """
+    The live failure. Uploading happens on a screen with no project picker, so
+    "no project" is what most documents get; scoping it out made PIP unable to
+    read its own reference material the moment a project was activated.
+    """
+    vector_store.ingest_document(db_conn, sample_doc)  # no project_id
+
+    matches = vector_store.query(
+        db_conn, "SQLCipher", project_id="proj-a", threshold=0.1, top_k=3
+    )
+
+    assert len(matches) >= 1
+
+
+def test_another_projects_document_stays_out_of_scope(db_conn, sample_doc, project_doc, projects):
+    """
+    The half that must NOT change: unfiled is not a wildcard in both
+    directions. A document filed under one project stays out of another's
+    retrieval.
+    """
+    alpha, beta = projects
+    vector_store.ingest_document(db_conn, sample_doc, project_id=alpha)
+    vector_store.ingest_document(db_conn, project_doc, project_id=beta)
+
+    # Deliberately the text of BETA's document. Asserting only that it is
+    # absent would pass for the wrong reason if it simply scored too low, so
+    # the same query is run unscoped first to establish that it does retrieve
+    # beta's document - leaving the project filter as the only thing that can
+    # account for its absence in the scoped call.
+    question = "FastAPI migration second sprint"
+    unscoped = vector_store.query(db_conn, question, threshold=0.1, top_k=5)
+    assert project_doc in [m["file_path"] for m in unscoped]
+
+    scoped = vector_store.query(db_conn, question, project_id=alpha, threshold=0.1, top_k=5)
+    assert project_doc not in [m["file_path"] for m in scoped]
+
+
+def test_a_scoped_query_reaches_its_own_project_and_the_unfiled_together(
+    db_conn, sample_doc, project_doc, projects
+):
+    alpha, _ = projects
+    vector_store.ingest_document(db_conn, sample_doc)  # unfiled
+    vector_store.ingest_document(db_conn, project_doc, project_id=alpha)
+
+    found = {
+        m["file_path"]
+        for m in vector_store.query(
+            db_conn, "FastAPI and SQLCipher", project_id=alpha, threshold=0.1, top_k=10
+        )
+    }
+
+    assert found == {sample_doc, project_doc}
+
+
+def test_an_unscoped_query_is_unchanged_and_sees_everything(db_conn, sample_doc, project_doc, projects):
+    _, beta = projects
+    vector_store.ingest_document(db_conn, sample_doc)
+    vector_store.ingest_document(db_conn, project_doc, project_id=beta)
+
+    found = {
+        m["file_path"]
+        for m in vector_store.query(
+            db_conn, "FastAPI and SQLCipher", threshold=0.1, top_k=10
+        )
+    }
+
+    assert found == {sample_doc, project_doc}
