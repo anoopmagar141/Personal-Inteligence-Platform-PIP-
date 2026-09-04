@@ -31,8 +31,15 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
+  # Nothing in lib/ imports this, and it still cannot be removed. Material's
+  # AdaptiveTextSelectionToolbar imports package:flutter/cupertino.dart, which
+  # defines CupertinoIcons with fontPackage: cupertino_icons - and TextField
+  # (the chat composer) and SelectableText (trace view) both reach that
+  # toolbar, so the icon tree-shaker sees those glyphs as referenced. Removing
+  # the package makes every build warn "Expected to find fonts for
+  # (MaterialIcons, packages/cupertino_icons/CupertinoIcons), but found
+  # (MaterialIcons)". Checked the hard way: with it removed, flutter analyze
+  # was clean and all 151 widget tests passed - only `flutter build` caught it.
   cupertino_icons: ^1.0.8
 
   # REST calls against PIP Core's /api/v1/* surface (Part 14.2).

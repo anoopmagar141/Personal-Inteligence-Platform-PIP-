@@ -630,7 +630,6 @@ def test_the_migration_does_not_unlink_conversations_from_their_project(tmp_path
     destroying exactly the relationship the table exists to hold, with no error
     to notice.
     """
-    import sqlite3
 
     from backend.memory import conversation_store
 

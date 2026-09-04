@@ -20,11 +20,9 @@ Coverage:
 import json
 import sqlite3
 import pytest
-from unittest.mock import MagicMock, call
-from pathlib import Path
+from unittest.mock import MagicMock
 
 from backend.memory import profile_store
-from backend.api import server
 from backend.api.server import (
     api_list_providers,
     api_grant_consent,

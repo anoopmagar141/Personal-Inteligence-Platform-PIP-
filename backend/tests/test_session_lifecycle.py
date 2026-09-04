@@ -4,10 +4,11 @@ from typing import Iterator
 
 import pytest
 
-from backend.core import session_lifecycle, trace
+from backend.core import session_lifecycle
 from backend.memory import pending_observer
 from backend.memory.profile_store import get_connection, initialize_schema
 from backend.providers.base_provider import BaseLLMProvider, ProviderUnavailableError
+from backend.stages.stage_11_observer import ObserverUnavailableError
 
 
 class FakeProvider(BaseLLMProvider):
@@ -347,7 +348,10 @@ async def test_failed_observer_run_leaves_it_for_startup_recovery(executor_conn)
             raise RuntimeError("model unavailable")
             yield  # pragma: no cover - generator marker
 
-    with pytest.raises(Exception):
+    # RuntimeError specifically - the one Exploding raises. A bare Exception
+    # would also be satisfied by run_observer_now failing on its own before it
+    # ever reached the provider, which is not what this test is about.
+    with pytest.raises(RuntimeError, match="model unavailable"):
         await session_lifecycle.run_observer_now(
             loop, executor, conn,
             [{"role": "user", "content": "hello there friend"}],
@@ -385,7 +389,12 @@ async def test_an_unreachable_llm_leaves_the_conversation_recoverable(executor_c
     conn, executor = executor_conn
     cid = await loop.run_in_executor(executor, _conversation_with_messages, conn)
 
-    with pytest.raises(Exception):
+    # ObserverUnavailableError, not a bare Exception: the provider's
+    # ProviderUnavailableError is deliberately translated at the observer
+    # boundary (stage_11_observer.run), and naming the type the caller actually
+    # sees is what pins that contract down. A bare Exception would pass equally
+    # well if the call failed before ever reaching the provider.
+    with pytest.raises(ObserverUnavailableError):
         await session_lifecycle.run_observer_now(
             loop, executor, conn,
             [{"role": "user", "content": "I've decided to use SQLCipher for storage"}],

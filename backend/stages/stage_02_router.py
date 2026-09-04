@@ -13,7 +13,7 @@
 # the underlying authority relationship between the three sources doesn't change.
 
 import logging
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 logger = logging.getLogger(__name__)
 

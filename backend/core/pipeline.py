@@ -325,38 +325,27 @@ def run(
         should_stop=should_stop,
     )
 
-    response_text = ""
-    status = "error"
-    error: Optional[str] = None
-    stage_hints: dict[str, Any] = {}
+    # Forward each event as it arrives, and fold it into the same aggregate
+    # collect() builds. The fold lives in stage_09 so this path and collect()
+    # cannot drift; what stays here is the yield, which is the one thing
+    # collect() cannot do for a live caller.
+    aggregate = stage_09.new_aggregate()
     for event in events:
         yield event
-        if event["type"] == "stage_hint":
-            stage_hints = event["data"]
-        elif event["type"] == "token":
-            response_text += event["data"]
-        elif event["type"] == "done":
-            status = "success"
-        elif event["type"] == "error":
-            status = "error"
-            error = event["data"]
-        elif event["type"] == "stopped":
-            status = "stopped"
+        stage_09.accumulate(aggregate, event)
 
-    trace.stage_log(conn, trace_id, "stage_09_llm_streaming", "error" if status == "error" else "ok", f"status={status}", error_detail=error or "")
+    status = aggregate["status"]
+    trace.stage_log(conn, trace_id, "stage_09_llm_streaming", "error" if status == "error" else "ok", f"status={status}", error_detail=aggregate["error"] or "")
 
     if status == "success":
         response_cache.set(
-            user_message, project_id, intent_result["category"], response_text, stage_hints,
+            user_message, project_id, intent_result["category"],
+            aggregate["response_text"], aggregate["stage_hints"],
             decision_log_hit=bool(decision_entries),
         )
 
     # Stage 10
-    result = stage_10.run(
-        trace_id,
-        {"response_text": response_text, "status": status, "error": error, "stage_hints": stage_hints},
-        conn,
-    )
+    result = stage_10.run(trace_id, aggregate, conn)
     yield {"type": "pipeline_complete", "data": result}
 
 

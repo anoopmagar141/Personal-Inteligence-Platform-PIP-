@@ -1,6 +1,5 @@
 import pytest
 import json
-from io import BytesIO
 from unittest.mock import patch, MagicMock
 import urllib.error
 

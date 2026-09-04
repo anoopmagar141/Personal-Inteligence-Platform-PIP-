@@ -101,35 +101,56 @@ def run(
     yield {"type": "error", "data": f"All providers failed: {last_error}"}
 
 
+def new_aggregate() -> dict[str, Any]:
+    """
+    The starting state for folding a run() stream into its final result.
+
+    status starts at "error", not "success": a stream that ends without ever
+    yielding "done" did not succeed, and defaulting the other way would report
+    a truncated run as a good one.
+    """
+    return {
+        "response_text": "",
+        "status": "error",
+        "error": None,
+        "stage_hints": {},
+    }
+
+
+def accumulate(aggregate: dict[str, Any], event: WSChatEvent) -> None:
+    """
+    Folds one event into `aggregate`, in place.
+
+    Shared by collect() and by pipeline.run(). pipeline.run() cannot call
+    collect() - it has to forward each event as it arrives, which a function
+    that drains the iterator cannot do - but it has to end up with exactly the
+    same shape, because both feed Stage 10. Keeping the fold itself in one
+    place is what stops those two from drifting apart when an event type is
+    added to only one of them.
+    """
+    kind = event["type"]
+    if kind == "stage_hint":
+        aggregate["stage_hints"] = event["data"]
+    elif kind == "token":
+        aggregate["response_text"] += event["data"]
+    elif kind == "done":
+        aggregate["status"] = "success"
+    elif kind == "error":
+        aggregate["status"] = "error"
+        aggregate["error"] = event["data"]
+    elif kind == "stopped":
+        aggregate["status"] = "stopped"
+
+
 def collect(event_iterator: Iterator[WSChatEvent]) -> dict[str, Any]:
     """
     Drains a run() event stream synchronously and returns the aggregated result.
     For callers that don't need live token-by-token forwarding (tests, a CLI,
     Stage 10). A live WS caller should iterate run() directly instead, forwarding
-    each event as it arrives, and build its own accumulator alongside if it also
-    needs the final text.
+    each event as it arrives, and accumulate() alongside if it also needs the
+    final text.
     """
-    response_text = ""
-    status = "error"
-    error: Optional[str] = None
-    stage_hints: dict[str, Any] = {}
-
+    aggregate = new_aggregate()
     for event in event_iterator:
-        if event["type"] == "stage_hint":
-            stage_hints = event["data"]
-        elif event["type"] == "token":
-            response_text += event["data"]
-        elif event["type"] == "done":
-            status = "success"
-        elif event["type"] == "error":
-            status = "error"
-            error = event["data"]
-        elif event["type"] == "stopped":
-            status = "stopped"
-
-    return {
-        "response_text": response_text,
-        "status": status,
-        "error": error,
-        "stage_hints": stage_hints,
-    }
+        accumulate(aggregate, event)
+    return aggregate

@@ -1,10 +1,10 @@
-import os
 
 import pytest
+from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
 
 from backend.api import server
-from backend.core import auth, trace
+from backend.core import auth
 from backend.memory import vector_store
 
 
@@ -81,17 +81,27 @@ def test_ws_chat_rejects_connection_without_token(monkeypatch):
     # all - no auth on either transport.
     monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
     client = TestClient(server.app)
-    with pytest.raises(Exception):
+    with pytest.raises(WebSocketDisconnect) as exc:
         with client.websocket_connect("/ws/chat"):
             pass
+    # The specific close code, not a bare Exception: this must fail because
+    # the token was missing, not because the route errored or the URL was
+    # wrong - failures that would also satisfy `raises(Exception)` and quietly
+    # stop testing the thing the test is named for.
+    assert exc.value.code == 4401
 
 
 def test_ws_chat_rejects_connection_with_wrong_token(monkeypatch):
     monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
     client = TestClient(server.app)
-    with pytest.raises(Exception):
+    with pytest.raises(WebSocketDisconnect) as exc:
         with client.websocket_connect("/ws/chat?token=wrong-token"):
             pass
+    # The specific close code, not a bare Exception: this must fail because
+    # the token was wrong, not because the route errored or the URL was
+    # wrong - failures that would also satisfy `raises(Exception)` and quietly
+    # stop testing the thing the test is named for.
+    assert exc.value.code == 4401
 
 
 def test_ws_chat_rejects_mismatched_origin_even_with_a_valid_token(monkeypatch, token):
@@ -101,9 +111,14 @@ def test_ws_chat_rejects_mismatched_origin_even_with_a_valid_token(monkeypatch, 
     # work from anywhere.
     monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: _fake_pipeline_events())
     client = TestClient(server.app)
-    with pytest.raises(Exception):
+    with pytest.raises(WebSocketDisconnect) as exc:
         with client.websocket_connect(ws_url(token), headers={"origin": "http://evil.example.com"}):
             pass
+    # The specific close code, not a bare Exception: this must fail because
+    # the origin was refused, not because the route errored or the URL was
+    # wrong - failures that would also satisfy `raises(Exception)` and quietly
+    # stop testing the thing the test is named for.
+    assert exc.value.code == 4403
 
 
 def test_ws_chat_accepts_connection_with_no_origin_header(monkeypatch, token):

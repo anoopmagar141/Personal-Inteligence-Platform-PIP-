@@ -366,13 +366,26 @@ class ChatViewState extends State<ChatView> {
               child: Column(
                 children: [
                   Expanded(
-                    child: ListView(
+                    // .builder, not ListView(children: [...]): streaming calls
+                    // setState once per token, and the eager form rebuilt every
+                    // bubble in the transcript on each of those - so the cost of
+                    // one reply grew with the length of the whole conversation.
+                    // The builder only builds what is on screen, which makes that
+                    // per-token cost independent of how long the chat is.
+                    child: ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.all(AppSpacing.lg),
-                      children: [
-                        for (final message in _transcript) ChatMessageBubble(message: message),
-                        if (_isStreaming) ChatMessageBubble(message: ChatMessage('assistant', _streamingText)),
-                      ],
+                      // The streaming bubble is the one extra row past the end of
+                      // the transcript, exactly where the old trailing `if` put it.
+                      itemCount: _transcript.length + (_isStreaming ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index < _transcript.length) {
+                          return ChatMessageBubble(message: _transcript[index]);
+                        }
+                        return ChatMessageBubble(
+                          message: ChatMessage('assistant', _streamingText),
+                        );
+                      },
                     ),
                   ),
                   Container(
@@ -575,17 +588,22 @@ class _ConversationSidebar extends StatelessWidget {
                           style: TextStyle(fontSize: 12, color: pip.textFaint),
                         ),
                       )
-                    : ListView(
+                    // .builder for the same reason as the transcript: this
+                    // sidebar is rebuilt by every setState in ChatView, token
+                    // events included, so the eager form rebuilt a row per
+                    // conversation on every token of every reply.
+                    : ListView.builder(
                         padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                        children: [
-                          for (final conversation in conversations!)
-                            _ConversationRow(
-                              title: '${conversation['title']}',
-                              selected: conversation['id'] == activeConversationId,
-                              onTap: () => onSelect(conversation['id'] as String),
-                              onDelete: () => onDelete(conversation['id'] as String),
-                            ),
-                        ],
+                        itemCount: conversations!.length,
+                        itemBuilder: (context, index) {
+                          final conversation = conversations![index];
+                          return _ConversationRow(
+                            title: '${conversation['title']}',
+                            selected: conversation['id'] == activeConversationId,
+                            onTap: () => onSelect(conversation['id'] as String),
+                            onDelete: () => onDelete(conversation['id'] as String),
+                          );
+                        },
                       ),
           ),
         ],

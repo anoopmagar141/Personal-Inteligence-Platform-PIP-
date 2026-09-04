@@ -1,6 +1,5 @@
 from typing import Iterator
 
-import pytest
 
 from backend.providers.base_provider import (
     BaseLLMProvider,

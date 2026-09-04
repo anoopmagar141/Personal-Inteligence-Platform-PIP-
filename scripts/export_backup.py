@@ -665,7 +665,7 @@ def main(argv: list[str] | None = None) -> pathlib.Path:
     verify(out_path, backup_password, expected)
 
     size_mb = out_path.stat().st_size / (1024 * 1024)
-    print(f"  verified: integrity ok, row counts match")
+    print("  verified: integrity ok, row counts match")
     print(f"\nBackup written: {out_path}  ({size_mb:.1f} MB)")
     print("Keep it somewhere other than this machine, and remember the password -")
     print("there is no recovery path for a .pipbak whose password is lost.")

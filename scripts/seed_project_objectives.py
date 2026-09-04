@@ -95,13 +95,11 @@ _venv.require("sqlcipher3")
 import _db
 
 import argparse
-import os
 import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
-from backend.memory import profile_store  # noqa: E402
 
 ROOT = pathlib.Path(__file__).parent.parent
 DB_PATH = ROOT / "data" / "pip.db"

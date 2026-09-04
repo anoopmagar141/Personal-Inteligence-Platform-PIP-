@@ -5,7 +5,7 @@ from backend.providers.base_provider import BaseLLMProvider, ProviderUnavailable
 def test_base_provider_cannot_be_instantiated():
     with pytest.raises(TypeError) as exc:
         # Attempting to instantiate the ABC directly
-        provider = BaseLLMProvider()
+        BaseLLMProvider()
     assert "Can't instantiate abstract class" in str(exc.value)
 
 def test_concrete_provider_can_be_instantiated():

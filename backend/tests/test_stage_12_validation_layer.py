@@ -1,8 +1,6 @@
 import pytest
-import sqlite3
 import os
 from datetime import datetime, timedelta, timezone
-from backend.core.types import MemoryCandidate
 from backend.core.constitution_enforcer import ConstitutionEnforcer
 from backend.stages.stage_12_validation_layer import run, reinforce_evidence
 from backend.memory import profile_store

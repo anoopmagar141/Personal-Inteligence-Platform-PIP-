@@ -1,4 +1,3 @@
-import pytest
 from datetime import datetime, timedelta, timezone
 from backend.stages import stage_00_gap_detector as gap_detector
 

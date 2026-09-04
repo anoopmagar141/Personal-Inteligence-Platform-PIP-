@@ -26,9 +26,7 @@ from backend.memory import (
     verification,
 )
 from backend.providers.ollama_provider import OllamaProvider
-from backend.stages import stage_08_provider_gate as provider_gate
 from backend.stages import stage_13_profile_update as stage_13
-from backend.stages.stage_08_provider_gate import ProviderConsentError
 from shared.ws_spec import ChatRequest, PipelineCompleteEvent, WSChatEvent
 
 logger = logging.getLogger(__name__)
@@ -694,7 +692,6 @@ _session_registry = session_lifecycle.SessionRegistry()
 
 
 try:
-    import concurrent.futures
     from contextlib import asynccontextmanager
 
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect

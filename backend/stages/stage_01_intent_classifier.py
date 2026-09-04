@@ -14,7 +14,7 @@
 
 import logging
 import re
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 logger = logging.getLogger(__name__)
 

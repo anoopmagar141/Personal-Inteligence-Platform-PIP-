@@ -1,5 +1,5 @@
 import datetime
-from typing import TypedDict, List, Optional, Literal
+from typing import TypedDict, Optional, Literal
 
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 

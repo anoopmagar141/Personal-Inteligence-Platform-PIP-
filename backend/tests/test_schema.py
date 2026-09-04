@@ -1,7 +1,6 @@
 import pytest
 import os
 import sqlite3
-from backend.config.settings import get_settings
 
 # Note: In production SQLCipher is accessed via profile_store.py get_connection().
 # For these tests, we test the schema execution and SQLite features.
@@ -79,7 +78,10 @@ def test_wrong_key_behavior():
     conn2 = get_db_connection(db_key="2222222222222222222222222222222222222222222222222222222222222222")
     
     # Try reading from identity - must fail loudly (throws database error due to encryption mismatch)
-    with pytest.raises(Exception):
+    # DatabaseError specifically: a bare Exception would also pass if the file
+    # were missing or the schema never applied, i.e. if the encryption were
+    # never actually exercised. HAS_SQLCIPHER is guaranteed by the skip above.
+    with pytest.raises(sqlcipher3.DatabaseError):
         conn2.execute("SELECT count(*) FROM sqlite_master").fetchall()
     conn2.close()
 
