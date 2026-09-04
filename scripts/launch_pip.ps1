@@ -65,14 +65,45 @@ function Write-Phase($phase, $detail) {
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 try { Set-Content -Path $progressFile -Value "" -Encoding utf8 } catch { }
 
-if (-not (Test-PortOpen 11434)) {
-    Start-Process ollama -ArgumentList "serve" -WindowStyle Hidden
-    Write-Phase "ollama" "started"
-} else {
+# Ollama, in every state a machine is actually ever in.
+#
+# WHY A MISSING OLLAMA DOES NOT STOP THE LAUNCH
+# ---------------------------------------------
+# This was one Start-Process with no check, under the $ErrorActionPreference =
+# "Stop" set at the top of the file. On a machine without Ollama installed that
+# throws, so the script died HERE - several lines before the one that starts
+# the application. And the Desktop shortcut runs this hidden, so the entire
+# failure presented as a double-clicked icon doing nothing: no window, no
+# error, and nothing in a log anybody in that situation would think to open.
+#
+# Continuing is not a concession. PIP without Ollama is an installation with no
+# model yet, which is exactly the state the model browser and /llm/catalog were
+# built for - the catalogue is deliberately fail-open so that choosing
+# something to pull is possible on a machine where nothing is set up. Refusing
+# to open the app is refusing to show the one screen that fixes the problem.
+#
+# A start that FAILS is reported the same way as one that was never possible.
+# The distinction between "absent" and "installed but broken" is real, and it
+# is not this script's to draw: both leave the same machine in the same state,
+# and neither is worth trading the application window for.
+if (Test-PortOpen 11434) {
     # Reported rather than skipped. A phase the splash never receives would sit
     # unresolved on screen, and "already running" is a true and useful thing to
     # be told - it is the difference between a fast launch and a broken one.
     Write-Phase "ollama" "already running"
+} elseif (Get-Command ollama -ErrorAction SilentlyContinue) {
+    try {
+        Start-Process ollama -ArgumentList "serve" -WindowStyle Hidden
+        Write-Phase "ollama" "started"
+    } catch {
+        Write-Phase "ollama" "could not be started"
+    }
+} else {
+    # The detail, not the phase id, carries this. A new phase would add a row
+    # to a checklist that is meant to be the same list every launch, and would
+    # describe the machine rather than a step - the step here genuinely is
+    # "local model service", and "not installed" is its outcome.
+    Write-Phase "ollama" "not installed"
 }
 
 if (-not (Test-PortOpen 8765)) {

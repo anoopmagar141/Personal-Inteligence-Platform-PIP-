@@ -111,6 +111,120 @@ def test_the_launcher_reports_a_branched_phase_on_both_paths(phase):
     )
 
 
+def ollama_block() -> str:
+    """
+    The launcher's Ollama block, from its guard comment to the bare closing
+    brace that ends the last branch. Read out of the file rather than restated
+    here, so these assertions cannot pass against code that is not shipping.
+    """
+    source = LAUNCHER.read_text(encoding="utf-8").splitlines()
+    start = next(
+        (i for i, line in enumerate(source) if "# Ollama, in every state" in line),
+        None,
+    )
+    assert start is not None, (
+        "The launcher's Ollama block has been rewritten past recognition. "
+        "These tests are now blind to it - re-anchor them before trusting them."
+    )
+    end = next((i for i in range(start, len(source)) if source[i].rstrip() == "}"), None)
+    assert end is not None, "The Ollama block has no closing brace this test can find"
+    return "\n".join(source[start : end + 1])
+def ollama_code() -> str:
+    """
+    The same block with its comment lines removed.
+
+    The comments there explain the bug by naming it - "this was one
+    Start-Process with no check" - so a test searching the raw text finds
+    Start-Process in the prose before it finds it in the code, and concludes
+    the guard is on the wrong side of it. Every assertion below is a claim
+    about what RUNS, so every one of them reads this instead.
+    """
+    return "\n".join(
+        line for line in ollama_block().splitlines() if not line.lstrip().startswith("#")
+    )
+
+
+def test_the_launcher_checks_for_ollama_before_starting_it():
+    """
+    The regression: `Start-Process ollama` with no check, under the
+    $ErrorActionPreference = "Stop" set at the top of the file. On a machine
+    without Ollama that throws, and it throws SEVERAL LINES BEFORE the
+    Start-Process that opens the application - so the launch ended here, having
+    started nothing.
+
+    What made it invisible rather than merely broken is the Desktop shortcut,
+    which runs the launcher with -WindowStyle Hidden. There was no console for
+    the error to land in. The whole failure presented as double-clicking the
+    PIP icon and having nothing happen.
+
+    This is the machine PIP is now packaged for: scripts/build_portable.ps1
+    produces a copy that carries its own Python but cannot carry Ollama.
+    """
+    block = ollama_code()
+    guard = block.index("Get-Command")
+    start = block.index("Start-Process")
+    assert guard < start, (
+        "scripts/launch_pip.ps1 starts Ollama without first checking it exists. "
+        "Under ErrorActionPreference Stop that terminates the launch before the "
+        "application is started, and the shortcut runs hidden, so the user sees "
+        "nothing at all."
+    )
+
+
+def test_a_machine_without_ollama_still_reaches_the_application():
+    """
+    The guard is only half the fix. A check that reports the problem and then
+    exits leaves the same user with the same nothing - and exiting would be the
+    wrong call regardless, because PIP with no Ollama is an installation with
+    no model YET. That is the exact state the model browser and the fail-open
+    /llm/catalog exist to serve. Refusing to open is refusing to show the
+    screen that fixes the problem.
+    """
+    assert "exit" not in ollama_code(), (
+        "A branch of the launcher's Ollama block now exits. Whatever Ollama's "
+        "state, the application still has to start: choosing and pulling a "
+        "model is done from inside it."
+    )
+
+
+def test_every_ollama_branch_reports_its_outcome():
+    """
+    Four states - listening, started, failed to start, not installed - and the
+    splash draws one row for all of them. A branch that reports nothing leaves
+    that row unresolved on screen for a step that has already finished.
+
+    The count is DERIVED from the block rather than written down here, and that
+    is the whole design of this test. The first version asserted `>= 3` against
+    four branches, so deleting one report left the suite green - which is the
+    same bug, in the same file, that the branched-phase test above was rewritten
+    to fix. A number restated in a test is a number that stops matching the code.
+    """
+    code = ollama_code()
+
+    # Every path that can be taken: the three top-level branches, plus the catch
+    # that splits the middle one into started and failed-to-start. `\bif` does
+    # not match inside `elseif`, so the two are counted separately rather than
+    # twice.
+    outcomes = (
+        len(re.findall(r"\bif\s*\(", code))
+        + len(re.findall(r"\belseif\s*\(", code))
+        + len(re.findall(r"\belse\s*\{", code))
+        + len(re.findall(r"\bcatch\s*\{", code))
+    )
+    written = re.findall(r'Write-Phase\s+"ollama"\s+"([^"]+)"', code)
+
+    assert len(written) >= outcomes, (
+        f"The launcher's Ollama block has {outcomes} outcomes but only "
+        f"{len(written)} of them report a phase ({written}). The branch that "
+        "stays quiet leaves the launch screen waiting on a step that already "
+        "happened."
+    )
+    assert len(set(written)) == len(written), (
+        f"Two Ollama branches report the same detail ({written}), so the launch "
+        "screen cannot tell apart the states they exist to distinguish."
+    )
+
+
 def test_the_already_running_path_still_completes_the_list():
     """
     When the backend is already listening the launcher skips the block that
