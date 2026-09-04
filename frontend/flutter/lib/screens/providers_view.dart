@@ -22,6 +22,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import 'model_browser.dart';
 import '../theme.dart';
 
 class ProvidersView extends StatefulWidget {
@@ -152,6 +153,11 @@ class _ProvidersViewState extends State<ProvidersView> {
               description: 'Local providers never need consent. Cloud providers are blocked until you explicitly consent (Stage 8, fail-closed).',
             ),
             _buildModelPicker(),
+            const SizedBox(height: AppSpacing.md),
+            // Getting a model and choosing one are separate acts, so they are
+            // separate cards: the picker above is about what PIP runs now, this
+            // is about what is available to run at all.
+            ModelBrowser(api: widget.api, onChanged: _loadModels),
             const SizedBox(height: AppSpacing.lg),
             // Cards, not a DataTable. Five columns plus an action button did
             // not fit the 720px this screen is constrained to, and the cell
@@ -269,7 +275,7 @@ class _ProvidersViewState extends State<ProvidersView> {
             const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
           else if (_models!.isEmpty)
             Text(
-              'No models found. Is Ollama running, and have you pulled a model (e.g. `ollama pull llama3.1:8b`)?',
+              'No models pulled yet. Pick one below and PIP will download it.',
               style: TextStyle(fontSize: 12.5, color: pip.textFaint),
             )
           else

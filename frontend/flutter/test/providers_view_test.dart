@@ -30,6 +30,18 @@ class FakeApi extends ApiClient {
   @override
   Future<String> getActiveModel() async => 'llama3.1:8b';
 
+  // ProvidersView hosts the ModelBrowser, which loads on mount. Left to the
+  // real implementations these reach the network, never resolve, and every
+  // pumpAndSettle in this file times out on a spinner - a failure with nothing
+  // to do with the consent behaviour under test.
+  @override
+  Future<Map<String, dynamic>> getModelCatalog() async =>
+      {'vram_gb': null, 'models': const [], 'error': null};
+
+  @override
+  Future<Map<String, dynamic>> getPullStatus() async =>
+      {'status': 'idle', 'model': null, 'completed': 0, 'total': 0, 'detail': '', 'error': null};
+
   @override
   Future<void> grantConsent(String providerId, String scope) async {
     calls.add('grant:$providerId=$scope');

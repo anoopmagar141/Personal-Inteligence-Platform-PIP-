@@ -178,6 +178,26 @@ class ApiClient {
     return result['model_name'] as String;
   }
 
+  /// What can be chosen: pulled models, suggested ones, and what fits.
+  ///
+  /// One call rather than three, because "what can I run" is one question and
+  /// answering it from three endpoints would put the joining logic here, where
+  /// a second client would have to reimplement it.
+  Future<Map<String, dynamic>> getModelCatalog() async {
+    return await get('/llm/catalog') as Map<String, dynamic>;
+  }
+
+  /// Start a download. Progress comes from polling pullStatus(), not a stream:
+  /// ADR-028 keeps every streaming path on the one WebSocket, and a progress
+  /// bar is not worth a second transport.
+  Future<void> startPull(String modelName) async {
+    await post('/llm/pull', {'model_name': modelName});
+  }
+
+  Future<Map<String, dynamic>> getPullStatus() async {
+    return await get('/llm/pull') as Map<String, dynamic>;
+  }
+
   Future<void> setActiveModel(String modelName) async {
     await post('/llm/active-model', {'model_name': modelName});
   }

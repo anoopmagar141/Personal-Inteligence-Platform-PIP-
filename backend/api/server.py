@@ -368,6 +368,138 @@ def api_list_llm_models() -> dict[str, Any]:
     return {"models": [{"name": m.get("name"), "size": m.get("size")} for m in models]}
 
 
+def api_llm_catalog() -> dict[str, Any]:
+    """
+    What can be chosen: what is pulled, what is worth suggesting, and what will
+    actually fit.
+
+    The three are merged rather than served separately because the question a
+    user is really asking is one question - "what can I run" - and answering it
+    from three endpoints would put the joining logic in the client, where a
+    second client would have to reimplement it.
+
+    fits is null, not false, when VRAM could not be detected. A machine with no
+    NVIDIA GPU is not a machine where every model fails; it is one where this
+    cannot tell, and saying so is the honest answer. The Flutter client shows a
+    warning only for an explicit false.
+    """
+    from backend.providers.ollama_provider import MODEL_CATALOG, detect_vram_gb, list_models
+
+    try:
+        pulled = {m.get("name"): m.get("size") for m in list_models()}
+        error = None
+    except Exception as e:
+        # Same fail-open posture as api_list_llm_models: a picker that cannot
+        # reach Ollama should still render the catalogue, because choosing a
+        # model to pull is exactly what you do when nothing is pulled yet.
+        pulled, error = {}, str(e)
+
+    vram_gb = detect_vram_gb()
+
+    def fits(required: float | None) -> bool | None:
+        if vram_gb is None or required is None:
+            return None
+        return required <= vram_gb
+
+    catalog = [
+        {**entry, "pulled": entry["name"] in pulled, "fits": fits(entry.get("vram_gb"))}
+        for entry in MODEL_CATALOG
+    ]
+
+    # Anything pulled that the catalogue does not mention is still a real choice
+    # and is listed alongside - the curated list is guidance, and a model the
+    # user pulled themselves should not vanish from their own picker.
+    listed = {entry["name"] for entry in MODEL_CATALOG}
+    extra = [
+        {"name": name, "size_gb": round((size or 0) / (1024 ** 3), 1), "vram_gb": None,
+         "note": "", "pulled": True, "fits": None}
+        for name, size in pulled.items() if name not in listed
+    ]
+
+    return {
+        "vram_gb": vram_gb,
+        "models": catalog + sorted(extra, key=lambda m: m["name"]),
+        "error": error,
+    }
+
+
+# One pull at a time, tracked in memory. Single-process and single-user, the
+# same reasoning SessionRegistry records for using a plain lock rather than any
+# distributed coordination - and a second concurrent pull of the same model is
+# not a thing to support, it is a thing to refuse.
+_pull_state: dict[str, Any] = {
+    "status": "idle",   # idle | pulling | done | error
+    "model": None,
+    "completed": 0,
+    "total": 0,
+    "detail": "",
+    "error": None,
+}
+_pull_lock = threading.Lock()
+
+
+def api_pull_status() -> dict[str, Any]:
+    with _pull_lock:
+        return dict(_pull_state)
+
+
+def api_start_pull(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Start pulling a model, and report progress by polling rather than streaming.
+
+    ADR-028 puts every streaming path through the one WebSocket and everything
+    else over REST. A pull is not chat, so an SSE route here would be a second
+    streaming implementation for a progress bar - which is the exact cost that
+    ADR bought its way out of. Polling a status endpoint is duller and has no
+    second transport to keep working.
+
+    The name is not validated against a list. That is the point of the feature:
+    Ollama has no catalogue API, so any name in its library must be accepted,
+    and a name that does not exist comes back as an error from Ollama itself -
+    which is a better source of truth than any list PIP could ship.
+    """
+    from backend.providers.ollama_provider import pull_model
+
+    model_name = (payload.get("model_name") or "").strip()
+    if not model_name:
+        raise ValueError("model_name is required")
+
+    with _pull_lock:
+        if _pull_state["status"] == "pulling":
+            raise ValueError(f"already pulling {_pull_state['model']} - wait for it to finish")
+        _pull_state.update(status="pulling", model=model_name, completed=0,
+                           total=0, detail="starting", error=None)
+
+    def run() -> None:
+        def on_progress(event: dict[str, Any]) -> None:
+            with _pull_lock:
+                # Only overwrite the byte counts when this event carries them:
+                # Ollama interleaves manifest and verify statuses that have no
+                # totals, and letting those reset the numbers makes a progress
+                # bar that jumps back to zero several times per download.
+                if event.get("total"):
+                    _pull_state["total"] = event["total"]
+                    _pull_state["completed"] = event.get("completed", 0)
+                _pull_state["detail"] = event.get("status", "")
+
+        try:
+            pull_model(model_name, on_progress)
+        except Exception as e:
+            with _pull_lock:
+                _pull_state.update(status="error", error=str(e))
+            return
+
+        with _pull_lock:
+            _pull_state.update(status="done", detail="complete",
+                               completed=_pull_state["total"])
+
+    # daemon, so a pull in flight cannot hold the backend open at shutdown. The
+    # download is resumable by Ollama on the next attempt, so nothing is lost by
+    # abandoning it - and blocking shutdown on a 5GB transfer would be worse.
+    threading.Thread(target=run, name=f"pull-{model_name}", daemon=True).start()
+    return {"status": "pulling", "model_name": model_name}
+
+
 def api_get_active_model(conn) -> dict[str, Any]:
     return {"model_name": pipeline.get_active_model_name(conn)}
 
@@ -1383,6 +1515,22 @@ try:
     @app.get(f"{BASE_PREFIX}/llm/models")
     def list_llm_models():
         return api_list_llm_models()
+
+    @app.get(f"{BASE_PREFIX}/llm/catalog")
+    def llm_catalog():
+        return api_llm_catalog()
+
+    @app.post(f"{BASE_PREFIX}/llm/pull")
+    def start_llm_pull(payload: dict[str, Any]):
+        from fastapi import HTTPException
+        try:
+            return api_start_pull(payload)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.get(f"{BASE_PREFIX}/llm/pull")
+    def llm_pull_status():
+        return api_pull_status()
 
     @app.get(f"{BASE_PREFIX}/llm/active-model")
     def get_active_model():

@@ -1,7 +1,7 @@
 # PIP — Current State
 
 **Last updated:** 2026-09-02
-**Status:** Working, locally-run, single-user. Backend test suite: 839/839 passing.
+**Status:** Working, locally-run, single-user. Backend test suite: 851/851 passing.
 
 This is a living snapshot of what PIP actually is and does *right now*. For the
 original locked architecture spec and ADRs, see `PIP_ARCHITECTURE_PRD_ADR.md`
@@ -513,6 +513,7 @@ and their quality has not been separately examined.
 | WS chat with streaming, stop-generation | Done |
 | Conversation history (multi-chat sidebar, like Claude/ChatGPT) | Done |
 | Model selection (any locally-pulled Ollama model) | Done |
+| Download any Ollama model from inside PIP, with progress and VRAM warnings | Done — curated list plus free text, so the list guides without limiting; warns and never refuses |
 | Document upload + RAG retrieval | Done |
 | Decision log (manual + Observer-derived, OR-logic confidence scoring) | Done |
 | Profile / preferences / skills / goals | Done |
@@ -549,7 +550,7 @@ and their quality has not been separately examined.
 
 ## 9. Testing
 
-Backend: **839 tests**, `pytest backend/tests/`. Frontend: **144 tests**,
+Backend: **851 tests**, `pytest backend/tests/`. Frontend: **151 tests**,
 `flutter analyze` / `flutter test` clean, and `flutter build windows` succeeds.
 
 `test_phase9_roundtrip.py` is worth naming for the same reason the palette test
