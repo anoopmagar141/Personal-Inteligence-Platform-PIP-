@@ -31,7 +31,57 @@ class ChatMessage {
   final String role; // 'user' | 'assistant' | 'system'
   final String content;
   final bool stopped; // true if this assistant turn was interrupted by the user
-  const ChatMessage(this.role, this.content, {this.stopped = false});
+
+  /// When this message was written, in LOCAL time, or null for one that never
+  /// came from the database.
+  ///
+  /// The backend stores UTC and sends it as such; this is converted on the way
+  /// in so that everything downstream of here is already in the reader's own
+  /// timezone. A transcript resumed on a machine that has since moved should
+  /// read in the time that machine keeps.
+  ///
+  /// Nullable rather than defaulted, because "no time" is a real state and a
+  /// fabricated one would be worse than a blank: a system notice has no send
+  /// time, and the streaming bubble has not finished being written yet.
+  final DateTime? createdAt;
+
+  const ChatMessage(this.role, this.content, {this.stopped = false, this.createdAt});
+}
+
+/// The clock time of a message, 24-hour.
+///
+/// Hand-formatted rather than reached for through package:intl. This project
+/// carries one dependency it does not import and documents at length why (see
+/// pubspec.yaml on cupertino_icons); adding a localisation package to print
+/// four digits would not survive the same scrutiny.
+String formatMessageTime(DateTime local) =>
+    '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+
+const _monthNames = <String>[
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/// Whether two moments fall on the same calendar day, locally.
+///
+/// Compared by date parts rather than by subtracting: a difference of under 24
+/// hours is not the same question, and across a daylight-saving boundary a
+/// "day" is 23 or 25 hours long.
+bool isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// What to call the day a message was sent, for the separator between days.
+///
+/// "Today" and "Yesterday" are named because those are the two a reader can
+/// place without doing arithmetic, and they are most of what a chat history
+/// contains. Everything older gets its full date - a bare weekday would be
+/// ambiguous the moment a conversation is more than a week old, which is
+/// exactly when somebody is scrolling back to find something.
+String messageDateLabel(DateTime local, {DateTime? now}) {
+  final today = now ?? DateTime.now();
+  if (isSameDay(local, today)) return 'Today';
+  if (isSameDay(local, today.subtract(const Duration(days: 1)))) return 'Yesterday';
+  return '${local.day} ${_monthNames[local.month - 1]} ${local.year}';
 }
 
 /// Enter-to-send, as an intent so Shift+Enter can still reach the TextField
@@ -127,7 +177,15 @@ class ChatViewState extends State<ChatView> {
           if (messages.isNotEmpty) {
             _transcript
               ..clear()
-              ..addAll(messages.map((m) => ChatMessage(m['role'] as String, m['content'] as String)));
+              ..addAll(messages.map((m) => ChatMessage(
+                    m['role'] as String,
+                    m['content'] as String,
+                    // Parsed leniently: a message written before created_at
+                    // was sent over the wire has none, and an unreadable one
+                    // should cost that message its timestamp rather than the
+                    // whole transcript its replay.
+                    createdAt: DateTime.tryParse(m['created_at'] as String? ?? '')?.toLocal(),
+                  )));
           }
         });
         _loadConversations(); // title/ordering may have changed
@@ -141,7 +199,7 @@ class ChatViewState extends State<ChatView> {
         return;
       case 'done':
         setState(() {
-          _transcript.add(ChatMessage('assistant', _streamingText));
+          _transcript.add(ChatMessage('assistant', _streamingText, createdAt: DateTime.now()));
           _streamingText = '';
           _isStreaming = false;
           _lastStageHint = _pendingStageHint;
@@ -165,7 +223,9 @@ class ChatViewState extends State<ChatView> {
           // turn, not discarded - the user still read it, and it belongs in
           // conversation_history the same way the backend keeps it (Part
           // 15.2's server-side counterpart to this).
-          _transcript.add(ChatMessage('assistant', _streamingText, stopped: true));
+          _transcript.add(
+            ChatMessage('assistant', _streamingText, stopped: true, createdAt: DateTime.now()),
+          );
           _streamingText = '';
           _isStreaming = false;
           _lastStageHint = _pendingStageHint;
@@ -181,7 +241,7 @@ class ChatViewState extends State<ChatView> {
     final text = _controller.text.trim();
     if (text.isEmpty || _isStreaming) return;
     setState(() {
-      _transcript.add(ChatMessage('user', text));
+      _transcript.add(ChatMessage('user', text, createdAt: DateTime.now()));
       _streamingText = '';
       _isStreaming = true;
     });
@@ -380,7 +440,25 @@ class ChatViewState extends State<ChatView> {
                       itemCount: _transcript.length + (_isStreaming ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (index < _transcript.length) {
-                          return ChatMessageBubble(message: _transcript[index]);
+                          final message = _transcript[index];
+                          // A separator wherever the day changes, and above the
+                          // first message that has a date at all - so the top of
+                          // a resumed transcript says when it started rather
+                          // than leaving the reader to infer it from the first
+                          // clock time they see.
+                          final previous = index > 0 ? _transcript[index - 1].createdAt : null;
+                          final showDate = message.createdAt != null &&
+                              (previous == null || !isSameDay(previous, message.createdAt!));
+                          if (!showDate) {
+                            return ChatMessageBubble(message: message);
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _DaySeparator(day: message.createdAt!),
+                              ChatMessageBubble(message: message),
+                            ],
+                          );
                         }
                         return ChatMessageBubble(
                           message: ChatMessage('assistant', _streamingText),
@@ -782,9 +860,25 @@ class ChatMessageBubble extends StatelessWidget {
                   baseStyle: TextStyle(fontSize: 14.5, height: 1.5, color: pip.text),
                 ),
         ),
-        if (message.stopped) ...[
+        // Time and interruption on one line under the bubble, kept as two
+        // Texts rather than one joined string so each reads on its own - the
+        // clock time is plain and "Stopped" is a caveat about the content.
+        if (message.createdAt != null || message.stopped) ...[
           const SizedBox(height: 4),
-          Text('Stopped', style: TextStyle(fontSize: 11, color: pip.textFaint, fontStyle: FontStyle.italic)),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (message.createdAt != null)
+                Text(
+                  formatMessageTime(message.createdAt!),
+                  style: TextStyle(fontSize: 11, color: pip.textFaint),
+                ),
+              if (message.createdAt != null && message.stopped)
+                Text('  ·  ', style: TextStyle(fontSize: 11, color: pip.textFaint)),
+              if (message.stopped)
+                Text('Stopped', style: TextStyle(fontSize: 11, color: pip.textFaint, fontStyle: FontStyle.italic)),
+            ],
+          ),
         ],
       ],
     );
@@ -859,6 +953,42 @@ class _ScopeTab extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// The dated rule between one day's messages and the next.
+///
+/// A centred label on a hairline rather than a heading: it marks a boundary
+/// between turns rather than starting a section, and the transcript's own
+/// hierarchy is the conversation, not the calendar.
+class _DaySeparator extends StatelessWidget {
+  final DateTime day;
+  const _DaySeparator({required this.day});
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: pip.border, height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Text(
+              messageDateLabel(day),
+              style: TextStyle(
+                fontSize: 11,
+                color: pip.textFaint,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: pip.border, height: 1)),
+        ],
       ),
     );
   }

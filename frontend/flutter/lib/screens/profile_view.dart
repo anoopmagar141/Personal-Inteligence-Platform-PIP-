@@ -45,9 +45,12 @@ import '../theme.dart';
 ///
 /// This mirrors two backend functions rather than guessing:
 ///
-///   * `correct_profile_field()` refuses name/language_preference/timezone
-///     outright and otherwise routes the write to whichever table already
-///     holds the field. It used to write to preference_memory unconditionally,
+///   * `correct_profile_field()` routes the write to whichever table already
+///     holds the field, identity included - it passes allow_identity, which
+///     the automated paths into that write deliberately do not, so the
+///     Observer still cannot rename you from something it inferred. It used to
+///     refuse name/language_preference/timezone outright, and used to write to
+///     preference_memory unconditionally,
 ///     which is why "edit" was once offered on preferences alone: correcting a
 ///     skill would have filed a new preference of the same name and left the
 ///     skill untouched. Now that it dispatches properly, skills and goals are
@@ -64,7 +67,10 @@ import '../theme.dart';
 ({bool canEdit, bool canDelete, bool hasHistory, String? note}) profileRowCapability(String table) {
   switch (table) {
     case 'identity':
-      return (canEdit: false, canDelete: false, hasHistory: false, note: 'set at onboarding');
+      // Editable, but never deletable: the columns are NOT NULL and they are
+      // what PIP addresses you by, so a correction has a meaning here and a
+      // retraction does not.
+      return (canEdit: true, canDelete: false, hasHistory: false, note: null);
     case 'interaction_style':
       // The only row with a past. interaction_style_history gains a row on
       // every change and is the one audit trail the profile has.

@@ -83,11 +83,14 @@ Future<FakeApi> pumpProfile(WidgetTester tester, List<dynamic> fields) async {
 
 void main() {
   group('profileRowCapability', () {
-    test('offers nothing on identity, and says why', () {
+    test('offers correction on identity, but never deletion', () {
+      // Asserted the opposite until identity became correctable. The columns
+      // are NOT NULL and are what PIP addresses you by, so a correction has a
+      // meaning here and a retraction does not.
       final capability = profileRowCapability('identity');
-      expect(capability.canEdit, isFalse);
+      expect(capability.canEdit, isTrue);
       expect(capability.canDelete, isFalse);
-      expect(capability.note, 'set at onboarding');
+      expect(capability.note, isNull);
     });
 
     test('offers both on the tables the correction endpoint can route to', () {
@@ -192,13 +195,12 @@ void main() {
     });
   });
 
-  testWidgets('shows no write affordances on an identity row', (tester) async {
+  testWidgets('a name can be corrected but not forgotten', (tester) async {
     await pumpProfile(tester, [row('identity', 'name', 'BatMan', confidence: 1.0, source: 'explicit')]);
 
     expect(find.text('BatMan'), findsOneWidget);
-    expect(find.text('Correct'), findsNothing);
+    expect(find.text('Correct'), findsOneWidget);
     expect(find.text('Forget'), findsNothing);
-    expect(find.textContaining('set at onboarding'), findsOneWidget);
   });
 
   testWidgets('a skill can be corrected, and says what a level is', (tester) async {

@@ -23,6 +23,12 @@ CONSENT_SEED_PATH = Path(__file__).parent.parent.parent / "config" / "provider_c
 DEFAULT_TIMEZONE = "UTC"
 DEFAULT_INTERACTION_STYLE = "adaptive"
 
+# The identity table's own columns, as opposed to everything else get_profile()
+# surfaces. They are singular, NOT NULL, and typed by the user at onboarding
+# rather than inferred from anything - which is why they are the only fields
+# with a rule about WHO may write them. See _write_profile_value.
+IDENTITY_FIELDS = frozenset({"name", "language_preference", "timezone"})
+
 
 def get_connection(db_path: str, db_key: str | None = None):
     # Was `assert re.fullmatch(...)` - assert statements are compiled out
@@ -675,9 +681,6 @@ def correct_profile_field(conn, field: str, value: str) -> None:
     preference gets created at all outside the Observer, and "correcting"
     something PIP has never recorded is really just stating it.
     """
-    if field in {"name", "language_preference", "timezone"}:
-        raise ValueError("immutable identity fields cannot be edited after onboarding")
-
     existing = get_profile_field(conn, field)
     target_table = existing["table"] if existing else "preference_memory"
 
@@ -702,6 +705,10 @@ def correct_profile_field(conn, field: str, value: str) -> None:
         field=field,
         value=value,
         source_label="user_correction",
+        # The only caller that passes this. A direct correction is the user
+        # stating a fact about themselves; every other path into this function
+        # is PIP inferring one.
+        allow_identity=True,
     )
 
 
@@ -966,6 +973,7 @@ def _write_profile_value(
     field: str | None,
     value: Any,
     source_label: str,
+    allow_identity: bool = False,
 ) -> None:
     """
     Writes one value into whichever profile table owns it, at maximum
@@ -989,14 +997,37 @@ def _write_profile_value(
     not an update).
     """
     if target_table == "identity":
-        if field in {"name", "language_preference", "timezone"}:
-            raise ValueError("immutable identity fields cannot be edited after onboarding")
+        # WHO may write these, rather than whether they can be written at all.
+        #
+        # This refused every caller, so somebody who mistyped their own name at
+        # onboarding lived with it permanently. The reason for the refusal is
+        # real, though, and it is not about the user: apply_verified_correction
+        # reaches this same function from stage_13, so lifting the rule
+        # outright would let the Observer rename the person it is observing,
+        # from a value it inferred out of their own conversation.
+        #
+        # So the gate moves from the field to the caller. Nothing automated
+        # passes allow_identity, because nothing automated should decide who
+        # somebody is. correct_profile_field passes it, because a direct
+        # correction is a person stating a fact about themselves - the one
+        # source that outranks anything PIP could infer.
+        if field in IDENTITY_FIELDS and not allow_identity:
+            raise ValueError(
+                f"'{field}' can only be set by you, not inferred - "
+                "correct it from your profile."
+            )
         
         # In case other identity fields exist in the future, whitelist against actual schema columns
         allowed_columns = {row["name"] for row in conn.execute("PRAGMA table_info(identity)")}
         if field not in allowed_columns:
             raise ValueError(f"Unknown identity field: {field}")
             
+        # Refused here, where the sentence can still reach whoever typed it,
+        # rather than surfacing as an IntegrityError from the driver.
+        if not str(value).strip():
+            raise ValueError(f"Your {field.replace('_', ' ')} cannot be empty.")
+        value = str(value).strip()
+
         conn.execute(f"UPDATE identity SET {field} = ? WHERE id = 1", (value,))
 
     elif target_table == "preference_memory":

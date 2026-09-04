@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from backend.api import server
 from backend.core import auth, instance_lock
-from backend.memory import profile_store, vector_store
+from backend.memory import conversation_store, profile_store, vector_store
 
 
 @pytest.fixture
@@ -797,8 +797,55 @@ def _client_with_token(tmp_path, monkeypatch):
     return TestClient(server.app), {"Authorization": f"Bearer {token}"}
 
 
-def test_rest_memory_correct_reports_immutable_field_as_422(tmp_path, monkeypatch):
+
+def test_resumed_messages_carry_their_timestamps(conn):
+    """
+    The break this closes. messages.created_at has been written since the table
+    existed and conversation_store.get_messages has always returned it -
+    _resolve_connection_state then rebuilt each message as {role, content} and
+    dropped it, so a conversation resumed from last week arrived at the client
+    with nothing to say when any of it happened.
+    """
+    conversation_id = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, conversation_id, "user", "hello", timestamp="2026-09-04T14:32:00Z")
+    conversation_store.append_message(conn, conversation_id, "assistant", "hi", timestamp="2026-09-04T14:32:07Z")
+
+    _, _, _, messages = server._resolve_connection_state(conn, conversation_id)
+
+    assert [m["created_at"] for m in messages] == [
+        "2026-09-04T14:32:00Z",
+        "2026-09-04T14:32:07Z",
+    ]
+
+
+def test_the_prompt_history_does_not_carry_timestamps(conn):
+    """
+    The other half, and the reason the strip happens in the caller rather than
+    never happening at all: the same list seeds conversation_history, which is
+    prompt input. A created_at on every prior turn would be tokens spent
+    telling the model something nobody asked it about, and stage_07 appends to
+    this list before handing it to a provider that expects {role, content}.
+    """
+    conversation_id = conversation_store.create_conversation(conn)
+    conversation_store.append_message(conn, conversation_id, "user", "hello")
+
+    _, _, _, resumed = server._resolve_connection_state(conn, conversation_id)
+    conversation_history = [{"role": m["role"], "content": m["content"]} for m in resumed]
+
+    assert conversation_history == [{"role": "user", "content": "hello"}]
+
+def test_rest_memory_correct_accepts_a_new_name(tmp_path, monkeypatch):
+    """
+    This asserted a 422 until identity fields became correctable. Someone who
+    mistyped their own name at onboarding had no route to fixing it, through
+    this endpoint or any other.
+    """
     client, headers = _client_with_token(tmp_path, monkeypatch)
+    client.post(
+        "/api/v1/onboarding/complete",
+        headers=headers,
+        json={"name": "BatMan", "language_preference": "English"},
+    )
 
     response = client.post(
         "/api/v1/memory/correct",
@@ -806,12 +853,35 @@ def test_rest_memory_correct_reports_immutable_field_as_422(tmp_path, monkeypatc
         json={"field": "name", "value": "Bruce"},
     )
 
+    assert response.status_code == 200
+    assert response.json() == {"status": "updated"}
+
+
+def test_rest_memory_correct_reports_an_empty_name_as_422(tmp_path, monkeypatch):
+    """
+    The endpoint still has to turn a refusal into a sentence rather than a
+    bare 500 - there is just a different set of refusals now. identity is NOT
+    NULL, and a name is what PIP addresses the user by.
+    """
+    client, headers = _client_with_token(tmp_path, monkeypatch)
+    client.post(
+        "/api/v1/onboarding/complete",
+        headers=headers,
+        json={"name": "BatMan", "language_preference": "English"},
+    )
+
+    response = client.post(
+        "/api/v1/memory/correct",
+        headers=headers,
+        json={"field": "name", "value": "   "},
+    )
+
     assert response.status_code == 422
-    assert "immutable identity fields" in response.json()["detail"]
+    assert "cannot be empty" in response.json()["detail"]
 
 
 def test_rest_memory_correct_still_accepts_a_mutable_field(tmp_path, monkeypatch):
-    """The guard must refuse the three identity fields and nothing else."""
+    """A field with no rule of its own still goes straight through."""
     client, headers = _client_with_token(tmp_path, monkeypatch)
 
     response = client.post(

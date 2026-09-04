@@ -582,7 +582,15 @@ def _resolve_connection_state(conn, conversation_id: Optional[str]) -> tuple[str
         rows = conversation_store.get_messages(conn, conversation_id)
         title_row = conn.execute("SELECT title FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
         title = title_row["title"] if title_row else "New chat"
-        messages = [{"role": r["role"], "content": r["content"]} for r in rows]
+        # created_at is kept here and stripped by the caller before the list
+        # becomes conversation_history. The client needs it to show when each
+        # turn happened; the prompt does not, and every timestamp forwarded
+        # into it would be tokens spent on something nobody asked the model
+        # about. See ws_chat()'s conversation_history line.
+        messages = [
+            {"role": r["role"], "content": r["content"], "created_at": r["created_at"]}
+            for r in rows
+        ]
         return model_name, conversation_id, title, messages
 
     return model_name, None, "New chat", []
@@ -1107,7 +1115,13 @@ try:
         observer_model_name, conversation_id, conversation_title, resumed_messages = await loop.run_in_executor(
             executor, _resolve_connection_state, conn, requested_conversation_id
         )
-        conversation_history: list[dict[str, str]] = list(resumed_messages)
+        # Reshaped rather than copied: resumed_messages carries created_at for
+        # the client's benefit, and the pipeline's message dicts are strictly
+        # {role, content} - stage_07 appends to this list and hands the result
+        # to a provider.
+        conversation_history: list[dict[str, str]] = [
+            {"role": m["role"], "content": m["content"]} for m in resumed_messages
+        ]
         # profile_meta.session_count is bumped once per connection, on the first
         # real message - see profile_store.begin_session() for why there and not
         # on connect or at session end. Resuming a past conversation still
@@ -1360,12 +1374,12 @@ try:
         with _conn() as conn:
             return api_get_interaction_style_history(conn, limit=limit)
 
-    # 422, not a bare 500: correct_profile_field refuses the three identity
-    # fields by design, and "immutable identity fields cannot be edited after
-    # onboarding" IS the answer to why an edit did not take. Uncaught, that
-    # sentence never leaves the server and a client can only report that
-    # something unspecified went wrong. Same reasoning, same status code as
-    # /memory/pending/{candidate_id}/confirm above.
+    # 422, not a bare 500: correct_profile_field rejects values it cannot
+    # store - a skill level that is not a number, an identity field emptied to
+    # nothing - and the sentence it raises IS the answer to why an edit did not
+    # take. Uncaught, that sentence never leaves the server and a client can
+    # only report that something unspecified went wrong. Same reasoning, same
+    # status code as /memory/pending/{candidate_id}/confirm above.
     @app.post(f"{BASE_PREFIX}/memory/correct")
     def correct_memory(payload: dict[str, Any]):
         from fastapi import HTTPException

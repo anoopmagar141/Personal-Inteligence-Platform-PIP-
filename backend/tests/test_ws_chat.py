@@ -577,17 +577,34 @@ def test_ws_chat_resumes_a_known_conversation_id(monkeypatch, token, tmp_path):
     from backend.memory import conversation_store
     seed_conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
     conversation_id = conversation_store.create_conversation(seed_conn)
-    conversation_store.append_message(seed_conn, conversation_id, "user", "earlier question")
-    conversation_store.append_message(seed_conn, conversation_id, "assistant", "earlier answer")
+    conversation_store.append_message(
+        seed_conn, conversation_id, "user", "earlier question",
+        timestamp="2026-09-04T14:32:00Z",
+    )
+    conversation_store.append_message(
+        seed_conn, conversation_id, "assistant", "earlier answer",
+        timestamp="2026-09-04T14:32:07Z",
+    )
     seed_conn.close()
 
     client = TestClient(server.app)
     with client.websocket_connect(f"/ws/chat?token={token}&conversation_id={conversation_id}") as ws:
         info = _expect_session_info(ws)
         assert info["conversation_id"] == conversation_id
+        # created_at is part of this payload now. It was always in the database
+        # and always dropped here, which left a conversation resumed from last
+        # week looking as though every turn had just happened.
         assert info["messages"] == [
-            {"role": "user", "content": "earlier question"},
-            {"role": "assistant", "content": "earlier answer"},
+            {
+                "role": "user",
+                "content": "earlier question",
+                "created_at": "2026-09-04T14:32:00Z",
+            },
+            {
+                "role": "assistant",
+                "content": "earlier answer",
+                "created_at": "2026-09-04T14:32:07Z",
+            },
         ]
 
 

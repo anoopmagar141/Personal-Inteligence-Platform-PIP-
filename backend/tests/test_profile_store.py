@@ -88,11 +88,55 @@ def test_profile_correction_and_soft_delete(conn):
     assert profile_store.get_profile_field(conn, "Python") is None
 
 
-def test_identity_fields_are_immutable_after_onboarding(conn):
+def test_you_can_correct_your_own_name_after_onboarding(conn):
+    """
+    This asserted the opposite until identity fields became correctable. The
+    rule was never really about the field: it protected these columns from
+    stage_13, and caught the user in the same net - so somebody who mistyped
+    their own name at onboarding could never fix it.
+    """
     profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
 
-    with pytest.raises(ValueError):
-        profile_store.correct_profile_field(conn, "name", "Bruce")
+    profile_store.correct_profile_field(conn, "name", "Bruce")
+
+    assert profile_store.get_profile_field(conn, "name")["value"] == "Bruce"
+
+
+def test_the_observer_still_cannot_rename_you(conn):
+    """
+    The half of the old rule that has to survive. apply_verified_correction is
+    reached from stage_13 with values PIP inferred from the conversation, and
+    an inference is not a source that gets to decide who somebody is.
+    """
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+
+    with pytest.raises(ValueError, match="can only be set by you"):
+        profile_store._write_profile_value(
+            conn,
+            target_table="identity",
+            field="name",
+            value="Bruce",
+            source_label="observer_inferred",
+        )
+
+    assert profile_store.get_profile_field(conn, "name")["value"] == "BatMan"
+
+
+def test_an_identity_field_cannot_be_emptied(conn):
+    """identity is NOT NULL, and these are the fields PIP addresses you by."""
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        profile_store.correct_profile_field(conn, "name", "   ")
+
+    assert profile_store.get_profile_field(conn, "name")["value"] == "BatMan"
+
+
+def test_identity_fields_still_cannot_be_deleted(conn):
+    """Correcting a name is a fact about you; deleting one leaves a NOT NULL
+    column with nothing in it and PIP with nothing to call you."""
+    profile_store.complete_onboarding(conn, name="BatMan", language_preference="English")
+
     with pytest.raises(ValueError):
         profile_store.soft_delete_profile_field(conn, "timezone")
 

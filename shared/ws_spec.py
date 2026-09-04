@@ -77,6 +77,16 @@ class StopRequest(TypedDict):
 class SessionMessage(TypedDict):
     role: Literal["user", "assistant"]
     content: str
+    # When the message was written, as messages.created_at holds it:
+    # "%Y-%m-%dT%H:%M:%SZ", always UTC. The client converts to local time for
+    # display - a transcript resumed on a machine in another timezone should
+    # read in that machine's, and only the sender's clock could be trusted to
+    # say what "3pm" meant anyway.
+    #
+    # Carried here and NOT into conversation_history: that list is prompt
+    # input, and a timestamp on every prior turn is tokens spent telling the
+    # model something it was not asked about. See _resolve_connection_state.
+    created_at: str
 
 
 class SessionInfoEvent(TypedDict):

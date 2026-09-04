@@ -126,7 +126,11 @@ def test_apply_verified_correction_immutable_identity(db_conn):
     }
     validation_result = ValidationResult.REQUIRES_CONFIRMATION("gated")
     
-    with pytest.raises(ValueError, match="immutable identity fields cannot be edited"):
+    # Still refused, and this is the half of the old rule that had to survive:
+    # the value here was inferred from "My name is bob", and an inference does
+    # not get to decide who somebody is. Only correct_profile_field passes
+    # allow_identity, because only it represents the user saying so directly.
+    with pytest.raises(ValueError, match="can only be set by you"):
         apply_verified_correction(db_conn, candidate, validation_result)
 def test_apply_verified_correction_goal_memory_malformed_id(db_conn):
     # Use a non-numeric identifier to trigger the fallback autoincrement branch
