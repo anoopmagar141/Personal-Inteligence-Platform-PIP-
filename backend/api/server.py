@@ -881,18 +881,38 @@ try:
 
     def _start_catch_up() -> None:
         """
-        Begin the catch-up, unless the database is still locked or it is
-        already running.
+        Begin the catch-up, unless there is nothing to catch up on.
 
-        Called from two places that cannot both be right about timing -
-        the lifespan, and whichever of unlock/setup opened the database
-        - so the guard lives here rather than at each call site. Calling
-        it twice is a no-op rather than a second drain: the second call
-        would open its own connection and race the first over the same
-        pending_observer rows.
+        Called from two places that cannot both be right about timing - the
+        lifespan, and whichever of unlock/setup opened the database - so the
+        guard lives here rather than at each call site. Calling it twice is a
+        no-op rather than a second drain: the second call would open its own
+        connection and race the first over the same pending_observer rows.
+
+        THE SECOND GUARD IS NOT AN OPTIMISATION
+
+        Catch-up recovers rows written by previous runs, so on an installation
+        where the database does not exist there is by definition nothing to
+        recover. Skipping it there would be merely tidy if _conn() were a read
+        - but it is not: opening a database that is not there CREATES it, and
+        on a first run there is no password yet, so what it created was an
+        unencrypted database.
+
+        That is not a hypothetical. A fresh portable install did exactly this:
+        the lifespan started catch-up, catch-up made a plaintext pip.db, and
+        /auth/setup then correctly refused to choose a password because it
+        could see a plaintext database with data in it. The first run of a new
+        install was unusable, and the database it left behind was unencrypted -
+        the precise outcome the sign-in work exists to prevent.
         """
         global _catch_up_task
         if session_key.state(_db_path_or_default()) == "locked":
+            return
+
+        db_path = Path(_db_path_or_default())
+        if not session_key.is_unlocked() and not (
+            db_path.exists() and db_path.stat().st_size > 0
+        ):
             return
         if _catch_up_task is not None and not _catch_up_task.done():
             return

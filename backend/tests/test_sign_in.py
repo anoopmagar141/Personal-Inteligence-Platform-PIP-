@@ -209,6 +209,63 @@ def test_setup_creates_a_password_on_a_bare_installation(tmp_path, monkeypatch, 
     assert session_key.is_unlocked() is True
 
 
+
+def test_a_first_run_does_not_create_a_database_before_it_has_a_password(tmp_path, monkeypatch):
+    """
+    The regression this closes, found by running the portable build rather than
+    by any test here.
+
+    The lifespan starts the catch-up, catch-up calls _conn(), and opening a
+    database that does not exist CREATES it - so on a first run, before any
+    password existed, PIP wrote itself a plaintext pip.db. /auth/setup then
+    correctly refused to choose a password, because it could see an unencrypted
+    database with data in it: the first run of a new install was unusable, and
+    what it left behind was exactly the unencrypted database the sign-in work
+    exists to prevent.
+
+    TestClient is entered as a context manager here, unlike everywhere else in
+    this file, and that is the whole test. Without it Starlette never runs the
+    lifespan, catch-up never starts, and this passes against the bug - which
+    the first version of it did.
+    """
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.setenv("PIP_SALT_PATH", str(tmp_path / "salt.bin"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with TestClient(server.app) as api:
+        assert api.get("/api/v1/auth/state", headers=headers).json()["state"] == "setup"
+
+    assert not (tmp_path / "pip.db").exists(), (
+        "starting the backend created a database before there was a password for it"
+    )
+
+
+def test_choosing_a_first_password_produces_an_encrypted_database(tmp_path, monkeypatch):
+    """
+    The other half, and the point of all of it: what a fresh install ends up
+    with. Before the sign-in work this was a plaintext database that stayed
+    plaintext until somebody remembered to run a script.
+    """
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.setenv("PIP_SALT_PATH", str(tmp_path / "salt.bin"))
+    token = auth.get_or_create_token(tmp_path / "api_token.txt")
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with TestClient(server.app) as api:
+        assert api.post(
+            "/api/v1/auth/setup", headers=headers, json={"password": "a-real-password"}
+        ).status_code == 200
+        assert api.get("/api/v1/status", headers=headers).status_code == 200
+
+    header = (tmp_path / "pip.db").read_bytes()[:16]
+    assert not header.startswith(b"SQLite format 3"), (
+        "a fresh install produced an unencrypted database"
+    )
+
+
 def test_setup_refuses_when_a_password_already_exists(tmp_path, monkeypatch, client):
     """
     create_salt() overwrites, and a replaced salt makes an existing database
