@@ -44,7 +44,11 @@ DART_LABELS = REPO / "frontend" / "flutter" / "lib" / "startup_progress.dart"
 
 # The phases only the launcher can report, because they happen before there is
 # a backend to ask. These are the ones that cover the multi-second wait.
-PRE_BACKEND_PHASES = {"ollama", "key", "backend"}
+# "key" was here until the password moved into the application. The launcher
+# no longer derives anything, so there is no key phase for it to report and no
+# row for one on the launch screen - signing in happens after that screen is
+# gone, on a screen of its own.
+PRE_BACKEND_PHASES = {"ollama", "backend"}
 
 # The phases only the backend can report, from inside its own lifespan.
 BACKEND_PHASES = {"lock", "ready"}

@@ -14,6 +14,7 @@ from backend.core import (
     pinned_executor,
     pipeline,
     proactive,
+    session_key,
     session_lifecycle,
     startup_progress,
     trace,
@@ -34,6 +35,21 @@ logger = logging.getLogger(__name__)
 
 BASE_PREFIX = "/api/v1"
 DEFAULT_DB_PATH = Path(__file__).parent.parent.parent / "data" / "pip.db"
+
+
+class LockedError(RuntimeError):
+    """
+    Raised when something tries to open the database before a password has
+    opened it. Routes are already refused by LockGateMiddleware; this is what
+    the paths that are not routes hit instead.
+    """
+
+
+def _db_path_or_default() -> str:
+    """The database this process is pointed at, as session_key needs it - a
+    path rather than a connection, since the whole question is whether one can
+    be opened yet."""
+    return os.environ.get("PIP_DB_PATH") or str(DEFAULT_DB_PATH)
 
 VALID_CONSENT_SCOPES = {"full_inference", "web_search_only", "embedding_only", "none"}
 
@@ -830,6 +846,15 @@ def _idle_timeout_seconds() -> float:
 
 _session_registry = session_lifecycle.SessionRegistry()
 
+# The startup catch-up, wherever it was started from.
+#
+# It used to be a local in the lifespan, because there was only one moment it
+# could begin: the database was already open by the time uvicorn started. Now
+# it begins either there (an installation with no password, or a key inherited
+# from the environment) or at the moment a password opens the database - and
+# shutdown has to be able to cancel whichever one happened.
+_catch_up_task: Any = None
+
 
 try:
     from contextlib import asynccontextmanager
@@ -837,6 +862,14 @@ try:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
     def _conn():
+        # A backstop behind LockGateMiddleware rather than the gate itself.
+        # Every route is refused while locked; this catches what is not a route
+        # - a background task, a WebSocket, something added later that forgets.
+        # Opening the database here with no key would not fail loudly: it would
+        # quietly create an empty unencrypted one beside the encrypted database
+        # it could not read.
+        if session_key.state(_db_path_or_default()) == "locked":
+            raise LockedError("PIP is locked - a password is needed before the database can be opened.")
         return open_app_connection(os.environ.get("PIP_DB_PATH"), os.environ.get("PIP_DB_KEY"))
 
     def _token_path() -> Path | None:
@@ -844,6 +877,63 @@ try:
         # real persisted token in data/api_token.txt" (production behavior).
         override = os.environ.get("PIP_TOKEN_PATH")
         return Path(override) if override else None
+
+    def _start_catch_up() -> None:
+        """
+        Begin the catch-up, unless the database is still locked or it is
+        already running.
+
+        Called from two places that cannot both be right about timing -
+        the lifespan, and whichever of unlock/setup opened the database
+        - so the guard lives here rather than at each call site. Calling
+        it twice is a no-op rather than a second drain: the second call
+        would open its own connection and race the first over the same
+        pending_observer rows.
+        """
+        global _catch_up_task
+        if session_key.state(_db_path_or_default()) == "locked":
+            return
+        if _catch_up_task is not None and not _catch_up_task.done():
+            return
+        _catch_up_task = asyncio.create_task(asyncio.to_thread(_catch_up_blocking))
+
+    def _catch_up_blocking() -> None:
+        conn = _conn()
+        try:
+            # Cheap (one UPDATE), and it belongs before the drain rather
+            # than after: the drain can run for minutes, and a goal that
+            # went stale while the app was closed should be marked by
+            # the time the first turn assembles context, not after.
+            profile_store.decay_stale_goals(conn)
+            # trace.hard_delete_after_days, which nothing enforced while
+            # traces lived in a file that only ever grew.
+            trace.purge_old_entries(conn)
+            recovered = session_lifecycle.recover_unobserved_conversations(conn)
+            if recovered:
+                logger.info(
+                    f"Recovered {len(recovered)} conversation(s) an unclean shutdown left "
+                    f"unprocessed; queued for the Observer."
+                )
+            result = session_lifecycle.drain_pending_on_startup(
+                conn, _default_observer_provider(pipeline.get_active_model_name(conn))
+            )
+            if result["completed"] or result["deferred"] or result["failed"]:
+                logger.info(f"Startup pending_observer drain: {result}")
+            if result["deferred"]:
+                # Almost always "Ollama was not up yet" - launch_pip.ps1
+                # starts it alongside this process without waiting. The
+                # rows stay queued and are retried on the next start,
+                # so this is a notice, not an error.
+                logger.info(
+                    f"{len(result['deferred'])} queued session(s) could not be processed "
+                    f"yet and remain queued for the next start."
+                )
+        except Exception as e:
+            # Fail open - catch-up must never stop the app working.
+            logger.error(f"Startup catch-up failed, continuing anyway: {e}")
+        finally:
+            conn.close()
+
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -865,6 +955,10 @@ try:
         # earlier test's TestClient had already latched the flag. Any such
         # assertion after the first one was not testing anything.
         _session_registry.shutting_down = False
+        # An older launcher, a test, or a shell that exported it. Adopting the
+        # key means those keep working exactly as they did rather than meeting
+        # a sign-in screen for a database already open to them.
+        session_key.adopt_environment_key()
         startup_progress.report("lock", "no other copy of PIP is running")
         # Before anything can log a request URL - the /ws/chat handshake carries
         # the token in its query string and uvicorn logs the full path.
@@ -896,44 +990,12 @@ try:
             # the connection it opens is created and used and closed there -
             # the sqlite3/sqlcipher3 thread-affinity rule this file documents
             # elsewhere. Nothing outside that function ever touches that conn.
-            def _catch_up_blocking() -> None:
-                conn = _conn()
-                try:
-                    # Cheap (one UPDATE), and it belongs before the drain rather
-                    # than after: the drain can run for minutes, and a goal that
-                    # went stale while the app was closed should be marked by
-                    # the time the first turn assembles context, not after.
-                    profile_store.decay_stale_goals(conn)
-                    # trace.hard_delete_after_days, which nothing enforced while
-                    # traces lived in a file that only ever grew.
-                    trace.purge_old_entries(conn)
-                    recovered = session_lifecycle.recover_unobserved_conversations(conn)
-                    if recovered:
-                        logger.info(
-                            f"Recovered {len(recovered)} conversation(s) an unclean shutdown left "
-                            f"unprocessed; queued for the Observer."
-                        )
-                    result = session_lifecycle.drain_pending_on_startup(
-                        conn, _default_observer_provider(pipeline.get_active_model_name(conn))
-                    )
-                    if result["completed"] or result["deferred"] or result["failed"]:
-                        logger.info(f"Startup pending_observer drain: {result}")
-                    if result["deferred"]:
-                        # Almost always "Ollama was not up yet" - launch_pip.ps1
-                        # starts it alongside this process without waiting. The
-                        # rows stay queued and are retried on the next start,
-                        # so this is a notice, not an error.
-                        logger.info(
-                            f"{len(result['deferred'])} queued session(s) could not be processed "
-                            f"yet and remain queued for the next start."
-                        )
-                except Exception as e:
-                    # Fail open - catch-up must never stop the app working.
-                    logger.error(f"Startup catch-up failed, continuing anyway: {e}")
-                finally:
-                    conn.close()
 
-            catch_up_task = asyncio.create_task(asyncio.to_thread(_catch_up_blocking))
+            # Only if the database can be opened at all. On a locked
+            # installation this runs from the unlock endpoint instead, which is
+            # the first moment there is anything to catch up ON - starting it
+            # here would just be a thread that fails LockedError and logs it.
+            _start_catch_up()
 
             # Ensures the token file exists before the first request arrives.
             # Never logged: the file at auth.TOKEN_PATH (or PIP_TOKEN_PATH) is
@@ -965,9 +1027,13 @@ try:
             # detaches the awaiting coroutine; the worker thread itself runs to
             # completion or dies with the process, which is why that retry
             # behaviour is what actually makes this safe.
-            catch_up_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await catch_up_task
+            # May never have started: a session that was locked for its
+            # whole life never opened the database, so there was nothing to
+            # catch up on and nothing to cancel.
+            if _catch_up_task is not None:
+                _catch_up_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await _catch_up_task
 
             loop = asyncio.get_event_loop()
             for session in await _session_registry.snapshot():
@@ -1022,6 +1088,33 @@ try:
             return None
         return header[len("Bearer "):]
 
+    # Everything the sign-in screen itself needs, which by definition cannot
+    # require being signed in. /auth/state tells it which screen to show; the
+    # other two are how it stops being locked.
+    _UNLOCKED_PATHS = frozenset({
+        f"{BASE_PREFIX}/auth/state",
+        f"{BASE_PREFIX}/auth/unlock",
+        f"{BASE_PREFIX}/auth/setup",
+    })
+
+    class LockGateMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            if (
+                request.url.path.startswith(BASE_PREFIX)
+                and request.url.path not in _UNLOCKED_PATHS
+                and session_key.state(_db_path_or_default()) == "locked"
+            ):
+                # 423 Locked, not 401. The caller's credentials are fine - the
+                # API token was accepted by the middleware outside this one -
+                # and the resource exists. What is missing is a password for
+                # the data, which is a different answer, and one a client can
+                # act on without discarding the token it already holds.
+                return JSONResponse(
+                    {"detail": "PIP is locked. Sign in to open your data."},
+                    status_code=423,
+                )
+            return await call_next(request)
+
     class TokenAuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
             if request.url.path.startswith(BASE_PREFIX):
@@ -1029,6 +1122,17 @@ try:
                     return JSONResponse({"detail": "missing or invalid bearer token"}, status_code=401)
             return await call_next(request)
 
+    # Added BEFORE TokenAuthMiddleware so it ends up INSIDE it: Starlette
+    # wraps in reverse registration order, so the token is checked first and
+    # this only ever sees an authenticated request.
+    #
+    # Gated on "locked" specifically, not on "anything but unlocked". A locked
+    # installation is one that HAS a password, which is the case this exists
+    # for. One in setup has neither a password nor data to protect yet, and it
+    # is the application that sends it to the create-a-password screen - worth
+    # being plain about, because it means this middleware is not what forces
+    # setup, and the test suite (no salt, unencrypted fixtures) is unaffected.
+    app.add_middleware(LockGateMiddleware)
     app.add_middleware(TokenAuthMiddleware)
 
     # Registered last so it's the OUTERMOST middleware (Starlette wraps in
@@ -1061,6 +1165,16 @@ try:
         # connection at all.
         if not auth.verify_token(websocket.query_params.get("token"), _token_path()):
             await websocket.close(code=4401, reason="missing or invalid token")
+            return
+
+        # The WebSocket's own version of LockGateMiddleware, which never sees
+        # it - Starlette middleware is HTTP-only, the same gap that once left
+        # this handshake with no origin check at all. Refused before accept()
+        # rather than after, so a locked backend never hands out a live socket.
+        # 4423 mirrors HTTP 423 in the private close-code range, next to the
+        # 4401 above.
+        if session_key.state(_db_path_or_default()) == "locked":
+            await websocket.close(code=4423, reason="PIP is locked")
             return
 
         # Defense in depth alongside the token check above: CORSMiddleware
@@ -1346,6 +1460,59 @@ try:
             except asyncio.TimeoutError:
                 logger.error("conn.close() did not complete within 5s on disconnect - abandoning it, not blocking shutdown on it.")
             executor.shutdown(wait=False)
+
+    # --- signing in ----------------------------------------------------
+    #
+    # The three routes LockGateMiddleware lets through while locked, and the
+    # only ones that mean anything before the database is open. Still behind
+    # the API token: this is the door to somebody's data, not a public page.
+    #
+    # async, and the work handed to a thread, because deriving a key is 256,000
+    # PBKDF2 iterations - about a quarter of a second - and a `def` endpoint
+    # would hold a threadpool worker while a create_task for the catch-up had
+    # no running loop to attach to.
+
+    @app.get(f"{BASE_PREFIX}/auth/state")
+    def auth_state():
+        """
+        Which screen the application should open on.
+
+        Answered without touching the database, because in three of the four
+        states it could not be opened anyway.
+        """
+        return {"state": session_key.state(_db_path_or_default())}
+
+    @app.post(f"{BASE_PREFIX}/auth/unlock")
+    async def auth_unlock(payload: dict[str, Any]):
+        from fastapi import HTTPException
+
+        opened = await asyncio.to_thread(
+            session_key.unlock, payload.get("password") or "", _db_path_or_default()
+        )
+        if not opened:
+            # 401, and deliberately not saying which part was wrong. There is
+            # one password here and it either opens the database or does not.
+            raise HTTPException(status_code=401, detail="That password did not open your data.")
+        _start_catch_up()
+        return {"state": "unlocked"}
+
+    @app.post(f"{BASE_PREFIX}/auth/setup")
+    async def auth_setup(payload: dict[str, Any]):
+        from fastapi import HTTPException
+
+        try:
+            await asyncio.to_thread(
+                session_key.set_initial_password,
+                payload.get("password") or "",
+                _db_path_or_default(),
+            )
+        except ValueError as exc:
+            # 422 for the reason /memory/correct uses it: the sentence raised
+            # IS the answer, and a bare 500 strands it on the server while the
+            # user is told only that something went wrong.
+            raise HTTPException(status_code=422, detail=str(exc))
+        _start_catch_up()
+        return {"state": "unlocked"}
 
     @app.get(f"{BASE_PREFIX}/status")
     def status():

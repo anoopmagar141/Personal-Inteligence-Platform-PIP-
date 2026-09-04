@@ -109,21 +109,27 @@ if (Test-PortOpen 11434) {
 if (-not (Test-PortOpen 8765)) {
     New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 
-    # Database key. Originally nothing set PIP_DB_KEY on the real startup path,
-    # so get_connection() always took its unencrypted fallback and ADR-026's
-    # "encrypted at rest" guarantee was dead code in every launch. First fixed
-    # with a random key in data/db_key.txt - which encrypts, but leaves the key
-    # beside the database it decrypts. Part 10.1's model is used instead now:
-    # a password, PBKDF2-derived, never written to disk.
+    # THE PASSWORD IS NO LONGER ASKED FOR HERE
     #
-    # This is the one place this script is not silent. Its whole premise is
-    # "double-click an icon, get a normal app window" with no console - and a
-    # password prompt is a console. That cost is deliberate and is the spec's
-    # own choice ("User types password at app launch"): a key that never
-    # touches disk cannot be obtained without asking. The window closes once
-    # the app starts.
-    # Which profile, before which password - the password only means anything
-    # once there is a salt to derive it against, and each profile has its own.
+    # This script used to derive the database key before starting uvicorn, via
+    # _db_key.ps1, and the comment that stood here called that the one place
+    # this script is not silent: its whole premise is "double-click an icon,
+    # get a normal app window" with no console, and a password prompt is a
+    # console. The cost was called deliberate.
+    #
+    # It stopped being worth paying once PIP became something other people
+    # install. A first-time user's first sight of the product was a blue
+    # PowerShell window asking for a password - for a database that, on a
+    # fresh machine, does not exist yet.
+    #
+    # So the order inverts. The backend starts with no key and serves three
+    # routes; the application window opens; the password is typed into PIP.
+    # backend/core/session_key.py holds it from there, and still never writes
+    # it down - Part 10.1's model is unchanged, only the prompt moved.
+    #
+    # An older copy of this script that still exports PIP_DB_KEY keeps working:
+    # the backend adopts a key it finds in the environment rather than asking
+    # for one it already has.
     . (Join-Path $PSScriptRoot "_profiles.ps1")
     $profilePaths = Select-PipProfile -Root $root
     if ($profilePaths) {
@@ -131,14 +137,12 @@ if (-not (Test-PortOpen 8765)) {
         Write-Phase "profile" $profilePaths.Name
     }
 
-    . (Join-Path $PSScriptRoot "_db_key.ps1")
-    if (-not (Set-PipDbKey -Root $root)) { exit 1 }
-    Write-Phase "key" "database key derived"
-
-    # Recorded only after the password worked, so the remembered profile is one
-    # that actually opened rather than one somebody picked and then failed to
-    # unlock. Through the module that owns the registry rather than by editing
-    # the JSON here, so there is one writer and one format.
+    # Recorded when the profile is CHOSEN, which is now the last thing this
+    # script knows about it - the password that proves it opens is typed into
+    # the application, long after this process has exited. So this remembers
+    # what was selected rather than what was successfully unlocked. Through the
+    # module that owns the registry rather than by editing the JSON here, so
+    # there is one writer and one format.
     if ($profilePaths) {
         try {
             & $pipPython -c `

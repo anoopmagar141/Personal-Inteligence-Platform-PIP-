@@ -27,10 +27,10 @@ void main() {
   });
 
   test('marks what happened, what is happening, and what has not', () {
-    final phases = parseStartupProgress([line('ollama', 'started'), line('key')].join('\n'));
+    final phases = parseStartupProgress([line('ollama', 'started'), line('profile')].join('\n'));
 
     expect(phaseNamed(phases, 'ollama').state, StartupPhaseState.done);
-    expect(phaseNamed(phases, 'key').state, StartupPhaseState.current);
+    expect(phaseNamed(phases, 'profile').state, StartupPhaseState.current);
     expect(phaseNamed(phases, 'backend').state, StartupPhaseState.pending);
     expect(phaseNamed(phases, 'ready').state, StartupPhaseState.pending);
   });
@@ -57,18 +57,20 @@ void main() {
     // Asserted as relative position rather than as a fixed prefix. The prefix
     // form broke the moment a phase was inserted between these two - which is a
     // change to the launch sequence, not to the property being tested here.
-    final phases = parseStartupProgress([line('key'), line('ollama')].join('\n'));
+    final phases = parseStartupProgress([line('profile'), line('ollama')].join('\n'));
     final ids = phases.map((p) => p.id).toList();
-    expect(ids.indexOf('ollama'), lessThan(ids.indexOf('key')));
+    expect(ids.indexOf('ollama'), lessThan(ids.indexOf('profile')));
   });
 
   test('a skipped step is not left unresolved behind a later one', () {
-    // The launcher omits the key phase when the backend was already running.
+    // The launcher omits the profile phase on a single-profile install, and
+    // every phase when the backend was already running. ('key' used to be here:
+    // the launcher no longer derives a key, the sign-in screen does.)
     // Those steps did happen - on the launch that started it - so the list
     // must not sit forever on a spinner for a step that will never report.
     final phases = parseStartupProgress([line('ollama'), line('ready')].join('\n'));
 
-    expect(phaseNamed(phases, 'key').state, StartupPhaseState.done);
+    expect(phaseNamed(phases, 'profile').state, StartupPhaseState.done);
     expect(phaseNamed(phases, 'backend').state, StartupPhaseState.done);
     expect(phaseNamed(phases, 'ready').state, StartupPhaseState.current);
   });
@@ -108,13 +110,13 @@ void main() {
     // CRLF line endings rather than the LF the Python side writes.
     const fromPowerShell =
         '{"phase":"ollama","detail":"already running","at":"2026-09-01T13:21:21Z"}\r\n'
-        '{"phase":"key","detail":"database key derived","at":"2026-09-01T13:21:21Z"}\r\n';
+        '{"phase":"profile","detail":"Work","at":"2026-09-01T13:21:21Z"}\r\n';
 
     final phases = parseStartupProgress(fromPowerShell);
 
     expect(phaseNamed(phases, 'ollama').detail, 'already running');
     expect(phaseNamed(phases, 'ollama').state, StartupPhaseState.done);
-    expect(phaseNamed(phases, 'key').state, StartupPhaseState.current);
+    expect(phaseNamed(phases, 'profile').state, StartupPhaseState.current);
   });
 
   group('startupIsReady', () {

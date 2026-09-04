@@ -30,6 +30,7 @@ import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'home_shell.dart';
 import 'onboarding_screen.dart';
+import 'screens/sign_in_screen.dart';
 import 'startup_progress.dart';
 import 'theme.dart';
 
@@ -142,11 +143,15 @@ class AppRoot extends StatefulWidget {
   State<AppRoot> createState() => _AppRootState();
 }
 
-enum _RootState { connecting, onboarding, error, ready }
+enum _RootState { connecting, signIn, onboarding, error, ready }
 
 class _AppRootState extends State<AppRoot> {
   late ApiClient api;
   _RootState _state = _RootState.connecting;
+
+  /// Which sign-in screen to show, once the backend has said which it needs.
+  /// Only meaningful in _RootState.signIn.
+  AuthState _authState = AuthState.locked;
   String _statusMessage = 'Starting PIP...';
   String? _errorDetail;
   List<StartupPhase> _phases = const [];
@@ -186,10 +191,28 @@ class _AppRootState extends State<AppRoot> {
       final token = await _tryReadToken();
       if (token != null) {
         try {
-          final status = await ApiClient(kApiBase, apiToken: token).getStatus();
+          final client = ApiClient(kApiBase, apiToken: token);
+          // Asked BEFORE /status, because /status is one of the routes a
+          // locked backend refuses. Reversing these two would mean a locked
+          // installation retried for 45 seconds and then reported that the
+          // backend never answered - when it had been answering all along,
+          // with the one word this loop needed.
+          final authState = authStateFrom(await client.authState());
+          if (!mounted) return;
+
+          if (authState != AuthState.unlocked) {
+            setState(() {
+              api = client;
+              _authState = authState;
+              _state = _RootState.signIn;
+            });
+            return;
+          }
+
+          final status = await client.getStatus();
           if (!mounted) return;
           setState(() {
-            api = ApiClient(kApiBase, apiToken: token);
+            api = client;
             _state = (status['onboarding_complete'] as bool? ?? false) ? _RootState.ready : _RootState.onboarding;
           });
           return;
@@ -221,6 +244,29 @@ class _AppRootState extends State<AppRoot> {
       _state = _RootState.error;
       _errorDetail = "PIP's backend didn't respond in time. Make sure it's running, then try again.";
     });
+  }
+
+  /// Where to go once the database is open.
+  ///
+  /// A brand-new password leaves an empty database, so this is also the path a
+  /// first-run install takes into onboarding - the same question /status
+  /// already answers, asked at the one moment it can now be asked.
+  Future<void> _afterUnlock() async {
+    try {
+      final status = await api.getStatus();
+      if (!mounted) return;
+      setState(() {
+        _state = (status['onboarding_complete'] as bool? ?? false)
+            ? _RootState.ready
+            : _RootState.onboarding;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _state = _RootState.error;
+        _errorDetail = 'Your data opened, but PIP could not read it: $e';
+      });
+    }
   }
 
   Future<String?> _tryReadToken() async {
@@ -290,6 +336,18 @@ class _AppRootState extends State<AppRoot> {
               ),
             ),
           ),
+        );
+      case _RootState.signIn:
+        return SignInScreen(
+          api: api,
+          state: _authState,
+          // Straight into the app rather than back through _connect(): the
+          // token is already in hand and the backend is demonstrably up, so a
+          // second retry loop would only re-derive what this screen just
+          // proved. /status still decides between onboarding and ready,
+          // because a freshly created password means a database with nobody
+          // in it yet.
+          onUnlocked: _afterUnlock,
         );
       case _RootState.onboarding:
         return OnboardingScreen(api: api, onComplete: () => setState(() => _state = _RootState.ready));

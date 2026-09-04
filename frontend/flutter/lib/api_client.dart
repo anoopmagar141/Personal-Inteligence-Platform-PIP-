@@ -93,6 +93,28 @@ class ApiClient {
   // --- Domain calls, matching the exact endpoints validated for the web
   // client (frontend/web/app.js) - same API surface, per Part 14.1. ---
 
+  // --- signing in ----------------------------------------------------
+  //
+  // The only three calls that work before the database is open. Everything
+  // else answers 423 until unlock() or completeSetup() has succeeded, which
+  // is why AppRoot asks authState() first and getStatus() second.
+
+  /// Which of setup / locked / needs_migration / unlocked this install is in.
+  Future<String> authState() async =>
+      (await get('/auth/state') as Map<String, dynamic>)['state'] as String;
+
+  /// Open the database with [password]. Throws on a wrong one - the message
+  /// carries the server's own sentence, which is more specific than anything
+  /// the caller could infer from a status code.
+  Future<void> unlock(String password) async {
+    await post('/auth/unlock', {'password': password});
+  }
+
+  /// Choose the first password on an installation that has never had one.
+  Future<void> completeSetup(String password) async {
+    await post('/auth/setup', {'password': password});
+  }
+
   Future<Map<String, dynamic>> getStatus() async => await get('/status') as Map<String, dynamic>;
 
   Future<void> completeOnboarding(Map<String, dynamic> payload) async {

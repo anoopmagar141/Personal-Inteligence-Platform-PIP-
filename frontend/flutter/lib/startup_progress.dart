@@ -34,7 +34,6 @@ const startupPhaseLabels = <String, String>{
   // the one thing worth seeing here: it is the last chance to notice you are
   // opening the wrong person's data before it is decrypted and on screen.
   'profile': 'Opening profile',
-  'key': 'Unlocking your data',
   'backend': 'Starting PIP Core',
   'lock': 'Checking nothing else is running',
   'ready': 'Backend listening',
