@@ -30,6 +30,7 @@ import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'home_shell.dart';
 import 'onboarding_screen.dart';
+import 'profile_picture.dart';
 import 'screens/sign_in_screen.dart';
 import 'startup_progress.dart';
 import 'theme.dart';
@@ -215,6 +216,10 @@ class _AppRootState extends State<AppRoot> {
             api = client;
             _state = (status['onboarding_complete'] as bool? ?? false) ? _RootState.ready : _RootState.onboarding;
           });
+          // Not awaited: the avatar is decoration, and the chat window should
+          // not wait on it. Every widget that draws it listens, so it appears
+          // when it arrives.
+          loadProfilePicture(client);
           return;
         } catch (_) {
           // Backend not answering yet, or this token is stale (e.g. a
@@ -260,6 +265,7 @@ class _AppRootState extends State<AppRoot> {
             ? _RootState.ready
             : _RootState.onboarding;
       });
+      loadProfilePicture(api);
     } catch (e) {
       if (!mounted) return;
       setState(() {

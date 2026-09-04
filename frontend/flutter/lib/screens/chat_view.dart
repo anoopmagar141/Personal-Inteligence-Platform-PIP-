@@ -17,6 +17,7 @@ import 'package:flutter/services.dart';
 
 import '../api_client.dart';
 import '../markdown.dart';
+import '../profile_picture.dart';
 import '../theme.dart';
 import '../ws_chat_client.dart';
 
@@ -909,17 +910,47 @@ class _Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pip = context.pip;
-    return Container(
-      width: 26,
-      height: 26,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: isUser ? pip.surfaceRaised : pip.accent,
-        shape: BoxShape.circle,
-      ),
-      child: isUser
-          ? Icon(Icons.person_outline, size: 15, color: pip.textMuted)
-          : Text('P', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: pip.accentOn)),
+
+    // The assistant's marker is fixed; only the user's can be a photograph.
+    if (!isUser) {
+      return Container(
+        width: 26,
+        height: 26,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: pip.accent, shape: BoxShape.circle),
+        child: Text('P', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: pip.accentOn)),
+      );
+    }
+
+    // Listened to rather than passed in: this widget is rebuilt once per
+    // message on screen, and threading the bytes down from ChatView would put
+    // a parameter through three widgets that have no use for it.
+    return ValueListenableBuilder<Uint8List?>(
+      valueListenable: profilePicture,
+      builder: (context, picture, _) {
+        return Container(
+          width: 26,
+          height: 26,
+          alignment: Alignment.center,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: pip.surfaceRaised,
+            shape: BoxShape.circle,
+          ),
+          child: picture == null
+              ? Icon(Icons.person_outline, size: 15, color: pip.textMuted)
+              : Image.memory(
+                  picture,
+                  fit: BoxFit.cover,
+                  width: 26,
+                  height: 26,
+                  // gaplessPlayback so replacing the picture swaps it in place
+                  // instead of blanking every avatar on screen for a frame
+                  // while the new bytes decode.
+                  gaplessPlayback: true,
+                ),
+        );
+      },
     );
   }
 }

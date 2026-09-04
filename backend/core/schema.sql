@@ -32,6 +32,32 @@ CREATE TABLE IF NOT EXISTS identity (
     timezone TEXT NOT NULL
 );
 
+-- identity_avatar Table
+--
+-- The user's picture, kept in the database rather than as a file in data/ for
+-- the same reason document_blobs exists: everything else about a person is
+-- inside the SQLCipher boundary, and a face beside the encrypted database that
+-- describes them is the one piece anybody could read off a stolen disk.
+--
+-- Separate from identity rather than a column on it, also for document_blobs'
+-- reason. get_profile() selects identity to build the rows the profile screen
+-- lists, and a BLOB on that table would drag the image through every one of
+-- those reads to display three short strings.
+--
+-- Singleton, like identity: one profile per database, and switching profiles
+-- means a different database entirely.
+--
+-- media_type is stored rather than inferred at read time because the bytes are
+-- served back over HTTP and a browser needs telling what they are. It is set
+-- from the magic bytes the server checked, never from what the client claimed.
+CREATE TABLE IF NOT EXISTS identity_avatar (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    image BLOB NOT NULL,
+    media_type TEXT NOT NULL CHECK (media_type IN ('image/png', 'image/jpeg')),
+    byte_size INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 -- 3. skill_memory Table
 CREATE TABLE IF NOT EXISTS skill_memory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

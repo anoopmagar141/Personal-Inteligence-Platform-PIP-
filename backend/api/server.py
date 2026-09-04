@@ -20,6 +20,7 @@ from backend.core import (
     trace,
 )
 from backend.memory import (
+    avatar_store,
     conversation_store,
     decision_log,
     profile_store,
@@ -1784,6 +1785,55 @@ try:
                 return api_upload_document(conn, file.filename or "", content, project_id)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc))
+
+    # --- the profile picture -------------------------------------------
+    #
+    # Multipart in, raw bytes out, which is the one place in this API that
+    # answers with something other than JSON. An image encoded into a JSON
+    # field would be base64 - a third larger, decoded by hand on both sides,
+    # and unable to be handed straight to a widget that already knows how to
+    # decode PNG and JPEG.
+
+    @app.post(f"{BASE_PREFIX}/profile/picture")
+    async def set_profile_picture(file: UploadFile = File(...)):
+        from fastapi import HTTPException
+
+        content = await file.read()
+        with _conn() as conn:
+            try:
+                media_type = avatar_store.set_avatar(conn, content)
+            except avatar_store.InvalidImageError as exc:
+                # 422 and the sentence, same as every other refusal here: "that
+                # file is not a PNG or JPEG image" is the answer, and a 500
+                # would strand it on the server.
+                raise HTTPException(status_code=422, detail=str(exc))
+        return {"status": "updated", "media_type": media_type, "byte_size": len(content)}
+
+    @app.get(f"{BASE_PREFIX}/profile/picture")
+    def get_profile_picture():
+        from fastapi import HTTPException, Response
+
+        with _conn() as conn:
+            avatar = avatar_store.get_avatar(conn)
+        if avatar is None:
+            # 404 rather than an empty 200. "There is no picture" is a real
+            # answer and the client draws initials for it; a 200 carrying zero
+            # bytes would be a broken image instead.
+            raise HTTPException(status_code=404, detail="No profile picture is set.")
+        return Response(
+            content=avatar["image"],
+            media_type=avatar["media_type"],
+            # The bytes change only when somebody replaces them, and the client
+            # re-fetches on that event rather than on a timer - so a cache here
+            # would only ever serve a picture the user has just deleted.
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.delete(f"{BASE_PREFIX}/profile/picture")
+    def delete_profile_picture():
+        with _conn() as conn:
+            removed = avatar_store.clear_avatar(conn)
+        return {"status": "deleted" if removed else "not_found"}
 
     @app.post(f"{BASE_PREFIX}/rag/ingest")
     def ingest_document(payload: dict[str, Any]):

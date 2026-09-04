@@ -10,6 +10,7 @@
 // (frontend/web/app.js) already uses and was live-validated against.
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -188,6 +189,38 @@ class ApiClient {
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);
     return _decode(response) as Map<String, dynamic>;
+  }
+
+  // --- the profile picture --------------------------------------------
+  //
+  // The one endpoint pair that does not speak JSON. An image encoded into a
+  // JSON field would be base64 - a third larger, hand-decoded on both sides,
+  // and no longer something Image.memory can be handed directly.
+
+  /// The stored picture, or null when none is set.
+  ///
+  /// 404 is translated to null rather than thrown, because "there is no
+  /// picture" is an answer and not a failure - it is what makes the initials
+  /// appear. Every other status still throws.
+  Future<Uint8List?> getProfilePicture() async {
+    final response = await http.get(_uri('/profile/picture'), headers: _authHeaders);
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) {
+      throw Exception('GET /profile/picture failed: ${response.statusCode} ${response.body}');
+    }
+    return response.bodyBytes;
+  }
+
+  Future<void> setProfilePicture(String filename, List<int> bytes) async {
+    final request = http.MultipartRequest('POST', _uri('/profile/picture'))
+      ..headers.addAll(_authHeaders)
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    final response = await http.Response.fromStream(await request.send());
+    _decode(response);
+  }
+
+  Future<void> deleteProfilePicture() async {
+    await delete('/profile/picture');
   }
 
   Future<List<dynamic>> getLlmModels() async {

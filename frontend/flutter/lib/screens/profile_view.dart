@@ -38,7 +38,12 @@
 
 import 'package:flutter/material.dart';
 
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+
 import '../api_client.dart';
+import '../profile_picture.dart';
 import '../theme.dart';
 
 /// What the write endpoints can actually do with a row from this table.
@@ -178,6 +183,18 @@ class _ProfileViewState extends State<ProfileView> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  /// The name as the profile itself reports it, for the initials fallback.
+  ///
+  /// Read out of the rows already loaded rather than fetched separately: the
+  /// value is being rendered a few lines below, and asking the backend again
+  /// for it would be a second round trip for a first letter.
+  String? _nameFromFields() {
+    for (final row in _fields ?? const []) {
+      if (row is Map && row['field'] == 'name') return '${row['value']}';
+    }
+    return null;
   }
 
   Future<void> _load() async {
@@ -341,6 +358,11 @@ class _ProfileViewState extends State<ProfileView> {
               description: 'What PIP has learned about you, and how confident it is. '
                   'Correct anything it has wrong - your correction outranks what it inferred.',
             ),
+            // Above the fields rather than among them: everything below is
+            // something PIP inferred and you may correct, and a picture is
+            // neither. It was chosen, it carries no confidence, and there is
+            // nothing for the Observer to have been wrong about.
+            _PictureRow(api: widget.api, name: _nameFromFields()),
             _fields!.isEmpty
                 ? const EmptyState(
                     icon: Icons.person_outline,
@@ -646,6 +668,144 @@ class _ConfidenceMeter extends StatelessWidget {
           style: TextStyle(fontSize: 11, color: pip.textFaint, fontFamily: AppTheme.mono),
         ),
       ],
+    );
+  }
+}
+
+
+/// The profile picture, with the two things anybody wants to do to one.
+///
+/// Its own widget rather than more of _ProfileViewState, and it keeps its own
+/// error. The screen's _error blanks the entire page - correctly, since a
+/// profile that could not be loaded has nothing to show - and a picture that
+/// failed to upload must not do that. The profile behind it loaded fine.
+class _PictureRow extends StatefulWidget {
+  final ApiClient api;
+  final String? name;
+
+  const _PictureRow({required this.api, required this.name});
+
+  @override
+  State<_PictureRow> createState() => _PictureRowState();
+}
+
+class _PictureRowState extends State<_PictureRow> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _run(Future<void> Function() work) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await work();
+      await loadProfilePicture(widget.api);
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pick() async {
+    final picked = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['png', 'jpg', 'jpeg'],
+    );
+    if (picked == null) return;
+
+    await _run(() async {
+      final original = await picked.readAsBytes();
+      // Scaled here rather than on the server: what travels is what gets
+      // stored, decrypted on every read and decoded on every frame - and a
+      // camera-roll photograph is several megabytes of pixels for something
+      // drawn at 26 of them.
+      final scaled = await downscaleForAvatar(Uint8List.fromList(original));
+      await widget.api.setProfilePicture('avatar.png', scaled);
+    });
+  }
+
+  Future<void> _remove() => _run(() => widget.api.deleteProfilePicture());
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+
+    return ValueListenableBuilder<Uint8List?>(
+      valueListenable: profilePicture,
+      builder: (context, picture, _) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                alignment: Alignment.center,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: pip.surfaceRaised,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: pip.border),
+                ),
+                child: picture != null
+                    ? Image.memory(picture, fit: BoxFit.cover, width: 72, height: 72, gaplessPlayback: true)
+                    : Text(
+                        // Initials rather than a stock silhouette: they are
+                        // already personal, and they make an empty state look
+                        // deliberate rather than unfinished.
+                        initialsFrom(widget.name),
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: pip.textMuted),
+                      ),
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Profile picture',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: pip.text),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'PNG or JPEG, kept inside your encrypted database rather than as a loose file.',
+                      style: TextStyle(fontSize: 12.5, height: 1.4, color: pip.textFaint),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: _busy ? null : _pick,
+                          child: Text(picture == null ? 'Choose a picture' : 'Change'),
+                        ),
+                        if (picture != null)
+                          TextButton(
+                            onPressed: _busy ? null : _remove,
+                            child: const Text('Remove'),
+                          ),
+                        if (_busy) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (_error != null)
+                      Text(_error!, style: TextStyle(fontSize: 12, color: pip.danger)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
