@@ -401,7 +401,7 @@ class _LoadingScreen extends StatelessWidget {
     // PipPalette's, for the same reason - on this screen the palette may be
     // the wrong one.
     return Scaffold(
-      backgroundColor: const Color(0xFF060608),
+      backgroundColor: kGatewayStage,
       body: GatewayFlow(
         child: Center(
           child: ConstrainedBox(
@@ -414,7 +414,7 @@ class _LoadingScreen extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 32,
-                    color: Color(0xFFF2F3F8),
+                    color: kGatewayText,
                     letterSpacing: 2,
                   ),
                 ),
@@ -422,7 +422,7 @@ class _LoadingScreen extends StatelessWidget {
                 const SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF8B8BF5)),
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: kGatewayAccent),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 // The checklist replaces the message rather than sitting under
@@ -433,7 +433,7 @@ class _LoadingScreen extends StatelessWidget {
                   Text(
                     message,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF9AA0B4)),
+                    style: const TextStyle(fontSize: 13, color: kGatewayTextMuted),
                   )
                 else
                   _PhaseList(phases: phases, onDark: true),
@@ -469,9 +469,9 @@ class _PhaseList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pip = context.pip;
-    final accent = onDark ? const Color(0xFF8B8BF5) : pip.accent;
-    final text = onDark ? const Color(0xFFE8EAF2) : pip.text;
-    final faint = onDark ? const Color(0xFF6E7488) : pip.textFaint;
+    final accent = onDark ? kGatewayAccent : pip.accent;
+    final text = onDark ? kGatewayText : pip.text;
+    final faint = onDark ? kGatewayTextFaint : pip.textFaint;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,

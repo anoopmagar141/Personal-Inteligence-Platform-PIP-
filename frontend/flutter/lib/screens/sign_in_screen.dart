@@ -28,6 +28,7 @@ import 'package:flutter/material.dart';
 
 import '../api_client.dart';
 import '../theme.dart';
+import '../widgets/gateway_flow.dart';
 
 /// What the backend says this installation needs.
 enum AuthState { locked, setup, needsMigration, unlocked }
@@ -49,6 +50,34 @@ AuthState authStateFrom(String raw) {
       return AuthState.locked;
   }
 }
+
+/// The look of a text field on the dark stage.
+///
+/// Spelled out rather than inherited. The app-wide InputDecorationTheme is
+/// filled with PipPalette.surface, which on this fixed dark stage is a white
+/// slab under a light theme - and on a sign-in screen that is not a cosmetic
+/// problem: somebody typing a password they cannot recover needs to see the
+/// field they are typing into, and see which one has focus.
+InputDecoration _stageField(String label, {Widget? suffix}) => InputDecoration(
+      labelText: label,
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: const Color(0xFF15161F),
+      labelStyle: const TextStyle(color: kGatewayTextMuted),
+      floatingLabelStyle: const TextStyle(color: kGatewayAccent),
+      border: OutlineInputBorder(
+        borderRadius: AppRadius.sm,
+        borderSide: const BorderSide(color: Color(0xFF2C2F43)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: AppRadius.sm,
+        borderSide: const BorderSide(color: Color(0xFF2C2F43)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: AppRadius.sm,
+        borderSide: const BorderSide(color: kGatewayAccent, width: 1.5),
+      ),
+    );
 
 class SignInScreen extends StatefulWidget {
   final ApiClient api;
@@ -159,12 +188,26 @@ class _SignInScreenState extends State<SignInScreen> {
       return _MigrationNotice(pip: pip);
     }
 
+    // The same dark stage and the same field as the launch screen, because
+    // these two are consecutive: the launch screen becomes this one, and a
+    // hard cut from a black particle field to a white form would read as two
+    // different applications.
+    //
+    // Everything below states its colours rather than taking PipPalette's.
+    // The stage is fixed, so the palette here would be the wrong one half the
+    // time - and on a sign-in screen "wrong" means a password field somebody
+    // cannot see what they are typing into.
     return Scaffold(
-      body: Center(
+      backgroundColor: kGatewayStage,
+      body: GatewayFlow(
+        child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.xl),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 380),
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              decoration: gatewayGlass(),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -172,7 +215,7 @@ class _SignInScreenState extends State<SignInScreen> {
                 Text(
                   _isSetup ? 'Choose a password' : 'Welcome back',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: pip.text),
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: kGatewayText),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
@@ -182,7 +225,7 @@ class _SignInScreenState extends State<SignInScreen> {
                           'data is gone.'
                       : 'Your data is encrypted. Enter your password to open it.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13.5, height: 1.5, color: pip.textFaint),
+                  style: const TextStyle(fontSize: 13.5, height: 1.5, color: kGatewayTextMuted),
                 ),
                 const SizedBox(height: AppSpacing.xl),
 
@@ -193,11 +236,15 @@ class _SignInScreenState extends State<SignInScreen> {
                   enabled: !_busy,
                   autofillHints: const [],
                   onSubmitted: (_) => _isSetup ? null : _submit(),
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscured ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                  style: const TextStyle(color: kGatewayText, fontSize: 15),
+                  cursorColor: kGatewayAccent,
+                  decoration: _stageField(
+                    'Password',
+                    suffix: IconButton(
+                      icon: Icon(
+                        _obscured ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                        color: kGatewayTextMuted,
+                      ),
                       tooltip: _obscured ? 'Show password' : 'Hide password',
                       onPressed: () => setState(() => _obscured = !_obscured),
                     ),
@@ -211,10 +258,9 @@ class _SignInScreenState extends State<SignInScreen> {
                     obscureText: _obscured,
                     enabled: !_busy,
                     onSubmitted: (_) => _submit(),
-                    decoration: const InputDecoration(
-                      labelText: 'Confirm password',
-                      border: OutlineInputBorder(),
-                    ),
+                    style: const TextStyle(color: kGatewayText, fontSize: 15),
+                    cursorColor: kGatewayAccent,
+                    decoration: _stageField('Confirm password'),
                   ),
                 ],
 
@@ -222,7 +268,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   const SizedBox(height: AppSpacing.md),
                   Text(
                     _error!,
-                    style: TextStyle(fontSize: 13, color: pip.danger),
+                    style: const TextStyle(fontSize: 13, color: Color(0xFFFF8A8A)),
                   ),
                 ],
 
@@ -247,12 +293,14 @@ class _SignInScreenState extends State<SignInScreen> {
                     'There is no password reset. PIP never stores your password, '
                     'so nobody - including PIP - can recover your data without it.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11.5, height: 1.5, color: pip.textFaint),
+                    style: const TextStyle(fontSize: 11.5, height: 1.5, color: kGatewayTextFaint),
                   ),
                 ],
               ],
             ),
+            ),
           ),
+        ),
         ),
       ),
     );

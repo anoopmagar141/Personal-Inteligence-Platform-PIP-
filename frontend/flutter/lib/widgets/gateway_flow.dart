@@ -31,9 +31,31 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-/// The stage colour. Deliberately fixed rather than themed - see the note on
-/// [GatewayFlow] about why the launch screen is dark in both themes.
-const _stage = Color(0xFF060608);
+import '../theme.dart';
+
+/// The stage the field is drawn on, and the colours that stay legible over it.
+///
+/// Fixed rather than themed, and shared rather than repeated. Two screens sit
+/// on this field - the launch screen and sign-in - and they are consecutive:
+/// somebody watches one become the other. Letting each keep its own hex
+/// literals would guarantee they drifted apart by a shade eventually, and the
+/// seam would show at exactly the moment both are on screen.
+///
+/// PipPalette is deliberately not used here. The field is dots of light and
+/// only exists against a dark stage; on a near-white page it is grey speckle.
+/// That makes the stage a property of the field, not a preference.
+const kGatewayStage = Color(0xFF060608);
+const kGatewayText = Color(0xFFF2F3F8);
+const kGatewayTextMuted = Color(0xFF9AA0B4);
+const kGatewayTextFaint = Color(0xFF6E7488);
+const kGatewayAccent = Color(0xFF8B8BF5);
+
+/// A panel that reads as glass over the field rather than as a hole in it.
+BoxDecoration gatewayGlass() => BoxDecoration(
+      color: const Color(0xFF0E0F16).withValues(alpha: 0.72),
+      borderRadius: AppRadius.lg,
+      border: Border.all(color: const Color(0xFF23263A)),
+    );
 
 class GatewayFlow extends StatefulWidget {
   /// Drawn on top of the field.
@@ -91,7 +113,7 @@ class _GatewayFlowState extends State<GatewayFlow> with SingleTickerProviderStat
     }
 
     return ColoredBox(
-      color: _stage,
+      color: kGatewayStage,
       child: GestureDetector(
         onTapDown: still ? null : (details) => _ripple(details.localPosition),
         child: Stack(

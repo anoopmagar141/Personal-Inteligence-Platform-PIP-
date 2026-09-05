@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pip_flutter_client/api_client.dart';
 import 'package:pip_flutter_client/screens/sign_in_screen.dart';
+import 'package:pip_flutter_client/theme.dart';
 
 class FakeApi extends ApiClient {
   final List<String> unlocked = [];
@@ -40,12 +41,22 @@ Future<FakeApi> pumpSignIn(
   Object? throwThis,
 }) async {
   final api = FakeApi()..throwThis = throwThis;
+  // disableAnimations, so pumpAndSettle below has something to settle to. This
+  // screen now sits on the launch screen's particle field, which drifts
+  // forever by design; these tests are about passwords and should not have to
+  // know that. Inside MaterialApp, not around it - MaterialApp installs its
+  // own MediaQuery from the view and would replace anything above it.
   await tester.pumpWidget(
     MaterialApp(
-      home: SignInScreen(
-        api: api,
-        state: state,
-        onUnlocked: onUnlocked ?? () {},
+      home: Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: SignInScreen(
+            api: api,
+            state: state,
+            onUnlocked: onUnlocked ?? () {},
+          ),
+        ),
       ),
     ),
   );
@@ -54,6 +65,7 @@ Future<FakeApi> pumpSignIn(
 }
 
 void main() {
+  _legibilityTests();
   group('authStateFrom', () {
     test('reads the four states the backend reports', () {
       expect(authStateFrom('locked'), AuthState.locked);
@@ -213,5 +225,61 @@ void main() {
       expect(find.textContaining('set_db_password.py'), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
+  });
+}
+
+
+// --- Legibility on the fixed dark stage ------------------------------------
+//
+// Sign-in sits on the launch screen's particle field, which forces a dark
+// stage in both themes. That makes every colour on this screen a decision
+// rather than an inheritance, and the failure mode is not cosmetic: a password
+// that cannot be recovered, typed into a field somebody cannot see.
+
+Future<void> _pumpUnderLightTheme(WidgetTester tester) async {
+  await tester.pumpWidget(MaterialApp(
+    theme: AppTheme.light,
+    home: Builder(
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: SignInScreen(api: FakeApi(), state: AuthState.locked, onUnlocked: () {}),
+      ),
+    ),
+  ));
+  await tester.pumpAndSettle();
+}
+
+void _expectLightOnDark(Color? colour) {
+  expect(colour, isNotNull);
+  // Anything this bright cannot be one of the light theme's dark inks, which
+  // is the whole assertion - not the exact shade, which is free to change.
+  expect(colour!.computeLuminance(), greaterThan(0.4));
+}
+
+void _legibilityTests() {
+  testWidgets('the heading stays readable under the light theme', (tester) async {
+    await _pumpUnderLightTheme(tester);
+
+    final heading = tester.widget<Text>(find.text('Welcome back'));
+    _expectLightOnDark(heading.style?.color);
+  });
+
+  testWidgets('the password field shows what is typed into it', (tester) async {
+    await _pumpUnderLightTheme(tester);
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    _expectLightOnDark(field.style?.color);
+    // And the field is not left transparent over the field of dots, which
+    // would put moving specks behind the characters.
+    expect(field.decoration?.filled, isTrue);
+  });
+
+  testWidgets('the unrecoverable-password warning is still legible', (tester) async {
+    // The one piece of copy on this screen somebody has to read BEFORE they
+    // rely on it.
+    await _pumpUnderLightTheme(tester);
+
+    final warning = tester.widget<Text>(find.textContaining('no password reset'));
+    expect(warning.style!.color!.computeLuminance(), greaterThan(0.12));
   });
 }
