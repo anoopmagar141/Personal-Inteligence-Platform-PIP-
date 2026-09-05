@@ -215,6 +215,90 @@ def test_column_migration_is_idempotent(tmp_path, db_key):
     assert profile_store.apply_column_migrations(conn) == []
 
 
+class _StalePragmaConn:
+    """
+    A connection whose PRAGMA read happened before another connection's ALTER.
+
+    Hides one column from PRAGMA table_info while passing everything else
+    through to a real connection, so the ALTER below is issued for real and
+    fails for real, with the driver's own error. That is the interleaving
+    itself: read, lose the race, write anyway.
+    """
+
+    def __init__(self, real, hidden):
+        self._real = real
+        self._hidden = hidden
+
+    def execute(self, sql, *args):
+        cursor = self._real.execute(sql, *args)
+        if sql.startswith("PRAGMA table_info"):
+            return [row for row in cursor.fetchall() if row["name"] != self._hidden]
+        return cursor
+
+    def commit(self):
+        self._real.commit()
+
+
+def test_a_column_added_by_another_connection_is_not_an_error(tmp_path, db_key):
+    """
+    Two connections run initialize_schema() concurrently on every start: unlock
+    begins the catch-up, which opens the database, while the application's
+    first /status opens its own. The PRAGMA check and the ALTER are not one
+    atomic step, so both can read "absent" and both then write.
+
+    Latent for every column already in _ADDED_COLUMNS - each exists on any
+    database opened even once, so the check short-circuits and nothing races.
+    Adding a NEW one re-arms it for exactly one start, which is why the suite
+    was green and the first real launch after adding identity.preferred_name
+    answered /status with a 500: "duplicate column name: preferred_name",
+    raised out of initialize_schema before the request ran a single query.
+    """
+    conn = profile_store.get_connection(str(tmp_path / "pip.db"), db_key)
+    profile_store.initialize_schema(conn)
+    assert "preferred_name" in {r["name"] for r in conn.execute("PRAGMA table_info(identity)")}
+
+    loser = _StalePragmaConn(conn, "preferred_name")
+
+    # The point: this used to raise.
+    added = profile_store.apply_column_migrations(loser)
+
+    # Reported as not-added, because this connection did not add it - the one
+    # that won the race did, and it is the one that ran any backfill.
+    assert "identity.preferred_name" not in added
+    assert "preferred_name" in {r["name"] for r in conn.execute("PRAGMA table_info(identity)")}
+
+
+class _FailingAlterConn(_StalePragmaConn):
+    """Reports the column absent, then fails the ALTER with a chosen error."""
+
+    def __init__(self, real, hidden, error):
+        super().__init__(real, hidden)
+        self._error = error
+
+    def execute(self, sql, *args):
+        if sql.startswith("ALTER TABLE"):
+            raise self._error
+        return super().execute(sql, *args)
+
+
+def test_an_alter_failure_that_is_not_the_race_still_raises(tmp_path, db_key):
+    """
+    Only "duplicate column name" is swallowed. A guard that ate every
+    OperationalError would turn a genuinely failed migration into a database
+    that silently lacks the column, and the failure would resurface much later
+    and somewhere unrelated as "no such column".
+    """
+    conn = profile_store.get_connection(str(tmp_path / "pip.db"), db_key)
+    profile_store.initialize_schema(conn)
+
+    loser = _FailingAlterConn(
+        conn, "preferred_name", sqlite3.OperationalError("database is locked")
+    )
+
+    with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+        profile_store.apply_column_migrations(loser)
+
+
 def test_migrated_database_matches_a_freshly_created_one(tmp_path, db_key):
     # A repaired database and a new one must be indistinguishable, or the two
     # populations drift and later code has to handle both shapes.

@@ -193,7 +193,32 @@ def apply_column_migrations(conn) -> list[str]:
         if not existing:
             continue  # table absent entirely - schema.sql owns creating it, not this
         if column not in existing:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+            except OPERATIONAL_ERRORS as e:
+                if "duplicate column name" not in str(e).lower():
+                    raise
+                # Another connection added it between the PRAGMA above and
+                # this line. The read and the write are not one atomic step,
+                # and two connections run this concurrently on every start:
+                # unlock kicks off the catch-up, which opens the database and
+                # calls initialize_schema, while the application's first
+                # /status opens its own connection and calls it too.
+                #
+                # Latent until now, and it could only ever fire once per
+                # column. Every column already in this list exists on any
+                # database that has been opened even once, so the PRAGMA check
+                # short-circuits and nothing races. Adding a NEW one re-arms
+                # it for exactly one start - which is why the whole test suite
+                # passed and the first real launch after adding preferred_name
+                # answered /status with a 500.
+                #
+                # Skipped rather than retried: the column is there, which is
+                # all this loop wanted. The backfill is deliberately not run -
+                # the connection that won the ALTER runs it, and running it
+                # twice is the one thing _BACKFILLS' comment warns against.
+                logger.debug(f"{table}.{column} was added by another connection; skipping")
+                continue
             key = f"{table}.{column}"
             # Only on the pass that actually adds the column, so a backfill
             # cannot re-run later and overwrite real values with defaults.
