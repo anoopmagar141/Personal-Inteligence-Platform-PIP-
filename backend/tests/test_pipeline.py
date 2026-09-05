@@ -370,3 +370,117 @@ def test_falls_back_to_the_snapshot_before_the_first_migrated_session(db_conn):
 
 def test_no_history_at_all_reads_as_a_first_run(db_conn):
     assert pipeline._load_last_session_timestamp(db_conn) is None
+
+
+# --- Live stage events -----------------------------------------------------
+#
+# stage_hint answers "what happened" once it has happened: four booleans, sent
+# as streaming starts, buffered by the client until the answer is finished.
+# These answer the question somebody staring at a spinner is actually asking,
+# in the present tense, and they say when a stage found NOTHING - which is the
+# distinction an empty vector index hid for two days.
+
+
+def _stages(events):
+    return [e["data"] for e in events if e["type"] == "stage"]
+
+
+def test_every_retrieval_stage_reports_itself(db_conn):
+    events = list(pipeline.run(db_conn, "what did I decide about the database?",
+                               providers=[FakeProvider()]))
+
+    seen = [s["stage"] for s in _stages(events)]
+    assert seen[0] == "intent"
+    for expected in ("decisions", "profile", "documents", "writing"):
+        assert expected in seen, f"{expected} never reported itself"
+    # Writing is last: everything before it is milliseconds of local lookups,
+    # and it is the only part somebody waits through.
+    assert seen[-1] == "writing"
+
+
+def test_an_empty_retrieval_says_so_rather_than_staying_silent(db_conn):
+    """
+    The distinction this whole event type exists for. With no documents
+    ingested, Stage 5 returns nothing - and that has to read differently from
+    a stage that found something, because downstream they are identical.
+    """
+    events = list(pipeline.run(db_conn, "what is in my documents?", providers=[FakeProvider()]))
+
+    documents = next(s for s in _stages(events) if s["stage"] == "documents")
+    assert documents["status"] == "empty"
+    assert documents["detail"] == "nothing close enough"
+
+
+def test_a_stage_that_found_something_is_marked_ok(db_conn, tmp_path, monkeypatch):
+    root = tmp_path / "documents"
+    root.mkdir()
+    monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", root)
+    doc = root / "notes.txt"
+    doc.write_text("PIP stores structured memory in SQLCipher and vectors in ChromaDB.",
+                   encoding="utf-8")
+    vector_store.ingest_document(db_conn, str(doc))
+
+    # Near-verbatim on purpose. Stage 5 runs at the real similarity_threshold
+    # (0.6) and this asserts the EVENT, not retrieval quality - a paraphrase
+    # here would make the test a measurement of the embedding model, and it
+    # would fail for a reason that has nothing to do with what it checks.
+    # Checked: "Where does PIP keep its vectors?" scores under the floor.
+    events = list(pipeline.run(db_conn,
+                               "PIP stores structured memory in SQLCipher and vectors in ChromaDB",
+                               providers=[FakeProvider()]))
+
+    documents = next(s for s in _stages(events) if s["stage"] == "documents")
+    assert documents["status"] == "ok"
+    assert "passage" in documents["detail"]
+    assert "1 document" in documents["detail"]
+
+
+def test_the_stages_all_arrive_before_the_first_token(db_conn):
+    """
+    Ordering is the feature. A stage list that arrived alongside or after the
+    answer would be a log, not a progress display.
+    """
+    events = list(pipeline.run(db_conn, "hello there", providers=[FakeProvider()]))
+    types = [e["type"] for e in events]
+
+    assert "stage" in types and "token" in types
+    assert types.index("token") > max(i for i, t in enumerate(types) if t == "stage")
+
+
+def test_a_cached_answer_says_it_was_cached(db_conn):
+    """
+    From outside, a cache hit is indistinguishable from a fast answer, and the
+    two have very different reasons to be wrong - Stages 3-9 never ran.
+    """
+    message = "a question worth caching"
+    list(pipeline.run(db_conn, message, providers=[FakeProvider()]))
+
+    second = list(pipeline.run(db_conn, message, providers=[FakeProvider()]))
+
+    stages = _stages(second)
+    if not any(s["stage"] == "cache" for s in stages):
+        pytest.skip("this category is not cached (ttl 0), so there is no hit to report")
+    assert [s["stage"] for s in stages] == ["intent", "cache"]
+
+
+def test_web_search_is_reported_only_when_it_runs(db_conn):
+    # An ordinary question triggers no search, and "0 results" would report the
+    # absence of something nobody asked for.
+    events = list(pipeline.run(db_conn, "explain how indexes work",
+                               providers=[FakeProvider()]))
+
+    assert not any(s["stage"] == "web" for s in _stages(events))
+
+
+def test_stage_details_count_in_the_singular_when_there_is_one(db_conn):
+    """
+    Found by running it, not by reading it: the live pipeline reported
+    "1 details". These strings are shown to a person on every turn, so the
+    grammar is part of the feature rather than polish on top of it.
+    """
+    events = list(pipeline.run(db_conn, "what do you know about me?", providers=[FakeProvider()]))
+
+    for step in _stages(events):
+        detail = step["detail"]
+        if detail.startswith("1 "):
+            assert not detail.endswith("s"), f"{step['stage']}: {detail!r} should be singular"

@@ -1,7 +1,13 @@
-// Matches frontend/web/app.js's chat flow: stage_hint is buffered
-// (pendingStageHints) and only rendered into the sidebar once done/error
-// arrives (Part 14.3: "static display, populated once response completes",
-// not a live per-stage animation).
+// stage_hint is still buffered and rendered into the sidebar once done/error
+// arrives (Part 14.3: "static display, populated once response completes") -
+// it summarises a finished turn and that is the right moment for it.
+//
+// The live per-stage display is a different event and a different question.
+// `stage` events (shared/ws_spec.py) arrive as each pipeline stage FINISHES,
+// before the first token, and are rendered by ReasoningStrip while the answer
+// is being written. Part 14.3 ruled out animating stage_hint, which was
+// correct - four booleans sent once cannot describe a process. It did not rule
+// out the backend reporting its stages, which is what this consumes.
 //
 // Conversation history sidebar: mirrors Claude/ChatGPT - a list of past
 // conversations, a "New chat" button, click to switch. Backed by
@@ -19,6 +25,7 @@ import '../api_client.dart';
 import '../markdown.dart';
 import '../profile_picture.dart';
 import '../theme.dart';
+import '../widgets/reasoning_strip.dart';
 import '../ws_chat_client.dart';
 
 /// Public, unlike the rest of this file's helpers, so that
@@ -113,6 +120,14 @@ class ChatViewState extends State<ChatView> {
   Map<String, dynamic>? _pendingStageHint;
   Map<String, dynamic>? _lastStageHint;
 
+  /// The live pipeline steps for the turn being answered.
+  ///
+  /// Kept after the answer lands rather than cleared on `done`: "why did it
+  /// say that" is asked about the answer already on screen, and a strip that
+  /// vanished at the moment the reply appeared would only ever be readable by
+  /// someone watching for it. Cleared when the NEXT turn starts.
+  List<ReasoningStep> _steps = [];
+
   String? _activeConversationId;
   List<dynamic>? _conversations;
 
@@ -141,6 +156,10 @@ class ChatViewState extends State<ChatView> {
   void initState() {
     super.initState();
     _subscription = widget.chatClient.events.listen(_handleEvent);
+    // The composer's border colour tracks focus. Without this the field would
+    // take focus and keep the resting border until some unrelated setState
+    // happened to repaint it.
+    _inputFocus.addListener(_onFocusChanged);
     _loadConversations();
   }
 
@@ -192,6 +211,13 @@ class ChatViewState extends State<ChatView> {
         _loadConversations(); // title/ordering may have changed
         _scrollToBottom();
         return;
+      case 'stage':
+        setState(() => _steps = [
+              ..._steps,
+              ReasoningStep.fromEvent(event.data as Map<String, dynamic>),
+            ]);
+        _scrollToBottom();
+        return;
       case 'stage_hint':
         _pendingStageHint = event.data as Map<String, dynamic>?;
         break;
@@ -238,12 +264,28 @@ class ChatViewState extends State<ChatView> {
     setState(() {});
   }
 
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Puts a starter question in the composer without sending it.
+  ///
+  /// Deliberately not send-on-tap: these are openings, not commands, and the
+  /// useful thing is usually the question with a name or a date added to it.
+  /// Sending immediately would make the pill a worse version of typing.
+  void _prefill(String text) {
+    _controller.text = text;
+    _controller.selection = TextSelection.collapsed(offset: text.length);
+    _inputFocus.requestFocus();
+  }
+
   void _send() {
     final text = _controller.text.trim();
     if (text.isEmpty || _isStreaming) return;
     setState(() {
       _transcript.add(ChatMessage('user', text, createdAt: DateTime.now()));
       _streamingText = '';
+      _steps = [];
       _isStreaming = true;
     });
     widget.chatClient.sendMessage(text, projectId: widget.activeProjectId);
@@ -269,6 +311,7 @@ class ChatViewState extends State<ChatView> {
     setState(() {
       _transcript.clear();
       _streamingText = '';
+      _steps = [];
       _isStreaming = false;
       _lastStageHint = null;
       _activeConversationId = null;
@@ -291,6 +334,10 @@ class ChatViewState extends State<ChatView> {
     setState(() {
       _transcript.clear();
       _streamingText = '';
+      // Belongs to the turn being left behind. The steps describe how ONE
+      // answer was built, and carrying them into another conversation would
+      // caption a reply they had nothing to do with.
+      _steps = [];
       _isStreaming = false;
       _lastStageHint = null;
     });
@@ -329,6 +376,7 @@ class ChatViewState extends State<ChatView> {
   @override
   void dispose() {
     _subscription?.cancel();
+    _inputFocus.removeListener(_onFocusChanged);
     _controller.dispose();
     _scrollController.dispose();
     _inputFocus.dispose();
@@ -433,12 +481,18 @@ class ChatViewState extends State<ChatView> {
                     // one reply grew with the length of the whole conversation.
                     // The builder only builds what is on screen, which makes that
                     // per-token cost independent of how long the chat is.
-                    child: ListView.builder(
+                    child: _transcript.isEmpty && !_isStreaming
+                        ? _EmptyChat(onPick: _prefill)
+                        : ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.all(AppSpacing.lg),
-                      // The streaming bubble is the one extra row past the end of
-                      // the transcript, exactly where the old trailing `if` put it.
-                      itemCount: _transcript.length + (_isStreaming ? 1 : 0),
+                      // Two extra rows past the transcript: the reasoning strip
+                      // (whenever there are steps to show) and the streaming
+                      // bubble. The strip comes first because it describes the
+                      // answer being written underneath it.
+                      itemCount: _transcript.length +
+                          (_steps.isNotEmpty || _isStreaming ? 1 : 0) +
+                          (_isStreaming ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (index < _transcript.length) {
                           final message = _transcript[index];
@@ -461,69 +515,108 @@ class ChatViewState extends State<ChatView> {
                             ],
                           );
                         }
+                        if (index == _transcript.length &&
+                            (_steps.isNotEmpty || _isStreaming)) {
+                          return ReasoningStrip(steps: _steps, active: _isStreaming);
+                        }
                         return ChatMessageBubble(
                           message: ChatMessage('assistant', _streamingText),
                         );
                       },
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
-                    decoration: BoxDecoration(border: Border(top: BorderSide(color: pip.border))),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (!showConversations) ...[
-                          _IconAction(
-                            icon: Icons.forum_outlined,
-                            tooltip: 'Conversations',
-                            onTap: _showConversationsDialog,
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                        ],
-                        Expanded(
-                          child: Shortcuts(
-                            shortcuts: const {
-                              // Enter sends; Shift+Enter falls through to the
-                              // TextField and inserts a newline. The field is
-                              // multi-line now, so without this binding Enter
-                              // would only ever add a line and never send.
-                              SingleActivator(LogicalKeyboardKey.enter): _SendIntent(),
-                            },
-                            child: Actions(
-                              actions: {
-                                _SendIntent: CallbackAction<_SendIntent>(
-                                  onInvoke: (_) {
-                                    _send();
-                                    return null;
-                                  },
-                                ),
-                              },
-                              child: TextField(
-                                controller: _controller,
-                                focusNode: _inputFocus,
-                                style: TextStyle(fontSize: 14.5, color: pip.text),
-                                decoration: const InputDecoration(hintText: 'Ask PIP anything...'),
-                                minLines: 1,
-                                maxLines: 5,
-                                enabled: !_isStreaming,
-                              ),
+                  // The composer is a raised card floating on the page rather
+                  // than a strip welded to the bottom edge. The old top border
+                  // ran the full width and read as a divider between two
+                  // regions; this reads as the one thing you type into.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.lg),
+                    child: Center(
+                      child: ConstrainedBox(
+                        // Matched to the transcript's own comfortable measure.
+                        // A composer stretched across an ultrawide window puts
+                        // the send button a head-turn away from the text.
+                        constraints: const BoxConstraints(maxWidth: 820),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: pip.surfaceRaised,
+                            borderRadius: AppRadius.lg,
+                            border: Border.all(
+                              color: _inputFocus.hasFocus ? pip.accent : pip.border,
+                              width: _inputFocus.hasFocus ? 1.5 : 1,
                             ),
                           ),
-                        ),
-                        if (!showHints) ...[
-                          const SizedBox(width: AppSpacing.sm),
-                          _IconAction(
-                            icon: Icons.insights_outlined,
-                            tooltip: 'How this answer was built',
-                            onTap: _showHintsDialog,
+                          padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.md, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Shortcuts(
+                                  shortcuts: const {
+                                    // Enter sends; Shift+Enter falls through to the
+                                    // TextField and inserts a newline. The field is
+                                    // multi-line now, so without this binding Enter
+                                    // would only ever add a line and never send.
+                                    SingleActivator(LogicalKeyboardKey.enter): _SendIntent(),
+                                  },
+                                  child: Actions(
+                                    actions: {
+                                      _SendIntent: CallbackAction<_SendIntent>(
+                                        onInvoke: (_) {
+                                          _send();
+                                          return null;
+                                        },
+                                      ),
+                                    },
+                                    child: TextField(
+                                      controller: _controller,
+                                      focusNode: _inputFocus,
+                                      style: TextStyle(fontSize: 14.5, color: pip.text, height: 1.45),
+                                      // The card draws the border now, so the field
+                                      // must not draw a second one inside it.
+                                      decoration: InputDecoration(
+                                        hintText: 'Ask PIP anything...',
+                                        border: InputBorder.none,
+                                        enabledBorder: InputBorder.none,
+                                        focusedBorder: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                                        hintStyle: TextStyle(color: pip.textFaint, fontSize: 14.5),
+                                      ),
+                                      minLines: 1,
+                                      maxLines: 8,
+                                      enabled: !_isStreaming,
+                                    ),
+                                  ),
+                              ),
+                              // Footer: what you can do with the message, kept under
+                              // the text rather than beside it, so a long message
+                              // grows upward and the controls never move.
+                              Row(
+                                children: [
+                                  if (!showConversations)
+                                    _IconAction(
+                                      icon: Icons.forum_outlined,
+                                      tooltip: 'Conversations',
+                                      onTap: _showConversationsDialog,
+                                    ),
+                                  if (!showHints)
+                                    _IconAction(
+                                      icon: Icons.insights_outlined,
+                                      tooltip: 'How this answer was built',
+                                      onTap: _showHintsDialog,
+                                    ),
+                                  const Spacer(),
+                                  _isStreaming
+                                      ? _SendButton(enabled: true, onTap: _stop, icon: Icons.stop_rounded, color: pip.danger)
+                                      : _SendButton(enabled: true, onTap: _send, icon: Icons.arrow_upward_rounded),
+                                ],
+                              ),
+                            ],
                           ),
-                        ],
-                        const SizedBox(width: AppSpacing.sm),
-                        _isStreaming
-                            ? _SendButton(enabled: true, onTap: _stop, icon: Icons.stop_rounded, color: pip.danger)
-                            : _SendButton(enabled: true, onTap: _send, icon: Icons.arrow_forward),
-                      ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1020,6 +1113,118 @@ class _DaySeparator extends StatelessWidget {
           ),
           Expanded(child: Divider(color: pip.border, height: 1)),
         ],
+      ),
+    );
+  }
+}
+
+/// What an empty conversation shows instead of a blank column.
+///
+/// The starters are PIP-specific on purpose. A generic set ("Generate code",
+/// "Launch app") would be decoration; these each exercise a real part of the
+/// pipeline a newcomer would not otherwise know exists - the decision log, the
+/// document index, the warm-start gap detector - and tapping one only fills
+/// the composer, so the question can be finished before it is asked.
+class _EmptyChat extends StatelessWidget {
+  final void Function(String) onPick;
+  const _EmptyChat({required this.onPick});
+
+  static const _starters = <({IconData icon, String label, String prompt})>[
+    (
+      icon: Icons.fact_check_outlined,
+      label: 'A past decision',
+      prompt: 'What did I decide about ',
+    ),
+    (
+      icon: Icons.description_outlined,
+      label: 'My documents',
+      prompt: 'What do my documents say about ',
+    ),
+    (
+      icon: Icons.history_outlined,
+      label: 'Where we left off',
+      prompt: 'Where were we?',
+    ),
+    (
+      icon: Icons.person_outline,
+      label: 'What PIP knows',
+      prompt: 'What do you know about me?',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: AppSpacing.xl),
+              Text(
+                'What are you working on?',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: pip.text),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'PIP remembers your decisions, your documents and your projects, '
+                'and will say which of them an answer came from.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13.5, color: pip.textMuted, height: 1.55),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final starter in _starters)
+                    _StarterPill(
+                      icon: starter.icon,
+                      label: starter.label,
+                      onTap: () => onPick(starter.prompt),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StarterPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _StarterPill({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.lg,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
+          decoration: BoxDecoration(
+            color: pip.surface,
+            borderRadius: AppRadius.lg,
+            border: Border.all(color: pip.border),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 15, color: pip.textMuted),
+            const SizedBox(width: AppSpacing.sm),
+            Text(label, style: TextStyle(fontSize: 12.5, color: pip.text)),
+          ]),
+        ),
       ),
     );
   }

@@ -55,9 +55,29 @@ from backend.stages import stage_07_context_assembly as stage_07
 from backend.stages import stage_08_provider_gate as stage_08
 from backend.stages import stage_09_llm_streaming as stage_09
 from backend.stages import stage_10_response_delivery as stage_10
-from shared.ws_spec import PipelineCompleteEvent, WSChatEvent
+from shared.ws_spec import PipelineCompleteEvent, StageEvent, WSChatEvent
 
 logger = logging.getLogger(__name__)
+
+
+def _stage_event(stage: str, label: str, detail: str, status: str = "ok") -> StageEvent:
+    """
+    One line of "what PIP is doing", for a client to show while it waits.
+
+    This is the same information trace.stage_log already records, sent live
+    instead of only after the fact. The trace answers "what happened" once it
+    has happened; a person watching a spinner is asking a different question,
+    in the present tense, and nothing was answering it - stage_hint carries
+    four booleans, arrives once as streaming STARTS, and the client buffers it
+    until the answer is finished.
+
+    Deliberately says when a stage found NOTHING (status "empty") rather than
+    reporting only what succeeded. A retrieval that returns no chunks and a
+    retrieval that was never run produce the same silence downstream, and the
+    difference between them is the whole diagnosis when an answer is wrong.
+    """
+    return {"type": "stage", "data": {"stage": stage, "label": label, "detail": detail, "status": status}}
+
 
 _DEFAULT_PROVIDER_ID = "ollama"
 DEFAULT_MODEL_NAME = "llama3.1:8b"
@@ -261,6 +281,11 @@ def run(
         logger.error(f"Pipeline: Stage 2 raised unexpectedly, defaulting to LLM-only: {e}")
         router_result = {"retrieval_priority": [], "provider_preference": "local"}
     trace.stage_log(conn, trace_id, "stage_02_router", "ok", f"priority={router_result['retrieval_priority']}")
+    yield _stage_event(
+        "intent",
+        "Working out what you're asking",
+        intent_result["category"].replace("_", " "),
+    )
 
     # Response Cache (Part 7.1) - positioned here (between Stage 2 and Stage 7)
     # deliberately: a hit skips Stages 3-9 entirely, not just Stage 9's LLM call.
@@ -269,6 +294,10 @@ def run(
         trace.stage_log(conn, trace_id, "response_cache", "ok", "cache hit, skipping Stages 3-9")
         cache_hint = dict(cached["stage_hints"])
         cache_hint["cache_hit"] = True
+        # Reported, because from outside a cached answer is indistinguishable
+        # from a fast one - and the two have very different reasons to be
+        # wrong. Stages 3-9 never ran for this turn.
+        yield _stage_event("cache", "Answered this before", "reusing the saved response")
         yield {"type": "stage_hint", "data": cache_hint}
         yield {"type": "token", "data": cached["response_text"]}
         yield {"type": "done", "data": None}
@@ -288,6 +317,12 @@ def run(
         logger.error(f"Pipeline: Stage 3 raised unexpectedly, returning empty: {e}")
         decision_entries = []
     trace.stage_log(conn, trace_id, "stage_03_decision_log_lookup", "ok", f"{len(decision_entries)} entries")
+    yield _stage_event(
+        "decisions",
+        "Checking your decisions",
+        f"{len(decision_entries)} recorded" if decision_entries else "nothing on this",
+        "ok" if decision_entries else "empty",
+    )
 
     try:
         profile_fields = stage_04.run(conn, intent_result["category"], intent_result["retrieval_hint"])
@@ -295,6 +330,14 @@ def run(
         logger.error(f"Pipeline: Stage 4 raised unexpectedly, returning empty: {e}")
         profile_fields = []
     trace.stage_log(conn, trace_id, "stage_04_memory_lookup", "ok", f"{len(profile_fields)} fields")
+    yield _stage_event(
+        "profile",
+        "Reading what it knows about you",
+        f"{len(profile_fields)} detail{'s' if len(profile_fields) != 1 else ''}"
+        if profile_fields
+        else "nothing relevant",
+        "ok" if profile_fields else "empty",
+    )
 
     try:
         # ADR-002: Stage 5 always runs regardless of skip_rag - the Mechanism 2
@@ -305,6 +348,23 @@ def run(
         logger.error(f"Pipeline: Stage 5 raised unexpectedly, returning empty: {e}")
         rag_result = {"chunks": [], "conflict_flag": False}
     trace.stage_log(conn, trace_id, "stage_05_rag_retrieval", "ok", f"{len(rag_result['chunks'])} chunks, conflict={rag_result['conflict_flag']}")
+    # The one this project learned to care about. An empty retrieval used to
+    # look exactly like a question no document answered, and PIP answered
+    # anyway - out of the decision log - for two days without a single surface
+    # saying the index was empty.
+    _chunks = rag_result["chunks"]
+    _files = {c.get("file_path") for c in _chunks if c.get("file_path")}
+    yield _stage_event(
+        "documents",
+        "Searching your documents",
+        (
+            f"{len(_chunks)} passage{'s' if len(_chunks) != 1 else ''} "
+            f"from {len(_files)} document{'s' if len(_files) != 1 else ''}"
+        )
+        if _chunks
+        else "nothing close enough",
+        "ok" if _chunks else "empty",
+    )
 
     # Security fix: Stage 6 used to fire on trigger-keyword match alone, with no
     # consent check at all - the ONLY gate ever applied was to the LLM provider
@@ -329,6 +389,15 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: Stage 6 raised unexpectedly, returning empty: {e}")
     trace.stage_log(conn, trace_id, "stage_06_web_search", "ok", f"{len(web_results)} results")
+    # Only when it actually ran. A "Searched the web: 0 results" line on every
+    # ordinary question would report the absence of something nobody asked
+    # for, and would be indistinguishable from a search that failed.
+    if web_results:
+        yield _stage_event(
+            "web",
+            "Searching the web",
+            f"{len(web_results)} result{'s' if len(web_results) != 1 else ''}",
+        )
 
     # Stage 7
     try:
@@ -360,6 +429,11 @@ def run(
         )
         yield {"type": "pipeline_complete", "data": result}
         return
+
+    # Before the call, not after: everything above is milliseconds of local
+    # lookups and this is the part somebody actually waits through, so it has
+    # to be on screen while it happens rather than announced once it is over.
+    yield _stage_event("writing", "Writing", get_active_model_name(conn))
 
     # Stage 9 - streamed live to the caller.
     events = stage_09.run(

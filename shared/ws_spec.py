@@ -62,9 +62,47 @@ class StoppedEvent(TypedDict):
     data: None
 
 
-# Part 14.3: the five event shapes ever sent over the /ws/chat wire, in
-# emission order stage_hint (always first) -> token* -> (done | error | stopped).
-WSChatEvent = Union[StageHintEvent, TokenEvent, DoneEvent, ErrorEvent, StoppedEvent]
+class StageData(TypedDict):
+    """
+    One retrieval or generation step, reported as it finishes.
+
+    `stage` is the stable identifier a client may branch on; `label` and
+    `detail` are the sentences shown to a person. Both are written HERE rather
+    than mapped from `stage` in the client, on this project's usual split: the
+    backend is the only side that knows a lookup found three passages or none,
+    and a frontend that assembled that sentence itself would be inventing
+    knowledge it does not have.
+
+    `status` distinguishes the case that matters most and reads identically to
+    success from outside: "skipped" is a stage that never ran, "empty" is a
+    stage that ran and found nothing. An answer built on an empty RAG lookup is
+    exactly the failure this project spent a session chasing while every
+    surface said things were fine.
+    """
+
+    stage: str
+    label: str
+    detail: str
+    status: Literal["ok", "empty", "skipped", "error"]
+
+
+class StageEvent(TypedDict):
+    """
+    Emitted as each pipeline stage completes, before the first token.
+
+    Additive to the wire protocol, and safe for an older client by
+    construction: server.py forwards every event that is not
+    pipeline_complete without inspecting it, and a client that does not know
+    this type ignores it the same way it ignores anything else unrecognised.
+    """
+
+    type: Literal["stage"]
+    data: StageData
+
+
+# Part 14.3: the event shapes ever sent over the /ws/chat wire, in emission
+# order stage* -> stage_hint -> token* -> (done | error | stopped).
+WSChatEvent = Union[StageEvent, StageHintEvent, TokenEvent, DoneEvent, ErrorEvent, StoppedEvent]
 
 
 # What a client sends into /ws/chat while a response is actively streaming, to
