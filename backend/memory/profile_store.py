@@ -17,6 +17,16 @@ try:
 except ImportError:  # pragma: no cover - exercised when SQLCipher is installed.
     sqlcipher3 = None
 
+# "database is locked" arrives as a different class depending on which driver
+# opened the connection, and sqlcipher3's is not a subclass of sqlite3's. Built
+# once here so the one place that catches it does not have to know whether
+# SQLCipher is installed.
+OPERATIONAL_ERRORS: tuple[type[Exception], ...] = (
+    (sqlite3.OperationalError, sqlcipher3.dbapi2.OperationalError)
+    if sqlcipher3 is not None
+    else (sqlite3.OperationalError,)
+)
+
 
 SCHEMA_PATH = Path(__file__).parent.parent / "core" / "schema.sql"
 CONSENT_SEED_PATH = Path(__file__).parent.parent.parent / "config" / "provider_consent.json"
@@ -51,9 +61,46 @@ def get_connection(db_path: str, db_key: str | None = None):
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
 
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
+    # busy_timeout before anything else, so it is in force for every statement
+    # below and for whatever the caller runs afterwards. This is hygiene rather
+    # than a fix for the failure described next - it was measured, and a
+    # timeout does not help there at all.
     conn.execute("PRAGMA busy_timeout = 5000")
+
+    # foreign_keys is a property of THIS connection and has to succeed.
+    conn.execute("PRAGMA foreign_keys = ON")
+
+    # journal_mode is a property of the DATABASE FILE, not of this connection,
+    # and is therefore allowed to fail.
+    #
+    # SQLite refuses to change into or out of WAL while another connection has
+    # the database open in a write transaction, and for that case it returns
+    # SQLITE_BUSY WITHOUT calling the busy handler - so no timeout, however
+    # long, makes any difference. Measured, after a first attempt at this
+    # assumed the opposite: with another connection holding BEGIN EXCLUSIVE on
+    # a database that is not yet WAL, the switch fails identically at a 5000ms
+    # timeout and at 0.
+    #
+    # What made that reachable is the first run, and only the first run. A new
+    # installation has no database; choosing a password creates one and starts
+    # the catch-up, which opens it and writes; the application asks for /status
+    # milliseconds later; that second connection tried to switch a
+    # not-yet-WAL database while the first was mid-write, and raised from
+    # inside here - before the caller had run a single query. What a new user
+    # saw, immediately after setting their password, was "PIP could not read
+    # your data". Once the file IS in WAL the pragma is a no-op that takes no
+    # lock, so the window closes for good after one successful start.
+    #
+    # Swallowing it is correct rather than merely convenient: the connection
+    # that holds the lock is itself setting WAL, so the file ends up in the
+    # mode this line wanted. Refusing to return a usable connection over a
+    # setting another connection is in the middle of applying would turn a
+    # transient overlap into a failed request.
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+    except OPERATIONAL_ERRORS:
+        pass
+
     return conn
 
 
