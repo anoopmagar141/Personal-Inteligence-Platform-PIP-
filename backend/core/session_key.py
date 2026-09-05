@@ -70,8 +70,15 @@ def current_key() -> str | None:
 
 
 def lock() -> None:
-    """Forget the key. Used by tests, and by nothing in production - a locked
-    session is what a restart produces."""
+    """
+    Forget the key.
+
+    Reachable in production now, through POST /auth/lock - the sign-out
+    control. This used to say "used by tests, and by nothing in production",
+    which was true and was the whole problem: unlock had an endpoint and a
+    screen, lock had neither, so once PIP was open the only way to close it
+    was to end the process.
+    """
     global _key, _failed_attempts
     with _guard:
         _key = None

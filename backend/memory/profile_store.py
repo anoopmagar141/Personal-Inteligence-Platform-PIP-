@@ -37,7 +37,7 @@ DEFAULT_INTERACTION_STYLE = "adaptive"
 # surfaces. They are singular, NOT NULL, and typed by the user at onboarding
 # rather than inferred from anything - which is why they are the only fields
 # with a rule about WHO may write them. See _write_profile_value.
-IDENTITY_FIELDS = frozenset({"name", "language_preference", "timezone"})
+IDENTITY_FIELDS = frozenset({"name", "preferred_name", "language_preference", "timezone"})
 
 
 def get_connection(db_path: str, db_key: str | None = None):
@@ -141,6 +141,11 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("skill_contradiction_log", "session_no", "INTEGER"),
     # See schema.sql: what Stage 0 measures the warm-start gap from.
     ("profile_meta", "previous_session_date", "TEXT"),
+    # See schema.sql: what to call somebody, as distinct from who they are.
+    # Deliberately no backfill - NULL means "no separate calling name", which
+    # every existing profile is, and copying name into it would invent a
+    # preference nobody stated while making the two indistinguishable.
+    ("identity", "preferred_name", "TEXT"),
 )
 
 # Run once, immediately after the named column is first added, to give existing
@@ -538,6 +543,7 @@ def complete_onboarding(
     conn,
     *,
     name: str,
+    preferred_name: str | None = None,
     language_preference: str,
     timezone: str | None = None,
     current_project: dict[str, str] | None = None,
@@ -550,17 +556,28 @@ def complete_onboarding(
     if not language_preference.strip():
         raise ValueError("language_preference is required")
 
+    # Blank means "no separate calling name" and is stored as NULL rather than
+    # "", so one test - preferred_name IS NULL - answers it everywhere, and an
+    # empty string cannot start standing in for an absent one.
+    calling_name = (preferred_name or "").strip() or None
+
     timestamp = now_utc()
     conn.execute(
         """
-        INSERT INTO identity (id, name, language_preference, timezone)
-        VALUES (1, ?, ?, ?)
+        INSERT INTO identity (id, name, preferred_name, language_preference, timezone)
+        VALUES (1, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
+            preferred_name = excluded.preferred_name,
             language_preference = excluded.language_preference,
             timezone = excluded.timezone
         """,
-        (name.strip(), language_preference.strip(), (timezone or DEFAULT_TIMEZONE).strip()),
+        (
+            name.strip(),
+            calling_name,
+            language_preference.strip(),
+            (timezone or DEFAULT_TIMEZONE).strip(),
+        ),
     )
     conn.execute(
         """
@@ -626,6 +643,24 @@ def get_profile(conn) -> list[dict[str, Any]]:
                 _profile_row("identity", "timezone", identity["timezone"], 1.0, "explicit", "active"),
             ]
         )
+        # Only when there is one. An always-present empty row would put a blank
+        # "Preferred name:" line into the Identity section of every prompt and
+        # a blank field on every profile screen, for the majority of profiles
+        # that never set one - stating an absence rather than omitting it.
+        #
+        # The row is keyed by the column name, so correct_profile_field()
+        # already routes an edit here through the existing identity path with
+        # no special case: get_profile is what tells it where a field lives.
+        # keys() rather than a bare subscript: sqlite3.Row raises IndexError
+        # for a column that is not there, and a database opened by something
+        # that did not run apply_column_migrations would take the whole
+        # profile down over an optional nickname.
+        if "preferred_name" in identity.keys() and identity["preferred_name"]:
+            rows.append(
+                _profile_row(
+                    "identity", "preferred_name", identity["preferred_name"], 1.0, "explicit", "active"
+                )
+            )
 
     rows.extend(
         _profile_row("skill_memory", row["name"], row["level"], row["confidence"], row["source_label"], row["status"])
@@ -729,7 +764,21 @@ def correct_profile_field(conn, field: str, value: str) -> None:
     something PIP has never recorded is really just stating it.
     """
     existing = get_profile_field(conn, field)
-    target_table = existing["table"] if existing else "preference_memory"
+    if existing:
+        target_table = existing["table"]
+    elif field in IDENTITY_FIELDS:
+        # An identity field get_profile did not emit because it is not set
+        # yet - preferred_name, before anybody has chosen one.
+        #
+        # Without this the fallback below would apply, and the first attempt to
+        # set a calling name would create a PREFERENCE called "preferred_name"
+        # instead: no error, a success response, the value visible on the
+        # profile screen, and identity.preferred_name still NULL. The lookup is
+        # "where does this field live", and for an identity column the answer
+        # does not depend on whether it currently holds anything.
+        target_table = "identity"
+    else:
+        target_table = "preference_memory"
 
     if target_table == "skill_memory":
         # skill_memory.level is a REAL, and SQLite would happily store the
@@ -799,6 +848,17 @@ def goal_id_from_field(field: str) -> str | None:
 def soft_delete_profile_field(conn, field: str) -> bool:
     if field in {"name", "language_preference", "timezone"}:
         raise ValueError("immutable identity fields cannot be deleted")
+
+    # preferred_name is the one identity field that CAN be removed, because it
+    # is the one that is optional to begin with - deleting it means "go back to
+    # calling me by my name", not "I have no name". Handled here rather than
+    # left to fall through the loop below, which searches five tables that will
+    # never hold it and would report not_found: an interface offering a delete
+    # that silently does nothing is how the rest of today's bugs started.
+    if field == "preferred_name":
+        cur = conn.execute("UPDATE identity SET preferred_name = NULL WHERE id = 1")
+        conn.commit()
+        return cur.rowcount > 0
 
     updated = 0
     for table, column in (

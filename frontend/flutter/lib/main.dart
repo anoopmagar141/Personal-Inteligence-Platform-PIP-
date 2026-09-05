@@ -362,6 +362,18 @@ class _AppRootState extends State<AppRoot> {
           api: api,
           themeMode: widget.themeMode,
           onCycleTheme: widget.onCycleTheme,
+          // Straight to the sign-in screen rather than back through
+          // _connect(), for the reason onUnlocked goes the other way without
+          // it: the backend is demonstrably up and the token is in hand, so a
+          // 45-attempt connect loop would only re-derive what this session
+          // already knows. AuthState.locked rather than a re-read of
+          // /auth/state - the app just locked it, and asking the server to
+          // confirm what it was told a moment ago is a round trip that can
+          // only agree or be wrong.
+          onSignedOut: () => setState(() {
+            _authState = AuthState.locked;
+            _state = _RootState.signIn;
+          }),
         );
     }
   }

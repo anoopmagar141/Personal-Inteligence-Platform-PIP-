@@ -146,6 +146,9 @@ async function submitOnboarding(event) {
 
   const payload = {
     name: form.name.value,
+    // undefined rather than "", so a blank field is absent from the payload
+    // instead of asserting that somebody answered with nothing.
+    preferred_name: form.preferred_name.value || undefined,
     language_preference: form.language_preference.value,
     timezone: form.timezone.value || undefined,
     skills: parseCsv(form.skills.value, 3),

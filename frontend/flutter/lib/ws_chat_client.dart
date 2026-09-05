@@ -109,6 +109,25 @@ class WsChatClient {
     connect();
   }
 
+  /// Closes the connection for good without tearing the client down.
+  ///
+  /// Three different closes exist here and they are not interchangeable.
+  /// switchConversation closes in order to reconnect. dispose() closes and
+  /// also shuts the event and status streams the widget tree is still
+  /// listening to. Sign-out needs the one in between: stop talking to the
+  /// backend, keep the object usable until the screen goes away.
+  ///
+  /// Sets _disposed because that flag is what _scheduleReconnect checks.
+  /// Without it a bare sink.close() here would be followed a second later by
+  /// the reconnect timer reopening the very connection this exists to end -
+  /// against a backend that has since locked, so it would fail, and retry.
+  void disconnect() {
+    _disposed = true;
+    _subscription?.cancel();
+    _channel?.sink.close();
+    _statusController.add('disconnected');
+  }
+
   void dispose() {
     _disposed = true;
     _subscription?.cancel();

@@ -30,11 +30,13 @@ class HomeShell extends StatefulWidget {
   final ApiClient api;
   final ThemeMode themeMode;
   final VoidCallback onCycleTheme;
+  final VoidCallback onSignedOut;
   const HomeShell({
     super.key,
     required this.api,
     required this.themeMode,
     required this.onCycleTheme,
+    required this.onSignedOut,
   });
 
   @override
@@ -136,6 +138,53 @@ class _HomeShellState extends State<HomeShell> {
     } catch (_) {
       if (mounted) setState(() => _pendingCount = 0);
     }
+  }
+
+  /// Locks the database and returns to the sign-in screen.
+  ///
+  /// Confirmed first, because the cost of a misclick here is not symmetric:
+  /// signing out takes one click and getting back in takes the password, in
+  /// the middle of whatever the person was saying.
+  ///
+  /// The socket is closed BEFORE the call, not after. /auth/lock persists the
+  /// transcripts of every session the registry knows about, so leaving a live
+  /// connection open across it means the turns typed after that point belong
+  /// to a session already enqueued - and the server would have no way to reach
+  /// them again. Closing first makes the enqueue the last word on this
+  /// conversation, which is what it claims to be.
+  Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'PIP will close your data and ask for your password again. '
+          'Anything said this session is saved first.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Sign out')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    _chatClient.disconnect();
+    try {
+      await widget.api.lock();
+    } catch (error) {
+      // Reported rather than swallowed, and the screen does NOT change: a
+      // failed lock means the data is still open, and sending somebody to a
+      // sign-in screen over an unlocked database would be the one outcome
+      // worse than the error itself.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not sign out: $error')),
+        );
+      }
+      return;
+    }
+    widget.onSignedOut();
   }
 
   void _selectTab(int index) {
@@ -240,6 +289,13 @@ class _HomeShellState extends State<HomeShell> {
                     onTap: () => _selectTab(i),
                   ),
                 const Spacer(),
+                _SidebarItem(
+                  label: 'Sign out',
+                  icon: Icons.lock_outline,
+                  selected: false,
+                  collapsed: _collapsed,
+                  onTap: _signOut,
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                   child: _ThemeToggle(

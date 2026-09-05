@@ -25,9 +25,19 @@ CREATE TABLE IF NOT EXISTS profile_meta (
 );
 
 -- 2. identity Table
+--
+-- name is who somebody IS; preferred_name is what to call them. They are
+-- separated because one field could not be both without one of the two jobs
+-- losing: a full name in the only field means PIP addresses somebody by their
+-- legal name every time it speaks to them, and a short name in the only field
+-- means the full one is nowhere in the profile at all.
+--
+-- preferred_name is nullable and the fallback is name, so a profile that never
+-- sets one behaves exactly as it did before the column existed.
 CREATE TABLE IF NOT EXISTS identity (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     name TEXT NOT NULL,
+    preferred_name TEXT,
     language_preference TEXT NOT NULL,
     timezone TEXT NOT NULL
 );

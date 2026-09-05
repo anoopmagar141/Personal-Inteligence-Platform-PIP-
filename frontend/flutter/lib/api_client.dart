@@ -116,6 +116,13 @@ class ApiClient {
     await post('/auth/setup', {'password': password});
   }
 
+  /// Sign out: the server persists whatever the open sessions were saying,
+  /// then forgets the key. Every route answers 423 afterwards, so the caller's
+  /// next job is to show the sign-in screen.
+  Future<void> lock() async {
+    await post('/auth/lock', {});
+  }
+
   Future<Map<String, dynamic>> getStatus() async => await get('/status') as Map<String, dynamic>;
 
   Future<void> completeOnboarding(Map<String, dynamic> payload) async {

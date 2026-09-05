@@ -25,6 +25,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
+  final _preferredName = TextEditingController();
   final _language = TextEditingController(text: 'English');
   final _timezone = TextEditingController();
   final _projectName = TextEditingController();
@@ -44,6 +45,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     final payload = <String, dynamic>{
       'name': _name.text,
+      if (_preferredName.text.trim().isNotEmpty) 'preferred_name': _preferredName.text.trim(),
       'language_preference': _language.text,
       if (_timezone.text.trim().isNotEmpty) 'timezone': _timezone.text.trim(),
       if (_parseCsv(_skills.text, 3) != null) 'skills': _parseCsv(_skills.text, 3),
@@ -109,14 +111,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'A few questions before we start. Name, language, and timezone are locked once set.',
+                    'A few questions before we start. You can change any of this later from your profile.',
                     style: TextStyle(fontSize: 12, color: pip.textMuted, height: 1.5),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   TextFormField(
                     controller: _name,
-                    decoration: const InputDecoration(labelText: 'Name *'),
+                    decoration: const InputDecoration(
+                      labelText: 'Full name *',
+                      hintText: 'your name as you would write it',
+                    ),
                     validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _preferredName,
+                    decoration: const InputDecoration(
+                      labelText: 'What should PIP call you?',
+                      hintText: 'leave blank to be called by the name above',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -127,12 +140,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _timezone,
-                    decoration: const InputDecoration(labelText: 'Timezone', hintText: 'defaults to system timezone'),
+                    decoration: const InputDecoration(
+                      labelText: 'Timezone',
+                      hintText: 'e.g. Asia/Kathmandu - defaults to UTC',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _projectName,
-                    decoration: const InputDecoration(labelText: 'Current project name'),
+                    decoration: const InputDecoration(
+                      labelText: 'Current project name',
+                      hintText: 'optional - leave blank and no project is created',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -150,6 +169,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: _interactionStyle,
+                    // A dropdown sizes itself to its widest ITEM, not to the
+                    // space it has. "Brief summary first, detail on request"
+                    // is wider than this card's 440px, so without this the row
+                    // overflows by 268px - a real overflow at the width this
+                    // screen declares for itself, found by a widget test
+                    // rendering the form at exactly that width.
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'How do you prefer answers?'),
                     items: const [
                       DropdownMenuItem(value: '', child: Text("I'll specify each time (adaptive)")),

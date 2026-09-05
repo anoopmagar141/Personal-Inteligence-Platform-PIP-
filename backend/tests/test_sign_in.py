@@ -327,3 +327,62 @@ def test_a_key_inherited_from_the_environment_is_adopted(tmp_path, monkeypatch):
 def test_nothing_is_adopted_when_there_is_nothing_to_adopt(tmp_path, monkeypatch):
     monkeypatch.delenv("PIP_DB_KEY", raising=False)
     assert session_key.adopt_environment_key() is False
+
+
+# --- Signing out -----------------------------------------------------------
+#
+# session_key.lock() has always worked and was reachable only from tests, so
+# unlock had an endpoint and a screen while lock had neither: once PIP was
+# open, ending the process was the only way to close it.
+
+
+def test_signing_out_locks_everything_again(tmp_path, monkeypatch, client):
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    api.post("/api/v1/auth/unlock", headers=headers, json={"password": PASSWORD})
+    assert api.get("/api/v1/status", headers=headers).status_code == 200
+
+    response = api.post("/api/v1/auth/lock", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "locked"}
+    assert session_key.is_unlocked() is False
+    assert api.get("/api/v1/status", headers=headers).status_code == 423
+
+
+def test_the_same_password_opens_it_again_afterwards(tmp_path, monkeypatch, client):
+    """
+    Signing out closes the data; it does not change what opens it. Worth
+    asserting rather than assuming, because lock() also clears PIP_DB_KEY from
+    the environment - and a lock that damaged the path back in would be
+    indistinguishable from one that worked, right up until somebody tried.
+    """
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    api.post("/api/v1/auth/unlock", headers=headers, json={"password": PASSWORD})
+    api.post("/api/v1/auth/lock", headers=headers)
+
+    reopened = api.post("/api/v1/auth/unlock", headers=headers, json={"password": PASSWORD})
+
+    assert reopened.status_code == 200
+    assert api.get("/api/v1/status", headers=headers).status_code == 200
+
+
+def test_signing_out_is_not_a_way_in(tmp_path, monkeypatch, client):
+    """
+    /auth/lock is deliberately NOT in _UNLOCKED_PATHS. Locking a locked
+    session has nothing to do, and that list is only what the sign-in screen
+    needs in order to get in - a route that widens it earns its place or stays
+    out.
+    """
+    api, headers = client
+    make_encrypted_db(tmp_path)
+
+    assert api.post("/api/v1/auth/lock", headers=headers).status_code == 423
+
+
+def test_signing_out_still_needs_the_api_token(tmp_path, monkeypatch, client):
+    api, _ = client
+    make_encrypted_db(tmp_path)
+
+    assert api.post("/api/v1/auth/lock").status_code == 401

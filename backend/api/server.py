@@ -171,6 +171,7 @@ def api_complete_onboarding(conn, payload: dict[str, Any]) -> dict[str, Any]:
     message = profile_store.complete_onboarding(
         conn,
         name=payload["name"],
+        preferred_name=payload.get("preferred_name"),
         language_preference=payload["language_preference"],
         timezone=payload.get("timezone"),
         current_project=payload.get("current_project"),
@@ -1549,6 +1550,46 @@ try:
             raise HTTPException(status_code=422, detail=str(exc))
         _start_catch_up()
         return {"state": "unlocked"}
+
+    @app.post(f"{BASE_PREFIX}/auth/lock")
+    async def auth_lock():
+        """
+        Sign out: persist what the open sessions were saying, then forget the
+        key.
+
+        The ordering is the whole of it. Persisting needs the database open and
+        locking is what closes it, so a lock that ran first would strand every
+        in-flight conversation the way a kill does - and "sign out" would
+        quietly become the most destructive control in the application.
+
+        Enqueued rather than observed inline, by the same route shutdown uses:
+        an Observer pass is a ~130s-class LLM call (ADR-033) and nothing
+        somebody clicking sign out should wait behind. The transcripts land in
+        pending_observer and the next unlock's catch-up drains them.
+
+        NOT added to _UNLOCKED_PATHS. Locking a locked session is a request
+        with nothing to do, and 423 is a truthful answer the client can act on;
+        that list is deliberately only what the sign-in screen needs to get in.
+
+        A WebSocket already open keeps the connection it was handed - a
+        sqlite3 connection does not stop working because a module forgot the
+        key it was opened with. Every route answers 423 from here, so the
+        client returns to the sign-in screen and drops the socket itself.
+        Stated rather than papered over: the guarantee is that no NEW work can
+        reach the data, not that a socket is severed mid-sentence.
+        """
+        loop = asyncio.get_event_loop()
+        for session in await _session_registry.snapshot():
+            try:
+                await session_lifecycle.enqueue_for_shutdown(loop, session)
+            except Exception as e:
+                # Same posture as the shutdown path this mirrors: one session's
+                # transcript failing to persist must not leave the key in
+                # memory, which is the thing the user actually asked for.
+                logger.error(f"Lock: failed to enqueue a session's transcript, it will be lost: {e}")
+        session_key.lock()
+        logger.info("PIP locked at the user's request.")
+        return {"state": "locked"}
 
     @app.get(f"{BASE_PREFIX}/status")
     def status():

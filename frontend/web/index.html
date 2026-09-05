@@ -31,19 +31,22 @@
 <div id="onboarding" class="screen hidden">
   <div class="card">
     <h1>Welcome to PIP</h1>
-    <p class="muted">A few questions before we start. Name, language, and timezone are locked once set.</p>
+    <p class="muted">A few questions before we start. You can change any of this later from your profile.</p>
     <form id="onboarding-form">
-      <label>Name <span class="required">*</span>
-        <input type="text" name="name" required>
+      <label>Full name <span class="required">*</span>
+        <input type="text" name="name" required placeholder="your name as you would write it">
+      </label>
+      <label>What should PIP call you?
+        <input type="text" name="preferred_name" placeholder="leave blank to be called by the name above">
       </label>
       <label>Primary language <span class="required">*</span>
         <input type="text" name="language_preference" required placeholder="e.g. English">
       </label>
       <label>Timezone
-        <input type="text" name="timezone" placeholder="defaults to system timezone">
+        <input type="text" name="timezone" placeholder="e.g. Asia/Kathmandu - defaults to UTC">
       </label>
       <label>Current project name
-        <input type="text" name="project_name">
+        <input type="text" name="project_name" placeholder="optional - leave blank and no project is created">
       </label>
       <label>Current project description
         <input type="text" name="project_description">

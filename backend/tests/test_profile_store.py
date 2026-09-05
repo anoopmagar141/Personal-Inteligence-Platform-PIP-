@@ -742,3 +742,149 @@ def test_foreign_key_enforcement_survives_the_rebuild(tmp_path, db_key):
     profile_store.initialize_schema(conn)
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
+
+
+# --- Full name vs calling name ---------------------------------------------
+#
+# identity.name answers "who is this"; identity.preferred_name answers "what do
+# I call them". One column could not do both jobs: a full name in it means PIP
+# addresses somebody by their legal name every time it speaks, and a short name
+# in it means the full one is not recorded anywhere.
+
+
+def _identity(conn):
+    return conn.execute("SELECT * FROM identity WHERE id = 1").fetchone()
+
+
+def _field(conn, name):
+    return profile_store.get_profile_field(conn, name)
+
+
+def test_onboarding_stores_a_calling_name_alongside_the_full_one(conn):
+    profile_store.complete_onboarding(
+        conn, name="Anup Magar", preferred_name="saru", language_preference="English"
+    )
+
+    row = _identity(conn)
+    assert row["name"] == "Anup Magar"
+    assert row["preferred_name"] == "saru"
+
+
+def test_a_blank_calling_name_is_stored_as_absent_not_as_empty(conn):
+    """
+    NULL rather than "", so one test answers "is there a calling name"
+    everywhere. An empty string would be a third state that reads as present
+    and prints as nothing.
+    """
+    profile_store.complete_onboarding(
+        conn, name="Anup Magar", preferred_name="   ", language_preference="English"
+    )
+
+    assert _identity(conn)["preferred_name"] is None
+
+
+def test_the_profile_omits_a_calling_name_nobody_set(conn):
+    profile_store.complete_onboarding(conn, name="Anup Magar", language_preference="English")
+
+    assert _field(conn, "name") is not None
+    assert _field(conn, "preferred_name") is None
+
+
+def test_the_profile_carries_a_calling_name_once_there_is_one(conn):
+    profile_store.complete_onboarding(
+        conn, name="Anup Magar", preferred_name="saru", language_preference="English"
+    )
+
+    row = _field(conn, "preferred_name")
+    assert row is not None
+    assert row["table"] == "identity"
+    assert row["value"] == "saru"
+
+
+def test_setting_a_calling_name_for_the_first_time_reaches_identity(conn):
+    """
+    The regression this guards is silent, which is what makes it worth a test.
+
+    correct_profile_field resolves the target table from get_profile, and
+    get_profile omits an unset preferred_name - so the fallback would have
+    written a PREFERENCE named "preferred_name": success response, value
+    visible on the profile screen, identity.preferred_name still NULL, and
+    nothing anywhere reporting a problem.
+    """
+    profile_store.complete_onboarding(conn, name="Anup Magar", language_preference="English")
+
+    profile_store.correct_profile_field(conn, "preferred_name", "saru")
+
+    assert _identity(conn)["preferred_name"] == "saru"
+    assert _field(conn, "preferred_name")["table"] == "identity"
+
+
+def test_a_calling_name_can_be_changed_like_any_other_identity_field(conn):
+    profile_store.complete_onboarding(
+        conn, name="Anup Magar", preferred_name="saru", language_preference="English"
+    )
+
+    profile_store.correct_profile_field(conn, "preferred_name", "Anup")
+
+    assert _identity(conn)["preferred_name"] == "Anup"
+
+
+def test_a_calling_name_can_be_removed_and_the_real_name_cannot(conn):
+    """
+    preferred_name is the one identity field that is optional, so it is the one
+    that can be deleted - "go back to calling me by my name", not "I have no
+    name".
+    """
+    profile_store.complete_onboarding(
+        conn, name="Anup Magar", preferred_name="saru", language_preference="English"
+    )
+
+    assert profile_store.soft_delete_profile_field(conn, "preferred_name") is True
+    assert _identity(conn)["preferred_name"] is None
+
+    for immutable in ("name", "language_preference", "timezone"):
+        with pytest.raises(ValueError, match="immutable"):
+            profile_store.soft_delete_profile_field(conn, immutable)
+
+
+def test_the_observer_cannot_decide_what_to_call_somebody(conn):
+    """
+    Same rule the other identity fields carry, and for the same reason: an
+    inferred value must never rename the person it was inferred from. Only a
+    direct correction passes allow_identity.
+    """
+    profile_store.complete_onboarding(conn, name="Anup Magar", language_preference="English")
+
+    with pytest.raises(ValueError, match="only be set by you"):
+        profile_store._write_profile_value(
+            conn,
+            target_table="identity",
+            field="preferred_name",
+            value="mate",
+            source_label="inferred",
+        )
+
+
+def test_an_existing_database_gains_the_column_without_a_value(tmp_path):
+    """
+    An upgrade, not a fresh create. NULL is correct for every profile that
+    predates the column - copying name into it would invent a preference
+    nobody stated and make the two indistinguishable afterwards.
+    """
+    db_path = tmp_path / "old.db"
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    connection.execute(
+        "CREATE TABLE identity (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL, "
+        "language_preference TEXT NOT NULL, timezone TEXT NOT NULL)"
+    )
+    connection.execute("INSERT INTO identity VALUES (1, 'Anup Magar', 'English', 'UTC')")
+    connection.commit()
+
+    profile_store.initialize_schema(connection)
+
+    row = connection.execute("SELECT * FROM identity WHERE id = 1").fetchone()
+    assert "preferred_name" in row.keys()
+    assert row["preferred_name"] is None
+    assert row["name"] == "Anup Magar"
+    connection.close()
