@@ -34,6 +34,7 @@ import 'profile_picture.dart';
 import 'screens/sign_in_screen.dart';
 import 'startup_progress.dart';
 import 'theme.dart';
+import 'widgets/gateway_flow.dart';
 
 /// The data directory, exported so screens that read it directly (Backup) get
 /// the same answer this file resolves at startup rather than deriving a second
@@ -386,39 +387,58 @@ class _LoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pip = context.pip;
+    // Dark in BOTH themes, which is the one deliberate departure from this
+    // app's rule that nothing picks its own colours.
+    //
+    // The field only exists against a black stage - it is dots of light, and
+    // on a near-white page it is grey speckle. The launch screen is also the
+    // one surface where the user's theme has not been read yet: it is on
+    // screen before the backend answers, so it cannot be a preference, only a
+    // guess. A fixed dark stage is honest about that where a light one
+    // pretending to match would not.
+    //
+    // The phase list keeps its own light-on-dark colours below rather than
+    // PipPalette's, for the same reason - on this screen the palette may be
+    // the wrong one.
     return Scaffold(
-      backgroundColor: pip.bg,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 340),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'PIP',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 32, color: pip.accent),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.5),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              // The checklist replaces the message rather than sitting under
-              // it. Both at once would be a real account of the startup next
-              // to a counter's guess about the same startup, and the guess
-              // would be the one that looked authoritative.
-              if (phases.isEmpty)
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: pip.textMuted),
-                )
-              else
-                _PhaseList(phases: phases),
-            ],
+      backgroundColor: const Color(0xFF060608),
+      body: GatewayFlow(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 340),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'PIP',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 32,
+                    color: Color(0xFFF2F3F8),
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF8B8BF5)),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                // The checklist replaces the message rather than sitting under
+                // it. Both at once would be a real account of the startup next
+                // to a counter's guess about the same startup, and the guess
+                // would be the one that looked authoritative.
+                if (phases.isEmpty)
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF9AA0B4)),
+                  )
+                else
+                  _PhaseList(phases: phases, onDark: true),
+              ],
+            ),
           ),
         ),
       ),
@@ -432,11 +452,26 @@ class _LoadingScreen extends StatelessWidget {
 /// is the only thing that says how far the launch actually got.
 class _PhaseList extends StatelessWidget {
   final List<StartupPhase> phases;
-  const _PhaseList({required this.phases});
+
+  /// Drawn over the launch screen's fixed dark stage rather than over the
+  /// user's theme.
+  ///
+  /// The launch screen cannot know which theme is right - it is on screen
+  /// before the backend has answered anything - so it commits to dark and this
+  /// list has to follow it there. Without this, a light-theme install showed
+  /// near-black text on a near-black field: the checklist that exists to say
+  /// how far the launch got would have been the one thing on screen nobody
+  /// could read.
+  final bool onDark;
+
+  const _PhaseList({required this.phases, this.onDark = false});
 
   @override
   Widget build(BuildContext context) {
     final pip = context.pip;
+    final accent = onDark ? const Color(0xFF8B8BF5) : pip.accent;
+    final text = onDark ? const Color(0xFFE8EAF2) : pip.text;
+    final faint = onDark ? const Color(0xFF6E7488) : pip.textFaint;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,13 +485,13 @@ class _PhaseList extends StatelessWidget {
                 SizedBox(
                   width: 20,
                   child: switch (phase.state) {
-                    StartupPhaseState.done => Icon(Icons.check, size: 14, color: pip.accent),
+                    StartupPhaseState.done => Icon(Icons.check, size: 14, color: accent),
                     StartupPhaseState.current => SizedBox(
                         width: 11,
                         height: 11,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: pip.accent),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: accent),
                       ),
-                    StartupPhaseState.pending => Icon(Icons.circle_outlined, size: 11, color: pip.textFaint),
+                    StartupPhaseState.pending => Icon(Icons.circle_outlined, size: 11, color: faint),
                   },
                 ),
                 Expanded(
@@ -470,7 +505,7 @@ class _PhaseList extends StatelessWidget {
                           fontWeight: phase.state == StartupPhaseState.current
                               ? FontWeight.w600
                               : FontWeight.w400,
-                          color: phase.state == StartupPhaseState.pending ? pip.textFaint : pip.text,
+                          color: phase.state == StartupPhaseState.pending ? faint : text,
                         ),
                       ),
                       // The detail is where "already running" lives, which is
@@ -478,7 +513,7 @@ class _PhaseList extends StatelessWidget {
                       if (phase.detail.isNotEmpty && phase.state != StartupPhaseState.pending)
                         Text(
                           phase.detail,
-                          style: TextStyle(fontSize: 11, color: pip.textFaint),
+                          style: TextStyle(fontSize: 11, color: faint),
                         ),
                     ],
                   ),
