@@ -25,6 +25,7 @@
 // relies on it.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api_client.dart';
 import '../theme.dart';
@@ -182,10 +183,12 @@ class _SignInScreenState extends State<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pip = context.pip;
+    // No `context.pip` here any more, and its absence is the point: every
+    // colour on the three auth screens is now stated against the fixed dark
+    // stage rather than inherited from a theme that may be the wrong one.
 
     if (widget.state == AuthState.needsMigration) {
-      return _MigrationNotice(pip: pip);
+      return const _MigrationNotice();
     }
 
     // The same dark stage and the same field as the launch screen, because
@@ -314,49 +317,121 @@ class _SignInScreenState extends State<SignInScreen> {
 /// scripts/set_db_password.py does it carefully - backing up first, and proving
 /// the new key opens the copy before removing anything. A button here that did
 /// it silently would be the least ceremonious irreversible action in PIP.
-class _MigrationNotice extends StatelessWidget {
-  final PipPalette pip;
-  const _MigrationNotice({required this.pip});
+class _MigrationNotice extends StatefulWidget {
+  const _MigrationNotice();
+
+  @override
+  State<_MigrationNotice> createState() => _MigrationNoticeState();
+}
+
+class _MigrationNoticeState extends State<_MigrationNotice> {
+  static const _command = r'.venv\Scripts\python.exe scripts\set_db_password.py';
+
+  bool _copied = false;
 
   @override
   Widget build(BuildContext context) {
+    // On the same field as the other two auth screens, because this IS one of
+    // them - /auth/state returns needs_migration where it would otherwise
+    // return locked, so somebody meeting this screen met it INSTEAD of the
+    // password prompt, not on some separate error route.
+    //
+    // Contrast is held higher here than on sign-in. This screen is read rather
+    // than glanced at, it is the only instruction anybody gets, and it is met
+    // by definition on an installation where something is already not as
+    // expected.
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Padding(
+      backgroundColor: kGatewayStage,
+      body: GatewayFlow(
+        child: Center(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Your data is not encrypted yet',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: pip.text),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Container(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                decoration: gatewayGlass(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Your data is not encrypted yet',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: kGatewayText,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    const Text(
+                      'This installation has a database from before PIP had passwords. '
+                      'Encrypting it is a one-off migration that backs up your data first '
+                      'and checks the new key works before changing anything, so it runs '
+                      'as a script rather than from here.',
+                      textAlign: TextAlign.center,
+                      // Muted, not faint. On sign-in the faint tone carries a
+                      // warning somebody has already been told; here it would
+                      // carry the explanation of what to do next, and there is
+                      // nothing else on screen to fall back on.
+                      style: TextStyle(fontSize: 13.5, height: 1.55, color: kGatewayTextMuted),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.md, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF05060A),
+                        borderRadius: AppRadius.sm,
+                        border: Border.all(color: const Color(0xFF2C2F43)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            // Still selectable. The copy button is the easy
+                            // path, not the only one - somebody whose
+                            // clipboard is doing something strange still has
+                            // to be able to get this command out by hand.
+                            child: SelectableText(
+                              _command,
+                              style: TextStyle(
+                                fontFamily: AppTheme.mono,
+                                fontSize: 13,
+                                height: 1.4,
+                                color: kGatewayText,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          IconButton(
+                            icon: Icon(
+                              _copied ? Icons.check : Icons.copy_outlined,
+                              size: 17,
+                              color: _copied ? kGatewayAccent : kGatewayTextMuted,
+                            ),
+                            tooltip: _copied ? 'Copied' : 'Copy command',
+                            onPressed: () async {
+                              await Clipboard.setData(const ClipboardData(text: _command));
+                              if (!mounted) return;
+                              // Confirmed rather than silently assumed: the
+                              // whole screen is one instruction, and "did that
+                              // work" is the very next thought.
+                              setState(() => _copied = true);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    const Text(
+                      'Then start PIP again.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12.5, color: kGatewayTextMuted),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'This installation has a database from before PIP had passwords. '
-                  'Encrypting it is a one-off migration that backs up your data first '
-                  'and checks the new key works before changing anything, so it runs '
-                  'as a script rather than from here.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13.5, height: 1.55, color: pip.textFaint),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                SelectableText(
-                  r'.venv\Scripts\python.exe scripts\set_db_password.py',
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 13,
-                    color: pip.text,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Then start PIP again.',
-                  style: TextStyle(fontSize: 12.5, color: pip.textFaint),
-                ),
-              ],
+              ),
             ),
           ),
         ),

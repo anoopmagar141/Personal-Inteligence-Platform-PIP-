@@ -8,6 +8,7 @@
 // recovered - because the whole design depends on somebody having been told.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pip_flutter_client/api_client.dart';
@@ -66,6 +67,7 @@ Future<FakeApi> pumpSignIn(
 
 void main() {
   _legibilityTests();
+  _migrationTests();
   group('authStateFrom', () {
     test('reads the four states the backend reports', () {
       expect(authStateFrom('locked'), AuthState.locked);
@@ -281,5 +283,91 @@ void _legibilityTests() {
 
     final warning = tester.widget<Text>(find.textContaining('no password reset'));
     expect(warning.style!.color!.computeLuminance(), greaterThan(0.12));
+  });
+}
+
+
+// --- The migration notice --------------------------------------------------
+//
+// The screen shown instead of the password prompt when an installation still
+// has an unencrypted database. It is one instruction and nothing else, so what
+// is worth holding it to is that the instruction survives: readable, copyable
+// by hand, and copyable by button.
+
+Future<void> _pumpMigration(WidgetTester tester) async {
+  await tester.pumpWidget(MaterialApp(
+    theme: AppTheme.light,
+    home: Builder(
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: SignInScreen(
+          api: FakeApi(),
+          state: AuthState.needsMigration,
+          onUnlocked: () {},
+        ),
+      ),
+    ),
+  ));
+  await tester.pumpAndSettle();
+}
+
+const _migrationCommand = r'.venv\Scripts\python.exe scripts\set_db_password.py';
+
+void _migrationTests() {
+  testWidgets('shows the command, and never a password field', (tester) async {
+    await _pumpMigration(tester);
+
+    expect(find.text(_migrationCommand), findsOneWidget);
+    // The point of this state: there is nothing to unlock yet, so offering a
+    // password box would invite somebody to set one on the wrong path.
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('the command stays selectable by hand', (tester) async {
+    // The copy button is the easy path, not the only one.
+    await _pumpMigration(tester);
+
+    expect(find.byType(SelectableText), findsOneWidget);
+  });
+
+  testWidgets('the copy button puts the command on the clipboard', (tester) async {
+    await _pumpMigration(tester);
+
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+
+    await tester.tap(find.byTooltip('Copy command'));
+    await tester.pumpAndSettle();
+
+    expect(copied, _migrationCommand);
+    // And it says so, because "did that work" is the next thought on a screen
+    // whose whole content is one instruction.
+    expect(find.byTooltip('Copied'), findsOneWidget);
+  });
+
+  testWidgets('every word of it is legible on the dark stage', (tester) async {
+    // This screen is met on an installation where something is already not as
+    // expected, and it is the only instruction anybody gets. Under the light
+    // theme it used to inherit near-black ink, which on this stage would have
+    // been the whole screen gone.
+    await _pumpMigration(tester);
+
+    for (final finder in [
+      find.text('Your data is not encrypted yet'),
+      find.textContaining('one-off migration'),
+      find.text('Then start PIP again.'),
+    ]) {
+      final text = tester.widget<Text>(finder);
+      expect(text.style!.color!.computeLuminance(), greaterThan(0.25),
+          reason: 'too dark to read on the stage: ${text.data}');
+    }
   });
 }
