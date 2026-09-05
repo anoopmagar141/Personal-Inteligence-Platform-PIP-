@@ -84,7 +84,14 @@ class _AuroraBackgroundState extends State<AuroraBackground>
                   // Dark backgrounds swallow a wash that would be obvious on
                   // white, so the two are not the same number with a theme
                   // switch in front of them.
-                  strength: dark ? 0.17 : 0.07,
+                  //
+                  // 0.17 was too much, seen on a real screen rather than
+                  // guessed at: over a near-black page it stopped reading as
+                  // ambient light and started reading as a purple stain with
+                  // an edge. Alpha also drives the banding - the fewer levels
+                  // a gradient spans, the wider each band - so lowering it
+                  // helps the same defect the extra gradient stops address.
+                  strength: dark ? 0.10 : 0.07,
                 ),
               ),
             ),
@@ -115,19 +122,19 @@ class _AuroraPainter extends CustomPainter {
       (
         centre: Offset(size.width * (0.5 + 0.16 * math.sin(phase)),
             size.height * (0.92 + 0.05 * math.cos(phase * 0.8))),
-        radius: size.width * 0.42,
+        radius: size.width * 0.58,
         alpha: strength,
       ),
       (
         centre: Offset(size.width * (0.22 + 0.10 * math.cos(phase * 0.7)),
             size.height * (0.78 + 0.06 * math.sin(phase * 1.1))),
-        radius: size.width * 0.30,
+        radius: size.width * 0.44,
         alpha: strength * 0.7,
       ),
       (
         centre: Offset(size.width * (0.80 + 0.09 * math.sin(phase * 1.3)),
             size.height * (0.70 + 0.07 * math.cos(phase))),
-        radius: size.width * 0.26,
+        radius: size.width * 0.38,
         alpha: strength * 0.55,
       ),
     ];
@@ -138,10 +145,23 @@ class _AuroraPainter extends CustomPainter {
         blob.radius,
         Paint()
           ..shader = RadialGradient(
+            // Five stops approximating a gaussian falloff, not two.
+            //
+            // A two-stop gradient fades linearly, and a linear fade to zero
+            // has a corner in it at the outer edge - the rate of change stops
+            // dead. Over a large radius on a near-black page that corner is
+            // visible as an arc, which is exactly what it looked like: a
+            // smudge with a boundary rather than light with none. The extra
+            // stops round that corner off so the falloff approaches zero
+            // gradually instead of arriving there.
             colors: [
               color.withValues(alpha: blob.alpha),
+              color.withValues(alpha: blob.alpha * 0.72),
+              color.withValues(alpha: blob.alpha * 0.36),
+              color.withValues(alpha: blob.alpha * 0.11),
               color.withValues(alpha: 0),
             ],
+            stops: const [0.0, 0.28, 0.55, 0.78, 1.0],
           ).createShader(Rect.fromCircle(center: blob.centre, radius: blob.radius)),
       );
     }
