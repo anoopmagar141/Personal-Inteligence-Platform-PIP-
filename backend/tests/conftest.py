@@ -76,3 +76,11 @@ def isolated_data_dir(tmp_path, monkeypatch):
     for variable, filename in _ISOLATED_PATHS.items():
         monkeypatch.setenv(variable, str(tmp_path / filename))
 
+    # Not a path, and isolated for a different reason. profiles.activate() -
+    # which POST /auth/profile calls - writes the five variables through
+    # os.environ directly, because it re-points a LIVE process rather than
+    # configuring a new one. The four above are already on this table so
+    # monkeypatch puts them back; PIP_PROFILE was not on any, so a test that
+    # switched profile left the next one believing it was somebody else.
+    monkeypatch.setenv("PIP_PROFILE", "default")
+

@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import server
-from backend.core import auth, db_key, session_key
+from backend.core import auth, db_key, profiles, session_key
 from backend.memory import profile_store
 
 PASSWORD = "correct-horse-battery"
@@ -114,6 +114,14 @@ def test_the_sign_in_routes_stay_open_while_locked(tmp_path, monkeypatch, client
     assert api.get("/api/v1/auth/state", headers=headers).status_code == 200
     assert api.get("/api/v1/auth/state", headers=headers).json()["state"] == "locked"
 
+    # The switcher's two routes are open for the same reason: choosing WHO to
+    # sign in as cannot require being signed in. Neither opens a database -
+    # one reads an unencrypted registry, the other sets path variables.
+    assert api.get("/api/v1/auth/profiles", headers=headers).status_code == 200
+    assert api.post(
+        "/api/v1/auth/profile", headers=headers, json={"slug": "default"}
+    ).status_code == 200
+
 
 def test_the_gate_is_not_a_substitute_for_the_token(tmp_path, monkeypatch, client):
     """
@@ -153,7 +161,10 @@ def test_the_right_password_opens_it(tmp_path, monkeypatch, client):
     response = api.post("/api/v1/auth/unlock", headers=headers, json={"password": PASSWORD})
 
     assert response.status_code == 200
-    assert response.json() == {"state": "unlocked"}
+    # The profile comes back with the state because the client may have sent
+    # one - the sign-in screen's switcher does - and a request that changed
+    # which database is open should say which one it left open.
+    assert response.json()["state"] == "unlocked"
     assert api.get("/api/v1/status", headers=headers).status_code == 200
 
 
@@ -386,3 +397,209 @@ def test_signing_out_still_needs_the_api_token(tmp_path, monkeypatch, client):
     make_encrypted_db(tmp_path)
 
     assert api.post("/api/v1/auth/lock").status_code == 401
+
+
+# --- choosing a profile -----------------------------------------------------
+#
+# This was a numbered menu printed by scripts/_profiles.ps1 before uvicorn
+# started, and it is now two routes and a control on the sign-in screen. What
+# is tested here is what the move made possible and what it must not have made
+# possible: that the backend can be re-pointed while locked, that it refuses to
+# be while unlocked, and that the separation the profiles module exists to
+# provide - one password per database - is not weakened by the switch being a
+# click rather than a restart.
+
+
+def second_profile(name="Second", password="a-different-password"):
+    """A registered profile with a database of its own, under its own password."""
+    profile = profiles.register(name)
+    make_encrypted_db(profile.paths()["db"].parent, password=password)
+    return profile
+
+
+def test_the_profile_list_names_who_can_sign_in(tmp_path, client):
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    profiles.register("Second")
+
+    payload = api.get("/api/v1/auth/profiles", headers=headers).json()
+
+    assert payload["active"] == "default"
+    assert [p["name"] for p in payload["profiles"]] == ["Default", "Second"]
+    # Registered but never opened. This is what lets the screen say "Choose a
+    # password" for one name and "Welcome back" for another without opening
+    # anything - the distinction the console menu drew with "(no database yet)".
+    assert payload["profiles"][0]["exists"] is True
+    assert payload["profiles"][1]["exists"] is False
+
+
+def test_the_list_carries_no_paths(tmp_path, client):
+    """A directory layout is not something a sign-in screen needs, so it is not
+    something the route hands out."""
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    profiles.register("Second")
+
+    body = api.get("/api/v1/auth/profiles", headers=headers).text
+
+    assert "pip.db" not in body
+    assert "salt" not in body
+
+
+def test_switching_reports_the_state_of_the_profile_switched_to(tmp_path, client):
+    """
+    The whole reason the switcher can exist. A name with no database behind it
+    is a "choose a password" screen even when the one before it was not, and
+    the client learns that from the same call that does the switching rather
+    than from a second question that could be answered after another switch.
+    """
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    fresh = profiles.register("Second")
+
+    switched = api.post("/api/v1/auth/profile", headers=headers, json={"slug": fresh.slug})
+
+    assert switched.status_code == 200
+    assert switched.json() == {"profile": fresh.slug, "name": "Second", "state": "setup"}
+    assert api.get("/api/v1/auth/state", headers=headers).json()["state"] == "setup"
+
+    back = api.post("/api/v1/auth/profile", headers=headers, json={"slug": "default"})
+    assert back.json()["state"] == "locked"
+
+
+def test_switching_is_refused_while_unlocked(tmp_path, client):
+    """
+    The safety property the whole feature rests on. The key in memory belongs
+    to the profile it was derived for, and it is also in PIP_DB_KEY, which
+    vector_store reads. Re-pointing underneath it would aim one profile's key
+    at another's files - SQLCipher refuses the database loudly, but the Chroma
+    directory would be opened and written under the wrong key's HMAC, which
+    fails silently and permanently.
+    """
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    other = profiles.register("Second")
+    api.post("/api/v1/auth/unlock", headers=headers, json={"password": PASSWORD})
+
+    refused = api.post("/api/v1/auth/profile", headers=headers, json={"slug": other.slug})
+
+    assert refused.status_code == 409
+    # And nothing moved: the database that was open is still the one open.
+    assert profiles.active_slug() == "default"
+    assert api.get("/api/v1/status", headers=headers).status_code == 200
+
+
+def test_an_unknown_profile_is_refused_rather_than_created(tmp_path, client):
+    """
+    404, not a new directory. slugify() keeps a name from climbing out of the
+    profiles directory, but a route that registered whatever it was sent would
+    let anything holding the API token litter the data directory with profiles
+    nobody asked for.
+    """
+    api, headers = client
+    make_encrypted_db(tmp_path)
+
+    refused = api.post("/api/v1/auth/profile", headers=headers, json={"slug": "nobody"})
+
+    assert refused.status_code == 404
+    assert profiles.active_slug() == "default"
+
+
+def test_a_profiles_own_password_is_the_only_one_that_opens_it(tmp_path, client):
+    """
+    The separation, unchanged by the switch being a click. Two profiles are two
+    databases under two keys derived from two passwords; making the choice
+    easier to reach must not make one password reach further.
+    """
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    other = second_profile()
+
+    refused = api.post(
+        "/api/v1/auth/unlock",
+        headers=headers,
+        json={"password": PASSWORD, "profile": other.slug},
+    )
+    assert refused.status_code == 401
+
+    opened = api.post(
+        "/api/v1/auth/unlock",
+        headers=headers,
+        json={"password": "a-different-password", "profile": other.slug},
+    )
+    assert opened.status_code == 200
+    assert opened.json()["profile"] == other.slug
+
+
+def test_the_password_and_the_profile_it_is_for_arrive_together(tmp_path, client):
+    """
+    unlock() honours a profile in its own body rather than trusting a selection
+    made in an earlier request. Two calls leave a window between them, and
+    "typed one profile's password at another's database" should be reachable by
+    a mistake, never by timing.
+    """
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    other = second_profile()
+
+    # Never selected; named only in the unlock itself.
+    opened = api.post(
+        "/api/v1/auth/unlock",
+        headers=headers,
+        json={"password": "a-different-password", "profile": other.slug},
+    )
+
+    assert opened.status_code == 200
+    assert profiles.active_slug() == other.slug
+
+
+def test_only_a_password_that_worked_records_the_last_used_profile(tmp_path, client):
+    """
+    The half of this that got better rather than only moving. The launcher
+    wrote last_used at the MENU, because the password was typed into the
+    application long after the script had exited - so a selection that never
+    opened anything still became "last opened". It is now written after a key
+    has been proven to open the database.
+    """
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    other = second_profile()
+
+    api.post("/api/v1/auth/profile", headers=headers, json={"slug": other.slug})
+    api.post(
+        "/api/v1/auth/unlock",
+        headers=headers,
+        json={"password": "not-it", "profile": other.slug},
+    )
+    assert profiles.last_used() == "default"
+
+    api.post(
+        "/api/v1/auth/unlock",
+        headers=headers,
+        json={"password": "a-different-password", "profile": other.slug},
+    )
+    assert profiles.last_used() == other.slug
+
+
+def test_choosing_a_first_password_lands_in_the_profile_it_was_chosen_for(tmp_path, client):
+    """
+    Setup takes a profile for the same reason unlock does. A new profile's
+    first password is the case the switcher makes reachable at all - before
+    this, a profile registered by scripts/new_profile.py could only be opened
+    by restarting the launcher and answering its menu.
+    """
+    api, headers = client
+    make_encrypted_db(tmp_path)
+    fresh = profiles.register("Second")
+
+    created = api.post(
+        "/api/v1/auth/setup",
+        headers=headers,
+        json={"password": "a-brand-new-password", "profile": fresh.slug},
+    )
+
+    assert created.status_code == 200
+    assert created.json()["profile"] == fresh.slug
+    # In the new profile's directory, and nowhere near the original's.
+    assert fresh.paths()["salt"].exists()
+    assert fresh.exists()

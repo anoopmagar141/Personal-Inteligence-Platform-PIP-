@@ -96,24 +96,54 @@ class ApiClient {
 
   // --- signing in ----------------------------------------------------
   //
-  // The only three calls that work before the database is open. Everything
-  // else answers 423 until unlock() or completeSetup() has succeeded, which
-  // is why AppRoot asks authState() first and getStatus() second.
+  // The only calls that work before the database is open. Everything else
+  // answers 423 until unlock() or completeSetup() has succeeded, which is why
+  // AppRoot asks authState() first and getStatus() second.
 
   /// Which of setup / locked / needs_migration / unlocked this install is in.
   Future<String> authState() async =>
       (await get('/auth/state') as Map<String, dynamic>)['state'] as String;
 
+  /// Who this installation can be signed in as.
+  ///
+  /// Each entry carries `slug`, `name`, and `exists` - the last being whether
+  /// the profile has been created or only registered, which is what lets the
+  /// sign-in screen say "Choose a password" for one name and "Welcome back"
+  /// for another without opening anything.
+  Future<Map<String, dynamic>> authProfiles() async =>
+      await get('/auth/profiles') as Map<String, dynamic>;
+
+  /// Point the backend at another profile, and get back the state it is in.
+  ///
+  /// Refused with 409 while unlocked, which is not a limitation to work
+  /// around: the key in the server's memory belongs to the profile it was
+  /// derived for. Switching is something the sign-in screen does, and signing
+  /// out is how you get back to it.
+  Future<String> selectProfile(String slug) async =>
+      (await post('/auth/profile', {'slug': slug}) as Map<String, dynamic>)['state'] as String;
+
   /// Open the database with [password]. Throws on a wrong one - the message
   /// carries the server's own sentence, which is more specific than anything
   /// the caller could infer from a status code.
-  Future<void> unlock(String password) async {
-    await post('/auth/unlock', {'password': password});
+  ///
+  /// [profile] is sent even though selectProfile() has normally already been
+  /// called, so that the password and the profile it is meant for arrive
+  /// together. A selection in one request and a password in the next leaves a
+  /// window between them; nobody should be able to reach "typed one profile's
+  /// password at another's database" by timing.
+  Future<void> unlock(String password, {String? profile}) async {
+    await post('/auth/unlock', {
+      'password': password,
+      'profile': ?profile,
+    });
   }
 
-  /// Choose the first password on an installation that has never had one.
-  Future<void> completeSetup(String password) async {
-    await post('/auth/setup', {'password': password});
+  /// Choose the first password on a profile that has never had one.
+  Future<void> completeSetup(String password, {String? profile}) async {
+    await post('/auth/setup', {
+      'password': password,
+      'profile': ?profile,
+    });
   }
 
   /// Sign out: the server persists whatever the open sessions were saying,

@@ -86,10 +86,26 @@ def test_the_isolation_table_still_covers_every_override_in_the_backend():
             continue
         found |= set(re.findall(r'environ\.get\(\s*"(PIP_[A-Z_]+)"', source.read_text(encoding="utf-8")))
 
-    # PIP_DB_KEY is a secret, not a path - it has no real file to pollute, and
-    # tests that need it set it themselves.
-    uncovered = found - set(_ISOLATED_PATHS) - {"PIP_DB_KEY"}
+    # Two overrides are not paths, so _ISOLATED_PATHS is the wrong place for
+    # them - a table that maps a variable to a filename would give each of
+    # these a value that is a path, which is precisely what neither one is.
+    #
+    #   PIP_DB_KEY is a secret. It has no real file to pollute, and tests that
+    #   need it set it themselves.
+    #
+    #   PIP_PROFILE is a slug - the name of the profile the four real path
+    #   variables spell out. Setting it to a path would make active_slug()
+    #   return something profiles.get() cannot find. It IS isolated, by its own
+    #   line in conftest's fixture, because profiles.activate() writes it
+    #   through os.environ and a test that switched profile would otherwise
+    #   leave the next one believing it was somebody else.
+    not_paths = {"PIP_DB_KEY", "PIP_PROFILE"}
+    uncovered = found - set(_ISOLATED_PATHS) - not_paths
     assert not uncovered, (
         f"These backend overrides are not isolated in conftest: {sorted(uncovered)}. "
         "Add them to _ISOLATED_PATHS, or a test run will write to the real data/ file."
     )
+
+    # And the one that is isolated elsewhere is actually isolated, so that this
+    # exemption stays an exemption from the TABLE rather than from isolation.
+    assert os.environ.get("PIP_PROFILE"), "PIP_PROFILE is unset - conftest no longer pins it"

@@ -14,6 +14,7 @@ from backend.core import (
     pinned_executor,
     pipeline,
     proactive,
+    profiles,
     session_key,
     session_lifecycle,
     startup_progress,
@@ -1126,10 +1127,18 @@ try:
         return header[len("Bearer "):]
 
     # Everything the sign-in screen itself needs, which by definition cannot
-    # require being signed in. /auth/state tells it which screen to show; the
-    # other two are how it stops being locked.
+    # require being signed in. /auth/state tells it which screen to show, and
+    # /auth/profiles and /auth/profile tell it and let it change WHOSE screen
+    # it is; the last two are how it stops being locked.
+    #
+    # The two profile routes are safe to open for the same reason /auth/state
+    # is: neither touches a database. One lists names out of a registry that is
+    # not encrypted and never was, the other sets four path variables. Reading
+    # anything those paths point at still needs the password that follows.
     _UNLOCKED_PATHS = frozenset({
         f"{BASE_PREFIX}/auth/state",
+        f"{BASE_PREFIX}/auth/profiles",
+        f"{BASE_PREFIX}/auth/profile",
         f"{BASE_PREFIX}/auth/unlock",
         f"{BASE_PREFIX}/auth/setup",
     })
@@ -1519,9 +1528,125 @@ try:
         """
         return {"state": session_key.state(_db_path_or_default())}
 
+    @app.get(f"{BASE_PREFIX}/auth/profiles")
+    def auth_profiles():
+        """
+        Who can be signed in as, for the switcher on the sign-in screen.
+
+        This used to be a numbered list printed by scripts/_profiles.ps1 before
+        uvicorn started, which meant the only way to choose a profile was a
+        console window nobody who installs an application expects to meet. The
+        list is the same list; it is answered here so the application can draw
+        it.
+
+        `exists` is whether the profile has actually been created, not merely
+        registered - the same distinction the console menu drew with "(no
+        database yet - will onboard)". It is what lets the screen say "Choose a
+        password" for one name and "Welcome back" for another without opening
+        anything.
+
+        No paths in the response. The screen has no use for them, and a
+        directory layout is not something a UI should be able to leak.
+        """
+        return {
+            "active": profiles.active_slug(),
+            "last_used": profiles.last_used(),
+            "profiles": [
+                {
+                    "slug": p.slug,
+                    "name": p.name,
+                    "exists": p.exists(),
+                    "last_used": p.last_used,
+                }
+                for p in profiles.list_profiles()
+            ],
+        }
+
+    @app.post(f"{BASE_PREFIX}/auth/profile")
+    def auth_select_profile(payload: dict[str, Any]):
+        """
+        Point this process at another profile, and say what state it is in.
+
+        A POST rather than a query parameter on /auth/state, because it is not
+        a question - it changes which files every subsequent route reads, and a
+        GET that did that would be lying about itself.
+
+        REFUSED WHILE UNLOCKED, which is the whole safety property. The key
+        held in memory belongs to the profile it was derived for; re-pointing
+        the paths underneath it would aim one profile's key at another's files.
+        SQLCipher would refuse the database loudly, but the Chroma index would
+        be opened and written under the wrong key's HMAC and fail silently. So
+        switching is a thing you do from the sign-in screen or not at all -
+        sign out first, which is one click and is what the sign-in screen is.
+        """
+        from fastapi import HTTPException
+
+        if session_key.is_unlocked():
+            raise HTTPException(
+                status_code=409,
+                detail="Sign out before switching profile.",
+            )
+
+        slug = (payload.get("slug") or "").strip()
+        try:
+            profile = profiles.activate(slug)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"There is no profile named {slug!r}.")
+
+        return {
+            "profile": profile.slug,
+            "name": profile.name,
+            "state": session_key.state(_db_path_or_default()),
+        }
+
+    def _activate_requested_profile(payload: dict[str, Any]) -> None:
+        """
+        Honour a `profile` on an unlock or setup body.
+
+        The screen has normally already called /auth/profile, so this is
+        usually a no-op that re-points at the profile already selected. It
+        exists so that the password and the profile it is meant for arrive in
+        the same request: a client that selected in one call and unlocked in
+        another has a window in which some other client could have switched
+        underneath it, and "typed one profile's password into another's
+        database" should not be reachable by a race, only by a mistake.
+        """
+        from fastapi import HTTPException
+
+        requested = (payload.get("profile") or "").strip()
+        if not requested or requested == profiles.active_slug():
+            return
+        try:
+            profiles.activate(requested)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"There is no profile named {requested!r}.")
+
+    def _remember_profile() -> None:
+        """
+        Record which profile was opened, so the next launch offers it first.
+
+        Written HERE rather than at selection, which is the one thing about
+        this that got better rather than only moving. The launcher recorded
+        what was chosen from its menu, because the password was typed into the
+        application long after the script had exited - so a mistyped selection
+        that never opened anything still became "last used". This runs after a
+        key has been proven to open the database, so the file now means what
+        its name says.
+
+        Best-effort, for the reason every other write to the registry is: it is
+        a convenience index, and failing an unlock that has already succeeded
+        because a JSON file could not be written would be the wrong failure.
+        """
+        try:
+            profiles.record_last_used(profiles.active_slug())
+        except Exception as e:
+            logger.warning(f"Could not record the last used profile: {e}")
+
     @app.post(f"{BASE_PREFIX}/auth/unlock")
     async def auth_unlock(payload: dict[str, Any]):
         from fastapi import HTTPException
+
+        _activate_requested_profile(payload)
 
         opened = await asyncio.to_thread(
             session_key.unlock, payload.get("password") or "", _db_path_or_default()
@@ -1530,12 +1655,15 @@ try:
             # 401, and deliberately not saying which part was wrong. There is
             # one password here and it either opens the database or does not.
             raise HTTPException(status_code=401, detail="That password did not open your data.")
+        _remember_profile()
         _start_catch_up()
-        return {"state": "unlocked"}
+        return {"state": "unlocked", "profile": profiles.active_slug()}
 
     @app.post(f"{BASE_PREFIX}/auth/setup")
     async def auth_setup(payload: dict[str, Any]):
         from fastapi import HTTPException
+
+        _activate_requested_profile(payload)
 
         try:
             await asyncio.to_thread(
@@ -1548,8 +1676,9 @@ try:
             # IS the answer, and a bare 500 strands it on the server while the
             # user is told only that something went wrong.
             raise HTTPException(status_code=422, detail=str(exc))
+        _remember_profile()
         _start_catch_up()
-        return {"state": "unlocked"}
+        return {"state": "unlocked", "profile": profiles.active_slug()}
 
     @app.post(f"{BASE_PREFIX}/auth/lock")
     async def auth_lock():

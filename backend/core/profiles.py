@@ -194,6 +194,97 @@ def last_used() -> str:
     return load().get("last_used") or DEFAULT_SLUG
 
 
+# --- pointing this process at one profile -----------------------------------
+#
+# WHY THE CHOICE MOVED OUT OF THE LAUNCHER
+# ----------------------------------------
+# scripts/_profiles.ps1 used to ask "Which profile?" in the console before
+# uvicorn started, and the answer became four environment variables. That is
+# the same mistake the password prompt made, for the same reason: PIP is
+# something other people install, and a numbered menu in a blue PowerShell
+# window is not a sign-in screen. The password moved into the application in
+# Part 10.1's rework; the profile follows it here, and for the same cost -
+# nothing, because the four variables are read at CALL time by every consumer
+# (db_key.salt_path, vector_store.chroma_path, profile_store's documents root,
+# server._db_path_or_default), never captured at import.
+#
+# WHAT DOES NOT CHANGE
+# --------------------
+# The separation this module's header describes. Two profiles are still two
+# databases under two keys derived from two passwords; activate() only points
+# at files, and cannot open them. Everything after it still needs the right
+# password, so a switch is still exactly as hard to misuse as a fresh launch.
+
+
+def active_slug() -> str:
+    """
+    Which profile this process is currently pointed at.
+
+    PIP_PROFILE is the label; the four path variables are what actually take
+    effect. They are set together and only together, so a process that has one
+    has all five.
+    """
+    return os.environ.get("PIP_PROFILE") or DEFAULT_SLUG
+
+
+def environment_for(profile: Profile) -> dict[str, str]:
+    """
+    The five variables that point a process at one profile.
+
+    Exactly the set scripts/_profiles.ps1 sets, deliberately. A profile opened
+    from the launcher and the same profile opened from the sign-in screen have
+    to be the same files, and the only way to guarantee that is for both to
+    spell out the same list.
+    """
+    paths = profile.paths()
+    return {
+        "PIP_DB_PATH": str(paths["db"]),
+        "PIP_SALT_PATH": str(paths["salt"]),
+        "PIP_CHROMA_PATH": str(paths["chroma"]),
+        "PIP_DOCUMENTS_ROOT": str(paths["documents"]),
+        "PIP_PROFILE": profile.slug,
+    }
+
+
+def activate(slug: str) -> Profile:
+    """
+    Point this process at *slug*'s files. Only ever call this while locked.
+
+    That condition is not a style note. The key held in session_key belongs to
+    the profile that was open when it was derived, and it is also in
+    PIP_DB_KEY, which vector_store reads to decrypt chunk text. Re-pointing the
+    paths while a key is still held would leave one profile's key aimed at
+    another profile's files: SQLCipher would refuse the database, but the
+    Chroma directory would be opened and written under the wrong key's HMAC,
+    which fails silently and permanently. The caller that enforces this is the
+    /auth/profile route, which refuses while unlocked.
+
+    Creates the directories rather than requiring them, because a profile that
+    has been registered but never opened has nothing on disk yet - that is the
+    state new_profile.py leaves behind, and the state a first sign-in resolves.
+    """
+    profile = get(slug)
+    paths = profile.paths()
+    paths["db"].parent.mkdir(parents=True, exist_ok=True)
+    paths["documents"].mkdir(parents=True, exist_ok=True)
+    os.environ.update(environment_for(profile))
+
+    # The one cache that outlives a lock. Everything else reads its path per
+    # call; Chroma's client is held for the life of the module and would keep
+    # the previous profile's directory open. Lazily imported and best-effort:
+    # this module is imported by scripts that have no reason to pull in
+    # chromadb and sentence-transformers, and a switch must not fail because a
+    # vector index could not be dropped.
+    try:
+        from backend.memory import vector_store
+
+        vector_store.reset_client()
+    except Exception as e:
+        logger.warning(f"Could not reset the vector store while switching profile: {e}")
+
+    return profile
+
+
 def _save(profiles: list[Profile], last: str) -> None:
     path = registry_path()
     path.parent.mkdir(parents=True, exist_ok=True)

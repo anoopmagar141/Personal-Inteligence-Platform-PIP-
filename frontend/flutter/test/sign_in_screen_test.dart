@@ -1,11 +1,14 @@
 // The sign-in screen, which is now the first thing anybody sees.
 //
-// What is worth asserting here is not that a button submits. It is the three
-// things that would be quietly wrong in a way nobody notices until it matters:
-// that an unfamiliar state falls back to asking for a password rather than
-// skipping one, that the server's own sentence reaches the person who typed
-// the password, and that the screen says out loud that nothing can be
-// recovered - because the whole design depends on somebody having been told.
+// What is worth asserting here is not that a button submits. It is the things
+// that would be quietly wrong in a way nobody notices until it matters: that
+// an unfamiliar state falls back to asking for a password rather than skipping
+// one, that the server's own sentence reaches the person who typed the
+// password, that the screen says out loud that nothing can be recovered -
+// because the whole design depends on somebody having been told - and, since
+// the profile menu moved here out of the PowerShell launcher, that switching
+// profile redresses the screen for the profile switched TO rather than leaving
+// one profile's words under another profile's name.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,30 +21,66 @@ import 'package:pip_flutter_client/theme.dart';
 class FakeApi extends ApiClient {
   final List<String> unlocked = [];
   final List<String> created = [];
+  final List<String?> unlockedProfiles = [];
+  final List<String> selected = [];
   Object? throwThis;
+
+  /// What /auth/profiles answers. Empty by default, which is the shape of an
+  /// installation that has never made a second profile - and therefore the
+  /// shape every test that is not about the switcher should be running under.
+  List<Map<String, dynamic>> profiles = const [];
+  String activeProfile = 'default';
+
+  /// What /auth/profile answers for each slug.
+  Map<String, String> stateAfterSwitch = const {};
 
   FakeApi() : super('http://localhost:0', apiToken: 't');
 
   @override
-  Future<void> unlock(String password) async {
+  Future<void> unlock(String password, {String? profile}) async {
     if (throwThis != null) throw throwThis!;
     unlocked.add(password);
+    unlockedProfiles.add(profile);
   }
 
   @override
-  Future<void> completeSetup(String password) async {
+  Future<void> completeSetup(String password, {String? profile}) async {
     if (throwThis != null) throw throwThis!;
     created.add(password);
+    unlockedProfiles.add(profile);
+  }
+
+  @override
+  Future<Map<String, dynamic>> authProfiles() async =>
+      {'active': activeProfile, 'profiles': profiles};
+
+  @override
+  Future<String> selectProfile(String slug) async {
+    selected.add(slug);
+    activeProfile = slug;
+    return stateAfterSwitch[slug] ?? 'locked';
   }
 }
+
+/// Two profiles, one opened before and one only registered.
+///
+/// The second having no database is the case worth carrying in the default
+/// fixture: it is what makes the switcher change the screen's words rather
+/// than only its label, and it is the state scripts/new_profile.py leaves
+/// behind for a first sign-in to resolve.
+List<Map<String, dynamic>> get _twoProfiles => [
+      {'slug': 'default', 'name': 'Default', 'exists': true},
+      {'slug': 'jenisha', 'name': 'Jenisha', 'exists': false},
+    ];
 
 Future<FakeApi> pumpSignIn(
   WidgetTester tester,
   AuthState state, {
   VoidCallback? onUnlocked,
   Object? throwThis,
+  FakeApi? api_,
 }) async {
-  final api = FakeApi()..throwThis = throwThis;
+  final api = (api_ ?? FakeApi())..throwThis = throwThis;
   // disableAnimations, so pumpAndSettle below has something to settle to. This
   // screen now sits on the launch screen's particle field, which drifts
   // forever by design; these tests are about passwords and should not have to
@@ -215,6 +254,107 @@ void main() {
     });
   });
 
+  group('choosing which profile to sign in as', () {
+    // This was a numbered menu printed by scripts/_profiles.ps1 before the
+    // application window existed. The point of moving it is that the choice
+    // and the password are now one screen, so what these assert is that the
+    // screen stays consistent with itself while the choice changes.
+
+    testWidgets('is not drawn at all on a single-profile installation',
+        (tester) async {
+      // Most installations. A control offering one choice is not a choice, and
+      // this screen has to remain exactly what it was before profiles existed.
+      final api = FakeApi()
+        ..profiles = [
+          {'slug': 'default', 'name': 'Default', 'exists': true},
+        ];
+      await pumpSignIn(tester, AuthState.locked, api_: api);
+
+      expect(find.text('Switch'), findsNothing);
+    });
+
+    testWidgets('names the profile being signed in as', (tester) async {
+      final api = FakeApi()..profiles = _twoProfiles;
+      await pumpSignIn(tester, AuthState.locked, api_: api);
+
+      expect(find.text('Default'), findsOneWidget);
+      expect(find.text('Switch'), findsOneWidget);
+    });
+
+    testWidgets('switching redresses the screen for the profile switched to',
+        (tester) async {
+      // The assertion the whole feature turns on. A profile with no database
+      // behind it is a "choose a password" screen even though the one before
+      // it was not, and a screen that kept the old heading would be asking
+      // for a password that cannot exist yet.
+      final api = FakeApi()
+        ..profiles = _twoProfiles
+        ..stateAfterSwitch = {'jenisha': 'setup'};
+      await pumpSignIn(tester, AuthState.locked, api_: api);
+
+      await tester.tap(find.text('Switch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Jenisha').last);
+      await tester.pumpAndSettle();
+
+      expect(api.selected, ['jenisha']);
+      expect(find.text('Choose a password'), findsOneWidget);
+      expect(find.byType(TextField), findsNWidgets(2));
+    });
+
+    testWidgets('sends the password with the profile it was typed for',
+        (tester) async {
+      // Two profiles are two databases under two keys. A password that arrived
+      // without saying which profile it was meant for could be checked against
+      // whichever one the server happened to be pointed at.
+      final api = FakeApi()..profiles = _twoProfiles;
+      await pumpSignIn(tester, AuthState.locked, api_: api);
+
+      await tester.enterText(find.byType(TextField), 'correct-horse');
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+
+      expect(api.unlocked, ['correct-horse']);
+      expect(api.unlockedProfiles, ['default']);
+    });
+
+    testWidgets('clears a password typed for the profile left behind',
+        (tester) async {
+      // Not tidiness. Two profiles have two passwords by construction, so a
+      // password typed for one is never the right answer for the other -
+      // leaving it in the field invites somebody to submit it and be told it
+      // did not open their data.
+      final api = FakeApi()..profiles = _twoProfiles;
+      await pumpSignIn(tester, AuthState.locked, api_: api);
+
+      await tester.enterText(find.byType(TextField), 'the-other-password');
+      await tester.tap(find.text('Switch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Jenisha').last);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text, '');
+    });
+
+    testWidgets('a registry that cannot be read costs nothing', (tester) async {
+      // This screen's job is to take a password, and it can do that against
+      // whichever profile the backend is already pointed at. An error banner
+      // about a list most installations do not even have would be noise in
+      // front of the one thing somebody came here to do.
+      final api = _ProfilesRefused();
+      await pumpSignIn(tester, AuthState.locked, api_: api);
+
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.text('Switch'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), 'correct-horse');
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+
+      expect(api.unlocked, ['correct-horse']);
+    });
+  });
+
   group('an unencrypted database from before passwords', () {
     testWidgets('points at the migration script instead of offering a button',
         (tester) async {
@@ -227,7 +367,25 @@ void main() {
       expect(find.textContaining('set_db_password.py'), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
+
+    testWidgets('still lets another profile be reached', (tester) async {
+      // A legacy plaintext database in one profile is no reason to be stuck on
+      // the screen about it while another profile on the same machine opens
+      // perfectly well - and this screen's whole instruction is "run a script
+      // and come back", which is a long time to be locked out of your own data.
+      final api = FakeApi()..profiles = _twoProfiles;
+      await pumpSignIn(tester, AuthState.needsMigration, api_: api);
+
+      expect(find.text('Switch'), findsOneWidget);
+    });
   });
+}
+
+/// An installation whose profile registry cannot be read.
+class _ProfilesRefused extends FakeApi {
+  @override
+  Future<Map<String, dynamic>> authProfiles() async =>
+      throw Exception('500 {"detail":"profiles.json is unreadable"}');
 }
 
 

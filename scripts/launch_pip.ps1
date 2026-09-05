@@ -130,25 +130,34 @@ if (-not (Test-PortOpen 8765)) {
     # An older copy of this script that still exports PIP_DB_KEY keeps working:
     # the backend adopts a key it finds in the environment rather than asking
     # for one it already has.
+    # AND THE PROFILE IS NO LONGER ASKED FOR HERE EITHER
+    #
+    # This used to print "Which profile?" and wait for a number, which was the
+    # same mistake as the password prompt above and outlived it by one change:
+    # a console menu, before any window had opened, asking a question about a
+    # product the person had not yet seen. The launch is silent or it is not,
+    # and one remaining prompt made it not.
+    #
+    # So this now only RESOLVES - the profile opened last, with no interaction
+    # - and the choosing moved to the sign-in screen, which lists every profile
+    # and switches between them through POST /auth/profile. That route works
+    # because the backend re-points itself: the four variables below are read
+    # at call time by everything that consumes them, never captured at import,
+    # so a running process can be aimed somewhere else as long as it holds no
+    # key. It refuses while unlocked, which is why signing out is the first
+    # half of switching.
+    #
+    # record_last_used moved with it, to the unlock route. It used to be
+    # written here, at selection, and therefore recorded what somebody typed
+    # at this menu rather than what actually opened - the password came much
+    # later, into an application this script had already exited before. It is
+    # now written after a key has been proven to open the database, so the
+    # field means what it is called.
     . (Join-Path $PSScriptRoot "_profiles.ps1")
-    $profilePaths = Select-PipProfile -Root $root
+    $profilePaths = Resolve-PipLastProfile -Root $root
     if ($profilePaths) {
         Set-PipProfileEnvironment -Paths $profilePaths
         Write-Phase "profile" $profilePaths.Name
-    }
-
-    # Recorded when the profile is CHOSEN, which is now the last thing this
-    # script knows about it - the password that proves it opens is typed into
-    # the application, long after this process has exited. So this remembers
-    # what was selected rather than what was successfully unlocked. Through the
-    # module that owns the registry rather than by editing the JSON here, so
-    # there is one writer and one format.
-    if ($profilePaths) {
-        try {
-            & $pipPython -c `
-                "from backend.core import profiles; profiles.record_last_used('$($profilePaths.Slug)')" `
-                2>$null
-        } catch { }
     }
 
     $stdoutLog = Join-Path $dataDir "backend.log"

@@ -172,6 +172,30 @@ def _get_collection():
     return _collection
 
 
+def reset_client() -> None:
+    """
+    Forget the cached client and collection, so the next call opens whatever
+    PIP_CHROMA_PATH now says.
+
+    Needed because switching profiles no longer means a new process. The client
+    is cached for the life of the module and holds an open handle on one
+    directory, so a switch that did not clear it would leave the second profile
+    reading and writing the first profile's index - not a leak of content
+    (chunk ids are keyed with an HMAC of the live key, so one profile cannot
+    address the other's chunks) but a silent accumulation of unreadable weight
+    in a directory that does not belong to it, and an ingest that appears to
+    work while landing nowhere the owner can find.
+
+    Not a close(). Chroma's PersistentClient has no documented shutdown that is
+    safe to call while another thread may be mid-query, and dropping the
+    reference is what the process already relies on at exit. The SQLite handle
+    underneath is released when the last reference goes.
+    """
+    global _client, _collection
+    _client = None
+    _collection = None
+
+
 def _get_model() -> SentenceTransformer:
     """
     The embedding model, loaded once per process, from local disk when possible.

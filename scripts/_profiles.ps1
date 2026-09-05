@@ -1,4 +1,25 @@
-# Profile selection for the launcher.
+# Profile paths for the launcher.
+#
+# WHY THERE IS NO LONGER A PROMPT HERE
+# ------------------------------------
+# This file used to print "Which profile?" and read a number, because the
+# launcher was the only thing running early enough to make the choice - the
+# four path variables below had to be set before uvicorn started.
+#
+# That stopped being true when the password moved into the application. The
+# backend now starts with no key and no opinion, and every consumer of these
+# variables reads them at call time rather than capturing them at import, so
+# the running process can be re-pointed. backend/core/profiles.py:activate()
+# does exactly that, POST /auth/profile exposes it, and the switcher lives on
+# the sign-in screen where a person choosing who to sign in as would look for
+# it. A numbered menu in a blue PowerShell window was the last thing left in
+# the launch that a person had to answer, and it was answering it before they
+# had seen the product at all.
+#
+# What remains here is the non-interactive half: resolve the profile that was
+# opened last and point the backend at it, so the common case - the same
+# person opening PIP again - needs no interaction anywhere. Choosing anything
+# else is the application's job now.
 #
 # WHY THIS IS SILENT WHEN THERE IS ONE PROFILE
 # --------------------------------------------
@@ -55,14 +76,20 @@ function Resolve-PipProfilePaths {
     }
 }
 
-function Select-PipProfile {
+function Resolve-PipLastProfile {
     <#
     .SYNOPSIS
-    Returns the chosen profile's paths, or $null to mean "the original layout".
+    Returns the last-opened profile's paths, or $null to mean "the original
+    layout".
 
-    Prompts only when there is something to choose between. With one profile
-    registered - or none - this returns $null and the caller behaves exactly as
-    it did before profiles existed.
+    Silent by design, and never wrong in a way that costs anything: the
+    application's sign-in screen lists every profile and can switch to any of
+    them before a password is typed, so the worst case here is that somebody
+    clicks one name on a screen they were already looking at.
+
+    $null with one profile - or none - so the caller behaves exactly as it did
+    before profiles existed, and so that data/pip.db is reached by the same code
+    path it always was rather than by an override that happens to name it.
     #>
     param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -72,41 +99,10 @@ function Select-PipProfile {
     $registry = Join-Path $Root "data\profiles.json"
     $lastUsed = try { (Get-Content $registry -Raw -Encoding utf8 | ConvertFrom-Json).last_used } catch { "default" }
 
-    Write-Host ""
-    Write-Host "  Which profile?" -ForegroundColor Cyan
-    Write-Host ""
-    for ($i = 0; $i -lt $profiles.Count; $i++) {
-        $p = $profiles[$i]
-        $paths = Resolve-PipProfilePaths -Root $Root -Profile $p
-        $marker = if ($p.slug -eq $lastUsed) { "*" } else { " " }
-        $state = if (Test-Path $paths.Db) { "" } else { "   (no database yet - will onboard)" }
-        Write-Host ("   {0} [{1}] {2}{3}" -f $marker, ($i + 1), $p.name, $state)
-    }
-    Write-Host ""
-    Write-Host "  * = last opened. Press Enter to take it." -ForegroundColor DarkGray
+    $chosen = $profiles | Where-Object { $_.slug -eq $lastUsed } | Select-Object -First 1
+    if (-not $chosen) { $chosen = $profiles[0] }
 
-    $answer = (Read-Host "  Number").Trim()
-
-    if ([string]::IsNullOrWhiteSpace($answer)) {
-        $chosen = $profiles | Where-Object { $_.slug -eq $lastUsed } | Select-Object -First 1
-        if (-not $chosen) { $chosen = $profiles[0] }
-    }
-    else {
-        $index = 0
-        if (-not [int]::TryParse($answer, [ref]$index) -or $index -lt 1 -or $index -gt $profiles.Count) {
-            # Not a silent fallback to profile 1: opening the wrong person's
-            # profile because a keystroke was mistyped is exactly the confusion
-            # this menu exists to prevent.
-            Write-Host "  Not one of the listed numbers. Nothing was opened." -ForegroundColor Red
-            exit 1
-        }
-        $chosen = $profiles[$index - 1]
-    }
-
-    $paths = Resolve-PipProfilePaths -Root $Root -Profile $chosen
-    Write-Host ""
-    Write-Host ("  Opening {0}" -f $paths.Name) -ForegroundColor Green
-    return $paths
+    return Resolve-PipProfilePaths -Root $Root -Profile $chosen
 }
 
 function Set-PipProfileEnvironment {

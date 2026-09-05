@@ -15,6 +15,24 @@
 // database is touched - so the difference is copy and one extra field, not a
 // separate route the app has to decide between.
 //
+// WHY THE PROFILE SWITCHER IS HERE AND NOT IN THE LAUNCHER
+//
+// It was in the launcher, for the same reason the password was:
+// scripts/_profiles.ps1 printed "Which profile?" and read a number, because
+// the four path variables had to be set before uvicorn started. That stopped
+// being true once nothing captures those variables at import - the backend
+// re-points itself through POST /auth/profile, and the only rule is that it
+// must not be holding a key when it does.
+//
+// Which puts the choice exactly where a person looks for it. "Who am I
+// signing in as" and "what is my password" are one question asked twice, and
+// answering the first in a console window several seconds before the
+// application appears was answering it in the wrong place, to somebody who
+// had not seen the product yet.
+//
+// The switcher is drawn only when there is more than one profile, so a normal
+// installation is unchanged - the same screen, with nothing extra on it.
+//
 // WHAT IT DOES NOT DO
 //
 // Recover anything. There is no reset, no hint, no security question, and the
@@ -96,6 +114,22 @@ class SignInScreen extends StatefulWidget {
   State<SignInScreen> createState() => _SignInScreenState();
 }
 
+/// One profile as the sign-in screen needs it: a name to show, a slug to send,
+/// and whether it has ever been opened.
+class _ProfileOption {
+  final String slug;
+  final String name;
+  final bool exists;
+
+  const _ProfileOption({required this.slug, required this.name, required this.exists});
+
+  factory _ProfileOption.fromJson(Map<String, dynamic> json) => _ProfileOption(
+        slug: json['slug'] as String,
+        name: json['name'] as String? ?? json['slug'] as String,
+        exists: json['exists'] as bool? ?? true,
+      );
+}
+
 class _SignInScreenState extends State<SignInScreen> {
   final _password = TextEditingController();
   final _confirm = TextEditingController();
@@ -105,13 +139,83 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _obscured = true;
   String? _error;
 
-  bool get _isSetup => widget.state == AuthState.setup;
+  /// Which situation the SELECTED profile is in.
+  ///
+  /// Seeded from what AppRoot was told and then owned here, because switching
+  /// profile changes the answer - a name with no database behind it is a
+  /// "choose a password" screen even though the one before it was not. Reading
+  /// widget.state in build() would have shown the previous profile's words
+  /// under the new profile's name.
+  late AuthState _state = widget.state;
+
+  List<_ProfileOption> _profiles = const [];
+  String? _activeSlug;
+
+  bool get _isSetup => _state == AuthState.setup;
 
   @override
   void initState() {
     super.initState();
     // The only field on the screen, and the only thing anybody is here to do.
     _passwordFocus.requestFocus();
+    _loadProfiles();
+  }
+
+  /// Ask who this installation can be signed in as.
+  ///
+  /// Failure is swallowed on purpose. This screen's job is to take a password,
+  /// and it can do that against the profile the backend is already pointed at
+  /// whether or not a registry could be read. An error banner about a list
+  /// that most installations do not even have would be noise in front of the
+  /// one thing somebody came here to do.
+  Future<void> _loadProfiles() async {
+    try {
+      final payload = await widget.api.authProfiles();
+      if (!mounted) return;
+      setState(() {
+        _profiles = (payload['profiles'] as List<dynamic>? ?? [])
+            .map((e) => _ProfileOption.fromJson(e as Map<String, dynamic>))
+            .toList();
+        _activeSlug = payload['active'] as String?;
+      });
+    } catch (_) {
+      // Left as it was: no list, no switcher, one profile's worth of screen.
+    }
+  }
+
+  /// Point the backend at another profile and redress the screen for it.
+  ///
+  /// The password fields are cleared rather than carried across, and that is
+  /// not tidiness. Two profiles have two passwords by construction - separate
+  /// databases under separate keys - so a password typed for one is never the
+  /// right answer for the other, and leaving it in the field invites somebody
+  /// to submit it and be told it did not open their data.
+  Future<void> _switchTo(_ProfileOption profile) async {
+    if (_busy || profile.slug == _activeSlug) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      final state = await widget.api.selectProfile(profile.slug);
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _activeSlug = profile.slug;
+        _state = authStateFrom(state);
+        _password.clear();
+        _confirm.clear();
+      });
+      _passwordFocus.requestFocus();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = _sentence(e);
+      });
+    }
   }
 
   @override
@@ -146,9 +250,9 @@ class _SignInScreenState extends State<SignInScreen> {
 
     try {
       if (_isSetup) {
-        await widget.api.completeSetup(password);
+        await widget.api.completeSetup(password, profile: _activeSlug);
       } else {
-        await widget.api.unlock(password);
+        await widget.api.unlock(password, profile: _activeSlug);
       }
       if (!mounted) return;
       widget.onUnlocked();
@@ -181,15 +285,131 @@ class _SignInScreenState extends State<SignInScreen> {
     return 'Could not open your data. Is PIP still starting?';
   }
 
+  /// The row of names, or nothing at all.
+  ///
+  /// Null below two profiles, which is most installations - a control offering
+  /// one choice is not a choice, and the screen those people see is exactly
+  /// the screen that was here before profiles existed.
+  ///
+  /// A menu rather than a row of chips or a dropdown form field. Chips would
+  /// spread with the number of profiles and push the password field down the
+  /// card; a DropdownButtonFormField would read as a fourth thing to fill in,
+  /// next to two fields that genuinely are. This is one line that says who is
+  /// signing in, and opens when that is the wrong answer.
+  Widget? _profileSwitcher() {
+    if (_profiles.length <= 1) return null;
+
+    final active = _profiles.firstWhere(
+      (p) => p.slug == _activeSlug,
+      orElse: () => _profiles.first,
+    );
+
+    // The menu is sized to the control rather than to its longest name.
+    // PopupMenuButton defaults to hugging its content, which on a card this
+    // wide opens a narrow box under a full-width row and reads as a different
+    // control appearing rather than that one unfolding. LayoutBuilder because
+    // the width is the card's, and the card is a max-width that a narrow
+    // window can be smaller than.
+    return LayoutBuilder(
+      builder: (context, constraints) => PopupMenuButton<_ProfileOption>(
+        enabled: !_busy,
+        tooltip: 'Switch profile',
+        position: PopupMenuPosition.under,
+        offset: const Offset(0, AppSpacing.xs),
+        constraints: BoxConstraints(
+          minWidth: constraints.maxWidth,
+          maxWidth: constraints.maxWidth,
+        ),
+        // Stated, not inherited, for the reason every other colour on this
+        // screen is: the app-wide theme may be the light one, and a white menu
+        // dropped onto this fixed dark stage is the same visual break the
+        // launch-to-sign-in cut was built to avoid.
+        color: const Color(0xFF15161F),
+        shape: const RoundedRectangleBorder(
+          borderRadius: AppRadius.sm,
+          side: BorderSide(color: Color(0xFF2C2F43)),
+        ),
+        onSelected: _switchTo,
+        itemBuilder: (context) => [
+          for (final profile in _profiles)
+            PopupMenuItem<_ProfileOption>(
+              value: profile,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 22,
+                    child: profile.slug == active.slug
+                        ? const Icon(Icons.check, size: 15, color: kGatewayAccent)
+                        : null,
+                  ),
+                  Expanded(
+                    child: Text(
+                      profile.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, color: kGatewayText),
+                    ),
+                  ),
+                  // The same distinction the console menu drew with "(no
+                  // database yet - will onboard)", in the two words there is
+                  // room for. Somebody about to be asked to CHOOSE a password
+                  // rather than enter one should be able to see why before the
+                  // heading changes under them.
+                  if (!profile.exists)
+                    const Padding(
+                      padding: EdgeInsets.only(left: AppSpacing.sm),
+                      child: Text('New', style: TextStyle(fontSize: 11.5, color: kGatewayTextFaint)),
+                    ),
+                ],
+              ),
+            ),
+        ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm + 2,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFF15161F),
+            borderRadius: AppRadius.sm,
+            border: Border.all(color: const Color(0xFF2C2F43)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.person_outline, size: 17, color: kGatewayTextMuted),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  active.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14, color: kGatewayText),
+                ),
+              ),
+              const Text('Switch', style: TextStyle(fontSize: 12, color: kGatewayTextFaint)),
+              const SizedBox(width: AppSpacing.xs),
+              const Icon(Icons.expand_more, size: 17, color: kGatewayTextMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // No `context.pip` here any more, and its absence is the point: every
     // colour on the three auth screens is now stated against the fixed dark
     // stage rather than inherited from a theme that may be the wrong one.
 
-    if (widget.state == AuthState.needsMigration) {
-      return const _MigrationNotice();
+    if (_state == AuthState.needsMigration) {
+      // The switcher goes with it. A legacy plaintext database in one profile
+      // is no reason to be stuck on the screen about it when another profile
+      // on the same machine opens perfectly well - and this screen's whole
+      // instruction is "run a script and come back", which is a long time to
+      // be unable to reach your own data.
+      return _MigrationNotice(header: _profileSwitcher());
     }
+
+    final switcher = _profileSwitcher();
 
     // The same dark stage and the same field as the launch screen, because
     // these two are consecutive: the launch screen becomes this one, and a
@@ -215,6 +435,14 @@ class _SignInScreenState extends State<SignInScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Above the heading, because it changes what the heading says.
+                // "Choose a password" under a name somebody has just switched
+                // away from would be the screen contradicting itself, and the
+                // order here is the order the two are read in.
+                if (switcher != null) ...[
+                  switcher,
+                  const SizedBox(height: AppSpacing.lg),
+                ],
                 Text(
                   _isSetup ? 'Choose a password' : 'Welcome back',
                   textAlign: TextAlign.center,
@@ -318,7 +546,13 @@ class _SignInScreenState extends State<SignInScreen> {
 /// the new key opens the copy before removing anything. A button here that did
 /// it silently would be the least ceremonious irreversible action in PIP.
 class _MigrationNotice extends StatefulWidget {
-  const _MigrationNotice();
+  /// The profile switcher, when there is more than one profile. Passed in
+  /// rather than rebuilt here: it belongs to the sign-in state that owns the
+  /// selection, and two copies of that control would be two answers to "which
+  /// profile is selected" that could disagree.
+  final Widget? header;
+
+  const _MigrationNotice({this.header});
 
   @override
   State<_MigrationNotice> createState() => _MigrationNoticeState();
@@ -355,6 +589,10 @@ class _MigrationNoticeState extends State<_MigrationNotice> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (widget.header != null) ...[
+                      widget.header!,
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
                     const Text(
                       'Your data is not encrypted yet',
                       textAlign: TextAlign.center,
