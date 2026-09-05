@@ -49,10 +49,21 @@ Future<FakeApi> pumpChat(
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
+  // disableAnimations, so pumpAndSettle below still has something to settle
+  // to. The chat screen carries a slow decorative glow that never stops on its
+  // own; these tests are about which conversations the sidebar asks for, and
+  // should not have to know that.
   await tester.pumpWidget(
     MaterialApp(
-      home: Scaffold(
-        body: ChatView(api: api, chatClient: chatClient, activeProjectId: activeProjectId),
+      // Inside MaterialApp, not around it: MaterialApp installs its own
+      // MediaQuery from the view and would replace anything above it.
+      home: Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: Scaffold(
+            body: ChatView(api: api, chatClient: chatClient, activeProjectId: activeProjectId),
+          ),
+        ),
       ),
     ),
   );
@@ -138,9 +149,16 @@ void main() {
     final chatClient = WsChatClient('ws://127.0.0.1:1/ws/chat');
     addTearDown(chatClient.dispose);
 
+    // Same reduce-motion wrapper as pumpChat above, and for the same reason:
+    // the chat screen's decorative glow never stops on its own.
     Widget build(String projectId) => MaterialApp(
-          home: Scaffold(
-            body: ChatView(api: api, chatClient: chatClient, activeProjectId: projectId),
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: Scaffold(
+                body: ChatView(api: api, chatClient: chatClient, activeProjectId: projectId),
+              ),
+            ),
           ),
         );
 

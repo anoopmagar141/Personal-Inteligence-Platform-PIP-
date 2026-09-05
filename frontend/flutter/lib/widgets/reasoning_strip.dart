@@ -57,7 +57,7 @@ class ReasoningStrip extends StatelessWidget {
       // may not have run.
       return _Pill(
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          ThinkingOrb(state: active ? OrbState.thinking : OrbState.idle, size: 26),
+          ThinkingOrb(state: active ? OrbState.thinking : OrbState.idle, size: 32),
           const SizedBox(width: AppSpacing.sm),
           Text('Thinking', style: TextStyle(fontSize: 13.5, color: pip.textMuted)),
         ]),
@@ -77,7 +77,7 @@ class ReasoningStrip extends StatelessWidget {
           Row(mainAxisSize: MainAxisSize.min, children: [
             ThinkingOrb(
               state: active ? orbStateForStage(current.stage) : OrbState.idle,
-              size: 26,
+              size: 32,
             ),
             const SizedBox(width: AppSpacing.sm),
             Flexible(

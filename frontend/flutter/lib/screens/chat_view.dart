@@ -25,6 +25,7 @@ import '../api_client.dart';
 import '../markdown.dart';
 import '../profile_picture.dart';
 import '../theme.dart';
+import '../widgets/aurora_background.dart';
 import '../widgets/reasoning_strip.dart';
 import '../ws_chat_client.dart';
 
@@ -472,7 +473,8 @@ class ChatViewState extends State<ChatView> {
                 onDelete: _delete,
               ),
             Expanded(
-              child: Column(
+              child: AuroraBackground(
+                child: Column(
                 children: [
                   Expanded(
                     // .builder, not ListView(children: [...]): streaming calls
@@ -607,6 +609,21 @@ class ChatViewState extends State<ChatView> {
                                       tooltip: 'How this answer was built',
                                       onTap: _showHintsDialog,
                                     ),
+                                  // Both icons are hidden at wide widths,
+                                  // because their panels are on screen
+                                  // already - which left the footer as a
+                                  // Spacer and a button, and a band of empty
+                                  // card that read as something failing to
+                                  // load. The shortcut is worth saying and
+                                  // nothing else was using the space.
+                                  if (showConversations && showHints)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: AppSpacing.xs),
+                                      child: Text(
+                                        'Enter to send  ·  Shift+Enter for a new line',
+                                        style: TextStyle(fontSize: 11.5, color: pip.textFaint),
+                                      ),
+                                    ),
                                   const Spacer(),
                                   _isStreaming
                                       ? _SendButton(enabled: true, onTap: _stop, icon: Icons.stop_rounded, color: pip.danger)
@@ -620,6 +637,7 @@ class ChatViewState extends State<ChatView> {
                     ),
                   ),
                 ],
+                ),
               ),
             ),
             if (showHints)

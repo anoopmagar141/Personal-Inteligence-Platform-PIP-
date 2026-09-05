@@ -140,6 +140,19 @@ class _OrbPainter extends CustomPainter {
     final radius = size.width / 2;
     final paint = Paint()..style = PaintingStyle.fill;
 
+    // A faint core, so the dots read as one object rather than as scattered
+    // specks. Drawn first, and never in idle - a still orb should look at
+    // rest, not lit.
+    if (state != OrbState.idle) {
+      canvas.drawCircle(
+        centre,
+        radius * 0.62,
+        Paint()
+          ..color = color.withValues(alpha: 0.10)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+      );
+    }
+
     for (var i = 0; i < _dotCount; i++) {
       // Golden-angle spacing, so the dots never line up into spokes the way an
       // even 2pi/n split does at small counts.
@@ -188,8 +201,13 @@ class _OrbPainter extends CustomPainter {
         centre.dy + math.sin(angle) * distance * radius,
       );
       // Opacity tracks scale so dots recede rather than pop.
-      paint.color = color.withValues(alpha: (0.25 + 0.55 * scale).clamp(0.0, 1.0));
-      canvas.drawCircle(offset, (radius * 0.12 * scale).clamp(0.5, radius), paint);
+      //
+      // Both numbers were raised after seeing it on screen at its real size.
+      // At 0.12 of a 13px radius the dots were about a pixel and a half, and
+      // the whole thing read as a faint static ring rather than as motion -
+      // the animation was running perfectly and was simply too small to see.
+      paint.color = color.withValues(alpha: (0.35 + 0.6 * scale).clamp(0.0, 1.0));
+      canvas.drawCircle(offset, (radius * 0.19 * scale).clamp(1.0, radius), paint);
     }
   }
 
