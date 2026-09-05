@@ -59,9 +59,16 @@ if ($SkipBuild) {
     $age = (Get-Date) - (Get-Item $payload).LastWriteTime
     Write-Host "  Packaging the existing build, last written $([math]::Round($age.TotalMinutes)) minute(s) ago." -ForegroundColor Yellow
 } else {
+    # build_portable.ps1 runs under ErrorActionPreference = "Stop", so a real
+    # failure throws rather than returning a code. What is checked afterwards is
+    # that the payload is actually there.
+    #
+    # NOT $LASTEXITCODE. That is the exit code of the last NATIVE command the
+    # script ran, which is robocopy - whose success codes are 1 and 3, not 0.
+    # Reading it here declared every successful build a failure.
     & (Join-Path $PSScriptRoot "build_portable.ps1")
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ERROR: the portable build failed; nothing to package." -ForegroundColor Red
+    if (-not (Test-Path (Join-Path $payload "python\python.exe"))) {
+        Write-Host "  ERROR: the portable build did not produce a payload." -ForegroundColor Red
         exit 1
     }
 }

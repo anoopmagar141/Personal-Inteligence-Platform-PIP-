@@ -139,6 +139,13 @@ Write-Host ""
 Write-Host "  Verify it, from that folder, with:" -ForegroundColor DarkGray
 Write-Host "    .\python\python.exe -c `"import sqlcipher3, chromadb, torch; print('ok')`"" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "  Then compress it for distribution - a self-extracting 7-Zip archive" -ForegroundColor DarkGray
-Write-Host "  gives the user a single file that behaves like an installer." -ForegroundColor DarkGray
+Write-Host "  Then compress it for distribution - scripts\build_installer.ps1" -ForegroundColor DarkGray
+Write-Host "  turns this folder into PIP-Setup.exe." -ForegroundColor DarkGray
 Write-Host ""
+
+# Explicit, because without it $LASTEXITCODE is whatever the last NATIVE command
+# left behind - and the last one here is robocopy, whose success codes are 1
+# and 3 rather than 0. A caller checking $LASTEXITCODE after running this script
+# would read a completed build as a failed one, which is exactly what
+# build_installer.ps1 did.
+exit 0
