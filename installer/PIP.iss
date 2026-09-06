@@ -58,6 +58,17 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\app\{#AppExeName}
+
+; The mark, on the installer itself and on the entry in Apps & Features.
+; Generated from installer\pip-iris-blue.svg by scripts\make_icons.py - the
+; artwork is the source, and the .ico is checked in beside it so a build never
+; depends on regenerating one.
+;
+; The window and shortcut icons come from the executable instead: Flutter
+; compiles windows\runner\resources\app_icon.ico into it, and pointing the
+; shortcuts at the exe means a shortcut cannot disagree with the window it
+; opens.
+SetupIconFile=pip.ico
 ; ~1.1 GB extracted. Stated so the wizard can refuse before it fills a disk.
 ExtraDiskSpaceRequired=0
 DirExistsWarning=no
