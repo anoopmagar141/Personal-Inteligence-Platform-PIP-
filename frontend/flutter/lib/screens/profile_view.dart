@@ -13,6 +13,51 @@
 // Deletion is soft (ADR-022: the row stays, its status flips), so these are
 // retractions rather than erasures.
 //
+// THE CALLING NAME, AND WHY IT NEEDS A ROW THAT HOLDS NOTHING
+//
+// identity.preferred_name has been in the schema, in IDENTITY_FIELDS, in
+// onboarding, and in correct_profile_field's routing since profiles had
+// names - and it was unreachable to anybody who left the optional box blank
+// at onboarding. get_profile() omits an unset one deliberately, so it does
+// not put a blank "Preferred name:" line into the Identity section of every
+// prompt; this screen renders what get_profile returns; so the field that
+// was never set had no row, and a row is the only thing here that carries a
+// button. Onboarding's "you can change any of this later from your profile"
+// was true of every field except that one.
+//
+// Fixed on this side rather than by emitting the empty row from the backend,
+// because the backend's reason for omitting it is a good one and applies to
+// the prompt, not to this screen. So the placeholder is a presentation
+// decision made where the presenting happens: one synthesised row, marked
+// `unset`, offering "Set" instead of "Correct" and no confidence meter,
+// because there is nothing yet to be confident about. Everything it sends is
+// the ordinary correction endpoint - correct_profile_field already routes an
+// unset identity field to the identity table precisely so that the first
+// attempt to set a calling name does not create a preference of that name
+// instead.
+//
+// TWO KINDS OF FACT, AND WHY THEY ARE NOW TWO SECTIONS
+//
+// Everything on this screen used to be one list, which put "your name is Anup
+// Magar" and "PIP is 18% sure you prefer terse answers" in the same shape,
+// under the same confidence meter, with the same Correct button. They are not
+// the same kind of claim. One is something you stated and PIP is merely
+// storing; the other is something PIP inferred and may have got wrong - and
+// this screen's entire purpose is governing the second kind.
+//
+// So identity is lifted out into a profile card at the top: who you are, what
+// PIP calls you, what language and timezone it works in, and the handful of
+// counts PIP can honestly report about the relationship. It is edited as a
+// unit, through one Edit button, because those four fields are answered
+// together at onboarding and read together in every prompt - correcting them
+// one dialog at a time was four round trips to change a name and the timezone
+// it is greeted in.
+//
+// What remains below is what PIP has LEARNED. Every row there is inferred,
+// carries a confidence, and can be retracted. That is the list this screen was
+// built to govern, and it reads as one now that it is not interleaved with
+// four rows nobody needs to govern at all.
+//
 // LAYOUT. This was one flat list of identical rows, each headed by the
 // backend's own `field` key. That reads fine for a preference called
 // answer_style and badly for everything else: goal_memory's key is the
@@ -69,13 +114,29 @@ import '../theme.dart';
 ///
 /// active_projects is deliberately in neither: projects have their own screen,
 /// where archiving one is a status change rather than a memory retraction.
-({bool canEdit, bool canDelete, bool hasHistory, String? note}) profileRowCapability(String table) {
+({bool canEdit, bool canDelete, bool hasHistory, String? note}) profileRowCapability(
+  String table, {
+  String field = '',
+}) {
   switch (table) {
     case 'identity':
-      // Editable, but never deletable: the columns are NOT NULL and they are
-      // what PIP addresses you by, so a correction has a meaning here and a
+      // Editable, and deletable in exactly one place. name,
+      // language_preference and timezone are NOT NULL and are what PIP
+      // addresses you by, so a correction has a meaning there and a
       // retraction does not.
-      return (canEdit: true, canDelete: false, hasHistory: false, note: null);
+      //
+      // preferred_name is the exception, because it is the one identity
+      // column that is optional to begin with: removing it means "go back to
+      // calling me by my name", not "I have no name".
+      // soft_delete_profile_field() gives it its own branch for that reason,
+      // and offering no button for a delete the backend implements leaves the
+      // only way to undo a calling name being to set it to something else.
+      return (
+        canEdit: true,
+        canDelete: field == 'preferred_name',
+        hasHistory: false,
+        note: null,
+      );
     case 'interaction_style':
       // The only row with a past. interaction_style_history gains a row on
       // every change and is the one audit trail the profile has.
@@ -103,10 +164,15 @@ import '../theme.dart';
 /// The order sections appear in, and what to call each one.
 ///
 /// Ordered by how much it tells you about the person rather than
-/// alphabetically or by table name: who they are, how they want to be spoken
-/// to, what they are trying to do, then the smaller inferred material.
+/// alphabetically or by table name: how they want to be spoken to, what they
+/// are trying to do, then the smaller inferred material.
+///
+/// identity is deliberately absent. Those rows are drawn by the profile card
+/// above the list rather than as a section in it, and removing them here
+/// rather than filtering at the call site keeps one answer to "which tables
+/// does the learned list show" - a future identity column is covered by it
+/// without anybody having to remember.
 const profileSections = <String, String>{
-  'identity': 'You',
   'interaction_style': 'How you like answers',
   'goal_memory': 'Goals',
   'active_projects': 'Projects',
@@ -126,6 +192,23 @@ const _setMembershipTables = {
   'document_access_patterns',
 };
 
+/// What the identity columns are called on screen.
+///
+/// Only where the humanised column name would be worse. "Name" and "Preferred
+/// name" sitting next to each other do not say which is which - the first
+/// reads as the general case and the second as a variation on it, when they
+/// are a person's full name and what to call them. Onboarding already asks
+/// for them as "Full name" and "What should PIP call you?", so this is the
+/// same pair of questions given the same pair of names.
+///
+/// Scoped to identity rather than folded into humaniseFieldName(): a
+/// preference legitimately called "name" is not somebody's full name, and a
+/// humaniser is a spelling rule, not a glossary.
+const identityLabels = <String, String>{
+  'name': 'Full name',
+  'preferred_name': 'Preferred name',
+};
+
 /// What to show as a row's heading, and what (if anything) belongs under it.
 ///
 /// Pure, so the decision can be tested without pumping a widget.
@@ -139,12 +222,22 @@ const _setMembershipTables = {
   // the text is the goal.
   if (table == 'goal_memory') return (title: value, detail: null);
 
+  // A field the profile does not hold yet, offered so that it can be. What
+  // goes underneath is what PIP does in its absence - not a value, which is
+  // the whole point of the row.
+  if (row['unset'] == true) {
+    return (title: _label(table, field), detail: row['note'] as String?);
+  }
+
   if (_setMembershipTables.contains(table) || field == value) {
     return (title: field, detail: null);
   }
 
-  return (title: humaniseFieldName(field), detail: value);
+  return (title: _label(table, field), detail: value);
 }
+
+String _label(String table, String field) =>
+    (table == 'identity' ? identityLabels[field] : null) ?? humaniseFieldName(field);
 
 /// answer_style -> "Answer style", name -> "Name".
 ///
@@ -171,6 +264,7 @@ class ProfileView extends StatefulWidget {
 
 class _ProfileViewState extends State<ProfileView> {
   List<dynamic>? _fields;
+  Map<String, dynamic>? _status;
   String? _error;
 
   /// Keyed by field name. A refusal belongs on the row that caused it - one
@@ -185,18 +279,6 @@ class _ProfileViewState extends State<ProfileView> {
     _load();
   }
 
-  /// The name as the profile itself reports it, for the initials fallback.
-  ///
-  /// Read out of the rows already loaded rather than fetched separately: the
-  /// value is being rendered a few lines below, and asking the backend again
-  /// for it would be a second round trip for a first letter.
-  String? _nameFromFields() {
-    for (final row in _fields ?? const []) {
-      if (row is Map && row['field'] == 'name') return '${row['value']}';
-    }
-    return null;
-  }
-
   Future<void> _load() async {
     try {
       final fields = await widget.api.getProfile();
@@ -209,6 +291,31 @@ class _ProfileViewState extends State<ProfileView> {
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     }
+
+    // Second, and separately swallowed. The counts are the least important
+    // thing on this screen and the profile is the most: a /status that failed
+    // must cost the four small numbers in the card, not the page. The card
+    // renders without them.
+    try {
+      final status = await widget.api.getStatus();
+      if (mounted) setState(() => _status = status);
+    } catch (_) {}
+  }
+
+  /// The identity columns as a plain map, for the card that draws them.
+  ///
+  /// Built from the same rows the list is built from rather than fetched
+  /// separately - get_profile() is one call and already returned them, and a
+  /// second endpoint for the same four values would be a second answer to
+  /// what somebody's name is.
+  Map<String, String> _identity() {
+    final values = <String, String>{};
+    for (final raw in _fields ?? const []) {
+      if (raw is Map && raw['table'] == 'identity') {
+        values['${raw['field']}'] = '${raw['value']}';
+      }
+    }
+    return values;
   }
 
   Future<void> _act(String field, Future<void> Function() action) async {
@@ -231,15 +338,23 @@ class _ProfileViewState extends State<ProfileView> {
 
   Future<void> _edit(Map<String, dynamic> row) async {
     final field = '${row['field']}';
+    final unset = row['unset'] == true;
     final saved = await showDialog<String>(
       context: context,
       builder: (context) => _CorrectFieldDialog(
         field: field,
-        initialValue: '${row['value']}',
+        // The label, not the column key. "Correct \"preferred_name\"" asks a
+        // person to recognise an identifier they have never seen; the row
+        // above the button already calls it Preferred name.
+        label: profileRowContent(row).title,
+        setting: unset,
+        initialValue: unset ? '' : '${row['value']}',
         // A skill's value is skill_memory.level, a number. Saying so beats
         // letting someone type "expert" and meet a refusal for it - the
         // backend does reject it, but a hint is cheaper than a round trip.
-        hint: row['table'] == 'skill_memory' ? 'A number from 0 to 1 - how well you know it.' : null,
+        hint: row['table'] == 'skill_memory'
+            ? 'A number from 0 to 1 - how well you know it.'
+            : (field == 'preferred_name' ? 'What PIP should call you in conversation.' : null),
       ),
     );
     if (saved == null || saved.isEmpty) return;
@@ -253,8 +368,16 @@ class _ProfileViewState extends State<ProfileView> {
       builder: (context) => AlertDialog(
         title: const Text('Forget this?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
         content: Text(
-          'PIP will stop using "$field" straight away. The record is kept and marked '
-          'retracted rather than erased, so the history stays readable.',
+          // preferred_name is the one delete here that is not a retraction of
+          // something PIP believed - the column is cleared outright, and what
+          // happens next is that PIP uses the name it already has. Saying
+          // "the record is kept and marked retracted" would describe
+          // soft_delete_profile_field's loop, which this field never enters.
+          field == 'preferred_name'
+              ? 'PIP will go back to calling you by your full name. You can set a '
+                  'preferred name again at any time.'
+              : 'PIP will stop using "$field" straight away. The record is kept and marked '
+                  'retracted rather than erased, so the history stays readable.',
           style: TextStyle(fontSize: 13, color: context.pip.textMuted, height: 1.5),
         ),
         actions: [
@@ -358,23 +481,46 @@ class _ProfileViewState extends State<ProfileView> {
               description: 'What PIP has learned about you, and how confident it is. '
                   'Correct anything it has wrong - your correction outranks what it inferred.',
             ),
-            // Above the fields rather than among them: everything below is
-            // something PIP inferred and you may correct, and a picture is
-            // neither. It was chosen, it carries no confidence, and there is
-            // nothing for the Observer to have been wrong about.
-            _PictureRow(api: widget.api, name: _nameFromFields()),
-            _fields!.isEmpty
-                ? const EmptyState(
-                    icon: Icons.person_outline,
-                    title: 'No profile fields yet',
-                    description: 'PIP fills this in as it learns about you through conversation.',
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final group in _grouped()) _section(group.key, group.value),
-                    ],
+            // Above the list rather than among it: everything below is
+            // something PIP inferred and you may correct, and none of this is.
+            // A picture was chosen, a name was stated - neither carries a
+            // confidence, and there is nothing for the Observer to have been
+            // wrong about.
+            ProfileCard(
+              api: widget.api,
+              identity: _identity(),
+              status: _status,
+              learnedCount: _grouped().fold<int>(0, (sum, g) => sum + g.value.length),
+              onChanged: _load,
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            Builder(builder: (context) {
+              final groups = _grouped();
+              if (groups.isEmpty) {
+                return const EmptyState(
+                  icon: Icons.psychology_outlined,
+                  title: 'PIP has not learned anything yet',
+                  // Not an error, and not a gap to apologise for: an
+                  // installation that has only been onboarded has stated
+                  // facts and inferred none, which is exactly right.
+                  description: 'What you tell PIP directly is above. This fills in as it '
+                      'notices patterns in what you work on.',
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md, left: 2),
+                    child: Text(
+                      'What PIP has learned',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: pip.text),
+                    ),
                   ),
+                  for (final group in groups) _section(group.key, group.value),
+                ],
+              );
+            }),
             ],
           ),
         ),
@@ -389,6 +535,11 @@ class _ProfileViewState extends State<ProfileView> {
     final buckets = <String, List<Map<String, dynamic>>>{};
     for (final raw in _fields!) {
       final row = raw as Map<String, dynamic>;
+      // Drawn by the profile card instead. Skipped here rather than removed
+      // after bucketing, so an identity column this build has never heard of
+      // does not fall through to the unrecognised-table branch below and
+      // reappear as a section called "identity".
+      if (row['table'] == 'identity') continue;
       buckets.putIfAbsent('${row['table']}', () => []).add(row);
     }
 
@@ -434,7 +585,8 @@ class _ProfileViewState extends State<ProfileView> {
     final pip = context.pip;
     final table = '${row['table']}';
     final field = '${row['field']}';
-    final capability = profileRowCapability(table);
+    final capability = profileRowCapability(table, field: field);
+    final unset = row['unset'] == true;
     final busy = _busy.contains(field);
     final rowError = _rowErrors[field];
     final content = profileRowContent(row);
@@ -503,9 +655,17 @@ class _ProfileViewState extends State<ProfileView> {
                 else ...[
                   if (capability.canEdit) ...[
                     const SizedBox(width: AppSpacing.sm),
-                    GhostButton(label: 'Correct', onTap: () => _edit(row)),
+                    // "Correct" is the wrong verb for something PIP has never
+                    // claimed. Nothing is being put right here; a question is
+                    // being answered for the first time.
+                    GhostButton(label: unset ? 'Set' : 'Correct', onTap: () => _edit(row)),
                   ],
-                  if (capability.canDelete) ...[
+                  // Never on a placeholder. The capability is a property of
+                  // the FIELD - preferred_name is deletable - but this row
+                  // holds nothing to delete, and the button would reach the
+                  // backend only to be told there was no active record under
+                  // that name to forget.
+                  if (capability.canDelete && !unset) ...[
                     const SizedBox(width: AppSpacing.sm),
                     GhostButton(label: 'Forget', color: pip.danger, onTap: () => _delete(row)),
                   ],
@@ -538,10 +698,24 @@ class _CorrectFieldDialog extends StatefulWidget {
   final String field;
   final String initialValue;
 
+  /// What the row above the button calls this field.
+  final String label;
+
+  /// Whether this field is being answered for the first time rather than put
+  /// right. Changes the verb and drops the sentence about outranking, which
+  /// says nothing when there is nothing to outrank.
+  final bool setting;
+
   /// What this particular field expects, when that is not obvious from the
   /// value already in the box. Null for the ordinary free-text case.
   final String? hint;
-  const _CorrectFieldDialog({required this.field, required this.initialValue, this.hint});
+  const _CorrectFieldDialog({
+    required this.field,
+    required this.initialValue,
+    required this.label,
+    this.setting = false,
+    this.hint,
+  });
 
   @override
   State<_CorrectFieldDialog> createState() => _CorrectFieldDialogState();
@@ -562,7 +736,7 @@ class _CorrectFieldDialogState extends State<_CorrectFieldDialog> {
     return AlertDialog(
       backgroundColor: pip.surface,
       title: Text(
-        'Correct "${widget.field}"',
+        widget.setting ? 'Set ${widget.label.toLowerCase()}' : 'Correct "${widget.label}"',
         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
       ),
       content: Column(
@@ -570,7 +744,9 @@ class _CorrectFieldDialogState extends State<_CorrectFieldDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'This is recorded as your own correction, which outranks anything PIP inferred.',
+            widget.setting
+                ? 'You are telling PIP this directly, so it is recorded as explicit rather than inferred.'
+                : 'This is recorded as your own correction, which outranks anything PIP inferred.',
             style: TextStyle(fontSize: 12.5, color: pip.textMuted),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -673,25 +849,61 @@ class _ConfidenceMeter extends StatelessWidget {
 }
 
 
-/// The profile picture, with the two things anybody wants to do to one.
+/// Who you are, as opposed to what PIP thinks about you.
 ///
-/// Its own widget rather than more of _ProfileViewState, and it keeps its own
-/// error. The screen's _error blanks the entire page - correctly, since a
-/// profile that could not be loaded has nothing to show - and a picture that
-/// failed to upload must not do that. The profile behind it loaded fine.
-class _PictureRow extends StatefulWidget {
+/// This is the half of the profile screen that is NOT governed memory. Every
+/// value in it was stated - at onboarding, or here - so nothing carries a
+/// confidence, nothing can be retracted, and there is no Observer to have
+/// been wrong. Presenting it in the same row shape as an inferred preference
+/// was the thing that made the old screen hard to read: a name and a hunch
+/// looked identical.
+///
+/// It keeps its own error, and so did the picture row it replaces, for the
+/// same reason. The screen's _error blanks the entire page - correct, since a
+/// profile that would not load has nothing to show - and a picture that failed
+/// to upload, or a rejected timezone, must not do that. The profile behind it
+/// loaded fine.
+class ProfileCard extends StatefulWidget {
   final ApiClient api;
-  final String? name;
 
-  const _PictureRow({required this.api, required this.name});
+  /// The identity columns, keyed by column name. Absent keys are absent
+  /// values: preferred_name is optional, and get_profile() omits it when it
+  /// has never been set.
+  final Map<String, String> identity;
+
+  /// /status, or null when it could not be read. Null costs the counts and
+  /// nothing else.
+  final Map<String, dynamic>? status;
+
+  /// How many rows the learned list holds. Passed in rather than fetched:
+  /// the screen has already grouped them, and counting them twice would be
+  /// two answers to one question.
+  final int learnedCount;
+
+  final Future<void> Function() onChanged;
+
+  const ProfileCard({
+    super.key,
+    required this.api,
+    required this.identity,
+    required this.status,
+    required this.learnedCount,
+    required this.onChanged,
+  });
 
   @override
-  State<_PictureRow> createState() => _PictureRowState();
+  State<ProfileCard> createState() => _ProfileCardState();
 }
 
-class _PictureRowState extends State<_PictureRow> {
+class _ProfileCardState extends State<ProfileCard> {
   bool _busy = false;
   String? _error;
+
+  String? get _fullName => widget.identity['name'];
+  String? get _callingName {
+    final value = widget.identity['preferred_name'];
+    return (value == null || value.trim().isEmpty) ? null : value;
+  }
 
   Future<void> _run(Future<void> Function() work) async {
     setState(() {
@@ -700,15 +912,18 @@ class _PictureRowState extends State<_PictureRow> {
     });
     try {
       await work();
-      await loadProfilePicture(widget.api);
+      await widget.onChanged();
     } catch (error) {
+      // The server's own sentence. "Your timezone cannot be empty" is the
+      // whole answer to why a save did not take, and a generic failure would
+      // replace it with less.
       if (mounted) setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _pick() async {
+  Future<void> _pickPicture() async {
     final picked = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['png', 'jpg', 'jpeg'],
@@ -720,45 +935,81 @@ class _PictureRowState extends State<_PictureRow> {
       // Scaled here rather than on the server: what travels is what gets
       // stored, decrypted on every read and decoded on every frame - and a
       // camera-roll photograph is several megabytes of pixels for something
-      // drawn at 26 of them.
+      // drawn at 88 of them.
       final scaled = await downscaleForAvatar(Uint8List.fromList(original));
       await widget.api.setProfilePicture('avatar.png', scaled);
+      await loadProfilePicture(widget.api);
     });
   }
 
-  Future<void> _remove() => _run(() => widget.api.deleteProfilePicture());
+  Future<void> _removePicture() => _run(() async {
+        await widget.api.deleteProfilePicture();
+        await loadProfilePicture(widget.api);
+      });
+
+  /// Edit all four identity fields at once.
+  ///
+  /// Only what CHANGED is sent, which is not an optimisation. Every write here
+  /// is recorded as an explicit user correction and stamps source_label on the
+  /// row; re-sending an untouched timezone would re-assert it as a fresh
+  /// statement about a field the person did not look at.
+  Future<void> _edit() async {
+    final result = await showDialog<Map<String, String?>>(
+      context: context,
+      builder: (context) => _EditIdentityDialog(identity: widget.identity),
+    );
+    if (result == null) return;
+
+    await _run(() async {
+      for (final entry in result.entries) {
+        final value = entry.value;
+        if (value == null) {
+          // Cleared, which only preferred_name can be - the dialog does not
+          // offer it for the three NOT NULL columns, and the backend refuses
+          // an empty value for them regardless. Deleting rather than writing
+          // "" so that "no calling name" stays one state and not two.
+          await widget.api.deleteProfileField(entry.key);
+        } else {
+          await widget.api.correctMemory(entry.key, value);
+        }
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final pip = context.pip;
 
-    return ValueListenableBuilder<Uint8List?>(
-      valueListenable: profilePicture,
-      builder: (context, picture, _) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-          child: Row(
+    return SectionCard(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 72,
-                height: 72,
-                alignment: Alignment.center,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: pip.surfaceRaised,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: pip.border),
+              ValueListenableBuilder<Uint8List?>(
+                valueListenable: profilePicture,
+                builder: (context, picture, _) => Container(
+                  width: 88,
+                  height: 88,
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: pip.surfaceRaised,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: pip.border),
+                  ),
+                  child: picture != null
+                      ? Image.memory(picture, fit: BoxFit.cover, width: 88, height: 88, gaplessPlayback: true)
+                      : Text(
+                          // Initials rather than a stock silhouette: they are
+                          // already personal, and they make an empty state
+                          // look deliberate rather than unfinished.
+                          initialsFrom(_fullName),
+                          style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600, color: pip.textMuted),
+                        ),
                 ),
-                child: picture != null
-                    ? Image.memory(picture, fit: BoxFit.cover, width: 72, height: 72, gaplessPlayback: true)
-                    : Text(
-                        // Initials rather than a stock silhouette: they are
-                        // already personal, and they make an empty state look
-                        // deliberate rather than unfinished.
-                        initialsFrom(widget.name),
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: pip.textMuted),
-                      ),
               ),
               const SizedBox(width: AppSpacing.lg),
               Expanded(
@@ -766,46 +1017,279 @@ class _PictureRowState extends State<_PictureRow> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'Profile picture',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: pip.text),
+                    SelectableText(
+                      _fullName ?? 'No name yet',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: pip.text, height: 1.2),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'PNG or JPEG, kept inside your encrypted database rather than as a loose file.',
-                      style: TextStyle(fontSize: 12.5, height: 1.4, color: pip.textFaint),
+                    const SizedBox(height: 4),
+                    // The calling name gets its own line rather than a slot in
+                    // the metadata run below, because it is the one fact here
+                    // that changes what PIP says out loud. Absent when there
+                    // is none: "PIP calls you Anup Magar" under the heading
+                    // "Anup Magar" states the default twice.
+                    if (_callingName != null)
+                      Text(
+                        'PIP calls you $_callingName',
+                        style: TextStyle(fontSize: 13.5, color: pip.accent),
+                      ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: 4,
+                      children: [
+                        for (final part in [
+                          widget.identity['language_preference'],
+                          widget.identity['timezone'],
+                        ].whereType<String>())
+                          Text(part, style: TextStyle(fontSize: 12.5, color: pip.textMuted)),
+                      ],
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Row(
                       children: [
-                        TextButton(
-                          onPressed: _busy ? null : _pick,
-                          child: Text(picture == null ? 'Choose a picture' : 'Change'),
+                        GhostButton(label: 'Change picture', onTap: _busy ? null : _pickPicture),
+                        const SizedBox(width: AppSpacing.sm),
+                        ValueListenableBuilder<Uint8List?>(
+                          valueListenable: profilePicture,
+                          // Offered only when there is one. A Remove that does
+                          // nothing is the same class of bug as a Forget on a
+                          // field that was never set.
+                          builder: (context, picture, _) => picture == null
+                              ? const SizedBox.shrink()
+                              : GhostButton(
+                                  label: 'Remove',
+                                  color: pip.textMuted,
+                                  onTap: _busy ? null : _removePicture,
+                                ),
                         ),
-                        if (picture != null)
-                          TextButton(
-                            onPressed: _busy ? null : _remove,
-                            child: const Text('Remove'),
-                          ),
-                        if (_busy) ...[
-                          const SizedBox(width: AppSpacing.sm),
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ],
                       ],
                     ),
-                    if (_error != null)
-                      Text(_error!, style: TextStyle(fontSize: 12, color: pip.danger)),
                   ],
                 ),
               ),
+              if (_busy)
+                const Padding(
+                  padding: EdgeInsets.only(left: AppSpacing.md),
+                  child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              else
+                GhostButton(label: 'Edit', onTap: _edit),
             ],
           ),
-        );
-      },
+          if (_error != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(_error!, style: TextStyle(fontSize: 11.5, color: pip.danger)),
+          ],
+          const SizedBox(height: AppSpacing.lg),
+          _Stats(status: widget.status, learnedCount: widget.learnedCount),
+        ],
+      ),
+    );
+  }
+}
+
+/// The four counts PIP can honestly report.
+///
+/// Every one is read from something the backend already maintains -
+/// profile_meta's session counter and first_session_date, decision_log, and
+/// the rows this screen is already displaying. Nothing here is derived,
+/// estimated, or padded out to fill a fourth slot: a profile screen for a
+/// product whose whole argument is that its claims are inspectable cannot
+/// open with a statistic nobody can check.
+class _Stats extends StatelessWidget {
+  final Map<String, dynamic>? status;
+  final int learnedCount;
+
+  const _Stats({required this.status, required this.learnedCount});
+
+  /// "2026-09-03T00:02:03Z" -> "3 Sep 2026". The stored value is an ISO
+  /// timestamp because that is what everything else in this database stores;
+  /// a date on a profile card is read, not sorted.
+  static String? formatSince(String? iso) {
+    if (iso == null || iso.isEmpty) return null;
+    final parsed = DateTime.tryParse(iso);
+    if (parsed == null) return null;
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final local = parsed.toLocal();
+    return '${local.day} ${months[local.month - 1]} ${local.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    final since = formatSince(status?['first_session_date'] as String?);
+
+    final tiles = <({String value, String label})>[
+      (value: '${status?['session_count'] ?? '-'}', label: 'Sessions'),
+      (value: since ?? '-', label: 'Known you since'),
+      (value: '$learnedCount', label: 'Things learned'),
+      (value: '${status?['active_decisions'] ?? '-'}', label: 'Decisions'),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: pip.surfaceRaised,
+        borderRadius: AppRadius.md,
+        border: Border.all(color: pip.border),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          for (var i = 0; i < tiles.length; i++) ...[
+            if (i > 0)
+              Container(width: 1, height: 30, color: pip.border),
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    tiles[i].value,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: pip.text),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    tiles[i].label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 11.5, color: pip.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// All four identity fields in one form.
+///
+/// One dialog rather than four Correct buttons because these are answered
+/// together at onboarding and read together in every prompt - changing a name
+/// and the timezone it is greeted in was two dialogs and two round trips.
+///
+/// Returns only what changed, with null meaning "cleared". The caller turns a
+/// null into a delete, which only preferred_name can be: the other three are
+/// NOT NULL columns and the field marks them required rather than letting
+/// somebody discover it from a 422.
+class _EditIdentityDialog extends StatefulWidget {
+  final Map<String, String> identity;
+  const _EditIdentityDialog({required this.identity});
+
+  @override
+  State<_EditIdentityDialog> createState() => _EditIdentityDialogState();
+}
+
+class _EditIdentityDialogState extends State<_EditIdentityDialog> {
+  late final _name = TextEditingController(text: widget.identity['name'] ?? '');
+  late final _preferred = TextEditingController(text: widget.identity['preferred_name'] ?? '');
+  late final _language = TextEditingController(text: widget.identity['language_preference'] ?? '');
+  late final _timezone = TextEditingController(text: widget.identity['timezone'] ?? '');
+
+  String? _complaint;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _preferred.dispose();
+    _language.dispose();
+    _timezone.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final name = _name.text.trim();
+    final language = _language.text.trim();
+    final timezone = _timezone.text.trim();
+
+    // Checked here as well as on the server, for the reason the sign-in screen
+    // checks a password mismatch itself: the backend does refuse an empty
+    // identity column, and being told so after a round trip is worse than
+    // being told immediately by the field that is empty.
+    if (name.isEmpty || language.isEmpty || timezone.isEmpty) {
+      setState(() => _complaint = 'Full name, language and timezone cannot be empty.');
+      return;
+    }
+
+    final preferred = _preferred.text.trim();
+    final hadPreferred = (widget.identity['preferred_name'] ?? '').trim();
+
+    final changed = <String, String?>{
+      if (name != (widget.identity['name'] ?? '')) 'name': name,
+      if (language != (widget.identity['language_preference'] ?? '')) 'language_preference': language,
+      if (timezone != (widget.identity['timezone'] ?? '')) 'timezone': timezone,
+      // Three cases, and only two of them are writes. Set to something new,
+      // cleared when there was one (a delete), or emptied when there was none
+      // - which is not a change at all and must not become a delete for a row
+      // that does not exist.
+      if (preferred != hadPreferred)
+        'preferred_name': preferred.isEmpty ? null : preferred,
+    };
+
+    Navigator.of(context).pop(changed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return AlertDialog(
+      backgroundColor: pip.surface,
+      title: const Text('Edit your profile', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+      content: SizedBox(
+        width: 380,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You are telling PIP this directly, so all of it is recorded as '
+                'explicit rather than inferred.',
+                style: TextStyle(fontSize: 12.5, color: pip.textMuted, height: 1.4),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              TextField(
+                controller: _name,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Full name'),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: _preferred,
+                decoration: const InputDecoration(
+                  labelText: 'Preferred name',
+                  helperText: 'What PIP calls you. Leave blank to be called by your full name.',
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: _language,
+                decoration: const InputDecoration(labelText: 'Primary language'),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: _timezone,
+                decoration: const InputDecoration(
+                  labelText: 'Timezone',
+                  helperText: 'e.g. Asia/Kathmandu',
+                ),
+                onSubmitted: (_) => _save(),
+              ),
+              if (_complaint != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(_complaint!, style: TextStyle(fontSize: 12, color: pip.danger)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
     );
   }
 }

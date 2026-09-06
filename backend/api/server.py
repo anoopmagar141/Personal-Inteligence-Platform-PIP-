@@ -162,6 +162,12 @@ def api_status(conn) -> dict[str, Any]:
         # built, needs to know where in the 30-session cycle it is.
         "session_count": meta["session_count"] if meta else 0,
         "last_session_date": meta["last_session_date"] if meta else None,
+        # The other end of the same pair, and the only date on the profile
+        # screen that does not change - "PIP has known you since" is the one
+        # number there that is about the relationship rather than about a
+        # count. Written once by complete_onboarding and COALESCEd on every
+        # subsequent write, so it survives a profile being re-onboarded.
+        "first_session_date": meta["first_session_date"] if meta else None,
         "active_decisions": decision_count,
         "pending_decisions": pending_count,
         "pending_memory": pending_memory_count,
