@@ -64,9 +64,31 @@ for ($i = 0; $i -lt 30; $i++) {
         Invoke-WebRequest -Uri "http://127.0.0.1:8765/api/v1/status" -UseBasicParsing -TimeoutSec 2 | Out-Null
         $ready = $true
         break
-    } catch [System.Net.WebException] {
+    } catch {
         # A 401 (missing/invalid token) still means the server answered - only
         # a connection failure means it isn't up yet.
+        #
+        # Catches everything and then ASKS THE EXCEPTION whether a response
+        # exists, rather than filtering on a type. The type filter here used to
+        # be [System.Net.WebException], which is what Windows PowerShell 5.1
+        # throws - but PowerShell 7's Invoke-WebRequest is built on HttpClient
+        # and throws Microsoft.PowerShell.Commands.HttpResponseException for an
+        # HTTP status and TaskCanceledException for a timeout. Neither matches,
+        # so under pwsh the catch never fired, $ErrorActionPreference = "Stop"
+        # made the unhandled error terminating, and the script aborted on the
+        # FIRST probe - taking the whole launch down while leaving the backend
+        # window it had just spawned running.
+        #
+        # That is worse than a plain failure, because the abandoned backend
+        # keeps the port and the instance lock, so the next run_dev.ps1 dies on
+        # AlreadyRunningError and the cause looks like a stale lock rather than
+        # a launcher bug. Measured: three consecutive failed launches, three
+        # different error messages, none of them the real one.
+        #
+        # .Response is present on WebException (5.1) and on
+        # HttpResponseException (7), and absent on the timeout/connection
+        # exceptions of both - so it answers the question the comment above
+        # actually asks, on either edition.
         if ($_.Exception.Response) { $ready = $true; break }
         Start-Sleep -Seconds 1
     }
