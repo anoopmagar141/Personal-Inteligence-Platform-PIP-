@@ -122,8 +122,18 @@ def test_every_script_needing_the_venv_carries_the_guard():
     derive_db_key.py is exempt for a different reason: the launcher invokes it
     with the venv interpreter by absolute path, so it cannot reach the failure,
     and its exit codes are a contract scripts/_db_key.ps1 reads.
+
+    eval_evidence_gate.py is exempt for a third: it imports backend, but only
+    backend.core.evidence_gate, whose entire import graph is `re`, `typing`,
+    `datetime` and backend.core.types. It opens no database and needs no venv
+    package, so a guard would have to name a dependency it does not have -
+    _venv.require("sqlcipher3") on a script that never touches SQLCipher would
+    turn a script that runs anywhere into one that refuses to. The exemption is
+    kept honest by test_the_evidence_gate_imports_nothing_outside_the_standard_library
+    below: if the gate ever grows a third-party dependency, that fails and this
+    exemption has to be revisited rather than silently covering for it.
     """
-    exempt = {"derive_db_key.py"}
+    exempt = {"derive_db_key.py", "eval_evidence_gate.py"}
     needs_venv = re.compile(r"^\s*(?:from|import)\s+(?:backend|sqlcipher3)\b", re.MULTILINE)
 
     unguarded = []
@@ -134,6 +144,32 @@ def test_every_script_needing_the_venv_carries_the_guard():
         if needs_venv.search(source) and "_venv.require" not in source:
             unguarded.append(path.name)
     assert not unguarded, f"these need _venv.require(): {unguarded}"
+
+
+def test_the_evidence_gate_imports_nothing_outside_the_standard_library():
+    """
+    What eval_evidence_gate.py's exemption above rests on, asserted rather than
+    assumed.
+
+    The gate is deliberately dependency-free - it is deterministic string work,
+    with no model call, no database and no vector index - and that is what lets
+    the evaluation harness run under any interpreter. A third-party import
+    sneaking into it would make the exemption a lie and the harness fail with
+    the exact raw traceback _venv exists to prevent.
+    """
+    gate = ROOT / "backend" / "core" / "evidence_gate.py"
+    tree = ast.parse(gate.read_text(encoding="utf-8"))
+
+    roots = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
+
+    # "backend" is allowed only because the one backend module it reaches for,
+    # backend.core.types, is itself stdlib-only.
+    assert roots <= {"re", "typing", "backend"}, f"evidence_gate grew a dependency: {roots}"
 
 
 def test_scripts_stay_ascii_so_windows_consoles_can_print_them():

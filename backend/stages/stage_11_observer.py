@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, Optional, TypedDict
 
 from backend.config.settings import get_settings
+from backend.core import evidence_gate
 from backend.core.constitution_enforcer import ConstitutionEnforcer
 from backend.core.types import now_utc
 from backend.memory import decision_log, session_snapshot
@@ -943,6 +944,16 @@ def run_session_end(
             logger.error(f"Observer: session snapshot write failed, continuing with candidates: {e}")
 
     enforcer = ConstitutionEnforcer(CONSTITUTION_PATH)
+
+    # The trusted record of who said what this session, built once and handed
+    # to every candidate. Built from the FULL transcript rather than the
+    # unobserved tail on purpose: _only_candidates_stated_this_session has
+    # already dropped anything grounded only in re-read turns, so widening the
+    # ledger cannot let an old signal back in - but it does let the gate see a
+    # contradiction the user voiced earlier in the same conversation, which a
+    # tail-only ledger would be blind to.
+    ledger = evidence_gate.EvidenceLedger.from_transcript(transcript)
+
     memory_results = []
     for candidate in output["memory_candidates"]:
         # Per-candidate isolation, and the reason is not hypothetical. A None
@@ -964,22 +975,56 @@ def run_session_end(
         # outcome Stage 13 already uses for a candidate that could not be
         # written, so no reader needs a new value to understand this one.
         try:
-            # Reinforcement must happen before validation and be visible to the write:
-            # a single-pass extraction can only ever produce evidence_count=1 on its
-            # own, so without this, repeat observations across sessions would never
-            # accumulate and would keep failing Stage 12's tiered thresholds forever.
-            candidate = stage_12.reinforce_evidence(conn, candidate)
-            validation_result = stage_12.run(conn, candidate, enforcer)
+            # The evidence gate runs FIRST, ahead of reinforcement, and the
+            # order is the mechanism rather than a preference. Grounding (in
+            # run() above) establishes that the cited words exist; the
+            # constitution establishes that the field may be written and that
+            # enough evidence has accumulated. Neither ever asks whether the
+            # words support the claim, so a genuine quote could carry an
+            # inference the user never made all the way to a profile write.
+            #
+            # Before reinforcement because reinforce_evidence() appends to
+            # memory_observation_log, and that log is exactly how a signal
+            # accrues the evidence_count that clears week_3_4 and month_2_plus.
+            # Gating after it would let the same unsupported inference, made
+            # once a session, vote itself into the profile in three - the check
+            # would be at the front door while the back door counted ballots.
+            verdict = evidence_gate.adjudicate(candidate, ledger)
+            if verdict.sufficient:
+                # Reinforcement must happen before validation and be visible to the write:
+                # a single-pass extraction can only ever produce evidence_count=1 on its
+                # own, so without this, repeat observations across sessions would never
+                # accumulate and would keep failing Stage 12's tiered thresholds forever.
+                candidate = stage_12.reinforce_evidence(conn, candidate)
+                validation_result = stage_12.run(conn, candidate, enforcer)
+            else:
+                logger.info(
+                    f"Observer: evidence gate rejected {candidate.get('target_table')}."
+                    f"{candidate.get('field_name')}={candidate.get('proposed_value')!r} "
+                    f"as {verdict.state}: {verdict.detail}"
+                )
+                validation_result = verdict.to_validation_result()
+            # One write path either way. A gate rejection is expressed in the
+            # statuses Stage 13 already routes on (HARD_REJECT / DISCARD), so
+            # nothing here is a second pipeline - it is the same one, with the
+            # candidate arriving already refused.
             outcome = stage_13.run(conn, candidate, validation_result)
             status = validation_result.status
+            evidence_state = verdict.state
         except Exception as e:
             logger.error(
                 f"Observer: candidate {candidate.get('target_table')}."
                 f"{candidate.get('field_name')} failed, dropping it and continuing: {e}"
             )
-            status, outcome = "ERROR", "failed"
+            status, outcome, evidence_state = "ERROR", "failed", "ERROR"
         memory_results.append({
             "candidate": candidate,
+            # Reported alongside validation_status rather than folded into it:
+            # "the constitution said no" and "the evidence did not support this"
+            # are different facts about a candidate, and collapsing them would
+            # make the evaluation harness unable to separate authenticity
+            # accuracy from inference-support accuracy.
+            "evidence_state": evidence_state,
             "validation_status": status,
             "outcome": outcome,
         })

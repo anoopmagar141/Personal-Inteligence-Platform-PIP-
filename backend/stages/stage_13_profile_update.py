@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+from backend.core import evidence_gate
 from backend.core.constitution_enforcer import is_contradicting_inferred_observation
 from backend.core.types import MemoryCandidate, ValidationResult
 from backend.memory import candidate_store, profile_store, verification
@@ -134,7 +135,22 @@ def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -
 
     if status in ("HARD_REJECT", "DISCARD"):
         logger.info(f"Candidate {status.lower()}: {validation_result.reason}")
-        _maybe_log_behavioral_contradiction(conn, candidate)
+        # A candidate the evidence gate refused must not become a vote.
+        #
+        # The contradiction logs below are the ONLY inputs to the behavioral
+        # override, which after three sessions and fourteen days interrupts the
+        # user to ask whether a preference they stated is still true. Feeding a
+        # gate rejection into that would be a laundering path around the gate
+        # itself: an inference with no supporting evidence, rejected three
+        # times, would still have accumulated three data points arguing that
+        # the user's own stated value is wrong - and the model would get to
+        # re-open a settled question purely by repeating an unsupported claim.
+        #
+        # Every other DISCARD still logs, unchanged. A threshold violation
+        # means the observation was real but not yet corroborated enough, which
+        # is exactly the kind of data point this counter exists to accumulate.
+        if validation_result.reason not in evidence_gate.REJECTION_STATES:
+            _maybe_log_behavioral_contradiction(conn, candidate)
         return "rejected"
 
     raise ValueError(f"Unknown ValidationResult status: {status}")

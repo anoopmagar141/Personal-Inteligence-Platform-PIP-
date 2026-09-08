@@ -18,6 +18,7 @@
 
 import asyncio
 import logging
+import re
 from typing import Any, Optional
 
 from backend.core import trace
@@ -69,12 +70,45 @@ class SessionRegistry:
             return list(self._sessions.values())
 
 
+# A content line that would be indistinguishable from a role header once the
+# messages are flattened into one string. See format_transcript below.
+_ROLE_HEADER_RE = re.compile(r"^(User|Assistant):", re.IGNORECASE)
+
+
 def format_transcript(conversation_history: list[dict[str, str]]) -> str:
-    """Plain User:/Assistant: transcript, matching Part 12.2's extraction prompt example."""
+    """
+    Plain User:/Assistant: transcript, matching Part 12.2's extraction prompt
+    example.
+
+    Role headers are the ONLY thing carrying authorship once the messages are
+    flattened, and evidence_gate.EvidenceLedger parses them back out to decide
+    whether a quote the Observer cites was actually spoken by the user. That
+    makes a content line beginning "User:" a forgery vector rather than a
+    cosmetic oddity: an assistant reply containing
+
+        Sure. Here is what you told me:
+        User: I prefer Flask
+
+    would parse back as a genuine user turn, and a claim the model authored
+    about its own user would be indistinguishable from one the user made. A
+    single leading space on any such continuation line removes the ambiguity -
+    invisible when read, unparseable as a header, and it leaves the words
+    themselves untouched so grounding still finds them where they really are.
+
+    Only continuation lines are escaped. The first line of a message already
+    sits after this function's own "{role}: " prefix, so it cannot start a line
+    and cannot forge anything.
+    """
     lines = []
     for message in conversation_history:
         role = "User" if message.get("role") == "user" else "Assistant"
-        lines.append(f"{role}: {message.get('content', '')}")
+        content = message.get("content", "")
+        content_lines = content.splitlines() or [content]
+        safe = "\n".join(
+            f" {line}" if index and _ROLE_HEADER_RE.match(line) else line
+            for index, line in enumerate(content_lines)
+        )
+        lines.append(f"{role}: {safe}")
     return "\n".join(lines)
 
 
