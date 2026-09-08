@@ -31,6 +31,7 @@ import 'api_client.dart';
 import 'home_shell.dart';
 import 'onboarding_screen.dart';
 import 'profile_picture.dart';
+import 'screens/model_setup_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'startup_progress.dart';
 import 'theme.dart';
@@ -145,7 +146,7 @@ class AppRoot extends StatefulWidget {
   State<AppRoot> createState() => _AppRootState();
 }
 
-enum _RootState { connecting, signIn, onboarding, error, ready }
+enum _RootState { connecting, signIn, modelSetup, onboarding, error, ready }
 
 class _AppRootState extends State<AppRoot> {
   late ApiClient api;
@@ -211,11 +212,11 @@ class _AppRootState extends State<AppRoot> {
             return;
           }
 
-          final status = await client.getStatus();
+          final next = await _firstScreenAfterUnlock(client);
           if (!mounted) return;
           setState(() {
             api = client;
-            _state = (status['onboarding_complete'] as bool? ?? false) ? _RootState.ready : _RootState.onboarding;
+            _state = next;
           });
           // Not awaited: the avatar is decoration, and the chat window should
           // not wait on it. Every widget that draws it listens, so it appears
@@ -257,15 +258,41 @@ class _AppRootState extends State<AppRoot> {
   /// A brand-new password leaves an empty database, so this is also the path a
   /// first-run install takes into onboarding - the same question /status
   /// already answers, asked at the one moment it can now be asked.
+  /// Which screen an unlocked backend should open on.
+  ///
+  /// The model step is offered only during a FIRST run - when onboarding has
+  /// not been completed. After that it never appears again, however many
+  /// models are or are not installed: somebody who deliberately runs PIP
+  /// without Ollama should not be asked about it on every launch, and the
+  /// model browser is where that choice lives once the app is set up.
+  ///
+  /// Its own method because two paths reach it - a launch that finds the
+  /// backend already unlocked, and the sign-in screen having just unlocked it
+  /// - and they were already drifting apart over which one loaded the avatar.
+  Future<_RootState> _firstScreenAfterUnlock(ApiClient client) async {
+    final status = await client.getStatus();
+    final onboarded = status['onboarding_complete'] as bool? ?? false;
+    if (onboarded) return _RootState.ready;
+
+    // Deliberately tolerant. This decides which screen to show, and a
+    // catalogue that could not be read is not a reason to fail a launch - it
+    // is a reason to carry on to onboarding, which needs nothing from Ollama.
+    try {
+      final catalog = await client.getModelCatalog();
+      final models = (catalog['models'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+      final hasModel = models.any((m) => m['pulled'] == true);
+      if (!hasModel) return _RootState.modelSetup;
+    } catch (_) {
+      // Fall through to onboarding.
+    }
+    return _RootState.onboarding;
+  }
+
   Future<void> _afterUnlock() async {
     try {
-      final status = await api.getStatus();
+      final next = await _firstScreenAfterUnlock(api);
       if (!mounted) return;
-      setState(() {
-        _state = (status['onboarding_complete'] as bool? ?? false)
-            ? _RootState.ready
-            : _RootState.onboarding;
-      });
+      setState(() => _state = next);
       loadProfilePicture(api);
     } catch (e) {
       if (!mounted) return;
@@ -355,6 +382,15 @@ class _AppRootState extends State<AppRoot> {
           // because a freshly created password means a database with nobody
           // in it yet.
           onUnlocked: _afterUnlock,
+        );
+      case _RootState.modelSetup:
+        return ModelSetupScreen(
+          api: api,
+          // Onboarding next either way. Downloading and skipping lead to the
+          // same place because the download does not stop when this screen
+          // closes - it runs in the backend, and waiting on it here would be
+          // making somebody watch 4.7 GB before they can type their name.
+          onDone: () => setState(() => _state = _RootState.onboarding),
         );
       case _RootState.onboarding:
         return OnboardingScreen(api: api, onComplete: () => setState(() => _state = _RootState.ready));

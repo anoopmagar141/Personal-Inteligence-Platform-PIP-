@@ -46,6 +46,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api_client.dart';
+import '../logo.dart';
 import '../theme.dart';
 import '../widgets/gateway_flow.dart';
 
@@ -443,6 +444,8 @@ class _SignInScreenState extends State<SignInScreen> {
                   switcher,
                   const SizedBox(height: AppSpacing.lg),
                 ],
+                const PipLogo(size: 56),
+                const SizedBox(height: AppSpacing.lg),
                 Text(
                   _isSetup ? 'Choose a password' : 'Welcome back',
                   textAlign: TextAlign.center,

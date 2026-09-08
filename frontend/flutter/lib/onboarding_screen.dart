@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 
 import 'api_client.dart';
+import 'logo.dart';
 import 'theme.dart';
 
 List<String>? _parseCsv(String value, int limit) {
@@ -103,6 +104,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  const PipLogo(size: 48),
+                  const SizedBox(height: AppSpacing.md),
                   TagLabel('Setup', color: pip.accent),
                   const SizedBox(height: AppSpacing.sm),
                   Text(

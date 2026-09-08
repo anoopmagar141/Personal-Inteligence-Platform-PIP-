@@ -200,6 +200,36 @@ def to_bmp_entry(image: np.ndarray) -> bytes:
     return header + pixels + and_mask
 
 
+def to_bmp_file(image: np.ndarray, background=(255, 255, 255)) -> bytes:
+    """
+    A standalone 24-bit .bmp, for Inno Setup's wizard artwork.
+
+    Flattened onto a solid background rather than kept transparent: BMP's
+    alpha support is inconsistent and Inno's wizard does not rely on it, so a
+    32-bit file with alpha renders as a black box often enough not to risk it.
+    White, because that is what the modern wizard style puts behind it.
+
+    Differs from the DIB inside an .ico in two ways that matter: it carries a
+    BITMAPFILEHEADER, and it has no AND mask - so the height in the info
+    header is the real height rather than double it.
+    """
+    height, width = image.shape[:2]
+
+    alpha = image[..., 3:4].astype(np.float64) / 255.0
+    flat = image[..., :3].astype(np.float64) * alpha + np.array(background) * (1 - alpha)
+    bgr = np.clip(flat + 0.5, 0, 255).astype(np.uint8)[::-1, :, ::-1]  # bottom-up, BGR
+
+    # Every row is padded to a 4-byte boundary.
+    row_bytes = width * 3
+    padding = (-row_bytes) % 4
+    rows = b"".join(bgr[y].tobytes() + bytes(padding) for y in range(height))
+
+    info = struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, len(rows), 0, 0, 0, 0)
+    size = 14 + len(info) + len(rows)
+    file_header = struct.pack("<2sIHHI", b"BM", size, 0, 0, 14 + len(info))
+    return file_header + info + rows
+
+
 def build_ico(images: dict[int, np.ndarray]) -> bytes:
     """Assemble the multi-size .ico container."""
     entries, payloads, offset = [], [], 6 + 16 * len(images)
@@ -252,10 +282,25 @@ def main() -> int:
         target.write_bytes(ico)
         print(f"  wrote    {target.relative_to(ROOT)}  ({len(ico) / 1024:.0f} KB)")
 
-    # A flat PNG too, for anywhere that wants one and for looking at.
-    preview = ROOT / "installer" / "pip-256.png"
-    preview.write_bytes(to_png(images[256]))
-    print(f"  wrote    {preview.relative_to(ROOT)}")
+    # The same artwork as a flat PNG, twice: once beside the .ico for looking
+    # at, and once as the application's own asset. Written from here rather
+    # than copied by hand so the window icon, the installer and the picture
+    # inside the app cannot drift apart - they all come from one run of this.
+    for preview in (
+        ROOT / "installer" / "pip-256.png",
+        ROOT / "frontend" / "flutter" / "assets" / "pip-logo.png",
+    ):
+        preview.parent.mkdir(parents=True, exist_ok=True)
+        preview.write_bytes(to_png(images[256]))
+        print(f"  wrote    {preview.relative_to(ROOT)}")
+
+    # Inno Setup's wizard artwork. Two sizes because it picks by DPI, and a
+    # single 55px image upscaled on a high-DPI display is visibly soft on the
+    # one screen somebody looks at while waiting.
+    for size, name in ((55, "wizard-small.bmp"), (138, "wizard-small-2x.bmp")):
+        target = ROOT / "installer" / name
+        target.write_bytes(to_bmp_file(render(size)))
+        print(f"  wrote    {target.relative_to(ROOT)}")
 
     print()
     print("  Rebuild the app for the window icon to change:")

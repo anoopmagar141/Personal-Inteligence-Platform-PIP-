@@ -34,6 +34,15 @@
 [Setup]
 ; Stable across versions - it is what makes an upgrade replace an install
 ; rather than sit beside it. Never regenerate this for an existing product.
+;
+; AND NEVER TEST-INSTALL A BUILD TO A SECOND DIRECTORY ON A MACHINE THAT HAS A
+; REAL ONE. Windows keys the installation off this id, not off the path, so a
+; /DIR= install is not a separate copy - it is the same application moved. Its
+; uninstaller then owns the registration, and running it strips the program
+; files out of the original location. Learned by doing it: the data survived,
+; because data\ is not something the uninstaller removes, but the install
+; itself had to be put back. Verify test builds in a VM, or accept that the
+; machine's own installation is the thing being replaced.
 AppId={{7B3C1E62-9F44-4A57-BD18-2E6C0A9F5D31}
 AppName={#AppName}
 AppVersion={#AppVersion}
@@ -69,6 +78,29 @@ UninstallDisplayIcon={app}\app\{#AppExeName}
 ; shortcuts at the exe means a shortcut cannot disagree with the window it
 ; opens.
 SetupIconFile=pip.ico
+WizardSmallImageFile=wizard-small.bmp,wizard-small-2x.bmp
+
+; EVERY PAGE THIS WIZARD DOES NOT SHOW, AND WHY
+;
+; It used to ask four questions before it would install anything: a welcome
+; page, where to put it, which shortcuts to make, and a confirmation. Every one
+; of them asks something a first-time user has no basis to answer - they do not
+; yet know what PIP is, so "where should it go" is not a question they can have
+; an opinion about. Four screens of clicking Next is not a choice being offered,
+; it is a toll.
+;
+; So there is one screen: the progress bar, and then the finish page. That last
+; one stays because it is the only page that does anything - it starts PIP, and
+; it offers Ollama to a machine that has not got it.
+;
+; Nothing is lost that anybody wanted. The install location is per-user and
+; fixed for the reason at the top of this file; a Desktop shortcut is what
+; somebody double-clicking an installer expects; and the restore shortcut lives
+; in the Start menu where it costs nobody anything. An advanced user can still
+; pass /DIR= on the command line, which is where that choice belongs.
+DisableWelcomePage=yes
+DisableDirPage=yes
+DisableReadyPage=yes
 ; ~1.1 GB extracted. Stated so the wizard can refuse before it fills a disk.
 ExtraDiskSpaceRequired=0
 DirExistsWarning=no
@@ -76,9 +108,11 @@ DirExistsWarning=no
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
-[Tasks]
-Name: "desktopicon"; Description: "Create a &Desktop shortcut"; GroupDescription: "Shortcuts:"
-Name: "restoreicon"; Description: "Create a shortcut for &restoring from a backup"; GroupDescription: "Shortcuts:"; Flags: unchecked
+; No [Tasks] section, deliberately - it is what put the shortcuts page in the
+; wizard. Both shortcuts are now always created: a Desktop icon is what
+; somebody double-clicking an installer is expecting, and the restore shortcut
+; sits in the Start menu folder where it is out of the way until the day it is
+; the only way back in.
 
 [Files]
 ; The whole portable build. data\ is deliberately not listed: it is created on
@@ -108,7 +142,7 @@ Name: "{group}\{#AppName}"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.e
 
 Name: "{autodesktop}\{#AppName}"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
     Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\scripts\launch_pip.ps1"""; \
-    WorkingDir: "{app}"; IconFilename: "{app}\app\{#AppExeName}"; Comment: "Start PIP"; Tasks: desktopicon
+    WorkingDir: "{app}"; IconFilename: "{app}\app\{#AppExeName}"; Comment: "Start PIP"
 
 ; Deliberately NOT hidden, and deliberately optional. A restore is a
 ; conversation - it asks for two passwords and prints what it is about to
@@ -116,7 +150,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{sys}\WindowsPowerShell\v1.0\powers
 ; restore_backup.py refuses while PIP holds the database open.
 Name: "{group}\Restore {#AppName} from backup"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
     Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\scripts\restore_pip.ps1"""; \
-    WorkingDir: "{app}"; Comment: "Rebuild PIP's database from a .pipbak backup file"; Tasks: restoreicon
+    WorkingDir: "{app}"; Comment: "Rebuild PIP's database from a .pipbak backup file"
 
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 

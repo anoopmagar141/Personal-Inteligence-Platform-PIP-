@@ -70,6 +70,13 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # The iris, for the screens a first run passes through. Generated from
+  # installer/pip-iris-blue.svg by scripts/make_icons.py, which writes the same
+  # artwork here and to the two .ico files - so the window icon, the installer
+  # and the picture inside the app cannot drift apart.
+  assets:
+    - assets/pip-logo.png
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
