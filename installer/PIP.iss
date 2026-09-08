@@ -29,7 +29,28 @@
 #define AppVersion "1.0.0"
 #define AppPublisher "Anup Magar"
 #define AppExeName "pip_flutter_client.exe"
-#define DistDir "..\dist\PIP"
+; Where the built payload is. Overridable with ISCC /DDistDir=..., which is how
+; scripts\build_installer.ps1 passes a SHORT path - and it has to.
+;
+; Windows still limits a path to 260 characters for most callers, ISCC among
+; them. torch ships license files for its vendored dependencies nested nine
+; directories deep:
+;
+;   torch-2.13.0.dist-info\licenses\third_party\kineto\libkineto\third_party\
+;   dynolog\third_party\prometheus-cpp\3rdparty\civetweb\src\third_party\
+;   duktape-1.8.0\LICENSE.txt
+;
+; That is 272 characters once this project's own directory name and the
+; installer\..\dist\PIP\ detour are in front of it, and the compiler fails
+; with "The system cannot find the path specified" - which reads like a missing
+; file and is not one.
+;
+; The fix is to stage the payload somewhere short rather than to drop the
+; files. They are licences: PIP redistributes torch, so torch's notices travel
+; with it.
+#ifndef DistDir
+  #define DistDir "..\dist\PIP"
+#endif
 
 [Setup]
 ; Stable across versions - it is what makes an upgrade replace an install

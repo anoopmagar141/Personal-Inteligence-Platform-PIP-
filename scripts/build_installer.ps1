@@ -28,21 +28,36 @@
 # there.
 
 param(
-    # Package whatever is already in dist\PIP instead of rebuilding it. For
+    # Package whatever is already staged instead of rebuilding it. For
     # iterating on the installer itself, where a three-minute copy between
     # attempts is the slowest part of the loop.
     [switch]$SkipBuild,
     # Produce the zip even when Inno Setup is available - for checking that
     # path still works.
-    [switch]$ZipOnly
+    [switch]$ZipOnly,
+    # Where to build the payload. Short on purpose, and NOT inside the project:
+    # Windows limits a path to 260 characters for most callers, the Inno
+    # compiler included, and torch ships license files nested deep enough that
+    # this project's own directory name is the difference between building and
+    # failing with "the system cannot find the path specified".
+    #
+    # Defaults to the root of whichever drive the project is on, so the payload
+    # stays on the same disk - copying a gigabyte across drives is minutes, and
+    # across a network drive is worse.
+    [string]$Payload
 )
 
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 $dist = Join-Path $root "dist"
-$payload = Join-Path $dist "PIP"
 $iss = Join-Path $root "installer\PIP.iss"
+
+if (-not $Payload) {
+    $drive = (Split-Path -Qualifier $root)     # "D:" for D:\...
+    $Payload = Join-Path "$drive\" "pip-build\PIP"
+}
+$payload = $Payload
 
 Write-Host ""
 Write-Host "  PIP - installer build" -ForegroundColor Cyan
@@ -66,7 +81,7 @@ if ($SkipBuild) {
     # NOT $LASTEXITCODE. That is the exit code of the last NATIVE command the
     # script ran, which is robocopy - whose success codes are 1 and 3, not 0.
     # Reading it here declared every successful build a failure.
-    & (Join-Path $PSScriptRoot "build_portable.ps1")
+    & (Join-Path $PSScriptRoot "build_portable.ps1") $payload
     if (-not (Test-Path (Join-Path $payload "python\python.exe"))) {
         Write-Host "  ERROR: the portable build did not produce a payload." -ForegroundColor Red
         exit 1
@@ -74,6 +89,7 @@ if ($SkipBuild) {
 }
 
 $sizeMb = [math]::Round((Get-ChildItem $payload -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB)
+Write-Host "  payload     : $payload  ($sizeMb MB)" -ForegroundColor DarkGray
 
 # --- find Inno Setup -------------------------------------------------------
 # The compiler is not on PATH after any of its installers, so this looks in the
@@ -114,7 +130,8 @@ if ($iscc) {
     Write-Host "  ($sizeMb MB in, LZMA2 - this takes a few minutes)" -ForegroundColor DarkGray
     Write-Host ""
 
-    & $iscc /Q $iss
+    # The payload is not where the .iss defaults to, so it is passed in.
+    & $iscc /Q "/DDistDir=$payload" $iss
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  ERROR: ISCC failed ($LASTEXITCODE)." -ForegroundColor Red
         exit 1
