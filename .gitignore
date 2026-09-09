@@ -54,6 +54,22 @@ data/chroma.superseded-*/
 # a database that is itself not tracked.
 data/demo_seed_*.json
 
+# The picture shown on the sign-in screen. A photograph of whoever uses this
+# machine, written by POST /profile/picture/sign-in and deleted by unpublishing
+# it - the one file in data/ that is a person rather than their data, and the
+# one this repo would leak in a screenshot of its own file list.
+data/signin-picture
+
+# Work the process could not finish and left for the next start: the markers
+# naming a profile to erase or a staged restore to install, and the converted
+# database and salt a restore writes beside the live pair. Machine-local by
+# definition - a marker names paths on THIS disk - and the staged pair is a
+# whole encrypted database that is about to be renamed over pip.db anyway.
+data/pending-deletion.json
+data/pending-restore.json
+data/restore-*.tmp.db
+data/restore-*.tmp.salt
+
 # Portable build output (scripts/build_portable.ps1) - over a gigabyte of
 # copied interpreter and dependencies, all of it reproducible from .venv.
 dist/
