@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-10] claude · Shipped MSVCP140/VCRUNTIME140/VCRUNTIME140_1 in the payload's app\ folder and made the payload gate require them · why: the Flutter exe imports them, a clean Windows install has none, and this build machine's System32 hid that from every test · files: scripts/build_portable.ps1, scripts/build_installer.ps1, docs/ARCHITECTURE.md
+
 - [2026-09-10] claude · Replaced the iris artwork with the six-node mark, rendered it to both .ico files, the wizard panel and a light/dark pair of app assets, and rebuilt the installer from it · why: the mark PIP ships under changed, and one script owning every raster is what stops the window icon, the installer and the picture inside the app drifting apart · files: installer/pip-mark.svg, installer/pip-iris-blue.svg (deleted), scripts/make_icons.py, installer/PIP.iss, frontend/flutter/lib/logo.dart, frontend/flutter/pubspec.yaml, frontend/flutter/assets/*, frontend/flutter/windows/runner/resources/app_icon.ico
 
 - [2026-09-10] claude · Rebuilt dist/PIP-Setup.exe from this code (twice: the first predated the Backup-tab refresh fix found by running it) · why: the shipped installer predated the in-app restore and the thinking mark; final sha256 69F2791DC58E76873103424E0C2E795770FB0E644154DF7E05583A19F220BFCD, app.so 842E8D94 verified identical in build tree and payload · files: dist/PIP-Setup.exe (gitignored artefact; recorded here for provenance)

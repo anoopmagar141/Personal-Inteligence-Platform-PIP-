@@ -231,6 +231,19 @@ so there is one write path, not two.
   file and is not one. `build_portable.ps1`'s own default of `dist/PIP` is for
   running it by hand, and is not what the installer uses.
 
+- **The payload ships the Visual C++ runtime beside the application.**
+  `pip_flutter_client.exe` imports `MSVCP140.dll`, `VCRUNTIME140.dll` and
+  `VCRUNTIME140_1.dll`, which are not part of a clean Windows install; they
+  arrive with the redistributable or with Visual Studio, so every build machine
+  has them and no build machine can notice they are missing. Windows resolves a
+  DLL from the executable's own directory and then System32, and never from a
+  sibling folder - so the copies already in the payload under `python\` did
+  nothing for the application. `build_portable.ps1` copies all three into
+  `app\`, from the VC Redist folder if there is one and System32 otherwise, and
+  `Assert-PayloadComplete` refuses to compile without them. App-local rather
+  than a prerequisite because the installer's premise is that it needs no admin
+  rights. `flutter_windows.dll` itself imports only system DLLs.
+
 ## Inconsistencies worth knowing
 
 - **`backend/observer/` is an empty directory.** All Observer code is in

@@ -121,6 +121,53 @@ Invoke-Robocopy $sitePackages (Join-Path $out "python\Lib\site-packages") @("/XD
 Write-Host "  [3/5] application" -ForegroundColor DarkGray
 Invoke-Robocopy $flutterRelease (Join-Path $out "app")
 
+# --- the C++ runtime the application is built against ----------------------
+#
+# WHY THIS IS NOT SOMEBODY ELSE'S PROBLEM
+#
+# pip_flutter_client.exe imports MSVCP140.dll, VCRUNTIME140.dll and
+# VCRUNTIME140_1.dll - the Visual C++ 2015-2022 runtime, which is NOT part of a
+# clean Windows install. It arrives with the redistributable, or with Visual
+# Studio, and a build machine has it either way.
+#
+# That is exactly why it was missing here and nothing noticed. Windows resolves
+# a DLL from the executable's own directory and then System32; this machine has
+# all three in System32, courtesy of Visual Studio, so every test passed while
+# the payload shipped none of them. On a machine without the redistributable
+# the window would never open - "VCRUNTIME140_1.dll was not found" - and the
+# only test that could have caught it is one on a machine that is not this one.
+#
+# Copied beside the exe rather than requiring the redistributable, because
+# app-local deployment is what Microsoft documents for exactly this case and it
+# removes a prerequisite from an installer whose whole premise is that it needs
+# no admin rights. The files come from the VC Redist folder, which is the copy
+# intended for redistribution, and fall back to System32 only if that is
+# absent.
+#
+# It FAILS rather than warns. A payload missing these is a payload that cannot
+# start, and the point of finding this late is not to find it again.
+$vcRuntime = @("MSVCP140.dll", "VCRUNTIME140.dll", "VCRUNTIME140_1.dll")
+$redistDir = Get-ChildItem "C:\Program Files*\Microsoft Visual Studio\*\*\VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT" -Directory -ErrorAction SilentlyContinue |
+    Sort-Object FullName -Descending | Select-Object -First 1
+
+foreach ($dll in $vcRuntime) {
+    $source = $null
+    if ($redistDir -and (Test-Path (Join-Path $redistDir.FullName $dll))) {
+        $source = Join-Path $redistDir.FullName $dll
+    } elseif (Test-Path (Join-Path $env:SystemRoot "System32\$dll")) {
+        $source = Join-Path $env:SystemRoot "System32\$dll"
+    }
+    if (-not $source) {
+        Write-Host "  ERROR: $dll was not found on this machine." -ForegroundColor Red
+        Write-Host "         The application imports it and a clean Windows install does" -ForegroundColor DarkGray
+        Write-Host "         not have it, so a payload without it cannot start." -ForegroundColor DarkGray
+        Write-Host "         Install the Visual C++ 2015-2022 redistributable and rebuild." -ForegroundColor DarkGray
+        exit 1
+    }
+    Copy-Item $source (Join-Path $out "app\$dll") -Force
+}
+Write-Host "        + $($vcRuntime.Count) VC++ runtime DLL(s) from $(if ($redistDir) { 'the VC Redist folder' } else { 'System32' })" -ForegroundColor DarkGray
+
 Write-Host "  [4/5] backend" -ForegroundColor DarkGray
 foreach ($dir in @("backend", "config", "shared", "scripts")) {
     # tests are excluded for the same reason Doc is: they are for developing

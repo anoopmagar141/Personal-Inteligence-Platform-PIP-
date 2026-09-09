@@ -114,6 +114,12 @@ function Assert-PayloadComplete {
         "app\pip_flutter_client.exe",
         "app\data\app.so",
         "app\flutter_windows.dll",
+        # The VC++ runtime the application links against. Absent from a clean
+        # Windows install and absent from the payload until it was noticed, so
+        # it is checked here rather than trusted to keep being copied.
+        "app\MSVCP140.dll",
+        "app\VCRUNTIME140.dll",
+        "app\VCRUNTIME140_1.dll",
         "backend\api\server.py",
         "backend\core\profiles.py",
         "config\provider_consent.json",
