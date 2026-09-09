@@ -19,6 +19,31 @@ class FakeApi extends ApiClient {
   String? pulled;
   Object? startPullThrows;
 
+  /// What the backend says PIP is currently using. Null means it could not be
+  /// read, which the browser treats as "do not withhold Delete from anything".
+  String? active;
+  bool cancelled = false;
+  final List<String> deleted = [];
+  Object? deleteThrows;
+
+  @override
+  Future<String> getActiveModel() async {
+    if (active == null) throw Exception('no active model');
+    return active!;
+  }
+
+  @override
+  Future<void> cancelPull() async {
+    cancelled = true;
+    pullStatus = {...?pullStatus, 'status': 'cancelled', 'detail': 'cancelled'};
+  }
+
+  @override
+  Future<void> deleteModel(String modelName) async {
+    if (deleteThrows != null) throw deleteThrows!;
+    deleted.add(modelName);
+  }
+
   @override
   Future<Map<String, dynamic>> getModelCatalog() async => catalog;
 
@@ -173,5 +198,165 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('llama3.1:8b'), findsOneWidget);
+  });
+
+  // --- stopping a download -------------------------------------------------
+
+  testWidgets('a running download offers to be cancelled', (tester) async {
+    final api = FakeApi(
+      catalog: {'vram_gb': 8.0, 'models': [_model('mistral:7b', sizeGb: 4.1)], 'error': null},
+      pullStatus: {
+        'status': 'pulling', 'model': 'qwen2.5:7b',
+        'completed': 900000000, 'total': 4400000000, 'detail': 'downloading', 'error': null,
+      },
+    );
+
+    await tester.pumpWidget(_wrap(ModelBrowser(api: api, onChanged: () {})));
+    await tester.pump();
+
+    expect(find.text('Downloading qwen2.5:7b'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pump();
+
+    expect(api.cancelled, isTrue);
+  });
+
+  testWidgets('nothing offers to be cancelled when nothing is downloading', (tester) async {
+    final api = FakeApi(
+      catalog: {'vram_gb': 8.0, 'models': [_model('mistral:7b', sizeGb: 4.1)], 'error': null},
+    );
+
+    await tester.pumpWidget(_wrap(ModelBrowser(api: api, onChanged: () {})));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TextButton, 'Cancel'), findsNothing);
+  });
+
+  testWidgets('a cancelled download is not dressed as a failure', (tester) async {
+    // A red line under something somebody chose to do is the wrong answer, and
+    // what they most want to know next is whether stopping cost them the 900MB.
+    final api = FakeApi(
+      catalog: {'vram_gb': 8.0, 'models': [_model('mistral:7b', sizeGb: 4.1)], 'error': null},
+      pullStatus: {
+        'status': 'cancelled', 'model': 'qwen2.5:7b',
+        'completed': 900000000, 'total': 4400000000, 'detail': 'cancelled', 'error': null,
+      },
+    );
+
+    await tester.pumpWidget(_wrap(ModelBrowser(api: api, onChanged: () {})));
+    await tester.pump();
+
+    expect(find.text('Stopped downloading qwen2.5:7b'), findsOneWidget);
+    expect(find.textContaining('carries on from here'), findsOneWidget);
+  });
+
+  // --- removing a pulled model ---------------------------------------------
+
+  testWidgets('a pulled model offers to be deleted', (tester) async {
+    final api = FakeApi(catalog: {
+      'vram_gb': 8.0,
+      'models': [
+        _model('llama3.1:8b', pulled: true, fits: true, sizeGb: 4.7),
+        _model('mistral:7b', fits: true, sizeGb: 4.1),
+      ],
+      'error': null,
+    })..active = 'phi3:mini';
+
+    await tester.pumpWidget(_wrap(ModelBrowser(api: api, onChanged: () {})));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TextButton, 'Delete'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Download'), findsOneWidget);
+  });
+
+  testWidgets('the model PIP is using is not offered for deletion', (tester) async {
+    // The backend refuses it too. A button whose only outcome is an
+    // explanation of why it did nothing is worse than saying what to do.
+    final api = FakeApi(catalog: {
+      'vram_gb': 8.0,
+      'models': [_model('llama3.1:8b', pulled: true, fits: true, sizeGb: 4.7)],
+      'error': null,
+    })..active = 'llama3.1:8b';
+
+    await tester.pumpWidget(_wrap(ModelBrowser(api: api, onChanged: () {})));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TextButton, 'Delete'), findsNothing);
+    expect(find.text('In use'), findsOneWidget);
+  });
+
+  testWidgets('deleting asks first, and says what it gives back', (tester) async {
+    final api = FakeApi(catalog: {
+      'vram_gb': 8.0,
+      'models': [_model('gemma2:9b', pulled: true, fits: true, sizeGb: 5.4)],
+      'error': null,
+    })..active = 'phi3:mini';
+
+    await tester.pumpWidget(_wrap(ModelBrowser(api: api, onChanged: () {})));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete gemma2:9b?'), findsOneWidget);
+    expect(find.textContaining('frees about 5.4GB on disk'), findsOneWidget);
+    // The reason this is a light confirmation and not the profile delete's.
+    expect(find.textContaining('Nothing of yours is in a model'), findsOneWidget);
+    expect(api.deleted, isEmpty);
+  });
+
+  testWidgets('cancelling the confirmation deletes nothing', (tester) async {
+    final api = FakeApi(catalog: {
+      'vram_gb': 8.0,
+      'models': [_model('gemma2:9b', pulled: true, fits: true, sizeGb: 5.4)],
+      'error': null,
+    })..active = 'phi3:mini';
+
+    await tester.pumpWidget(_wrap(ModelBrowser(api: api, onChanged: () {})));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(api.deleted, isEmpty);
+  });
+
+  testWidgets('confirming deletes it and tells the caller to re-read', (tester) async {
+    // The list one screen up still offers a name Ollama no longer has.
+    var changed = false;
+    final api = FakeApi(catalog: {
+      'vram_gb': 8.0,
+      'models': [_model('gemma2:9b', pulled: true, fits: true, sizeGb: 5.4)],
+      'error': null,
+    })..active = 'phi3:mini';
+
+    await tester.pumpWidget(_wrap(ModelBrowser(api: api, onChanged: () => changed = true)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(api.deleted, ['gemma2:9b']);
+    expect(changed, isTrue);
+  });
+
+  testWidgets("a refused delete shows the server's own sentence", (tester) async {
+    final api = FakeApi(catalog: {
+      'vram_gb': 8.0,
+      'models': [_model('gemma2:9b', pulled: true, fits: true, sizeGb: 5.4)],
+      'error': null,
+    })
+      ..active = 'phi3:mini'
+      ..deleteThrows = ApiException(422, '{"detail":"gemma2:9b is downloading right now"}');
+
+    await tester.pumpWidget(_wrap(ModelBrowser(api: api, onChanged: () {})));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('gemma2:9b is downloading right now'), findsOneWidget);
   });
 }

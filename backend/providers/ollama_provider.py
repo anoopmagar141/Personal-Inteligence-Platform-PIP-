@@ -130,6 +130,41 @@ MODEL_CATALOG: List[Dict[str, Any]] = [
 ]
 
 
+def delete_model(name: str, host: str = "http://localhost:11434") -> None:
+    """
+    Remove a pulled model from Ollama's store.
+
+    DELETE /api/delete, which frees the weights on disk - the reason anybody
+    wants this at all, since these are gigabytes each and a machine that pulled
+    four of them to compare has spent twenty. It is not destructive in the way
+    the rest of PIP means the word: nothing of the user's is in a model, and
+    the same name can be pulled again.
+
+    A name Ollama does not have comes back 404, which is reported rather than
+    swallowed: "it was already gone" and "you typed it wrong" look identical
+    from here, and only one of them is fine.
+    """
+    payload = json.dumps({"name": name}).encode("utf-8")
+    req = urllib.request.Request(
+        f"{host}/api/delete", data=payload, method="DELETE",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            response.read()
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", errors="replace").strip()
+        except Exception:
+            pass
+        raise ProviderExecutionError(
+            f"Ollama would not delete '{name}': {e.code} {detail or e.reason}"
+        )
+    except urllib.error.URLError as e:
+        raise ProviderUnavailableError(f"Ollama is unreachable at {host}: {e}")
+
+
 def detect_vram_gb() -> Optional[float]:
     """
     Total VRAM on the first GPU, or None if it cannot be determined.
@@ -156,7 +191,16 @@ def detect_vram_gb() -> Optional[float]:
         return None
 
 
-def pull_model(name: str, on_progress, host: str = "http://localhost:11434") -> None:
+class PullCancelled(Exception):
+    """The caller asked for the pull to stop. Not a failure - an answer."""
+
+
+def pull_model(
+    name: str,
+    on_progress,
+    host: str = "http://localhost:11434",
+    should_cancel=None,
+) -> None:
     """
     Pull a model, reporting progress as Ollama streams it.
 
@@ -170,6 +214,13 @@ def pull_model(name: str, on_progress, host: str = "http://localhost:11434") -> 
     and on any object carrying an `error`, which is how Ollama reports a name
     that does not exist in its library - the one mistake a free-text model field
     makes easy.
+
+    should_cancel, when given, is checked between events and raises
+    PullCancelled if it returns true. Closing the response is what actually
+    stops the transfer - Ollama has no cancel endpoint, and abandoning the
+    stream is how its own CLI stops a pull too. Nothing is wasted by stopping:
+    the blobs already written stay in Ollama's store, so pulling the same model
+    again resumes rather than restarting.
     """
     payload = json.dumps({"name": name, "stream": True}).encode("utf-8")
     req = urllib.request.Request(
@@ -183,6 +234,12 @@ def pull_model(name: str, on_progress, host: str = "http://localhost:11434") -> 
         # tells the caller it is still alive.
         with urllib.request.urlopen(req) as response:
             for raw in response:
+                # Checked per line rather than per second: a line arrives many
+                # times a second during a transfer, so this is the finest
+                # granularity available without a second thread, and leaving
+                # the `with` block is what closes the connection.
+                if should_cancel is not None and should_cancel():
+                    raise PullCancelled(f"the download of '{name}' was cancelled")
                 line = raw.decode("utf-8").strip()
                 if not line:
                     continue

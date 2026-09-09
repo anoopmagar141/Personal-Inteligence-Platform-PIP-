@@ -50,6 +50,16 @@ class ModelBrowserState extends State<ModelBrowser> {
   Map<String, dynamic>? _catalog;
   String? _error;
 
+  /// The model PIP is using. Read here so Delete can be withheld from it
+  /// rather than offered and then refused - the backend refuses either way,
+  /// but a button that exists only to explain why it did nothing is worse
+  /// than no button.
+  String? _active;
+
+  /// Names currently being deleted, so their row can say so and cannot be
+  /// asked twice.
+  final Set<String> _deleting = {};
+
   final _nameController = TextEditingController();
   Timer? _poll;
   Map<String, dynamic>? _pull;
@@ -71,9 +81,71 @@ class ModelBrowserState extends State<ModelBrowser> {
   Future<void> _load() async {
     try {
       final catalog = await widget.api.getModelCatalog();
-      if (mounted) setState(() { _catalog = catalog; _error = null; });
+      // Not fatal, and not worth an error line on this screen: without it the
+      // only cost is that Delete is offered for the active model and the
+      // backend refuses it, which is the same guard one layer out.
+      String? active;
+      try {
+        active = await widget.api.getActiveModel();
+      } catch (_) {}
+      if (mounted) setState(() { _catalog = catalog; _active = active; _error = null; });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _cancelPull() async {
+    setState(() => _error = null);
+    try {
+      await widget.api.cancelPull();
+      await _refreshPullStatus();
+    } catch (e) {
+      if (mounted) setState(() => _error = e is ApiException ? e.detail : e.toString());
+    }
+  }
+
+  /// Remove a pulled model, after saying how much comes back and what it costs
+  /// to undo.
+  ///
+  /// Confirmed, but lightly. Nothing of the user's is inside a model - it is
+  /// somebody else's weights, and the same name pulls again - so the ceremony
+  /// here is proportionate to "you will wait for a download", not to the
+  /// profile delete's "this cannot be undone".
+  Future<void> _deleteModel(String name, Object? sizeGb) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete $name?'),
+        content: Text(
+          sizeGb == null
+              ? 'This frees the space it takes on disk. Nothing of yours is in a '
+                  'model - you can download it again by name whenever you want.'
+              : 'This frees about ${sizeGb}GB on disk. Nothing of yours is in a '
+                  'model - you can download it again by name whenever you want.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: context.pip.danger),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() { _deleting.add(name); _error = null; });
+    try {
+      await widget.api.deleteModel(name);
+      await _load();
+      // The model list one screen up is now wrong: it still offers a name
+      // Ollama no longer has.
+      widget.onChanged();
+    } catch (e) {
+      if (mounted) setState(() => _error = e is ApiException ? e.detail : e.toString());
+    } finally {
+      if (mounted) setState(() => _deleting.remove(name));
     }
   }
 
@@ -218,17 +290,36 @@ class ModelBrowserState extends State<ModelBrowser> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            switch (status) {
-              'pulling' => 'Downloading ${_pull!['model']}',
-              'done' => 'Downloaded ${_pull!['model']}',
-              _ => 'Could not download ${_pull!['model']}',
-            },
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: status == 'error' ? pip.danger : pip.text,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  switch (status) {
+                    'pulling' => 'Downloading ${_pull!['model']}',
+                    'done' => 'Downloaded ${_pull!['model']}',
+                    'cancelled' => 'Stopped downloading ${_pull!['model']}',
+                    _ => 'Could not download ${_pull!['model']}',
+                  },
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: status == 'error' ? pip.danger : pip.text,
+                  ),
+                ),
+              ),
+              // Only while it is running, and disabled the moment it has been
+              // asked - the backend reports 'cancelling' in detail before the
+              // status changes, and a button that stays live through that
+              // invites a second click that means nothing.
+              if (status == 'pulling')
+                TextButton(
+                  onPressed: _pull!['detail'] == 'cancelling' ? null : _cancelPull,
+                  child: Text(
+                    _pull!['detail'] == 'cancelling' ? 'Stopping...' : 'Cancel',
+                    style: TextStyle(fontSize: 12.5, color: pip.textMuted),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 6),
           if (status == 'pulling') ...[
@@ -245,6 +336,12 @@ class ModelBrowserState extends State<ModelBrowser> {
             ),
           ] else if (status == 'error')
             Text('${_pull!['error']}', style: TextStyle(fontSize: 12, color: pip.danger))
+          else if (status == 'cancelled')
+            // Worth saying, because it decides whether cancelling felt like a
+            // waste: Ollama keeps the blobs it already wrote, so downloading
+            // this again picks up where this stopped.
+            Text('What downloaded is kept. Downloading it again carries on from here.',
+                style: TextStyle(fontSize: 12, color: pip.textMuted))
           else
             Text('Select it above to make it active.',
                 style: TextStyle(fontSize: 12, color: pip.textMuted)),
@@ -311,6 +408,26 @@ class ModelBrowserState extends State<ModelBrowser> {
             TextButton(
               onPressed: _busy ? null : () => _pullModel(name),
               child: const Text('Download'),
+            )
+          else if (name == _active)
+            // No Delete on the model PIP is using. The backend refuses it too,
+            // but a button whose only outcome is an explanation of why it did
+            // nothing is worse than the label that says what to do instead.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Text('In use',
+                  style: TextStyle(fontSize: 12, color: pip.textFaint)),
+            )
+          else if (_deleting.contains(name))
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: SizedBox(
+                  width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            TextButton(
+              onPressed: _busy ? null : () => _deleteModel(name, sizeGb),
+              child: Text('Delete', style: TextStyle(fontSize: 12.5, color: pip.danger)),
             ),
         ],
       ),

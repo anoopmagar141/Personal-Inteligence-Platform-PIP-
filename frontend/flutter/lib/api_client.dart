@@ -374,6 +374,27 @@ class ApiClient {
     await post('/llm/pull', {'model_name': modelName});
   }
 
+  /// Ask the running download to stop.
+  ///
+  /// Returns as soon as the backend has asked, not when it has stopped - the
+  /// puller notices between lines of Ollama's response. The status this screen
+  /// already polls reports 'cancelled' when it really has, so there is no
+  /// second mechanism to keep working.
+  ///
+  /// Nothing is wasted: the blobs already written stay in Ollama's store, so
+  /// pulling the same model again resumes rather than starting over.
+  Future<void> cancelPull() async {
+    await delete('/llm/pull');
+  }
+
+  /// Remove a pulled model from Ollama's store, freeing its weights on disk.
+  ///
+  /// Refused for the model PIP is currently using, and for one being
+  /// downloaded right now - both come back as the server's own sentence.
+  Future<void> deleteModel(String modelName) async {
+    await delete('/llm/models', {'model_name': modelName});
+  }
+
   Future<Map<String, dynamic>> getPullStatus() async {
     return await get('/llm/pull') as Map<String, dynamic>;
   }

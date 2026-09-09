@@ -456,7 +456,7 @@ def api_llm_catalog() -> dict[str, Any]:
 # distributed coordination - and a second concurrent pull of the same model is
 # not a thing to support, it is a thing to refuse.
 _pull_state: dict[str, Any] = {
-    "status": "idle",   # idle | pulling | done | error
+    "status": "idle",   # idle | pulling | done | error | cancelled
     "model": None,
     "completed": 0,
     "total": 0,
@@ -464,6 +464,12 @@ _pull_state: dict[str, Any] = {
     "error": None,
 }
 _pull_lock = threading.Lock()
+
+# Set to ask the pull thread to stop. An Event rather than a flag in
+# _pull_state, because the puller reads it between every line of Ollama's
+# response and taking the state lock that often would put the progress reporter
+# and the reader in each other's way for no gain.
+_pull_cancel = threading.Event()
 
 
 def api_pull_status() -> dict[str, Any]:
@@ -486,7 +492,7 @@ def api_start_pull(payload: dict[str, Any]) -> dict[str, Any]:
     and a name that does not exist comes back as an error from Ollama itself -
     which is a better source of truth than any list PIP could ship.
     """
-    from backend.providers.ollama_provider import pull_model
+    from backend.providers.ollama_provider import PullCancelled, pull_model
 
     model_name = (payload.get("model_name") or "").strip()
     if not model_name:
@@ -497,6 +503,10 @@ def api_start_pull(payload: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"already pulling {_pull_state['model']} - wait for it to finish")
         _pull_state.update(status="pulling", model=model_name, completed=0,
                            total=0, detail="starting", error=None)
+    # Cleared as the pull STARTS, not when one ends. A cancel that arrived
+    # while nothing was running would otherwise sit set and stop the next pull
+    # before it had transferred anything.
+    _pull_cancel.clear()
 
     def run() -> None:
         def on_progress(event: dict[str, Any]) -> None:
@@ -511,7 +521,15 @@ def api_start_pull(payload: dict[str, Any]) -> dict[str, Any]:
                 _pull_state["detail"] = event.get("status", "")
 
         try:
-            pull_model(model_name, on_progress)
+            pull_model(model_name, on_progress, should_cancel=_pull_cancel.is_set)
+        except PullCancelled:
+            # Not an error, and not reported as one. The partial download stays
+            # in Ollama's store, so pulling this model again resumes from where
+            # this stopped rather than starting over - which is worth the user
+            # knowing before they decide whether cancelling costs them anything.
+            with _pull_lock:
+                _pull_state.update(status="cancelled", detail="cancelled", error=None)
+            return
         except Exception as e:
             with _pull_lock:
                 _pull_state.update(status="error", error=str(e))
@@ -526,6 +544,69 @@ def api_start_pull(payload: dict[str, Any]) -> dict[str, Any]:
     # abandoning it - and blocking shutdown on a 5GB transfer would be worse.
     threading.Thread(target=run, name=f"pull-{model_name}", daemon=True).start()
     return {"status": "pulling", "model_name": model_name}
+
+
+def api_cancel_pull() -> dict[str, Any]:
+    """
+    Ask the running pull to stop.
+
+    Returns rather than waits. The puller notices between lines of Ollama's
+    response, which during a transfer is many times a second, but a stalled
+    connection could take longer - and a request that blocked until a socket
+    noticed would be a cancel button that hangs.
+
+    So the answer is "asked", and the status endpoint the screen is already
+    polling reports "cancelled" when it has actually stopped. The client had to
+    poll to draw the progress bar anyway; this needs no second mechanism.
+    """
+    with _pull_lock:
+        if _pull_state["status"] != "pulling":
+            raise ValueError("nothing is downloading")
+        model_name = _pull_state["model"]
+        _pull_state["detail"] = "cancelling"
+    _pull_cancel.set()
+    return {"status": "cancelling", "model_name": model_name}
+
+
+def api_delete_model(conn, payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Remove a pulled model from Ollama's store.
+
+    NOT the same class of thing as deleting a profile, and the ceremony is
+    different for a reason: nothing of the user's is inside a model. It is
+    several gigabytes of somebody else's weights that can be pulled again by
+    name, so what this recovers is disk space and what it costs is a download.
+
+    Refused in two cases, both because the refusal is more useful than the
+    delete:
+
+      The model PIP is currently using. Removing it would leave the pipeline
+      pointing at a name Ollama no longer has, and the failure would surface as
+      a broken chat rather than as anything to do with this screen. Choose
+      another model first - which is one click, on the same screen.
+
+      The model being downloaded right now. Deleting a store Ollama is actively
+      writing into is a race with no useful outcome; cancel it instead, which
+      is the button next to it.
+    """
+    from backend.providers.ollama_provider import delete_model
+
+    model_name = (payload.get("model_name") or "").strip()
+    if not model_name:
+        raise ValueError("model_name is required")
+
+    active = pipeline.get_active_model_name(conn)
+    if model_name == active:
+        raise ValueError(
+            f"{model_name} is the model PIP is using. Choose a different one first."
+        )
+
+    with _pull_lock:
+        if _pull_state["status"] == "pulling" and _pull_state["model"] == model_name:
+            raise ValueError(f"{model_name} is downloading right now - cancel that first.")
+
+    delete_model(model_name)
+    return {"status": "deleted", "model_name": model_name}
 
 
 def api_get_active_model(conn) -> dict[str, Any]:
@@ -2263,6 +2344,36 @@ try:
     @app.get(f"{BASE_PREFIX}/llm/pull")
     def llm_pull_status():
         return api_pull_status()
+
+    @app.delete(f"{BASE_PREFIX}/llm/pull")
+    def cancel_llm_pull():
+        """DELETE on the pull resource: it ends the thing GET reports on."""
+        from fastapi import HTTPException
+        try:
+            return api_cancel_pull()
+        except ValueError as e:
+            # 409, not 400: the request is well formed and there is simply
+            # nothing running - which a client that raced a finishing download
+            # should be able to tell apart from having sent nonsense.
+            raise HTTPException(status_code=409, detail=str(e))
+
+    @app.delete(f"{BASE_PREFIX}/llm/models")
+    def delete_llm_model(payload: dict[str, Any]):
+        """
+        The name travels in the body, not the path. Model names carry colons
+        and, for a Hugging Face GGUF reference, slashes - and a slash in a path
+        parameter is a different route, not a different model.
+        """
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_delete_model(conn, payload)
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=str(e))
+            except Exception as e:
+                # Ollama refusing, or being unreachable. Its sentence is more
+                # useful than a 500 with nothing in it.
+                raise HTTPException(status_code=502, detail=str(e))
 
     @app.get(f"{BASE_PREFIX}/llm/active-model")
     def get_active_model():
