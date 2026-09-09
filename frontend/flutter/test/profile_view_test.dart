@@ -90,7 +90,11 @@ Map<String, dynamic> row(
 Future<FakeApi> pumpProfile(WidgetTester tester, List<dynamic> fields) async {
   final api = FakeApi()..fields = fields;
   await tester.pumpWidget(
-    MaterialApp(home: Scaffold(body: ProfileView(api: api))),
+    MaterialApp(
+      home: Scaffold(
+        body: ProfileView(api: api, onCloseChat: () {}, onSignedOut: () {}),
+      ),
+    ),
   );
   await tester.pumpAndSettle();
   return api;
@@ -444,7 +448,11 @@ void main() {
     final api = FakeApi()
       ..fields = fullIdentity()
       ..status = null;
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ProfileView(api: api))));
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ProfileView(api: api, onCloseChat: () {}, onSignedOut: () {}),
+      ),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('Anup Magar'), findsOneWidget);

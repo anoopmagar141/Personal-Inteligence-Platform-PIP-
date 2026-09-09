@@ -38,12 +38,15 @@ already has the API token and local access, not a lockout that could leave the
 owner of the machine unable to open their own data.
 """
 
+import logging
 import os
 import threading
 import time
 from pathlib import Path
 
 from backend.core import db_key
+
+logger = logging.getLogger(__name__)
 
 # Held for the life of the process, never written down. Guarded because the
 # unlock endpoint and a request being served can touch it at the same moment.
@@ -225,3 +228,143 @@ def set_initial_password(password: str, db_path: str) -> None:
     with _guard:
         _key = candidate
     os.environ["PIP_DB_KEY"] = candidate
+
+
+class WrongPasswordError(Exception):
+    """The current password given does not open this profile."""
+
+
+def change_password(current_password: str, new_password: str, db_path: str) -> None:
+    """
+    Re-key this profile's database from one password to another, in place.
+
+    WHY THIS IS NOT scripts/set_db_password.py
+    ------------------------------------------
+    That script exists and does the same PRAGMA rekey, and for a long time it
+    was the honest place for this: changing a password is irreversible, and a
+    console that makes you type it twice is more ceremony than a form. But the
+    sign-in screen has already moved into the application, and leaving the
+    change behind means the only way to rotate a password is to find a
+    PowerShell prompt and a virtualenv - which for anyone who installed PIP
+    rather than cloned it is the same as there being no way at all.
+
+    Two things it does that the script does not, both required rather than
+    improvements: it re-encrypts the vector index (see vector_store.reencrypt -
+    the script silently orphans it), and it hands the new key to this process,
+    which is holding the old one and would otherwise keep using it against a
+    database that no longer answers to it.
+
+    THE ORDER IS THE SAFETY PROPERTY
+    --------------------------------
+      1. Prove the current password. Nothing has changed yet if it is wrong.
+      2. Keep the old salt in memory. It is about to be overwritten, and it is
+         the only thing that can turn the old password back into the old key.
+      3. New salt, new key, PRAGMA rekey - transactional, so a failure here
+         leaves the database readable under the old key.
+      4. Verify the new key opens it. If it does not, put the old salt back:
+         the database and the password the user still knows still match.
+      5. Only now re-encrypt the index and adopt the new key.
+
+    There is still no recovery for a FORGOTTEN password - that is Part 10.1 and
+    this does not change it. What this rules out is a failed change leaving a
+    remembered password no longer working, which would be the same loss caused
+    by the software rather than by the user.
+    """
+    global _key, _failed_attempts
+
+    from backend.memory import profile_store
+
+    if not new_password or not new_password.strip():
+        raise ValueError("A new password is required.")
+    if len(new_password) < 8:
+        raise ValueError("Use at least 8 characters.")
+    if new_password == current_password:
+        raise ValueError("That is the password you already have.")
+
+    try:
+        old_salt = db_key.load_salt()
+    except db_key.NoSaltError:
+        raise ValueError(
+            "This profile has no password yet, so there is nothing to change."
+        )
+
+    old_key = db_key.derive_key(current_password, old_salt)
+    if not db_key.verify_key(db_path, old_key):
+        # Charged the same delay a wrong unlock is, for the same reason: this
+        # endpoint is reachable in a loop, and it is a password oracle if it
+        # answers instantly.
+        with _guard:
+            _failed_attempts += 1
+            penalty = min(_failed_attempts * 0.25, _MAX_PENALTY_SECONDS)
+        time.sleep(penalty)
+        raise WrongPasswordError("That is not your current password.")
+
+    with _guard:
+        _failed_attempts = 0
+
+    new_salt = db_key.create_salt()
+    new_key = db_key.derive_key(new_password, new_salt)
+
+    conn = profile_store.get_connection(db_path, old_key)
+    try:
+        conn.execute(f"PRAGMA rekey = \"x'{new_key}'\"")
+    except Exception as exc:
+        db_key.write_salt(old_salt)
+        raise ValueError(f"The database could not be re-encrypted: {exc}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if not db_key.verify_key(db_path, new_key):
+        # Ambiguous, and the two readings need different repairs. Either the
+        # rekey did not take - in which case the database is still under the
+        # old key and the old salt has to go back, or the password the user
+        # still knows stops working - or it DID take and the check is what
+        # failed, in which case restoring the old salt is the thing that would
+        # destroy access. Asking the old key which world this is settles it.
+        if db_key.verify_key(db_path, old_key):
+            db_key.write_salt(old_salt)
+            raise ValueError(
+                "The database did not open with the new password, so nothing "
+                "was changed. Your existing password still works."
+            )
+
+        # Neither key opens it. The new salt stays, because the database was
+        # last written under the new key and that is the only password with any
+        # chance of matching it; putting the old salt back would remove even
+        # that. Loud, and deliberately not swallowed.
+        logger.error(
+            "Password change: the database opens under neither the old nor the "
+            "new key. The new salt has been kept, since the last write was "
+            "under the new key."
+        )
+        raise ValueError(
+            "The database could not be verified after re-encrypting. Try your "
+            "NEW password; if it does not work, restore from a backup."
+        )
+
+    # The index, now that the database is proven. Best-effort by design: chroma/
+    # is rebuildable and never authoritative (ADR: the vector store is derived
+    # state), so failing here must not undo a rekey that has already succeeded -
+    # the cost of the failure is a re-embed, and the cost of unwinding a
+    # verified rekey to avoid it would be a second irreversible operation run in
+    # an error path.
+    try:
+        from backend.memory import vector_store
+
+        converted = vector_store.reencrypt(old_key, new_key)
+        logger.info(
+            f"Password change: re-encrypted {converted['converted']} chunks "
+            f"({converted['skipped']} left alone)."
+        )
+    except Exception as e:
+        logger.error(
+            f"The database was re-encrypted but the vector index was not ({e}). "
+            f"Documents will need re-indexing; the database itself is fine."
+        )
+
+    with _guard:
+        _key = new_key
+    os.environ["PIP_DB_KEY"] = new_key

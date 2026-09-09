@@ -153,7 +153,46 @@ so there is one write path, not two.
   convert it to `HTTPException(422)` so the client can show it.
 - **Two unlock states, two status codes.** 401 means the bearer token is wrong;
   423 means the token is fine but no password has opened the database.
-  `_UNLOCKED_PATHS` is the small set the sign-in screen itself needs.
+  `_UNLOCKED_PATHS` is the small set the sign-in screen itself needs, plus
+  `_UNLOCKED_PATH_RE` for the one per-profile path (`/auth/profiles/<slug>/
+  picture`) whose slug cannot be an exact string.
+- **A profile is changed or destroyed only from inside itself.** `POST
+  /auth/profiles` (create) is served while *locked*, because it writes a name
+  into an unencrypted registry and makes an empty folder; rename, `POST
+  /auth/password` and `DELETE /auth/profiles/<slug>` are refused unless the
+  caller is unlocked **and** the slug matches `profiles.active_slug()`. That
+  pairing is the only ownership test the application has — there is no account
+  server and no recovery, so the sole thing separating an owner from anyone
+  else with the disk is that the owner can turn a password into a key that
+  opens it. The two irreversible operations ask for the password again on top,
+  because being unlocked proves the database was opened, not who is asking now.
+- **`profiles.delete()` erases; `profiles.remove()` does not.** ADR-024's
+  "removal is a retraction, not an erasure" still governs `remove()`, whose
+  caller cannot be shown to own the data. `delete()` is reachable only after
+  that proof, so it destroys the bytes. The unit of deletion is the
+  per-profile paths (`pip.db` + its `-wal`/`-shm` sidecars, `salt.bin`,
+  `chroma/`, `documents/`, and any published sign-in picture) — **never the
+  profile's directory**, because the default profile's `data_dir` is `"."`,
+  which also holds `profiles.json`, `pip.lock` and `api_token.txt`. A
+  directory-level delete would be correct for every profile except that one,
+  where it would take every *other* profile's registry entry with it.
+- **A password change must re-key ChromaDB too.** Chunk ids are
+  `HMAC(db_key, file_path)`, chunk text and stored paths are `Fernet(db_key)`.
+  Rekeying only SQLite leaves the whole index unreadable and *nothing fails
+  loudly* — the Documents screen reads its counts from the `documents` table,
+  so it keeps displaying an index that has stopped answering.
+  `session_key.change_password()` calls `vector_store.reencrypt()` after the
+  rekey verifies; embeddings are carried over untouched, since a vector derived
+  from the plaintext is the same vector whatever key it is stored under.
+  `scripts/set_db_password.py` still has this hole and relies on a rebuild.
+- **The sign-in screen's profile picture is deliberately unencrypted.** That
+  screen draws profiles *before* a password exists, so anything it can render
+  is by definition readable without one — there is no third option. Publishing
+  writes a second copy of the avatar beside the profile's database
+  (`profiles.publish_signin_picture`), which is a real cost against the exact
+  threat the encryption exists for. Hence: off by default, one sentence in the
+  UI saying what it does, un-publishing deletes the file, and the file is on
+  the erase list for `delete()`.
 
 ## Inconsistencies worth knowing
 

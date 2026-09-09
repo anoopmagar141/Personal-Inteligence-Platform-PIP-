@@ -79,6 +79,32 @@ def create_salt(path: Path | None = None) -> bytes:
     return salt
 
 
+def write_salt(salt: bytes, path: Path | None = None) -> None:
+    """
+    Put a specific salt back. The undo half of create_salt().
+
+    Exists for one caller: a password change that has replaced the salt and
+    then failed. PRAGMA rekey is transactional, so a failure there leaves the
+    database still readable under the OLD key - but the old key can only be
+    re-derived from the old password if the old salt is still on disk, and
+    create_salt() has by then overwritten it. Without this, a rekey that fails
+    at the wrong moment turns a recoverable error into the permanent loss
+    Part 10.1 says has no recovery.
+
+    Not for choosing a salt. A salt should always come from create_salt(); this
+    only ever writes one that was already there a moment ago.
+    """
+    if len(salt) != SALT_BYTES:
+        raise ValueError(f"salt must be {SALT_BYTES} bytes, got {len(salt)}")
+    target = path or salt_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(salt)
+    try:
+        os.chmod(target, 0o600)
+    except OSError:
+        pass
+
+
 def load_salt(path: Path | None = None) -> bytes:
     target = path or salt_path()
     if not target.exists():

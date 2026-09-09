@@ -581,3 +581,107 @@ def test_an_unscoped_query_is_unchanged_and_sees_everything(db_conn, sample_doc,
     }
 
     assert found == {sample_doc, project_doc}
+
+
+# --- Re-keying the index when the password changes ---
+#
+# Everything that identifies or reveals a chunk is keyed on PIP_DB_KEY: the id
+# is HMAC(key, file_path), the chunk text is Fernet(key), the stored path is
+# Fernet(key). A password change that rekeys only the SQLite database leaves
+# every one of those pointing at a key nothing holds any more - and nothing
+# fails loudly, because the Documents screen reads its chunk counts from the
+# documents table. The index just stops answering while still looking present.
+
+
+def test_reencrypt_keeps_the_index_answering_after_a_key_change(db_conn, sample_doc, monkeypatch, db_key):
+    """The property the whole function exists for."""
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    vector_store.ingest_document(db_conn, sample_doc)
+    new_key = "b" * 64
+
+    vector_store.reencrypt(db_key, new_key)
+
+    monkeypatch.setenv("PIP_DB_KEY", new_key)
+    matches = vector_store.query(db_conn, "Is ChromaDB the source of truth?", threshold=0.1, top_k=3)
+    assert any("ChromaDB" in m["chunk_text"] for m in matches)
+    assert all(m["file_path"] == sample_doc for m in matches)
+
+
+def test_without_reencrypt_a_key_change_silently_empties_the_index(db_conn, sample_doc, monkeypatch, db_key):
+    """
+    The failure being prevented, asserted rather than described. This is what
+    scripts/set_db_password.py leaves behind today: a query that returns
+    nothing, from an index that still has every chunk in it.
+    """
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    vector_store.ingest_document(db_conn, sample_doc)
+
+    monkeypatch.setenv("PIP_DB_KEY", "b" * 64)
+    assert vector_store.query(db_conn, "ChromaDB", threshold=0.1, top_k=3) == []
+
+
+def test_reencrypt_leaves_nothing_readable_under_the_old_key(db_conn, sample_doc, monkeypatch, db_key):
+    """
+    A conversion that added the new records without removing the old ones would
+    leave the profile's content sitting there under a key the user has just
+    replaced - which is most of the reason they replaced it.
+    """
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    vector_store.ingest_document(db_conn, sample_doc)
+    new_key = "c" * 64
+
+    vector_store.reencrypt(db_key, new_key)
+
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    assert vector_store.query(db_conn, "ChromaDB", threshold=0.1, top_k=3) == []
+
+
+def test_reencrypt_does_not_re_embed(db_conn, sample_doc, monkeypatch, db_key):
+    """
+    The embeddings are derived from the plaintext, and the plaintext has not
+    changed - so a vector is the same vector whatever key it is stored under.
+    Preserving them is what makes this seconds rather than the minutes a full
+    rebuild costs, and the model must not be touched at all.
+    """
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    vector_store.ingest_document(db_conn, sample_doc)
+    before = vector_store._get_collection().get(include=["embeddings"])["embeddings"]
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("re-encryption re-embedded the chunks")
+
+    monkeypatch.setattr(vector_store, "_get_model", fail)
+    vector_store.reencrypt(db_key, "d" * 64)
+
+    after = vector_store._get_collection().get(include=["embeddings"])["embeddings"]
+    assert len(after) == len(before)
+    assert [list(v) for v in after] == [list(v) for v in before]
+
+
+def test_reencrypt_on_an_empty_index_does_nothing(monkeypatch, db_key):
+    assert vector_store.reencrypt(db_key, "e" * 64) == {"converted": 0, "skipped": 0}
+
+
+def test_reencrypt_is_a_no_op_without_keys(db_conn, sample_doc):
+    """Plaintext mode (no PIP_DB_KEY) stores nothing encrypted and keys
+    nothing, so there is nothing to convert and it must not try."""
+    vector_store.ingest_document(db_conn, sample_doc)
+
+    assert vector_store.reencrypt("", "") == {"converted": 0, "skipped": 0}
+    assert vector_store.query(db_conn, "ChromaDB", threshold=0.1, top_k=3)
+
+
+def test_reencrypt_leaves_chunks_it_cannot_read_alone(db_conn, sample_doc, monkeypatch, db_key):
+    """
+    A chunk written under some third key is drift for a rebuild to settle, not
+    something to destroy on the way past. It is counted and skipped.
+    """
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    vector_store.ingest_document(db_conn, sample_doc)
+
+    result = vector_store.reencrypt("f" * 64, "0" * 64)
+
+    assert result["converted"] == 0
+    assert result["skipped"] > 0
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    assert vector_store.query(db_conn, "ChromaDB", threshold=0.1, top_k=3)

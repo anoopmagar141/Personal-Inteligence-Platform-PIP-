@@ -256,7 +256,23 @@ String humaniseFieldName(String field) {
 
 class ProfileView extends StatefulWidget {
   final ApiClient api;
-  const ProfileView({super.key, required this.api});
+
+  /// Close the chat socket before an operation that ends this session.
+  ///
+  /// Passed in rather than reached for, because the socket belongs to the
+  /// shell: this screen is one tab inside it and has no business owning the
+  /// connection the chat tab is using.
+  final VoidCallback onCloseChat;
+
+  /// Return to the sign-in screen, after this profile has stopped existing.
+  final VoidCallback onSignedOut;
+
+  const ProfileView({
+    super.key,
+    required this.api,
+    required this.onCloseChat,
+    required this.onSignedOut,
+  });
 
   @override
   State<ProfileView> createState() => _ProfileViewState();
@@ -521,6 +537,15 @@ class _ProfileViewState extends State<ProfileView> {
                 ],
               );
             }),
+            // Last, deliberately. Everything above is what PIP has of yours;
+            // this is what you can do about the whole of it, and a page that
+            // opened on a delete button would be a different page.
+            const SizedBox(height: AppSpacing.xl),
+            AccountCard(
+              api: widget.api,
+              onCloseChat: widget.onCloseChat,
+              onSignedOut: widget.onSignedOut,
+            ),
             ],
           ),
         ),
@@ -1289,6 +1314,619 @@ class _EditIdentityDialogState extends State<_EditIdentityDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
         FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+  }
+}
+
+/// The profile itself, as opposed to what is inside it.
+///
+/// WHY THIS IS ON THE PROFILE SCREEN AND NOT IN SETTINGS
+///
+/// Everything else here is what PIP has learned about a person. This is the
+/// container that holds it: its name, its password, and the button that
+/// destroys it. They belong on the same screen because they are answers to the
+/// same question - "what does PIP have of mine, and what can I do about it" -
+/// and putting the delete anywhere else would mean somebody reading a page of
+/// inferences about themselves has no way to act on the whole of it from where
+/// they are standing.
+///
+/// WHY ALL THREE ACTIONS ASK FOR SOMETHING
+///
+/// Renaming asks for a name, and changing or deleting asks for the password
+/// again. Being signed in proves the database was opened at some point; it
+/// does not prove who is at the keyboard now, and an unattended screen should
+/// not be one click from either of the two operations nobody can undo.
+class AccountCard extends StatefulWidget {
+  final ApiClient api;
+
+  /// Close the chat socket before the delete. The backend cannot erase a
+  /// database file this client still has open.
+  final VoidCallback onCloseChat;
+
+  /// Back to the sign-in screen, once the profile is gone.
+  final VoidCallback onSignedOut;
+
+  const AccountCard({
+    super.key,
+    required this.api,
+    required this.onCloseChat,
+    required this.onSignedOut,
+  });
+
+  @override
+  State<AccountCard> createState() => _AccountCardState();
+}
+
+class _AccountCardState extends State<AccountCard> {
+  String? _slug;
+  String? _name;
+  bool _picturePublished = false;
+  bool _busy = false;
+  String? _error;
+  String? _note;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  /// Which profile this is, and whether its picture is on the sign-in screen.
+  ///
+  /// From /auth/profiles rather than from a field on this screen, because the
+  /// profile's name and the person's name are different things: identity.name
+  /// is what PIP calls you, and this is the label on the database. They are
+  /// usually the same word and are not the same fact - renaming the profile
+  /// must not rewrite a memory, and correcting a memory must not rename a
+  /// directory.
+  Future<void> _load() async {
+    try {
+      final payload = await widget.api.authProfiles();
+      final active = payload['active'] as String?;
+      final listed = (payload['profiles'] as List<dynamic>? ?? [])
+          .cast<Map<String, dynamic>>();
+      final me = listed.where((p) => p['slug'] == active).firstOrNull;
+      final published = await widget.api.signInPicturePublished();
+      if (!mounted) return;
+      setState(() {
+        _slug = active;
+        _name = me?['name'] as String? ?? active;
+        _picturePublished = published;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = '$error');
+    }
+  }
+
+  Future<void> _run(Future<void> Function() work) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _note = null;
+    });
+    try {
+      await work();
+    } catch (error) {
+      // The server's own sentence. "That is not your current password" and
+      // "use at least 8 characters" are both complete answers, and a generic
+      // failure would replace them with less.
+      if (mounted) setState(() => _error = error is ApiException ? error.detail : '$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _rename() async {
+    final slug = _slug;
+    if (slug == null) return;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _RenameProfileDialog(current: _name ?? ''),
+    );
+    if (name == null) return;
+
+    await _run(() async {
+      await widget.api.renameProfile(slug, name);
+      await _load();
+      if (mounted) setState(() => _note = 'Renamed.');
+    });
+  }
+
+  /// Publish or withdraw the copy the sign-in screen can read.
+  ///
+  /// The confirmation is on the way IN only. Turning it on writes an
+  /// unencrypted copy of the picture beside the database, which is a real cost
+  /// against the exact threat PIP encrypts for and is worth one sentence
+  /// before it happens. Turning it off deletes that file, which needs no
+  /// ceremony at all - nobody has ever regretted removing a copy of their own
+  /// face from a disk.
+  Future<void> _toggleSignInPicture(bool wanted) async {
+    if (!wanted) {
+      await _run(() async {
+        await widget.api.unpublishSignInPicture();
+        await _load();
+        if (mounted) setState(() => _note = 'Removed from the sign-in screen.');
+      });
+      return;
+    }
+
+    final agreed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Show your picture before sign-in?'),
+        content: const Text(
+          'The sign-in screen appears before your password does, so it cannot '
+          'read anything that needed one. Turning this on saves a second copy '
+          'of your picture next to your data, NOT encrypted - anyone who can '
+          'read this disk can see it.\n\n'
+          'Nothing else leaves the encrypted database. Turning it off again '
+          'deletes that copy.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Show it'),
+          ),
+        ],
+      ),
+    );
+    if (agreed != true) return;
+
+    await _run(() async {
+      await widget.api.publishSignInPicture();
+      await _load();
+      if (mounted) setState(() => _note = 'Now shown on the sign-in screen.');
+    });
+  }
+
+  Future<void> _changePassword() async {
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => const _ChangePasswordDialog(),
+    );
+    if (result == null) return;
+
+    await _run(() async {
+      await widget.api.changePassword(result[0], result[1]);
+      if (mounted) {
+        setState(() => _note = 'Password changed. Your data has been re-encrypted.');
+      }
+    });
+  }
+
+  /// Erase this profile and leave.
+  ///
+  /// The socket closes before the request and the screen does not change until
+  /// it has succeeded. A client that navigated away optimistically and then
+  /// hit a 500 would have sent somebody to a sign-in screen for a profile that
+  /// still exists, with no way to know whether their data was gone.
+  Future<void> _delete() async {
+    final slug = _slug;
+    if (slug == null) return;
+
+    final password = await showDialog<String>(
+      context: context,
+      builder: (context) => _DeleteProfileDialog(name: _name ?? slug),
+    );
+    if (password == null) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _note = null;
+    });
+
+    widget.onCloseChat();
+    try {
+      await widget.api.deleteProfile(slug, password);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = error is ApiException ? error.detail : '$error';
+      });
+      return;
+    }
+    if (!mounted) return;
+    widget.onSignedOut();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+
+    return SectionCard(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.shield_outlined, size: 18, color: pip.textMuted),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'This profile',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: pip.text),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'A profile is a separate, separately encrypted PIP. Its password is '
+            'the only key to it, and there is no way to recover one that is '
+            'forgotten.',
+            style: TextStyle(fontSize: 12.5, height: 1.5, color: pip.textMuted),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          _AccountRow(
+            label: 'Name',
+            value: _name ?? '...',
+            // The label on the database, not the name PIP calls you - those
+            // are two facts that are usually the same word, and only one of
+            // them is a memory.
+            description: 'Shown on the sign-in screen. Your data is not moved.',
+            action: GhostButton(label: 'Rename', onTap: _busy ? null : _rename),
+          ),
+          Divider(height: AppSpacing.xl, color: pip.border),
+
+          _AccountRow(
+            label: 'Picture on the sign-in screen',
+            value: _picturePublished ? 'Shown' : 'Hidden',
+            description: _picturePublished
+                ? 'A copy of your picture is saved unencrypted so the sign-in '
+                    'screen can draw it. Turn this off to delete that copy.'
+                : 'Off. Your picture stays inside the encrypted database, where '
+                    'the sign-in screen cannot read it.',
+            action: Switch(
+              value: _picturePublished,
+              onChanged: _busy ? null : _toggleSignInPicture,
+            ),
+          ),
+          Divider(height: AppSpacing.xl, color: pip.border),
+
+          _AccountRow(
+            label: 'Password',
+            value: 'Set',
+            description: 'Changing it re-encrypts your database and your document '
+                'index. Takes a few seconds.',
+            action: GhostButton(label: 'Change', onTap: _busy ? null : _changePassword),
+          ),
+          Divider(height: AppSpacing.xl, color: pip.border),
+
+          _AccountRow(
+            label: 'Delete this profile',
+            value: 'Permanent',
+            description: 'Erases this profile\'s database, documents and search '
+                'index from this machine. Other profiles are untouched. '
+                'This cannot be undone.',
+            action: GhostButton(
+              label: 'Delete',
+              color: pip.danger,
+              onTap: _busy ? null : _delete,
+            ),
+          ),
+
+          if (_busy) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                const SizedBox(width: AppSpacing.sm),
+                Text('Working...', style: TextStyle(fontSize: 12, color: pip.textMuted)),
+              ],
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(_error!, style: TextStyle(fontSize: 12, color: pip.danger)),
+          ],
+          if (_note != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(_note!, style: TextStyle(fontSize: 12, color: pip.accent)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One setting: what it is, what it currently says, and the control.
+class _AccountRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final String description;
+  final Widget action;
+
+  const _AccountRow({
+    required this.label,
+    required this.value,
+    required this.description,
+    required this.action,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: pip.text),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(value, style: TextStyle(fontSize: 12.5, color: pip.textMuted)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: TextStyle(fontSize: 12, height: 1.45, color: pip.textFaint),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.lg),
+        action,
+      ],
+    );
+  }
+}
+
+class _RenameProfileDialog extends StatefulWidget {
+  final String current;
+  const _RenameProfileDialog({required this.current});
+
+  @override
+  State<_RenameProfileDialog> createState() => _RenameProfileDialogState();
+}
+
+class _RenameProfileDialogState extends State<_RenameProfileDialog> {
+  late final TextEditingController _name = TextEditingController(text: widget.current);
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _name.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(context, name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Rename this profile'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'This is the name on the sign-in screen. Nothing is moved and '
+            'nothing PIP remembers about you changes.',
+            style: TextStyle(fontSize: 13, height: 1.45),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          TextField(
+            controller: _name,
+            autofocus: true,
+            onSubmitted: (_) => _submit(),
+            decoration: const InputDecoration(labelText: 'Name'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _submit, child: const Text('Rename')),
+      ],
+    );
+  }
+}
+
+/// Current password, new password, and the new one again.
+///
+/// The confirmation field is checked here rather than only on the server,
+/// because a mismatch is the one error this side can be certain of - and the
+/// round trip would cost a full re-encryption to report something that could
+/// have been said immediately.
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog();
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_current.text.isEmpty) {
+      setState(() => _error = 'Enter your current password.');
+      return;
+    }
+    if (_next.text != _confirm.text) {
+      setState(() => _error = 'Those two passwords are different.');
+      return;
+    }
+    Navigator.pop(context, [_current.text, _next.text]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change your password'),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Your database is re-encrypted with the new password. The old one '
+              'stops working, and the new one cannot be recovered if you forget '
+              'it - write it down somewhere that is not this machine.',
+              style: TextStyle(fontSize: 13, height: 1.45),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            TextField(
+              controller: _current,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Current password'),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _next,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'New password'),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _confirm,
+              obscureText: true,
+              onSubmitted: (_) => _submit(),
+              decoration: const InputDecoration(labelText: 'New password again'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(_error!, style: TextStyle(fontSize: 12, color: context.pip.danger)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _submit, child: const Text('Change password')),
+      ],
+    );
+  }
+}
+
+/// The one dialog in PIP that asks somebody to type something they cannot get
+/// back.
+///
+/// Two obstacles rather than one, and they test different things. The password
+/// proves the person asking is the person who owns the data. The typed name
+/// proves they read which profile they are about to erase - which the password
+/// alone does not, and which matters most on a machine where several people
+/// each have one.
+class _DeleteProfileDialog extends StatefulWidget {
+  final String name;
+  const _DeleteProfileDialog({required this.name});
+
+  @override
+  State<_DeleteProfileDialog> createState() => _DeleteProfileDialogState();
+}
+
+class _DeleteProfileDialogState extends State<_DeleteProfileDialog> {
+  final _password = TextEditingController();
+  final _typedName = TextEditingController();
+  String? _error;
+
+  bool get _nameMatches =>
+      _typedName.text.trim().toLowerCase() == widget.name.trim().toLowerCase();
+
+  @override
+  void initState() {
+    super.initState();
+    _typedName.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _typedName.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_nameMatches) return;
+    if (_password.text.isEmpty) {
+      setState(() => _error = 'Enter your password.');
+      return;
+    }
+    Navigator.pop(context, _password.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return AlertDialog(
+      title: Text('Delete ${widget.name}?'),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This erases this profile from this machine: every conversation, '
+              'everything PIP has learned about you, your decisions, your '
+              'documents and the search index over them.',
+              style: TextStyle(fontSize: 13, height: 1.45, color: pip.text),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'There is no undo and no backup unless you made one yourself. '
+              'Other profiles on this machine are not affected.',
+              style: TextStyle(fontSize: 13, height: 1.45, color: pip.danger),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            TextField(
+              controller: _typedName,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Type ${widget.name} to confirm',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _password,
+              obscureText: true,
+              onSubmitted: (_) => _submit(),
+              decoration: const InputDecoration(labelText: 'Your password'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(_error!, style: TextStyle(fontSize: 12, color: pip.danger)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          // Dead until the name has been typed. A destructive button that is
+          // clickable before its confirmation is satisfied is a confirmation
+          // in name only.
+          onPressed: _nameMatches ? _submit : null,
+          style: FilledButton.styleFrom(backgroundColor: pip.danger),
+          child: const Text('Delete permanently'),
+        ),
       ],
     );
   }

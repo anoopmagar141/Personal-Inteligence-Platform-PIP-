@@ -602,4 +602,12 @@ def test_choosing_a_first_password_lands_in_the_profile_it_was_chosen_for(tmp_pa
     assert created.json()["profile"] == fresh.slug
     # In the new profile's directory, and nowhere near the original's.
     assert fresh.paths()["salt"].exists()
+
+    # The database is created by the first route that opens a connection, not
+    # by setup itself. Until this read, the only thing that had made one was
+    # the startup catch-up - which runs on a background thread, so whether the
+    # file existed by the time this assertion ran depended on that thread
+    # winning a race against the rest of the request. It usually did, and under
+    # a fuller suite it sometimes did not.
+    api.get("/api/v1/memory/profile", headers=headers)
     assert fresh.exists()

@@ -300,7 +300,13 @@ def rebuild_vector_index(out_path: pathlib.Path, new_key: str) -> None:
         print("  The database is restored. Launch PIP to have it rebuild the index.")
         return
 
-    chroma_dir = pathlib.Path(vector_store.CHROMA_DB_PATH)
+    # resolved_chroma_path(), not CHROMA_DB_PATH: the latter is the module
+    # constant, fixed at import to the repo's own data/chroma and blind to
+    # PIP_CHROMA_PATH. Reading it here meant this function moved the REAL index
+    # aside whatever directory the rest of the run was pointed at - which the
+    # test suite did on every run, quietly renaming the developer's own index
+    # to chroma.superseded-<stamp> from tests that never touched Chroma.
+    chroma_dir = pathlib.Path(vector_store.resolved_chroma_path())
     if chroma_dir.exists():
         kept = chroma_dir.with_name(f"{chroma_dir.name}.superseded-{_stamp()}")
         shutil.move(str(chroma_dir), str(kept))

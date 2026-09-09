@@ -86,8 +86,18 @@ class ApiClient {
     return _decode(response);
   }
 
-  Future<dynamic> delete(String path) async {
-    final response = await http.delete(_uri(path), headers: _authHeaders);
+  /// [body] is sent when given, which HTTP allows on DELETE and which one
+  /// route here needs: deleting a profile is confirmed by re-typing its
+  /// password, and a password does not belong in a query string - those are
+  /// logged, kept in history, and visible in a URL bar.
+  Future<dynamic> delete(String path, [Map<String, dynamic>? body]) async {
+    final request = http.Request('DELETE', _uri(path))
+      ..headers.addAll(_authHeaders);
+    if (body != null) {
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode(body);
+    }
+    final response = await http.Response.fromStream(await request.send());
     return _decode(response);
   }
 
@@ -151,6 +161,84 @@ class ApiClient {
   /// next job is to show the sign-in screen.
   Future<void> lock() async {
     await post('/auth/lock', {});
+  }
+
+  // --- managing profiles ----------------------------------------------
+  //
+  // Creating one happens on the sign-in screen and so works while locked; the
+  // other three happen from inside a profile and are refused otherwise. That
+  // split is the only ownership test this application has - there is no
+  // account server and no recovery, so the sole way to tell the owner of a
+  // profile from anyone else with the disk is that the owner can turn a
+  // password into a key that opens it.
+
+  /// Register a new profile and point the backend at it, ready for
+  /// [completeSetup] to choose its password.
+  ///
+  /// Two calls rather than one, matching the backend: this creates a directory
+  /// and a registry entry, and the password arrives separately. Sending both
+  /// together would mean a password travelling with a request that is served
+  /// while locked, for no gain.
+  Future<Map<String, dynamic>> createProfile(String name) async =>
+      await post('/auth/profiles', {'name': name}) as Map<String, dynamic>;
+
+  /// Change the name shown on the sign-in screen. The directory is untouched.
+  Future<Map<String, dynamic>> renameProfile(String slug, String name) async =>
+      await patch('/auth/profiles/$slug', {'name': name}) as Map<String, dynamic>;
+
+  /// Change this profile's password, re-encrypting its database to match.
+  ///
+  /// The current password is required even though the caller is already
+  /// signed in: the session proves the database was opened, not who is at the
+  /// keyboard now. Takes seconds - two PBKDF2 derivations and a full
+  /// re-encryption - so callers should show that it is working.
+  Future<void> changePassword(String currentPassword, String newPassword) async {
+    await post('/auth/password', {
+      'current_password': currentPassword,
+      'new_password': newPassword,
+    });
+  }
+
+  /// Erase this profile's data and sign out. There is no undo.
+  ///
+  /// The password is sent again for the same reason the change needs it, with
+  /// more at stake. Close the WebSocket before calling: the backend cannot
+  /// delete a database file this client still has open.
+  Future<Map<String, dynamic>> deleteProfile(String slug, String password) async =>
+      await delete('/auth/profiles/$slug', {'password': password}) as Map<String, dynamic>;
+
+  // --- the picture on the sign-in screen -------------------------------
+  //
+  // The avatar lives inside the encrypted database. The sign-in screen draws
+  // profiles that are locked, so a picture shown there cannot come from
+  // inside it - publishing writes a second, unencrypted copy beside the
+  // profile's database, which is a real cost against the threat the
+  // encryption exists for. Hence off by default, and un-publishing deletes
+  // the file rather than merely hiding it.
+
+  /// Whether this profile's picture is currently shown on the sign-in screen.
+  Future<bool> signInPicturePublished() async =>
+      ((await get('/profile/picture/sign-in')) as Map<String, dynamic>)['published'] as bool;
+
+  /// Publish a copy of the stored picture where the locked screen can read it.
+  Future<void> publishSignInPicture() async {
+    await post('/profile/picture/sign-in', {});
+  }
+
+  /// Delete that copy. The picture inside the database is left alone.
+  Future<void> unpublishSignInPicture() async {
+    await delete('/profile/picture/sign-in');
+  }
+
+  /// A profile's published picture, or null when it has not published one.
+  ///
+  /// The one call that reads a per-profile file without a password, and it can
+  /// only ever return what that profile's owner chose to publish for this
+  /// screen. 404 is "no picture", which the switcher draws initials for.
+  Future<Uint8List?> getSignInPicture(String slug) async {
+    final response = await http.get(_uri('/auth/profiles/$slug/picture'), headers: _authHeaders);
+    if (response.statusCode != 200) return null;
+    return response.bodyBytes;
   }
 
   Future<Map<String, dynamic>> getStatus() async => await get('/status') as Map<String, dynamic>;

@@ -4,12 +4,14 @@ import logging
 import os
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Any, Optional, Union
 
 from backend.config.settings import get_settings
 from backend.core import (
     auth,
+    db_key,
     instance_lock,
     pinned_executor,
     pipeline,
@@ -1149,11 +1151,23 @@ try:
         f"{BASE_PREFIX}/auth/setup",
     })
 
+    # The one path-shaped exception to the exact-match set above:
+    # /auth/profiles/<slug>/picture, which serves a file a profile's owner
+    # explicitly published FOR this screen. Matched with a pattern rather than
+    # added to the set because the slug varies, and anchored at both ends so it
+    # cannot be widened by anything appended to it. It reads one file and never
+    # opens a database, which is the same reason the other profile routes are
+    # safe to serve while locked.
+    _UNLOCKED_PATH_RE = re.compile(
+        rf"^{re.escape(BASE_PREFIX)}/auth/profiles/[^/]+/picture$"
+    )
+
     class LockGateMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
             if (
                 request.url.path.startswith(BASE_PREFIX)
                 and request.url.path not in _UNLOCKED_PATHS
+                and not _UNLOCKED_PATH_RE.match(request.url.path)
                 and session_key.state(_db_path_or_default()) == "locked"
             ):
                 # 423 Locked, not 401. The caller's credentials are fine - the
@@ -1563,6 +1577,12 @@ try:
                     "name": p.name,
                     "exists": p.exists(),
                     "last_used": p.last_used,
+                    # Whether this profile published a picture for this screen.
+                    # A boolean rather than the bytes: the list is drawn before
+                    # anything is chosen, and inlining every profile's photo
+                    # into it would make choosing slower for the common case of
+                    # nobody having published one.
+                    "picture": profiles.has_signin_picture(p.slug),
                 }
                 for p in profiles.list_profiles()
             ],
@@ -1725,6 +1745,262 @@ try:
         session_key.lock()
         logger.info("PIP locked at the user's request.")
         return {"state": "locked"}
+
+    # --- managing profiles ---------------------------------------------
+    #
+    # Creating one is done from the sign-in screen and so must work while
+    # locked; the other three are done from inside a profile and so must not.
+    # That split is not symmetry for its own sake - it is the only ownership
+    # test this application has. There is no account server and no recovery, so
+    # the sole way to distinguish the owner of a profile from anyone else with
+    # access to the disk is that the owner can turn a password into a key that
+    # opens it. Every operation that changes or destroys a profile therefore
+    # happens from inside it, after that has been demonstrated.
+
+    @app.post(f"{BASE_PREFIX}/auth/profiles")
+    def auth_create_profile(payload: dict[str, Any]):
+        """
+        Register a new profile and point this process at it, so the sign-in
+        screen can go straight on to choosing its password.
+
+        Creates the directory, NOT the database - /auth/setup does that, with
+        the password, one request later. Splitting it that way is what keeps
+        this route safe to serve while locked: it writes a name into a registry
+        that was never encrypted and creates an empty folder, and neither of
+        those is a thing anybody needs a password to be allowed to do.
+
+        REFUSED WHILE UNLOCKED, for the same reason /auth/profile is: it
+        activates, and re-pointing the path variables while a key is still held
+        aims one profile's key at another profile's files.
+
+        This route is the entire reason the feature is usable. Adding a profile
+        has been possible since profiles existed - through
+        scripts/new_profile.py, which needs a console, a checkout and a
+        virtualenv. For anybody who installed PIP rather than cloned it, that
+        is indistinguishable from the feature not being there.
+        """
+        from fastapi import HTTPException
+
+        if session_key.is_unlocked():
+            raise HTTPException(
+                status_code=409,
+                detail="Sign out before adding a profile.",
+            )
+
+        name = (payload.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="A name is required.")
+        if len(name) > 64:
+            raise HTTPException(status_code=422, detail="Use 64 characters or fewer.")
+
+        try:
+            profile = profiles.register(name)
+        except ValueError as exc:
+            # Both "that name is taken" and "that name has no letters or
+            # digits" land here, and both are sentences worth showing.
+            raise HTTPException(status_code=409, detail=str(exc))
+
+        profiles.activate(profile.slug)
+        return {
+            "slug": profile.slug,
+            "name": profile.name,
+            "state": session_key.state(_db_path_or_default()),
+        }
+
+    def _require_own_profile(slug: str) -> str:
+        """
+        Refuse unless this request is coming from inside *slug*, unlocked.
+
+        The two conditions are one idea. Unlocked means a password has opened
+        something; matching the active slug is what says it opened THIS. Either
+        one alone would let a profile be renamed or destroyed by somebody who
+        proved ownership of a different one.
+        """
+        from fastapi import HTTPException
+
+        if not session_key.is_unlocked():
+            raise HTTPException(status_code=423, detail="Sign in to this profile first.")
+        if slug != profiles.active_slug():
+            raise HTTPException(
+                status_code=403,
+                detail="A profile can only be changed from inside itself. Sign in as it first.",
+            )
+        return slug
+
+    @app.patch(f"{BASE_PREFIX}/auth/profiles/{{slug}}")
+    def auth_rename_profile(slug: str, payload: dict[str, Any]):
+        """
+        Change the name shown on the sign-in screen.
+
+        The slug is untouched, and that is deliberate rather than a shortcut:
+        it is a path segment, so renaming it means moving a directory holding
+        pip.db and salt.bin, and profiles.py is one long argument for never
+        moving salt.bin. The name is what a person reads; the slug is where the
+        bytes are, and only one of those is safe to change later.
+        """
+        from fastapi import HTTPException
+
+        _require_own_profile(slug)
+        try:
+            profile = profiles.rename(slug, payload.get("name") or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="There is no profile named " + repr(slug) + ".")
+        return {"slug": profile.slug, "name": profile.name}
+
+    @app.post(f"{BASE_PREFIX}/auth/password")
+    async def auth_change_password(payload: dict[str, Any]):
+        """
+        Change this profile's password, re-encrypting its database to match.
+
+        Asks for the current password even though the caller is demonstrably
+        already inside. The session is what proves the database was opened at
+        some point; it does not prove the person at the keyboard now is the one
+        who opened it, and a control that permanently changes the only key to
+        somebody's data should not be reachable from an unattended screen.
+
+        async and threaded like unlock, and for a stronger version of the same
+        reason: this is two PBKDF2 derivations plus a full re-encryption of the
+        database, which is seconds rather than a quarter of one.
+        """
+        from fastapi import HTTPException
+
+        try:
+            await asyncio.to_thread(
+                session_key.change_password,
+                payload.get("current_password") or "",
+                payload.get("new_password") or "",
+                _db_path_or_default(),
+            )
+        except session_key.WrongPasswordError as exc:
+            raise HTTPException(status_code=401, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+        return {"state": "unlocked", "profile": profiles.active_slug()}
+
+    def _verify_password_for_active_profile(password: str, db_path: str) -> bool:
+        """Whether *password* derives the key that opens the active profile."""
+        try:
+            candidate = db_key.derive_key_from_stored_salt(password)
+        except (db_key.NoSaltError, ValueError):
+            return False
+        return db_key.verify_key(db_path, candidate)
+
+    def _erase_with_retries(slug: str, attempts: int = 5) -> dict[str, str]:
+        """
+        profiles.delete(), given a moment for Windows to let go of the files.
+
+        The client closes its WebSocket before calling, and locking has already
+        stopped any new work reaching the database - but a socket closing is
+        asynchronous, and the connection it was holding is closed on a thread
+        this one does not wait for. On Windows an open handle makes unlink
+        raise rather than defer, so a delete issued in that half-second window
+        would fail on a profile the user has already been signed out of.
+
+        Five short attempts, then the error is real and is reported as one.
+        """
+        last: Exception | None = None
+        for attempt in range(attempts):
+            try:
+                profile = profiles.delete(slug)
+                return {"slug": profile.slug, "name": profile.name}
+            except PermissionError as exc:
+                last = exc
+                time.sleep(0.2 * (attempt + 1))
+        raise last if last else RuntimeError("the profile could not be deleted")
+
+    @app.delete(f"{BASE_PREFIX}/auth/profiles/{{slug}}")
+    async def auth_delete_profile(slug: str, payload: dict[str, Any]):
+        """
+        Erase this profile's data and sign out. There is no undo.
+
+        WHY THE PASSWORD IS ASKED FOR AGAIN
+        -----------------------------------
+        Same reason as the password change, with more at stake. Being unlocked
+        proves the database was opened; it does not prove who is asking now.
+        Deleting is the one operation here that cannot be walked back by
+        anybody, including the person who owns the data, so it gets the one
+        check that actually means something in this application.
+
+        WHAT IS DESTROYED
+        -----------------
+        pip.db (with its -wal/-shm sidecars), salt.bin, chroma/, documents/ and
+        any published sign-in picture - the paths profiles.py calls per-profile,
+        and nothing else. For the default profile those sit directly in data/,
+        alongside profiles.json, pip.lock and api_token.txt, which belong to the
+        application rather than to a person and which describe the OTHER
+        profiles. Deleting the directory would be right for every profile but
+        that one, where it would take everyone else's registry entry with it. So
+        the unit of deletion is those paths, for everybody, equally.
+
+        WHY IT LOCKS FIRST
+        ------------------
+        Two reasons that happen to agree. The key in memory belongs to files
+        that are about to stop existing, and Windows will not delete a database
+        file that is still open - so the sequence is: persist what the open
+        sessions were saying (exactly as sign-out does, or deleting would be
+        the most destructive way to lose an in-flight conversation), forget the
+        key, drop the vector store's cached handle, and only then erase.
+        """
+        from fastapi import HTTPException
+
+        _require_own_profile(slug)
+
+        password = (payload.get("password") or "") if payload else ""
+        if not password:
+            raise HTTPException(
+                status_code=422,
+                detail="Type your password to confirm. This cannot be undone.",
+            )
+
+        verified = await asyncio.to_thread(
+            _verify_password_for_active_profile, password, _db_path_or_default()
+        )
+        if not verified:
+            raise HTTPException(status_code=401, detail="That is not your password.")
+
+        # Everything /auth/lock does, for the reason it does it: an Observer
+        # pass is a ~130s LLM call nobody deleting an account should wait
+        # behind, and a transcript that never lands is a conversation lost by
+        # the delete rather than by the user. Enqueued, then the key goes.
+        loop = asyncio.get_event_loop()
+        for session in await _session_registry.snapshot():
+            try:
+                await session_lifecycle.enqueue_for_shutdown(loop, session)
+            except Exception as e:
+                logger.error(f"Delete: failed to enqueue a session's transcript: {e}")
+
+        session_key.lock()
+        try:
+            vector_store.reset_client()
+        except Exception as e:
+            logger.warning(f"Could not drop the vector store handle before deleting: {e}")
+
+        try:
+            erased = await asyncio.to_thread(_erase_with_retries, slug)
+        except Exception as exc:
+            logger.error(f"Deleting profile {slug!r} failed: {exc}")
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Some of this profile's files could not be deleted - they may "
+                    "still be open. You have been signed out; close PIP and try "
+                    f"again. ({exc})"
+                ),
+            )
+
+        # Point at something that exists, so the sign-in screen this client is
+        # about to show is describing a real profile rather than the paths of
+        # one that was just erased.
+        try:
+            profiles.activate(profiles.last_used())
+        except KeyError:
+            profiles.activate(profiles.DEFAULT_SLUG)
+
+        logger.info(f"Profile {slug!r} was deleted at the user's request.")
+        return {"state": "locked", "deleted": erased["slug"], "profile": profiles.active_slug()}
 
     @app.get(f"{BASE_PREFIX}/status")
     def status():
@@ -2045,6 +2321,93 @@ try:
         with _conn() as conn:
             removed = avatar_store.clear_avatar(conn)
         return {"status": "deleted" if removed else "not_found"}
+
+
+    # --- the picture on the sign-in screen -----------------------------
+    #
+    # The profile picture lives in identity_avatar, inside the encrypted
+    # database, and stays there. The sign-in screen draws profiles that are
+    # LOCKED, so a picture shown there cannot come from that table - anything
+    # the screen can render before a password is typed is by definition
+    # readable without one.
+    #
+    # Publishing therefore writes a second, unencrypted copy beside the
+    # profile's database (profiles.publish_signin_picture). That is a real cost
+    # against the threat this application encrypts for - a stolen disk, an
+    # image, a backup tool - so it is off until somebody turns it on, the
+    # sentence in the UI says what it does, and turning it off deletes the file
+    # rather than merely hiding it.
+
+    @app.get(f"{BASE_PREFIX}/auth/profiles/{{slug}}/picture")
+    def auth_profile_picture(slug: str):
+        """
+        A profile's published picture, servable while locked.
+
+        The one route that reads a per-profile file without a password, and it
+        can only ever return a file the owner of that profile explicitly
+        published for this purpose. It never opens a database and never touches
+        a profile that has not published one - an unpublished profile is a 404,
+        which is also the honest answer.
+        """
+        from fastapi import HTTPException, Response
+
+        try:
+            path = profiles.signin_picture_path(slug)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="There is no such profile.")
+
+        if not path.exists():
+            # 404 rather than an empty 200, same as /profile/picture: "there is
+            # no picture" is a real answer and the screen draws initials for it.
+            raise HTTPException(status_code=404, detail="No picture is published for this profile.")
+
+        image = path.read_bytes()
+        try:
+            media_type = avatar_store.detect_media_type(image)
+        except avatar_store.InvalidImageError:
+            # The bytes on disk are not an image any more. Refusing is the only
+            # safe answer: this response is served without a password, and
+            # handing back an unidentified file with a guessed Content-Type is
+            # how a stored file becomes a stored script.
+            raise HTTPException(status_code=404, detail="No picture is published for this profile.")
+
+        return Response(content=image, media_type=media_type, headers={"Cache-Control": "no-store"})
+
+    @app.post(f"{BASE_PREFIX}/profile/picture/sign-in")
+    def publish_signin_picture():
+        """
+        Copy this profile's picture out to where the sign-in screen can read it.
+
+        Takes no image of its own. The picture is whatever is already in
+        identity_avatar, so there is exactly one profile picture and this only
+        decides whether a copy of it is visible before sign-in - two uploads
+        that could drift apart would be two pictures wearing one name.
+        """
+        from fastapi import HTTPException
+
+        with _conn() as conn:
+            avatar = avatar_store.get_avatar(conn)
+        if avatar is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Set a profile picture first - there is nothing to show yet.",
+            )
+
+        profiles.publish_signin_picture(profiles.active_slug(), avatar["image"])
+        return {"status": "published", "media_type": avatar["media_type"]}
+
+    @app.delete(f"{BASE_PREFIX}/profile/picture/sign-in")
+    def unpublish_signin_picture():
+        """Delete the unencrypted copy. The picture inside the database is
+        untouched - this is only about what is visible while locked."""
+        removed = profiles.unpublish_signin_picture(profiles.active_slug())
+        return {"status": "unpublished" if removed else "not_found"}
+
+    @app.get(f"{BASE_PREFIX}/profile/picture/sign-in")
+    def signin_picture_state():
+        """Whether this profile's picture is currently shown on the sign-in
+        screen, so the switch can be drawn in the position it is really in."""
+        return {"published": profiles.has_signin_picture(profiles.active_slug())}
 
     @app.post(f"{BASE_PREFIX}/rag/ingest")
     def ingest_document(payload: dict[str, Any]):

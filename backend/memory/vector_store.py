@@ -155,13 +155,30 @@ _collection = None
 _model = None
 
 
+def resolved_chroma_path() -> str:
+    """
+    The directory this module will actually open: the module attribute when a
+    test has replaced it, otherwise the environment, otherwise the default.
+
+    Exported rather than left inline in _get_client, because it had a second
+    caller that resolved it differently. scripts/restore_backup.py read
+    CHROMA_DB_PATH directly to move the previous index aside - which is the
+    module CONSTANT, fixed at import to the repo's own data/chroma and blind to
+    PIP_CHROMA_PATH. So a restore run under an isolated environment renamed the
+    real index instead of the isolated one, and the test suite did it on every
+    run where data/chroma existed: the developer's index was moved to
+    chroma.superseded-<stamp> by tests that never went near it.
+
+    Two places deciding where one directory is meant one of them being wrong,
+    and the wrong one moving files. One function, both callers.
+    """
+    return CHROMA_DB_PATH if CHROMA_DB_PATH != _DEFAULT_CHROMA_DB_PATH else chroma_path()
+
+
 def _get_client():
     global _client
     if _client is None:
-        # The module attribute wins when a test has replaced it; otherwise the
-        # environment, then the default.
-        path = CHROMA_DB_PATH if CHROMA_DB_PATH != _DEFAULT_CHROMA_DB_PATH else chroma_path()
-        _client = chromadb.PersistentClient(path=path)
+        _client = chromadb.PersistentClient(path=resolved_chroma_path())
     return _client
 
 
@@ -682,3 +699,121 @@ def rebuild_from_sqlite(conn) -> dict[str, Any]:
             failed.append({"file_path": doc["file_path"], "reason": str(e)})
 
     return {"rebuilt": rebuilt, "failed": failed, "materialised": materialised["written"]}
+
+
+def reencrypt(old_db_key: str, new_db_key: str) -> dict[str, Any]:
+    """
+    Re-encrypt every chunk in the index from one database key to another.
+
+    WHY A PASSWORD CHANGE CANNOT SKIP THIS
+    --------------------------------------
+    Everything that identifies or reveals a chunk here is keyed on PIP_DB_KEY:
+    the id is `HMAC(key, file_path)::<n>`, the chunk text is Fernet(key), and
+    the stored path is Fernet(key). Change the key without touching the index
+    and nothing breaks loudly - _delete_chunks_for_path stops matching, query()
+    stops finding anything, and the Documents screen goes on displaying the
+    chunk counts SQLite recorded, because those come from the documents table
+    and not from here. The user's whole document index silently stops
+    answering, while every screen still says it is there.
+
+    scripts/set_db_password.py has this hole: it rekeys the database and leaves
+    the index behind. That is survivable there because chroma/ is rebuildable
+    and never authoritative - `rebuild_if_drifted` re-ingests from the bytes in
+    SQLite - but rebuilding means re-embedding every document, which is minutes
+    of CPU, and it only ever happens if something notices the drift. Converting
+    in place is seconds, because the embeddings are the expensive part and they
+    do not change: a vector derived from the plaintext is the same vector
+    whatever key the plaintext is stored under.
+
+    NOT ATOMIC, AND SAFE ANYWAY
+    ---------------------------
+    Chroma has no transaction to wrap this in. A crash halfway leaves some
+    chunks under each key, which reads exactly like the drift that already has
+    a repair path: the SQLite documents table is still the source of truth, and
+    a rebuild restores the index from it. That is the reason this is called
+    AFTER the database rekey has been verified rather than before - the
+    recoverable failure is the one that happens to the rebuildable store.
+    """
+    if not old_db_key or not new_db_key:
+        # Plaintext mode (dev/test, no PIP_DB_KEY): nothing here is encrypted
+        # and nothing is keyed, so there is nothing to convert.
+        return {"converted": 0, "skipped": 0}
+
+    old_fernet = _fernet(old_db_key)
+    new_fernet = _fernet(new_db_key)
+    collection = _get_collection()
+
+    stored = collection.get(include=["documents", "metadatas", "embeddings"])
+    ids = stored.get("ids") or []
+    if not ids:
+        return {"converted": 0, "skipped": 0}
+
+    documents = stored.get("documents") or []
+    metadatas = stored.get("metadatas") or []
+    embeddings = stored.get("embeddings")
+    embeddings = [] if embeddings is None else list(embeddings)
+
+    new_ids: list[str] = []
+    new_documents: list[str] = []
+    new_metadatas: list[dict[str, Any]] = []
+    new_embeddings: list[Any] = []
+    skipped = 0
+
+    for index, chunk_id in enumerate(ids):
+        metadata = dict(metadatas[index]) if index < len(metadatas) else {}
+        document = documents[index] if index < len(documents) else None
+
+        file_path_enc = metadata.get("file_path_enc")
+        if not file_path_enc or document is None:
+            # A chunk written in plaintext mode, or one missing the encrypted
+            # path it would have to be re-keyed by. Left exactly as it is
+            # rather than guessed at: a chunk this function cannot read is a
+            # chunk it has no business rewriting.
+            skipped += 1
+            continue
+
+        try:
+            file_path = old_fernet.decrypt(file_path_enc.encode("ascii")).decode("utf-8")
+            plaintext = old_fernet.decrypt(document.encode("ascii")).decode("utf-8")
+        except Exception:
+            # Not decryptable under the old key - so it was never encrypted
+            # under it. Almost certainly a leftover from an earlier key, which
+            # is drift for the rebuild to settle, not something to destroy here.
+            skipped += 1
+            continue
+
+        new_file_key = _file_key(new_db_key, file_path)
+        chunk_index = metadata.get("chunk_index", index)
+        new_ids.append(f"{new_file_key}::{chunk_index}")
+        new_documents.append(new_fernet.encrypt(plaintext.encode("utf-8")).decode("ascii"))
+        new_metadatas.append(
+            {
+                **metadata,
+                "file_key": new_file_key,
+                "file_path_enc": new_fernet.encrypt(file_path.encode("utf-8")).decode("ascii"),
+            }
+        )
+        if index < len(embeddings):
+            new_embeddings.append(embeddings[index])
+
+    if not new_ids:
+        return {"converted": 0, "skipped": skipped}
+
+    # Write the new records before removing the old ones. The ids differ (they
+    # are keyed on the new key), so the two sets cannot collide, and a crash
+    # between the two steps leaves duplicates - which a rebuild clears - rather
+    # than a window in which the chunks exist under neither key.
+    upsert: dict[str, Any] = {
+        "ids": new_ids,
+        "documents": new_documents,
+        "metadatas": new_metadatas,
+    }
+    if len(new_embeddings) == len(new_ids):
+        upsert["embeddings"] = new_embeddings
+    collection.upsert(**upsert)
+
+    stale = [chunk_id for chunk_id in ids if chunk_id not in set(new_ids)]
+    if stale:
+        collection.delete(ids=stale)
+
+    return {"converted": len(new_ids), "skipped": skipped}

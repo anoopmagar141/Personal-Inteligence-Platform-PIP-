@@ -47,6 +47,7 @@ import 'package:flutter/services.dart';
 
 import '../api_client.dart';
 import '../logo.dart';
+import '../profile_picture.dart';
 import '../theme.dart';
 import '../widgets/gateway_flow.dart';
 
@@ -122,12 +123,26 @@ class _ProfileOption {
   final String name;
   final bool exists;
 
-  const _ProfileOption({required this.slug, required this.name, required this.exists});
+  /// Whether this profile published a picture for this screen.
+  ///
+  /// A flag rather than the bytes, because the list is drawn before anything
+  /// is chosen: fetching every profile's photo to render a menu nobody may
+  /// open would make the common case - one profile, no picture - pay for the
+  /// rare one. The bytes are fetched separately for the profiles that say yes.
+  final bool picture;
+
+  const _ProfileOption({
+    required this.slug,
+    required this.name,
+    required this.exists,
+    this.picture = false,
+  });
 
   factory _ProfileOption.fromJson(Map<String, dynamic> json) => _ProfileOption(
         slug: json['slug'] as String,
         name: json['name'] as String? ?? json['slug'] as String,
         exists: json['exists'] as bool? ?? true,
+        picture: json['picture'] as bool? ?? false,
       );
 }
 
@@ -151,6 +166,13 @@ class _SignInScreenState extends State<SignInScreen> {
 
   List<_ProfileOption> _profiles = const [];
   String? _activeSlug;
+
+  /// The published pictures, by slug, for the profiles that have one.
+  ///
+  /// Held here rather than in profile_picture.dart's notifier, which holds the
+  /// picture of the profile that is SIGNED IN - there is no such profile yet
+  /// on this screen, and there are several candidates rather than one.
+  final Map<String, Uint8List> _pictures = {};
 
   bool get _isSetup => _state == AuthState.setup;
 
@@ -179,8 +201,72 @@ class _SignInScreenState extends State<SignInScreen> {
             .toList();
         _activeSlug = payload['active'] as String?;
       });
+      _loadPictures();
     } catch (_) {
       // Left as it was: no list, no switcher, one profile's worth of screen.
+    }
+  }
+
+  /// Fetch the published pictures, for the profiles that have one.
+  ///
+  /// After the list rather than with it, and each failure swallowed: a face is
+  /// decoration on a screen whose job is to take a password, and initials are
+  /// a complete answer. Nothing here should be able to keep somebody out of
+  /// their own data.
+  Future<void> _loadPictures() async {
+    for (final profile in _profiles.where((p) => p.picture)) {
+      try {
+        final bytes = await widget.api.getSignInPicture(profile.slug);
+        if (!mounted || bytes == null) continue;
+        setState(() => _pictures[profile.slug] = bytes);
+      } catch (_) {
+        // Initials, then.
+      }
+    }
+  }
+
+  /// Add a profile: a name here, a password on the screen this returns to.
+  ///
+  /// Split that way because the backend splits it, and the backend splits it
+  /// for a reason worth keeping visible - creating a profile writes a name
+  /// into an unencrypted registry and makes an empty folder, which is safe to
+  /// do while locked. The password arrives at the next step and makes the
+  /// database. Nothing is encrypted under a key nobody typed.
+  ///
+  /// The screen it returns to is this one, redressed: the new profile is
+  /// selected, so the heading becomes "Choose a password" and the field below
+  /// it is the one that creates the database.
+  Future<void> _addProfile() async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => const _NewProfileDialog(),
+    );
+    if (name == null || name.trim().isEmpty) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      final created = await widget.api.createProfile(name.trim());
+      if (!mounted) return;
+      await _loadProfiles();
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _activeSlug = created['slug'] as String?;
+        _state = authStateFrom(created['state'] as String? ?? 'setup');
+        _password.clear();
+        _confirm.clear();
+      });
+      _passwordFocus.requestFocus();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = _sentence(e);
+      });
     }
   }
 
@@ -277,6 +363,14 @@ class _SignInScreenState extends State<SignInScreen> {
   /// data" and "use at least 8 characters" are both answers, and a generic
   /// "sign-in failed" would replace them with less.
   String _sentence(Object error) {
+    // ApiException already unwraps FastAPI's {"detail": "..."} envelope, so
+    // the sentence is simply what it carries. The scrape below was the whole
+    // of this function and never fired: toString() returns the unwrapped
+    // sentence, which has no "detail" key in it to find - so every refusal on
+    // this screen, including a wrong password, was answered with the generic
+    // fallback instead of the specific reason the backend had written.
+    if (error is ApiException) return error.detail;
+
     final text = error.toString();
     final marker = text.indexOf('detail');
     if (marker >= 0) {
@@ -343,6 +437,12 @@ class _SignInScreenState extends State<SignInScreen> {
                         ? const Icon(Icons.check, size: 15, color: kGatewayAccent)
                         : null,
                   ),
+                  _SignInAvatar(
+                    name: profile.name,
+                    image: _pictures[profile.slug],
+                    size: 24,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       profile.name,
@@ -376,7 +476,15 @@ class _SignInScreenState extends State<SignInScreen> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.person_outline, size: 17, color: kGatewayTextMuted),
+              // The person icon, until there is a face to put there instead.
+              // A published picture is the whole reason the switcher can be
+              // scanned rather than read, which on a shared machine is the
+              // difference between choosing and checking.
+              _SignInAvatar(
+                name: active.name,
+                image: _pictures[active.slug],
+                size: 24,
+              ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
@@ -530,6 +638,27 @@ class _SignInScreenState extends State<SignInScreen> {
                     style: const TextStyle(fontSize: 11.5, height: 1.5, color: kGatewayTextFaint),
                   ),
                 ],
+
+                // Always here, including on an installation with one profile -
+                // which is where it matters most, because that is the only
+                // screen from which a second profile can be reached at all.
+                // The switcher above appears at two profiles and cannot be the
+                // way to make the second one.
+                //
+                // Quiet rather than prominent: adding a profile is a rare,
+                // deliberate act, and the one thing anybody is on this screen
+                // to do is type a password. It sits below the note about there
+                // being no reset for the same reason - nothing should come
+                // between the field and the button.
+                const SizedBox(height: AppSpacing.lg),
+                TextButton.icon(
+                  onPressed: _busy ? null : _addProfile,
+                  icon: const Icon(Icons.person_add_alt, size: 16, color: kGatewayTextMuted),
+                  label: const Text(
+                    'Add a profile',
+                    style: TextStyle(fontSize: 12.5, color: kGatewayTextMuted),
+                  ),
+                ),
               ],
             ),
             ),
@@ -677,6 +806,154 @@ class _MigrationNoticeState extends State<_MigrationNotice> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A profile's face on the sign-in screen, or its initials.
+///
+/// The picture comes from a copy the profile's owner explicitly published for
+/// this screen, which is unencrypted by necessity - a screen that draws
+/// profiles before any password has been typed cannot read anything that
+/// needed one. Most profiles will not have published one, and initials are a
+/// complete answer rather than a placeholder: they are what the rest of the
+/// app already draws when there is no picture.
+class _SignInAvatar extends StatelessWidget {
+  final String name;
+  final Uint8List? image;
+  final double size;
+
+  const _SignInAvatar({required this.name, required this.image, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = image;
+    return Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF23253A),
+        border: Border.all(color: const Color(0xFF2C2F43)),
+      ),
+      child: bytes == null
+          ? Center(
+              child: Text(
+                initialsFrom(name),
+                style: TextStyle(
+                  fontSize: size * 0.42,
+                  fontWeight: FontWeight.w600,
+                  color: kGatewayTextMuted,
+                ),
+              ),
+            )
+          : Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              // The bytes came off disk unverified as an image beyond their
+              // header, and a decode failure inside a builder takes the whole
+              // screen down with it. Initials are the fallback here for the
+              // same reason they are the default.
+              errorBuilder: (context, _, _) => Center(
+                child: Text(
+                  initialsFrom(name),
+                  style: TextStyle(
+                    fontSize: size * 0.42,
+                    fontWeight: FontWeight.w600,
+                    color: kGatewayTextMuted,
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// The name for a new profile, and the one sentence somebody needs before
+/// choosing it.
+///
+/// Only a name is asked for. The password is chosen on the screen behind this
+/// one, because that is the screen that creates the database - and putting
+/// both here would mean this dialog held a password while the profile it
+/// belongs to did not exist yet.
+class _NewProfileDialog extends StatefulWidget {
+  const _NewProfileDialog();
+
+  @override
+  State<_NewProfileDialog> createState() => _NewProfileDialogState();
+}
+
+class _NewProfileDialogState extends State<_NewProfileDialog> {
+  final _name = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _name.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(context, name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The stage's colours rather than the theme's, like everything else on
+    // these three screens: the app-wide theme may be the light one, and a
+    // white dialog on this dark stage reads as a different application.
+    return AlertDialog(
+      backgroundColor: const Color(0xFF15161F),
+      shape: const RoundedRectangleBorder(
+        borderRadius: AppRadius.sm,
+        side: BorderSide(color: Color(0xFF2C2F43)),
+      ),
+      title: const Text('Add a profile', style: TextStyle(color: kGatewayText, fontSize: 18)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'A profile is a separate, separately encrypted PIP. It has its own '
+            'password, its own memory and its own documents, and opening one '
+            'gives no access to the others.',
+            style: TextStyle(fontSize: 13, height: 1.5, color: kGatewayTextMuted),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          TextField(
+            controller: _name,
+            autofocus: true,
+            enabled: true,
+            onSubmitted: (_) => _submit(),
+            style: const TextStyle(color: kGatewayText, fontSize: 15),
+            cursorColor: kGatewayAccent,
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              labelStyle: TextStyle(color: kGatewayTextMuted),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFF2C2F43)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: kGatewayAccent),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const Text(
+            'You will choose its password next. There is no way to recover it.',
+            style: TextStyle(fontSize: 11.5, height: 1.5, color: kGatewayTextFaint),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel', style: TextStyle(color: kGatewayTextMuted)),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Continue')),
+      ],
     );
   }
 }

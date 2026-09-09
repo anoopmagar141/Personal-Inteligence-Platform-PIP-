@@ -492,3 +492,102 @@ def test_a_normal_restore_still_replaces_the_live_salt(
 
     assert salt_path.read_bytes() != b"0123456789abcdef"
     assert len(list(salt_path.parent.glob(f"{salt_path.name}.superseded-*"))) == 1
+
+
+# --- where the index actually is -------------------------------------------
+#
+# rebuild_vector_index() moves the previous Chroma directory aside before
+# re-ingesting. It read vector_store.CHROMA_DB_PATH to find it - the module
+# CONSTANT, fixed at import to the repo's own data/chroma and blind to
+# PIP_CHROMA_PATH. So this function moved the REAL index whatever directory the
+# rest of the run was pointed at, and the test suite did exactly that: every run
+# in which data/chroma existed renamed the developer's own index to
+# chroma.superseded-<stamp>, from tests that never went near Chroma. Twenty-two
+# of those directories had accumulated before anybody noticed, because the
+# index is derived and the next launch silently rebuilt it.
+
+
+def test_the_rebuild_moves_aside_the_index_the_environment_points_at(tmp_path, monkeypatch):
+    """
+    The isolation property. PIP_CHROMA_PATH is on conftest's table precisely so
+    that nothing in the suite can reach the real index; this function bypassed
+    it by reading a constant instead of asking.
+    """
+    from backend.memory import vector_store
+
+    isolated = tmp_path / "chroma"
+    isolated.mkdir()
+    (isolated / "chroma.sqlite3").write_bytes(b"the isolated index")
+
+    real = tmp_path / "not-this-one"
+    real.mkdir()
+    (real / "chroma.sqlite3").write_bytes(b"the index that must not be touched")
+
+    # *real* stands in for the repo's own data/chroma: both the default and the
+    # module attribute point at it, which is the state of an ordinary run where
+    # no test has replaced the attribute. That equality is what sends the
+    # resolution to the environment - and the environment says *isolated*.
+    monkeypatch.setenv("PIP_CHROMA_PATH", str(isolated))
+    monkeypatch.setattr(vector_store, "_DEFAULT_CHROMA_DB_PATH", str(real))
+    monkeypatch.setattr(vector_store, "CHROMA_DB_PATH", str(real))
+
+    assert vector_store.resolved_chroma_path() == str(isolated)
+    assert real.exists(), "the default path stood in for the real index and was moved"
+
+
+def test_a_test_that_replaced_the_module_attribute_still_wins(tmp_path, monkeypatch):
+    """
+    The other half of the resolution order, which test_vector_store.py relies
+    on: a monkeypatched module attribute beats the environment. Pinned because
+    collapsing the two callers onto one function must not quietly change which
+    of them wins.
+    """
+    from backend.memory import vector_store
+
+    monkeypatch.setenv("PIP_CHROMA_PATH", str(tmp_path / "from-the-environment"))
+    monkeypatch.setattr(vector_store, "CHROMA_DB_PATH", str(tmp_path / "from-the-attribute"))
+
+    assert vector_store.resolved_chroma_path() == str(tmp_path / "from-the-attribute")
+
+
+def test_the_rebuild_moves_the_isolated_index_and_not_the_real_one(
+    restore_script, tmp_path, monkeypatch
+):
+    """
+    The regression itself, at the call site that caused it.
+
+    rebuild_from_sqlite is stubbed out because the move is the whole subject
+    here - re-embedding a database is minutes of CPU and needs a real one - but
+    everything up to and including the move is the production path.
+    """
+    from backend.memory import vector_store
+
+    isolated = tmp_path / "isolated-chroma"
+    isolated.mkdir()
+    (isolated / "chroma.sqlite3").write_bytes(b"the index this run is pointed at")
+
+    real = tmp_path / "repo-data-chroma"
+    real.mkdir()
+    (real / "chroma.sqlite3").write_bytes(b"the developer's own index")
+
+    monkeypatch.setenv("PIP_CHROMA_PATH", str(isolated))
+    monkeypatch.setattr(vector_store, "_DEFAULT_CHROMA_DB_PATH", str(real))
+    monkeypatch.setattr(vector_store, "CHROMA_DB_PATH", str(real))
+    monkeypatch.setattr(
+        vector_store, "rebuild_from_sqlite",
+        lambda conn: {"rebuilt": [], "failed": [], "materialised": []},
+    )
+
+    db = tmp_path / "restored.db"
+    from backend.memory import profile_store
+    conn = profile_store.get_connection(str(db), "aa" * 32)
+    profile_store.initialize_schema(conn)
+    conn.close()
+
+    restore_script.rebuild_vector_index(db, "aa" * 32)
+
+    assert not isolated.exists(), "the index this run was pointed at was left in place"
+    assert list(tmp_path.glob("isolated-chroma.superseded-*")), "nothing was moved aside"
+    assert (real / "chroma.sqlite3").read_bytes() == b"the developer's own index", (
+        "the real index was moved by a run that was pointed somewhere else"
+    )

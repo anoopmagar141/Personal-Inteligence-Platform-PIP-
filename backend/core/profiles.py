@@ -54,6 +54,7 @@ import json
 import logging
 import os
 import re
+import shutil
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
@@ -352,3 +353,208 @@ def remove(slug: str) -> Profile:
     removed = next(p for p in profiles if p.slug == slug)
     _save(remaining, DEFAULT_SLUG if last_used() == slug else last_used())
     return removed
+
+
+def rename(slug: str, name: str) -> Profile:
+    """
+    Change a profile's display name, leaving its slug and directory alone.
+
+    The slug is a path segment - data/profiles/<slug> - so renaming it would
+    mean moving a directory that holds pip.db and salt.bin, and this module's
+    header is one long argument for never doing that. The name is what a person
+    reads on the sign-in screen; the slug is where the bytes live, and only one
+    of those is safe to change after the fact.
+    """
+    cleaned = name.strip()
+    if not cleaned:
+        raise ValueError("a profile name cannot be empty")
+    # Same ceiling the registry has always implied: the name is drawn in a
+    # switcher, not stored as a document.
+    if len(cleaned) > 64:
+        raise ValueError("a profile name must be 64 characters or fewer")
+
+    existing = list_profiles()
+    if not any(p.slug == slug for p in existing):
+        raise KeyError(f"no profile named {slug!r}")
+
+    renamed = [
+        Profile(**{**asdict(p), "name": cleaned}) if p.slug == slug else p
+        for p in existing
+    ]
+    _save(renamed, last_used())
+    return next(p for p in renamed if p.slug == slug)
+
+
+# --- destroying one ---------------------------------------------------------
+#
+# WHY THIS IS AN ERASURE AND remove() IS NOT
+# ------------------------------------------
+# remove() above unregisters and deliberately leaves the files, because it is
+# reachable by somebody who does not have the profile's password and therefore
+# cannot be shown to own what they are discarding. ADR-024's posture - removal
+# is a retraction, not an erasure - is the right one for that caller.
+#
+# delete() is the other caller, and the difference is authorisation. It is only
+# reachable from inside an unlocked profile, which means the person asking has
+# just proved they can derive its key. That proof is the only ownership claim
+# this application has: there is no account server, no recovery, nothing else
+# that could distinguish the owner from anyone with the disk. When it has been
+# made, "delete my account" has to mean the bytes are gone, because a control
+# labelled that way which merely hides a directory is the misleading label this
+# module's header warns about, pointed the other way.
+#
+# There is no undo. That is the same sentence db_key.py writes about a
+# forgotten password, and it is true here for the same reason.
+
+
+def erasable_paths(slug: str, data_root: Path | None = None) -> list[Path]:
+    """
+    Exactly what deleting *slug* would destroy, listed before anything is.
+
+    The list is this profile's own files and nothing else, which matters most
+    for the default profile: its data_dir is "." - the data directory itself -
+    which also holds profiles.json, pip.lock, api_token.txt, startup.jsonl and
+    ui_theme.txt. Those belong to the running application rather than to a
+    person, and three of them describe the OTHER profiles. A delete implemented
+    as "remove the profile's directory" would therefore be correct for every
+    profile except the original one, where it would take every other profile's
+    registry entry with it.
+
+    So the unit of deletion is the paths this module already names as
+    per-profile, for every profile equally. Everything that is the user's data
+    goes; the application's own plumbing stays.
+    """
+    profile = get(slug)
+    paths = profile.paths(data_root)
+    return [
+        paths["db"],
+        paths["salt"],
+        paths["chroma"],
+        paths["documents"],
+        # The unencrypted copy of the profile picture, if one was published to
+        # the sign-in screen. Not one of the four env-mapped paths, but it is
+        # the user's data by any reading - and a delete that left a photograph
+        # of the account holder in the directory it had just emptied would be
+        # the most visible possible way to get this wrong.
+        signin_picture_path(slug, data_root),
+    ]
+
+
+def _remove_path(path: Path) -> bool:
+    """Delete a file or a directory tree. Returns whether anything was there."""
+    if path.is_dir():
+        shutil.rmtree(path)
+        return True
+    if path.exists():
+        path.unlink()
+        return True
+    return False
+
+
+def delete(slug: str) -> Profile:
+    """
+    Erase a profile's data and unregister it. Only ever call this while the
+    caller has proved they can open it.
+
+    ORDERING
+    --------
+    Files first, registry second. A crash between the two leaves a registered
+    profile whose database is gone, which the sign-in screen already draws
+    correctly - `exists` is False, so it reads as "not created yet". The
+    reverse order would leave orphaned encrypted data with nothing pointing at
+    it, which nobody would ever find to delete again.
+
+    THE DEFAULT PROFILE IS NOT EXEMPT
+    ---------------------------------
+    Its data is erased like anyone else's. What survives is its registry entry,
+    because load() synthesises it whenever it is missing - the original
+    installation is always listed, and that invariant exists so that losing the
+    entry can never make the database it points at unreachable. The consequence
+    after a delete is that the slot remains and reads as a fresh profile, which
+    is what it now is: there is nothing behind it.
+    """
+    profile = get(slug)
+
+    for path in erasable_paths(slug):
+        _remove_path(path)
+        # SQLite leaves -wal and -shm beside a database it did not close
+        # cleanly, holding pages that have not landed in the main file yet.
+        # They are named after pip.db rather than living under it, so the
+        # four-path list does not cover them - and leaving them behind would
+        # leave fragments of the erased profile's content in a directory it
+        # was just deleted from.
+        if path.suffix == ".db":
+            for sidecar in (f"{path}-wal", f"{path}-shm", f"{path}-journal"):
+                _remove_path(Path(sidecar))
+
+    if slug != DEFAULT_SLUG:
+        # The directory itself, now that everything PIP put in it is gone.
+        # Best-effort: anything else in there was not put there by PIP, and
+        # deleting a directory that is not empty is not this function's call.
+        try:
+            profile.paths()["db"].parent.rmdir()
+        except OSError:
+            logger.info(f"{profile.data_dir} was not empty after erasing - leaving the directory.")
+
+        remaining = [p for p in list_profiles() if p.slug != slug]
+        _save(remaining, DEFAULT_SLUG if last_used() == slug else last_used())
+
+    return profile
+
+
+# --- the picture on the sign-in screen --------------------------------------
+#
+# WHY THIS IS A SEPARATE FILE AND NOT THE AVATAR
+# ----------------------------------------------
+# The profile picture lives in identity_avatar, inside the encrypted database.
+# That is the right place for it and it stays there. But the sign-in screen
+# draws profiles that are LOCKED - if it could read that table it would not be
+# a sign-in screen - so a picture shown there cannot come from inside the
+# database. There is no clever way around this: anything the screen can render
+# before a password is typed is, by definition, readable without one.
+#
+# So the trade is stated rather than hidden. Turning this on writes a SECOND
+# copy of the picture, unencrypted, beside the profile's database, and that
+# copy is readable by anyone who can read the disk - which is the threat model
+# (a stolen laptop, a disk image, a backup tool) that the encryption exists
+# for. A face is not a conversation, and plenty of people will think a
+# recognisable switcher is worth it; that is their call to make, which is why
+# it is off until somebody makes it and why removing it deletes the file.
+#
+# It is erased with the profile. erasable_paths() includes it, because a
+# "delete my account" that leaves a photograph of the account holder in the
+# directory it just emptied would be the most visible possible way to get this
+# wrong.
+
+SIGNIN_PICTURE_NAME = "signin-picture"
+
+
+def signin_picture_path(slug: str, data_root: Path | None = None) -> Path:
+    """
+    Where *slug*'s sign-in picture is, whether or not one has been published.
+
+    One fixed filename with no extension, because the format is detected from
+    the bytes when it is served (avatar_store.detect_media_type), exactly as it
+    is on upload. An extension would be a second, weaker claim about the same
+    thing, and the two could disagree.
+    """
+    profile = get(slug)
+    root = (data_root or data_dir()) / profile.data_dir
+    return root / SIGNIN_PICTURE_NAME
+
+
+def publish_signin_picture(slug: str, image: bytes) -> Path:
+    """Write the unencrypted copy the sign-in screen can read."""
+    path = signin_picture_path(slug)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(image)
+    return path
+
+
+def unpublish_signin_picture(slug: str) -> bool:
+    """Remove it. Returns whether there was one."""
+    return _remove_path(signin_picture_path(slug))
+
+
+def has_signin_picture(slug: str) -> bool:
+    return signin_picture_path(slug).exists()

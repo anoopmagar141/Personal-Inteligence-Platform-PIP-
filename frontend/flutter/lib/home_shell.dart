@@ -326,7 +326,17 @@ class _HomeShellState extends State<HomeShell> {
                   refreshToken: _reviewEpoch,
                   onQueueChanged: _refreshPendingCount,
                 ),
-                ProfileView(api: widget.api),
+                ProfileView(
+                  api: widget.api,
+                  // Deleting a profile signs you out of it, because the files
+                  // the key belongs to stop existing. The socket is closed
+                  // first for the same two reasons sign-out closes it - the
+                  // transcript enqueue has to be the last word on the
+                  // conversation, and the backend cannot delete a database
+                  // file this client still has open.
+                  onCloseChat: _chatClient.disconnect,
+                  onSignedOut: widget.onSignedOut,
+                ),
                 DecisionsView(api: widget.api, activeProjectId: _activeProjectId),
                 ProjectsView(
                   api: widget.api,
