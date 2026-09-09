@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-09] claude · Wrote the hook-install requirement into docs/CONVENTIONS.md and installed the hooks on this machine · why: core.hooksPath is per-clone and cannot be committed, so the repo carried the cap rule and a LOG entry saying the check was added while no hook was installed to run it · files: docs/CONVENTIONS.md
+
 - [2026-09-09] claude · Rebuilt dist/PIP-Setup.exe from a clean flutter build and verified it: 31,615/31,615 files byte-identical to the payload, sha256 7CE29ABA6F129C21886B473F82C9097CA1BA471862AB4363F9CA6C7AE20D3254 · why: the 76 MB installer in dist/ predated its own payload by 22 minutes and carried an empty version resource, so it was untrusted and replaced rather than explained · files: dist/PIP-Setup.exe (gitignored artefact; recorded here for provenance)
 
 - [2026-09-09] claude · Made scripts/build_installer.ps1 refuse to compile an incomplete, dirty or stale payload, and fail a suspiciously small installer · why: a 76 MB PIP-Setup.exe had been produced from a payload that had not finished assembling, and nothing in the pipeline could tell that from a success · files: scripts/build_installer.ps1

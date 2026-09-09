@@ -126,11 +126,30 @@ than a winner picked.
 - **`AGENTS.md` is capped at 80 lines and the cap is enforced, not remembered.**
   It is loaded into an agent's context before every session, so its length is
   paid on every request; detail belongs in `docs/`, which is read on demand.
-  → `scripts/pre-commit` (the check rejects a staged `AGENTS.md` over the cap)
+  → `scripts/pre-commit` (the check rejects a staged `AGENTS.md` over the cap,
+  once the hooks are installed — see Hooks below)
 - **Every file ends with exactly one trailing newline and no blank line.**
   `wc -l` therefore reports one fewer than the line number an editor shows for
   the end of the file. That gap is not a defect and must not be closed by
   deleting the final newline. → any file here; verified with `tail -c 1`
+
+## Hooks
+
+- **Cloning does not install the hooks; `scripts/install_hooks.ps1` does, once
+  per clone.** Git will not run hooks straight from a clone — that is what stops
+  a repository you cloned executing code on checkout — so this is a deliberate
+  step, and until it is taken nothing enforces the ADR-025 import guard or the
+  `AGENTS.md` cap. Both then fail open and silently: commits are accepted and
+  the rules read as if they were being applied.
+  → `scripts/install_hooks.ps1`
+- **The installer points `core.hooksPath` at `scripts/` rather than copying
+  into `.git/hooks/`.** A copy is a second version that drifts, and the one git
+  actually runs is the untracked one nobody reviews. Editing
+  `scripts/pre-commit` is therefore the whole of updating the hook.
+- **`core.hooksPath` lives in `.git/config`, so it is per-clone and per-machine
+  and cannot be committed.** Found the hard way: this repository carried the
+  cap rule, the LOG entry saying the check was added, and no installed hook on
+  the machine that wrote them.
 
 ## Tests
 
