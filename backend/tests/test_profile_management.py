@@ -884,3 +884,131 @@ def test_bytes_that_stopped_being_an_image_are_refused_not_guessed(app):
     session_key.lock()
 
     assert client.get("/api/v1/auth/profiles/default/picture", headers=headers).status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# A delete this process cannot carry out
+# ---------------------------------------------------------------------------
+#
+# Found in the running app, not here: deleting a profile that had been chatted
+# in failed with WinError 32, "the process cannot access the file because it is
+# being used by another process". A chat session's connection is closed by a
+# submission to its own pinned worker, and server.py's disconnect handler
+# records that such a submission can never be dequeued once that connection has
+# written - so it is bounded and abandoned, on the reasoning that the OS
+# reclaims the handle at exit. That is a sound answer to a leak and no answer
+# at all to a delete: on Windows an open handle refuses an unlink rather than
+# deferring it.
+#
+# So no retry budget can win, and the deletion is recorded instead and carried
+# out at the next start, before anything opens anything. What is tested is that
+# the answer the user gave still stands - not that the erase happens in one go.
+
+
+def test_a_delete_that_cannot_finish_now_is_recorded_rather_than_lost(app, monkeypatch):
+    client, headers, tmp_path = app
+    slug = make_second_profile(client, headers)
+
+    monkeypatch.setattr(
+        profiles, "delete",
+        lambda _s: (_ for _ in ()).throw(PermissionError("[WinError 32] in use")),
+    )
+    deleted = client.request(
+        "DELETE",
+        f"/api/v1/auth/profiles/{slug}",
+        json={"password": "priyas-own-password"},
+        headers=headers,
+    )
+
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["deferred"] is True
+    assert profiles.pending_deletions() == [slug]
+
+
+def test_a_deferred_delete_still_signs_you_out(app, monkeypatch):
+    """The key belongs to a profile that is going away. Holding it because the
+    unlink is postponed would leave the session open on data already given up."""
+    client, headers, _ = app
+    slug = make_second_profile(client, headers)
+
+    monkeypatch.setattr(
+        profiles, "delete",
+        lambda _s: (_ for _ in ()).throw(PermissionError("[WinError 32] in use")),
+    )
+    deleted = client.request(
+        "DELETE",
+        f"/api/v1/auth/profiles/{slug}",
+        json={"password": "priyas-own-password"},
+        headers=headers,
+    )
+
+    assert deleted.json()["state"] == "locked"
+    assert not session_key.is_unlocked()
+
+
+def test_a_delete_that_succeeds_marks_nothing(app):
+    """The mark is the exceptional path. An ordinary delete must not leave a
+    file behind saying there is work outstanding."""
+    client, headers, _ = app
+    slug = make_second_profile(client, headers)
+
+    client.request(
+        "DELETE",
+        f"/api/v1/auth/profiles/{slug}",
+        json={"password": "priyas-own-password"},
+        headers=headers,
+    )
+
+    assert profiles.pending_deletions() == []
+    assert not profiles.pending_deletion_path().exists()
+
+
+def test_the_drain_erases_what_was_marked(app):
+    client, headers, tmp_path = app
+    slug = make_second_profile(client, headers)
+    directory = tmp_path / "profiles" / slug
+    profiles.mark_for_deletion(slug)
+
+    erased = profiles.drain_pending_deletions()
+
+    assert erased == [slug]
+    assert not (directory / "pip.db").exists()
+    assert slug not in [p.slug for p in profiles.list_profiles()]
+    assert profiles.pending_deletions() == []
+
+
+def test_a_mark_that_still_cannot_be_erased_stays_marked(app, monkeypatch):
+    """One attempt per launch, and never a silent surrender: a deletion that
+    was asked for stays asked for until it happens."""
+    client, headers, _ = app
+    slug = make_second_profile(client, headers)
+    profiles.mark_for_deletion(slug)
+
+    monkeypatch.setattr(
+        profiles, "delete",
+        lambda _s: (_ for _ in ()).throw(PermissionError("[WinError 32] still in use")),
+    )
+    erased = profiles.drain_pending_deletions()
+
+    assert erased == []
+    assert profiles.pending_deletions() == [slug]
+
+
+def test_a_mark_for_a_profile_that_is_gone_is_dropped(app):
+    """delete() unregisters before it can fail, so a mark with no profile
+    behind it means the registry half already happened."""
+    client, headers, _ = app
+    profiles.mark_for_deletion("never-existed")
+
+    assert profiles.drain_pending_deletions() == []
+    assert profiles.pending_deletions() == []
+
+
+def test_an_unreadable_mark_file_does_not_stop_anything(app):
+    """Same posture as the registry itself: a convenience file that will not
+    parse must not be able to stop PIP opening."""
+    client, headers, _ = app
+    profiles.pending_deletion_path().write_text("{ not json", encoding="utf-8")
+
+    assert profiles.pending_deletions() == []
+    assert profiles.drain_pending_deletions() == []

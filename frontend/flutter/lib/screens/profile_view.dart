@@ -1520,8 +1520,9 @@ class _AccountCardState extends State<AccountCard> {
     });
 
     widget.onCloseChat();
+    Map<String, dynamic> result;
     try {
-      await widget.api.deleteProfile(slug, password);
+      result = await widget.api.deleteProfile(slug, password);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -1531,6 +1532,40 @@ class _AccountCardState extends State<AccountCard> {
       return;
     }
     if (!mounted) return;
+
+    // A deletion the backend could not carry out now is recorded and finished
+    // at the next start - a chat session's connection can hold the database
+    // open for the life of the process, and on Windows an open handle refuses
+    // an unlink rather than deferring it. Saying so is not a detail: the
+    // alternative is signing somebody out while letting them believe data is
+    // gone that is still on the disk.
+    if (result['deferred'] == true) {
+      // The spinner stops first. Everything this card was doing is finished -
+      // what is left is somebody reading a sentence - and a progress indicator
+      // turning behind that says the opposite.
+      setState(() => _busy = false);
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Deleting on next start'),
+          content: const Text(
+            'PIP could not finish erasing this profile while it was still open. '
+            'It has been recorded and will be erased the next time PIP starts - '
+            'you do not need to do anything.\n\n'
+            'You are signed out of it now, and it will not appear on the sign-in '
+            'screen once it is gone.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+    }
+
     widget.onSignedOut();
   }
 

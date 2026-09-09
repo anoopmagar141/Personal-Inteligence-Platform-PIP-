@@ -426,6 +426,18 @@ def erasable_paths(slug: str, data_root: Path | None = None) -> list[Path]:
     """
     profile = get(slug)
     paths = profile.paths(data_root)
+    # THE ORDER IS A SAFETY PROPERTY, NOT A LIST
+    #
+    # pip.db goes first because a partial erase has to fail in the harmless
+    # direction. If the database is gone and the salt survives, the leftover is
+    # a 16-byte file nobody needs. The reverse - salt gone, database still
+    # there - is the single worst outcome available in this codebase: the salt
+    # is half the key derivation, so the database can no longer be opened by
+    # the correct password, and Part 10.1 states there is no recovery.
+    #
+    # Not hypothetical. A delete of a profile that had been chatted in failed on
+    # pip.db with WinError 32, the handle still open; because pip.db is first,
+    # it failed before touching anything else and the profile was left whole.
     return [
         paths["db"],
         paths["salt"],
@@ -558,3 +570,117 @@ def unpublish_signin_picture(slug: str) -> bool:
 
 def has_signin_picture(slug: str) -> bool:
     return signin_picture_path(slug).exists()
+
+
+# --- deleting what this process cannot let go of ----------------------------
+#
+# WHY A DELETE CAN FAIL AT ALL
+# ----------------------------
+# A WebSocket chat session opens its own connection and keeps it for the life
+# of the socket. Closing it is submitted to that session's pinned worker, and
+# server.py's own comment records what was found live: a connection that did
+# any writes can leave that close submission never dequeued. It is therefore
+# bounded and then ABANDONED, on the reasoning that the OS reclaims the handle
+# at process exit - which is a sound answer to a leak and no answer at all to
+# a delete. On Windows an open handle does not defer an unlink, it refuses it,
+# so a profile that has been chatted in cannot always be erased by the process
+# that has it open. That is the WinError 32 this exists for.
+#
+# WHY A MARKER AND NOT A LONGER RETRY
+# -----------------------------------
+# No retry budget wins against a handle that will never be released before
+# exit. The alternative that does work is the one installers use for locked
+# files: record the intent, and carry it out on the next start, before
+# anything has opened anything. The user is signed out either way and their
+# answer was already given - the deletion becomes slower, not conditional.
+#
+# WHAT MAKES IT SAFE TO PERSIST A DESTRUCTIVE INSTRUCTION
+# -------------------------------------------------------
+# It is only ever written after a password has been verified against the
+# profile it names, in the session that asked. It lives beside profiles.json,
+# in the same directory and the same trust domain as the registry that says
+# which profiles exist at all - anything able to forge this could simply edit
+# that instead. And it names a slug, so it can only ever reach the paths
+# erasable_paths() already computes for that one profile.
+
+PENDING_DELETION_NAME = "pending-deletion.json"
+
+
+def pending_deletion_path() -> Path:
+    return data_dir() / PENDING_DELETION_NAME
+
+
+def pending_deletions() -> list[str]:
+    """Slugs waiting to be erased, oldest first. Never raises."""
+    path = pending_deletion_path()
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return [str(s) for s in raw.get("slugs", [])]
+    except Exception as e:
+        logger.warning(f"{PENDING_DELETION_NAME} could not be read ({e}) - ignoring it.")
+        return []
+
+
+def _write_pending(slugs: list[str]) -> None:
+    path = pending_deletion_path()
+    if not slugs:
+        if path.exists():
+            path.unlink()
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps({"slugs": slugs}, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def mark_for_deletion(slug: str) -> None:
+    """Record that *slug* is to be erased as soon as nothing has it open."""
+    slugs = pending_deletions()
+    if slug not in slugs:
+        slugs.append(slug)
+    _write_pending(slugs)
+    logger.info(f"Profile {slug!r} marked for deletion on next start.")
+
+
+def drain_pending_deletions() -> list[str]:
+    """
+    Erase whatever was marked, and forget what no longer needs erasing.
+
+    Called at startup, before anything opens a database - which is the whole
+    point, since the reason a mark exists is that something had one open.
+
+    A slug that is no longer in the registry is dropped rather than retried:
+    delete() unregisters before it can fail, so an entry with no profile behind
+    it means the registry half already happened and there is nothing left to
+    name. A slug that still cannot be erased stays marked and is tried again
+    next time, which costs one attempt per launch and never gives up silently.
+    """
+    marked = pending_deletions()
+    if not marked:
+        return []
+
+    erased: list[str] = []
+    still_pending: list[str] = []
+    for slug in marked:
+        try:
+            get(slug)
+        except KeyError:
+            # Unregistered already: nothing to point at, nothing to do.
+            logger.info(f"Pending deletion {slug!r} is no longer registered - clearing the mark.")
+            continue
+        try:
+            # The same delete the route would have done. Sharing it rather than
+            # repeating it is what keeps "what a delete erases" one answer -
+            # a second copy here would drift the first time the list changes,
+            # and the way it would drift is by leaving something behind.
+            delete(slug)
+            erased.append(slug)
+            logger.info(f"Finished deleting profile {slug!r} that was marked earlier.")
+        except Exception as e:
+            logger.error(f"Profile {slug!r} still could not be deleted ({e}) - staying marked.")
+            still_pending.append(slug)
+
+    _write_pending(still_pending)
+    return erased

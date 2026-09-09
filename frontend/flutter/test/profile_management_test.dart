@@ -96,11 +96,16 @@ class FakeApi extends ApiClient {
     if (failWith != null) throw failWith!;
   }
 
+  /// Whether the backend reports the erase as recorded-for-later rather than
+  /// done. A chat session can hold the database open for the life of the
+  /// process, so this is a real answer and not an error.
+  bool deferDelete = false;
+
   @override
   Future<Map<String, dynamic>> deleteProfile(String slug, String password) async {
     calls.add('delete:$slug:$password');
     if (failWith != null) throw failWith!;
-    return {'state': 'locked', 'deleted': slug};
+    return {'state': 'locked', 'deleted': slug, 'deferred': deferDelete};
   }
 
   @override
@@ -541,6 +546,45 @@ void main() {
 
       expect(signedOut, isFalse);
       expect(find.text('files could not be deleted'), findsOneWidget);
+    });
+
+    testWidgets('says so when the erase is recorded for the next start', (tester) async {
+      // Signing somebody out while letting them believe their data is gone
+      // when it is still on the disk would be the one wrong answer here.
+      var signedOut = false;
+      final api = FakeApi()..deferDelete = true;
+      await pumpProfile(tester, api_: api, onSignedOut: () => signedOut = true);
+      await openDeleteDialog(tester);
+
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), 'Anup');
+      await tester.enterText(fields.at(1), 'my-password');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete permanently'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Deleting on next start'), findsOneWidget);
+      expect(signedOut, isFalse, reason: 'left before the notice could be read');
+
+      await tester.tap(find.widgetWithText(FilledButton, 'OK'));
+      await tester.pumpAndSettle();
+      expect(signedOut, isTrue);
+    });
+
+    testWidgets('an ordinary delete says nothing extra', (tester) async {
+      var signedOut = false;
+      await pumpProfile(tester, onSignedOut: () => signedOut = true);
+      await openDeleteDialog(tester);
+
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), 'Anup');
+      await tester.enterText(fields.at(1), 'my-password');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete permanently'));
+      await settleDelete(tester);
+
+      expect(find.text('Deleting on next start'), findsNothing);
+      expect(signedOut, isTrue);
     });
 
     testWidgets('cancelling deletes nothing', (tester) async {

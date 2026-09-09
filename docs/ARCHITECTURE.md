@@ -176,6 +176,18 @@ so there is one write path, not two.
   which also holds `profiles.json`, `pip.lock` and `api_token.txt`. A
   directory-level delete would be correct for every profile except that one,
   where it would take every *other* profile's registry entry with it.
+- **A profile delete can be recorded rather than performed.** A chat session's
+  connection is closed by a submission to its own pinned worker, and
+  `server.py`'s disconnect handler documents that such a submission can never
+  be dequeued once that connection has written - so it is bounded and
+  abandoned, leaving `pip.db` open for the life of the process. On Windows an
+  open handle refuses an unlink rather than deferring it (WinError 32), so no
+  retry budget wins. The delete route therefore closes what it can
+  deterministically, retries briefly, and then writes the slug to
+  `data/pending-deletion.json`; the lifespan drains that **before anything
+  opens a database**. `erasable_paths()` puts `pip.db` first so a partial erase
+  fails in the harmless direction - a surviving salt is 16 useless bytes, a
+  surviving database with no salt is unopenable forever.
 - **A password change must re-key ChromaDB too.** Chunk ids are
   `HMAC(db_key, file_path)`, chunk text and stored paths are `Fernet(db_key)`.
   Rekeying only SQLite leaves the whole index unreadable and *nothing fails

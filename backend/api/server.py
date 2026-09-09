@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import gc
 import logging
 import os
 import re
@@ -1001,6 +1002,15 @@ try:
         # earlier test's TestClient had already latched the flag. Any such
         # assertion after the first one was not testing anything.
         _session_registry.shutting_down = False
+        # Before anything opens a database, because the only reason a deletion
+        # is pending is that something had one open when it was asked for.
+        try:
+            finished = profiles.drain_pending_deletions()
+            if finished:
+                logger.info(f"Finished deleting profile(s) marked earlier: {', '.join(finished)}")
+        except Exception as e:
+            # A convenience file failing to parse must not stop the app opening.
+            logger.error(f"Could not process pending profile deletions: {e}")
         # An older launcher, a test, or a shell that exported it. Adopting the
         # key means those keep working exactly as they did rather than meeting
         # a sign-in screen for a database already open to them.
@@ -1888,7 +1898,7 @@ try:
             return False
         return db_key.verify_key(db_path, candidate)
 
-    def _erase_with_retries(slug: str, attempts: int = 5) -> dict[str, str]:
+    def _erase_with_retries(slug: str, attempts: int = 8) -> dict[str, str]:
         """
         profiles.delete(), given a moment for Windows to let go of the files.
 
@@ -1899,7 +1909,12 @@ try:
         raise rather than defer, so a delete issued in that half-second window
         would fail on a profile the user has already been signed out of.
 
-        Five short attempts, then the error is real and is reported as one.
+        Eight attempts over about three seconds, then the caller records the
+        deletion for the next start instead. The budget is deliberately not
+        larger: it exists to win the ordinary races - a socket finishing its
+        close, a handler returning - and no budget wins against a connection
+        whose close was abandoned, which is the case that has to be deferred
+        rather than waited out.
         """
         last: Exception | None = None
         for attempt in range(attempts):
@@ -1908,7 +1923,11 @@ try:
                 return {"slug": profile.slug, "name": profile.name}
             except PermissionError as exc:
                 last = exc
-                time.sleep(0.2 * (attempt + 1))
+                # Between attempts, not only before the first: a connection
+                # released by a handler that returned during the wait is
+                # collected here rather than one whole attempt later.
+                gc.collect()
+                time.sleep(0.1 * (attempt + 1))
         raise last if last else RuntimeError("the profile could not be deleted")
 
     @app.delete(f"{BASE_PREFIX}/auth/profiles/{{slug}}")
@@ -1972,24 +1991,59 @@ try:
             except Exception as e:
                 logger.error(f"Delete: failed to enqueue a session's transcript: {e}")
 
+        # Closing each session's connection ON ITS OWN executor, because that
+        # is the only thread allowed to touch it - a sqlite3 connection opened
+        # on the pinned worker must be closed there too. Bounded like the
+        # disconnect path is, and for the same reason: this submission is the
+        # one known to be able to never complete, and a delete must not hang on
+        # it. What it buys is that the ordinary case - a session that never
+        # wrote - is now closed deterministically before the erase rather than
+        # racing it.
+        for session in await _session_registry.snapshot():
+            try:
+                await asyncio.wait_for(
+                    loop.run_in_executor(session["executor"], session["conn"].close),
+                    timeout=3.0,
+                )
+            except Exception as e:
+                logger.warning(f"A session's connection did not close before the delete: {e}")
+
         session_key.lock()
         try:
             vector_store.reset_client()
         except Exception as e:
             logger.warning(f"Could not drop the vector store handle before deleting: {e}")
 
+        # Per-request connections are closed by refcount when their handler
+        # returns, but one caught in a reference cycle - a traceback held by a
+        # logged exception, say - waits for the collector instead. On Windows
+        # that is the difference between an unlink and a WinError 32.
+        gc.collect()
+
         try:
             erased = await asyncio.to_thread(_erase_with_retries, slug)
+            deferred = False
         except Exception as exc:
-            logger.error(f"Deleting profile {slug!r} failed: {exc}")
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "Some of this profile's files could not be deleted - they may "
-                    "still be open. You have been signed out; close PIP and try "
-                    f"again. ({exc})"
-                ),
+            # Not a dead end, and not a lie either. A chat session's connection
+            # can be left open for the life of this process - the close is
+            # submitted to that session's pinned worker, and this file's own
+            # disconnect handler records that such a submission can never be
+            # dequeued, so it is bounded and abandoned. On Windows an open
+            # handle refuses an unlink rather than deferring it, which is the
+            # WinError 32 this branch exists for.
+            #
+            # So the deletion is recorded and carried out at the next start,
+            # before anything opens anything. The answer the user gave still
+            # stands; it is the moment of erasure that moves, and telling them
+            # that is more honest than telling them to try again at a control
+            # that would fail the same way for the same reason.
+            logger.warning(
+                f"Deleting profile {slug!r} now was not possible ({exc}) - "
+                f"marking it to be erased at the next start."
             )
+            profiles.mark_for_deletion(slug)
+            erased = {"slug": slug, "name": slug}
+            deferred = True
 
         # Point at something that exists, so the sign-in screen this client is
         # about to show is describing a real profile rather than the paths of
@@ -2000,7 +2054,16 @@ try:
             profiles.activate(profiles.DEFAULT_SLUG)
 
         logger.info(f"Profile {slug!r} was deleted at the user's request.")
-        return {"state": "locked", "deleted": erased["slug"], "profile": profiles.active_slug()}
+        return {
+            "state": "locked",
+            "deleted": erased["slug"],
+            "profile": profiles.active_slug(),
+            # The client says something different for a deletion that has been
+            # recorded rather than performed. Signing somebody out and letting
+            # them believe their data is gone when it is still on the disk
+            # would be the one wrong answer here.
+            "deferred": deferred,
+        }
 
     @app.get(f"{BASE_PREFIX}/status")
     def status():

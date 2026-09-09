@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-09] claude · Made a profile delete that cannot finish now record itself and complete at the next start · why: deleting a profile that had been chatted in failed with WinError 32, because a chat connection's close is abandoned by design and leaves pip.db open for the life of the process · files: backend/core/profiles.py, backend/api/server.py, frontend/flutter/lib/screens/profile_view.dart, backend/tests/test_profile_management.py, frontend/flutter/test/profile_management_test.dart, docs/ARCHITECTURE.md
+
 - [2026-09-09] claude · Made scripts/set_db_password.py carry the ChromaDB index over to the new key, and taught vector_store.reencrypt to encrypt a plaintext index on a first encryption · why: the script rekeyed only SQLite, so the index went dark while the Documents screen kept reporting it, and a first encryption left every document's text readable on disk in chroma/ · files: scripts/set_db_password.py, backend/memory/vector_store.py, backend/tests/test_set_db_password.py, backend/tests/test_vector_store.py, backend/core/session_key.py, docs/ARCHITECTURE.md
 
 - [2026-09-09] claude · Gave vector_store one resolved_chroma_path() and pointed restore_backup.py's rebuild at it · why: it read the CHROMA_DB_PATH module constant, so every full-suite run renamed the developer's real data/chroma to chroma.superseded-<stamp> from tests that never touched Chroma · files: backend/memory/vector_store.py, scripts/restore_backup.py, backend/tests/test_restore_backup.py
