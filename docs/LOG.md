@@ -6,6 +6,10 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-09] claude · Made scripts/build_installer.ps1 refuse to compile an incomplete, dirty or stale payload, and fail a suspiciously small installer · why: a 76 MB PIP-Setup.exe had been produced from a payload that had not finished assembling, and nothing in the pipeline could tell that from a success · files: scripts/build_installer.ps1
+
+- [2026-09-09] claude · Corrected the packaging path drift in AGENTS.md and installer/PIP.iss and recorded the MAX_PATH reason in ARCHITECTURE.md · why: both said the payload is built at dist/PIP while build_installer.ps1 stages it at <drive>\pip-build\PIP · files: AGENTS.md, installer/PIP.iss, docs/ARCHITECTURE.md
+
 - [2026-09-09] claude · Gave the active-model dropdown isExpanded, and covered the providers screen at widths either side of its 720px cap · why: below 720 the dropdown sized itself to its widest model name and the field clamped it, filling the console with one RenderFlex overflow per pulled model · files: frontend/flutter/lib/screens/providers_view.dart, frontend/flutter/test/providers_view_test.dart
 
 - [2026-09-09] claude · Put the PIP mark on the assistant's chat avatar in place of the letter P, and gave PipLogo an optional fallback · why: the avatar answers who said a turn, and a letter was standing in for a mark the app already has · files: frontend/flutter/lib/logo.dart, frontend/flutter/lib/screens/chat_view.dart

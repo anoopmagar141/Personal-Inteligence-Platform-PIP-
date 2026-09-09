@@ -88,6 +88,81 @@ if ($SkipBuild) {
     }
 }
 
+# --- refuse to compile an incomplete payload -------------------------------
+#
+# WHY THIS EXISTS
+#
+# A 76 MB PIP-Setup.exe was found in dist\, built from a payload that had not
+# finished assembling: the installer's timestamp was 22 minutes earlier than
+# the payload's last step, and its version resource was empty, so it was not
+# even a build of this .iss. Nothing caught it. -SkipBuild only warned how old
+# the payload was, and ISCC will happily compile whatever subset of the tree it
+# can see - a partial payload is not an error to it, it is a smaller install.
+#
+# Size alone does not settle it either: a payload can be the right size and
+# hold the wrong application binary, which is the failure this project has
+# actually had. So the check is per-file, and the one that matters most is
+# app\data\app.so - the Dart code. pip_flutter_client.exe is a runner shell
+# that does not change between builds of the same Flutter version, so an
+# unchanged .exe proves nothing at all about which code is inside.
+
+function Assert-PayloadComplete {
+    param([string]$Path, [string]$FlutterRelease)
+
+    $required = @(
+        "python\python.exe",
+        "app\pip_flutter_client.exe",
+        "app\data\app.so",
+        "app\flutter_windows.dll",
+        "backend\api\server.py",
+        "backend\core\profiles.py",
+        "config\provider_consent.json",
+        "scripts\launch_pip.ps1",
+        "shared\ws_spec.py"
+    )
+    $missing = @($required | Where-Object { -not (Test-Path (Join-Path $Path $_)) })
+    if ($missing.Count -gt 0) {
+        Write-Host "  ERROR: the payload is incomplete - refusing to compile." -ForegroundColor Red
+        foreach ($m in $missing) { Write-Host "         missing $m" -ForegroundColor DarkGray }
+        Write-Host "         Rebuild it: scripts\build_portable.ps1 `"$Path`"" -ForegroundColor DarkGray
+        exit 1
+    }
+
+    # data\ ships empty. A payload carrying a database is one built over
+    # somebody's real installation, and it would hand every user the
+    # developer's memory and a salt their password will not match.
+    if (Test-Path (Join-Path $Path "data")) {
+        $stray = @(Get-ChildItem (Join-Path $Path "data") -Recurse -Force -ErrorAction SilentlyContinue)
+        if ($stray.Count -gt 0) {
+            Write-Host "  ERROR: payload data\ is not empty ($($stray.Count) item(s)) - refusing." -ForegroundColor Red
+            foreach ($f in $stray | Select-Object -First 8) { Write-Host "         $($f.Name)" -ForegroundColor DarkGray }
+            exit 1
+        }
+    }
+
+    # The staleness check the whole release gate turns on. Only possible when
+    # the build tree is present - an installer built on a machine without the
+    # Flutter output is packaging a payload it cannot compare against, and says
+    # so rather than pretending it verified something.
+    $built = Join-Path $FlutterRelease "data\app.so"
+    if (Test-Path $built) {
+        $a = (Get-FileHash $built -Algorithm SHA256).Hash
+        $b = (Get-FileHash (Join-Path $Path "app\data\app.so") -Algorithm SHA256).Hash
+        if ($a -ne $b) {
+            Write-Host "  ERROR: the payload's Flutter build is NOT the one in the build tree." -ForegroundColor Red
+            Write-Host "         build tree : $a" -ForegroundColor DarkGray
+            Write-Host "         payload    : $b" -ForegroundColor DarkGray
+            Write-Host "         Rebuild the payload after `"flutter build windows`"." -ForegroundColor DarkGray
+            exit 1
+        }
+        Write-Host "  app.so      : matches the current Flutter build" -ForegroundColor DarkGray
+    } else {
+        Write-Host "  app.so      : no Flutter build tree here - staleness NOT verified" -ForegroundColor Yellow
+    }
+}
+
+Assert-PayloadComplete -Path $payload -FlutterRelease (Join-Path $root "frontend\flutter\build\windows\x64\runner\Release")
+
 $sizeMb = [math]::Round((Get-ChildItem $payload -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB)
 Write-Host "  payload     : $payload  ($sizeMb MB)" -ForegroundColor DarkGray
 
@@ -139,6 +214,24 @@ if ($iscc) {
 
     $output = Join-Path $dist "PIP-Setup.exe"
     $outMb = [math]::Round((Get-Item $output).Length / 1MB)
+
+    # "ISCC completed successfully" is not the same claim as "the installer
+    # holds the payload". The 76 MB artefact that prompted this check was 6.8%
+    # of its payload; a real LZMA2 build of this tree lands near 17%. The floor
+    # is deliberately well below that - it is an anomaly detector, not a
+    # compression model - and it fails the build rather than printing a warning
+    # nobody reads at the end of a five-minute compile.
+    $ratio = $outMb / $sizeMb
+    Write-Host ""
+    Write-Host ("  compressed  : {0} MB from {1} MB ({2:P1} of payload)" -f $outMb, $sizeMb, $ratio) -ForegroundColor DarkGray
+    if ($ratio -lt 0.10) {
+        Write-Host ""
+        Write-Host "  ERROR: the installer is far smaller than this payload can compress to." -ForegroundColor Red
+        Write-Host "         That is what a compile against a half-written payload looks like." -ForegroundColor DarkGray
+        Write-Host "         Treat $output as untrusted and rebuild." -ForegroundColor DarkGray
+        exit 1
+    }
+
     Write-Host ""
     Write-Host "  Built $output  ($outMb MB)" -ForegroundColor Green
     Write-Host ""

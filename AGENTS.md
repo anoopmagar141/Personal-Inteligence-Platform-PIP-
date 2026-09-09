@@ -63,12 +63,12 @@ e. If you change structure or a convention, update the matching doc in the same
 
 ## Current focus
 
-Packaging for other machines: `scripts/build_portable.ps1` → `dist/PIP` (copied
-CPython, deliberately not PyInstaller), then `scripts/build_installer.ps1` →
-`dist/PIP-Setup.exe` via `installer/PIP.iss` (per-user `%LocalAppData%`, no
-admin, `data/` survives uninstall), or `dist/PIP.zip` when Inno Setup is absent.
-Out of scope on purpose: bundling Ollama (the installer links to its download
-page) and code signing (SmartScreen warns until there is a certificate).
+Packaging for other machines: `scripts/build_portable.ps1 <out>` (copied
+CPython, not PyInstaller) stages the payload at `<drive>\pip-build\PIP`, not
+`dist/PIP` — ISCC is a MAX_PATH caller (docs/ARCHITECTURE.md). Then
+`scripts/build_installer.ps1` → `dist/PIP-Setup.exe` via `installer/PIP.iss`
+(per-user, no admin, `data/` survives uninstall), or `dist/PIP.zip` without
+Inno Setup. Deliberately out of scope: bundling Ollama, and code signing.
 
 ## LOG.md entry format
 

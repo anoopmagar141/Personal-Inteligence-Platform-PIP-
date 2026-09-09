@@ -210,6 +210,16 @@ so there is one write path, not two.
   UI saying what it does, un-publishing deletes the file, and the file is on
   the erase list for `delete()`.
 
+- **The installer payload is staged outside the project, and has to be.**
+  `build_installer.ps1` stages at `<project drive>\pip-build\PIP` and passes
+  it to ISCC as `/DDistDir`. Windows still limits most callers to 260
+  characters, ISCC among them, and torch ships licence files for its vendored
+  dependencies nine directories deep - which overruns from inside a project
+  folder named `Personal Inteligence Platform (PIP)`. The compiler then fails
+  with "The system cannot find the path specified", which reads like a missing
+  file and is not one. `build_portable.ps1`'s own default of `dist/PIP` is for
+  running it by hand, and is not what the installer uses.
+
 ## Inconsistencies worth knowing
 
 - **`backend/observer/` is an empty directory.** All Observer code is in

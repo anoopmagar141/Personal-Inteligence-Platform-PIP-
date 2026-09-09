@@ -1,8 +1,11 @@
 ; PIP - Inno Setup script
 ;
-; Compiled by scripts\build_installer.ps1, which builds dist\PIP first and
-; then points ISCC at this file. Compiling it directly works too, as long as
-; dist\PIP already exists.
+; Compiled by scripts\build_installer.ps1, which stages the payload at
+; <project drive>\pip-build\PIP and passes it in as /DDistDir - see the DistDir
+; note below for why it is not staged inside the project. Compiling this file
+; directly works too and falls back to the ..\dist\PIP default, which only
+; holds from a project path short enough to leave torch's licences under 260
+; characters.
 ;
 ; WHY THIS INSTALLS PER-USER AND NOT INTO PROGRAM FILES
 ;
