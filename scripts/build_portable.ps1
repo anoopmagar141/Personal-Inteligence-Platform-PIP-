@@ -7,7 +7,7 @@
 #
 #     PIP\
 #       python\   standalone interpreter + every dependency
-#       app\      the built Windows application
+#       app\      the built Windows application + its C++ runtime
 #       backend\  config\  scripts\  shared\
 #       data\     empty - created on first run, never shipped
 #
