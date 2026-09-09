@@ -30,8 +30,43 @@ for file in $(git diff --cached --name-only --diff-filter=ACM | grep -E '^backen
     fi
 done
 
+# AGENTS.md is capped at 80 lines, and the cap is the whole point of the file.
+#
+# It is loaded into an agent's context before every session, ahead of the task
+# it was actually given, so its length is a tax paid on every request whether
+# or not any of it is relevant. A folder map that has quietly grown into a
+# second architecture document costs tokens on the trivial jobs too, and the
+# middle of a long file is the first thing skimmed when context gets tight.
+# The cap is what keeps the detail in docs/, which is read on demand.
+#
+# Checked here rather than remembered, because remembering is what failed
+# first: an agent asked to verify these files compared them against line
+# counts it had picked out of a chat transcript, reported all six as wrong,
+# and recommended stripping the final newline to fix it. A limit that lives in
+# a conversation is not a limit.
+#
+# Counted with wc -l - newline characters - which is one LESS than the number
+# an editor shows when it counts the cursor position after the final newline
+# as a line. The file is supposed to end with that newline. Never "fix" a
+# count by deleting it: a text file without a trailing newline is what git
+# flags as "\ No newline at end of file", and it breaks cat and every
+# line-based tool that appends to it.
+#
+# Reads the staged content, for the same reason the import check above does.
+AGENTS_MAX_LINES=80
+
+if git diff --cached --name-only --diff-filter=ACM | grep -qx 'AGENTS.md'; then
+    lines=$(git show ":AGENTS.md" | wc -l)
+    if [ "$lines" -gt "$AGENTS_MAX_LINES" ]; then
+        echo "ERROR: AGENTS.md is $lines lines, over the $AGENTS_MAX_LINES-line cap (wc -l)."
+        echo "       Move detail into docs/ARCHITECTURE.md or docs/CONVENTIONS.md."
+        echo "       Do not raise the cap to fit what was added."
+        errors=$((errors + 1))
+    fi
+fi
+
 if [ $errors -ne 0 ]; then
-    echo "Commit rejected due to dependency violations."
+    echo "Commit rejected: $errors check(s) failed above."
     exit 1
 fi
 
