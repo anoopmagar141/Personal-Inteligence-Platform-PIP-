@@ -184,7 +184,11 @@ so there is one write path, not two.
   `session_key.change_password()` calls `vector_store.reencrypt()` after the
   rekey verifies; embeddings are carried over untouched, since a vector derived
   from the plaintext is the same vector whatever key it is stored under.
-  `scripts/set_db_password.py` still has this hole and relies on a rebuild.
+  `scripts/set_db_password.py` does the same, via the same function
+  (`--no-index-rekey` opts out); it also converts a plaintext index to an
+  encrypted one on a first encryption, since chunk text written before a
+  password existed is readable on disk and is exactly what the password
+  is being introduced to stop.
 - **The sign-in screen's profile picture is deliberately unencrypted.** That
   screen draws profiles *before* a password exists, so anything it can render
   is by definition readable without one — there is no third option. Publishing

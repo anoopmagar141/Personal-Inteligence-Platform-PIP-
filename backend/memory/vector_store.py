@@ -701,7 +701,7 @@ def rebuild_from_sqlite(conn) -> dict[str, Any]:
     return {"rebuilt": rebuilt, "failed": failed, "materialised": materialised["written"]}
 
 
-def reencrypt(old_db_key: str, new_db_key: str) -> dict[str, Any]:
+def reencrypt(old_db_key: Optional[str], new_db_key: str) -> dict[str, Any]:
     """
     Re-encrypt every chunk in the index from one database key to another.
 
@@ -716,14 +716,15 @@ def reencrypt(old_db_key: str, new_db_key: str) -> dict[str, Any]:
     and not from here. The user's whole document index silently stops
     answering, while every screen still says it is there.
 
-    scripts/set_db_password.py has this hole: it rekeys the database and leaves
-    the index behind. That is survivable there because chroma/ is rebuildable
-    and never authoritative - `rebuild_if_drifted` re-ingests from the bytes in
-    SQLite - but rebuilding means re-embedding every document, which is minutes
-    of CPU, and it only ever happens if something notices the drift. Converting
-    in place is seconds, because the embeddings are the expensive part and they
-    do not change: a vector derived from the plaintext is the same vector
-    whatever key the plaintext is stored under.
+    scripts/set_db_password.py had exactly this hole - it rekeyed the database
+    and left the index behind - and now calls this instead. It was survivable
+    there because chroma/ is rebuildable and never authoritative
+    (`rebuild_if_drifted` re-ingests from the bytes in SQLite), but rebuilding
+    means re-embedding every document, which is minutes of CPU, and it only
+    ever happens if something notices the drift. Converting in place is
+    seconds, because the embeddings are the expensive part and they do not
+    change: a vector derived from the plaintext is the same vector whatever
+    key the plaintext is stored under.
 
     NOT ATOMIC, AND SAFE ANYWAY
     ---------------------------
@@ -734,12 +735,21 @@ def reencrypt(old_db_key: str, new_db_key: str) -> dict[str, Any]:
     AFTER the database rekey has been verified rather than before - the
     recoverable failure is the one that happens to the rebuildable store.
     """
-    if not old_db_key or not new_db_key:
-        # Plaintext mode (dev/test, no PIP_DB_KEY): nothing here is encrypted
-        # and nothing is keyed, so there is nothing to convert.
+    if not new_db_key:
+        # Nothing to convert TO. Going the other way - encrypted back to
+        # plaintext - is not something any caller wants and would mean writing
+        # the user's documents out in the clear.
         return {"converted": 0, "skipped": 0}
 
-    old_fernet = _fernet(old_db_key)
+    # old_db_key None/empty is the first-encryption case: the index was written
+    # in the plaintext schema (raw text, plain file_path, no key anywhere) by an
+    # installation that had no PIP_DB_KEY. Those chunks are readable on disk,
+    # which is precisely what encrypting the database is meant to stop - so
+    # they are converted rather than skipped. scripts/set_db_password.py is the
+    # caller: without this, an install migrated from unencrypted to
+    # password-protected keeps every document's text sitting in chroma/ in the
+    # clear, and the "encrypted at rest" claim is false for the index.
+    old_fernet = _fernet(old_db_key) if old_db_key else None
     new_fernet = _fernet(new_db_key)
     collection = _get_collection()
 
@@ -764,35 +774,51 @@ def reencrypt(old_db_key: str, new_db_key: str) -> dict[str, Any]:
         document = documents[index] if index < len(documents) else None
 
         file_path_enc = metadata.get("file_path_enc")
-        if not file_path_enc or document is None:
-            # A chunk written in plaintext mode, or one missing the encrypted
-            # path it would have to be re-keyed by. Left exactly as it is
-            # rather than guessed at: a chunk this function cannot read is a
-            # chunk it has no business rewriting.
+        if document is None:
             skipped += 1
             continue
 
-        try:
-            file_path = old_fernet.decrypt(file_path_enc.encode("ascii")).decode("utf-8")
-            plaintext = old_fernet.decrypt(document.encode("ascii")).decode("utf-8")
-        except Exception:
-            # Not decryptable under the old key - so it was never encrypted
-            # under it. Almost certainly a leftover from an earlier key, which
-            # is drift for the rebuild to settle, not something to destroy here.
-            skipped += 1
-            continue
+        if old_fernet is None:
+            # Plaintext source: the path is in the clear and the document IS
+            # the chunk text. A chunk carrying file_path_enc here belongs to
+            # some encrypted key and is not ours to touch.
+            file_path = metadata.get("file_path")
+            if file_path_enc or not file_path:
+                skipped += 1
+                continue
+            plaintext = document
+        else:
+            if not file_path_enc:
+                # Missing the encrypted path it would have to be re-keyed by.
+                # Left exactly as it is rather than guessed at: a chunk this
+                # function cannot read is a chunk it has no business rewriting.
+                skipped += 1
+                continue
+            try:
+                file_path = old_fernet.decrypt(file_path_enc.encode("ascii")).decode("utf-8")
+                plaintext = old_fernet.decrypt(document.encode("ascii")).decode("utf-8")
+            except Exception:
+                # Not decryptable under the old key - so it was never encrypted
+                # under it. Almost certainly a leftover from an earlier key,
+                # which is drift for the rebuild to settle, not something to
+                # destroy here.
+                skipped += 1
+                continue
 
         new_file_key = _file_key(new_db_key, file_path)
         chunk_index = metadata.get("chunk_index", index)
         new_ids.append(f"{new_file_key}::{chunk_index}")
         new_documents.append(new_fernet.encrypt(plaintext.encode("utf-8")).decode("ascii"))
-        new_metadatas.append(
-            {
-                **metadata,
-                "file_key": new_file_key,
-                "file_path_enc": new_fernet.encrypt(file_path.encode("utf-8")).decode("ascii"),
-            }
-        )
+        converted_metadata = {
+            **metadata,
+            "file_key": new_file_key,
+            "file_path_enc": new_fernet.encrypt(file_path.encode("utf-8")).decode("ascii"),
+        }
+        # The plaintext path does not survive the conversion. Leaving it would
+        # mean encrypting the text and then filing it next to the very thing
+        # the encryption was hiding.
+        converted_metadata.pop("file_path", None)
+        new_metadatas.append(converted_metadata)
         if index < len(embeddings):
             new_embeddings.append(embeddings[index])
 

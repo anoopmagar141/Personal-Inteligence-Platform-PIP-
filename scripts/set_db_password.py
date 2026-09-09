@@ -17,7 +17,12 @@ What it does
   2. Takes a new password, twice, and derives a key from it against a fresh salt.
   3. Re-encrypts the database in place with SQLCipher's PRAGMA rekey.
   4. Reopens with the NEW key and verifies integrity plus row counts.
-  5. Only then removes data/db_key.txt, if it was there.
+  5. Carries the ChromaDB search index over to the new key (--no-index-rekey
+     skips it). Everything identifying a chunk there is keyed on the database
+     key, so a rekey that skipped this would leave the index unreadable while
+     nothing said so - the Documents screen reads its counts from SQLite and
+     would go on describing an index that had stopped answering.
+  6. Only then removes data/db_key.txt, if it was there.
 
 Ordering is the safety property. Nothing irreversible happens until the new key
 has been proven to open the re-encrypted database - and if the rekey fails
@@ -147,6 +152,76 @@ def _row_counts(conn) -> dict[str, int]:
     return counts
 
 
+def reencrypt_vector_index(old_key: str | None, new_key: str) -> None:
+    """
+    Carry the search index across to the new key.
+
+    WHY A REKEY THAT SKIPS THIS IS BROKEN AND LOOKS FINE
+    ---------------------------------------------------
+    Everything that identifies or reveals a chunk in ChromaDB is keyed on the
+    database key: the id is an HMAC of it over the file path, the chunk text is
+    Fernet under it, and so is the stored path. Re-encrypt the database without
+    touching the index and nothing fails loudly - the Documents screen reads
+    its chunk counts from the SQLite `documents` table, so it goes on reporting
+    an index that has silently stopped answering, and every RAG question comes
+    back with nothing found rather than with an error.
+
+    This script did exactly that until now. It was survivable, because chroma/
+    is derived and never authoritative and the startup drift check eventually
+    rebuilds it - but a rebuild re-embeds every document, which is minutes of
+    CPU, and it only happens once something notices. Converting in place is
+    seconds: the embeddings are the expensive part and they do not change, a
+    vector derived from the plaintext being the same vector under any key.
+
+    BEST EFFORT, AND DELIBERATELY AFTER THE VERIFY
+    ----------------------------------------------
+    Called once the new key has been proven to open the re-encrypted database,
+    so a failure here cannot undo something already verified. The recoverable
+    failure is the one that happens to the rebuildable store, and the cost of
+    it is a re-embed rather than a loss - which is why an absent chromadb or
+    sentence-transformers install prints a line instead of failing the run.
+    """
+    try:
+        from backend.memory import vector_store
+    except Exception as e:
+        print(f"  index re-encryption skipped: {e}")
+        print("  The database is re-encrypted. Launch PIP to have it rebuild the index.")
+        return
+
+    index_dir = pathlib.Path(vector_store.resolved_chroma_path())
+    if not index_dir.exists():
+        print("  no vector index to carry over")
+        return
+
+    # A pointed-somewhere-else run is safe but pointless, and silence about it
+    # would be the same silence this function exists to end. Nothing can be
+    # corrupted - a chunk that does not decrypt under the old key is skipped
+    # rather than rewritten - but the index the user actually has would be left
+    # under the old key with nobody saying so.
+    if index_dir.parent != DATA_DIR:
+        print(f"  WARNING: the index at {index_dir} is not beside {DB_PATH}.")
+        print("  Set PIP_CHROMA_PATH for the same profile as PIP_DB_PATH, or the")
+        print("  index that belongs to this database will be left under the old key.")
+
+    try:
+        result = vector_store.reencrypt(old_key, new_key)
+    except Exception as e:
+        print(f"  index re-encryption failed: {e}")
+        print("  The database is re-encrypted and intact. The index is derived -")
+        print("  launch PIP and it will rebuild from the documents in the database.")
+        return
+
+    converted, skipped = result["converted"], result["skipped"]
+    print(f"  vector index re-encrypted: {converted} chunk(s) carried over")
+    if skipped:
+        # Chunks written under some third key, or in the plaintext-mode schema.
+        # Left alone rather than destroyed: that is drift for a rebuild to
+        # settle, and this function has no business deciding otherwise.
+        print(f"  {skipped} chunk(s) were not readable under the old key and were left alone")
+        if not converted:
+            print("  None were carried over. Launch PIP to have it rebuild the index.")
+
+
 def _check_only() -> int:
     try:
         db_key.load_salt()
@@ -165,6 +240,11 @@ def _check_only() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check", action="store_true", help="Check a password without changing anything.")
+    parser.add_argument(
+        "--no-index-rekey",
+        action="store_true",
+        help="Skip carrying the ChromaDB index over. It will need a rebuild.",
+    )
     args = parser.parse_args()
 
     if not DB_PATH.exists():
@@ -220,6 +300,37 @@ def main() -> int:
         return 1
 
     print(f"  verified: integrity ok, {sum(after.values())} rows intact")
+
+    # After the verify, for the reason in this function's docstring: the
+    # database is already proven at this point, so nothing here can cost more
+    # than a re-embed.
+    if args.no_index_rekey:
+        print()
+        print("  --no-index-rekey: the search index is still under the OLD key.")
+        print("  It will answer nothing until PIP rebuilds it on the next launch.")
+    else:
+        print()
+        if old_key is None:
+            # First encryption. The index was written in the plaintext schema
+            # by an installation that had no key, so its chunk text is sitting
+            # in chroma/ in the clear - which is exactly what this run is
+            # meant to stop. Converting it is the same call; only the source
+            # side differs.
+            print("  Encrypting the search index for the first time ...")
+        else:
+            print("  Carrying the search index over to the new key ...")
+        try:
+            reencrypt_vector_index(old_key, new_key)
+        except Exception as e:
+            # reencrypt_vector_index handles its own failures, so reaching here
+            # means something unanticipated. Still not a reason to fail the
+            # run: the database is verified by this point, and the index is the
+            # one of the two that can be rebuilt. Reporting a successful rekey
+            # as a failure would be the worse outcome, because the next thing
+            # somebody does about it is run this script again.
+            print(f"  index re-encryption failed: {e}")
+            print("  The database is re-encrypted and intact. Launch PIP and it")
+            print("  will rebuild the index from the documents in the database.")
 
     if LEGACY_KEY_PATH.exists():
         LEGACY_KEY_PATH.unlink()

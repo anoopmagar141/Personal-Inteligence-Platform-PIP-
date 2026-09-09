@@ -685,3 +685,58 @@ def test_reencrypt_leaves_chunks_it_cannot_read_alone(db_conn, sample_doc, monke
     assert result["skipped"] > 0
     monkeypatch.setenv("PIP_DB_KEY", db_key)
     assert vector_store.query(db_conn, "ChromaDB", threshold=0.1, top_k=3)
+
+
+def test_reencrypt_encrypts_a_plaintext_index_for_the_first_time(db_conn, sample_doc, monkeypatch, db_key):
+    """
+    The first-encryption case, which scripts/set_db_password.py is the caller
+    for. An installation that ran without a key wrote its chunks in the clear;
+    encrypting the database while leaving those alone would mean every
+    document's text stays readable on disk in chroma/, and "encrypted at rest"
+    would be false for exactly the store that holds the document bodies.
+    """
+    vector_store.ingest_document(db_conn, sample_doc)  # no PIP_DB_KEY: plaintext
+    raw_before = vector_store._get_collection().get(include=["documents"])["documents"]
+    assert any("ChromaDB" in d for d in raw_before), "the fixture was not plaintext"
+
+    result = vector_store.reencrypt(None, db_key)
+
+    assert result["converted"] > 0
+    raw_after = vector_store._get_collection().get(include=["documents", "metadatas"])
+    for doc in raw_after["documents"]:
+        assert "ChromaDB" not in doc
+        assert "SQLCipher" not in doc
+    for meta in raw_after["metadatas"]:
+        assert "file_path" not in meta, "the plaintext path was filed beside the ciphertext"
+        assert sample_doc not in meta["file_path_enc"]
+
+
+def test_a_first_encryption_leaves_the_index_answering(db_conn, sample_doc, monkeypatch, db_key):
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    vector_store.ingest_document(db_conn, sample_doc)
+
+    vector_store.reencrypt(None, db_key)
+
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    matches = vector_store.query(db_conn, "Is ChromaDB the source of truth?", threshold=0.1, top_k=3)
+    assert any("ChromaDB" in m["chunk_text"] for m in matches)
+    assert all(m["file_path"] == sample_doc for m in matches)
+
+
+def test_a_first_encryption_does_not_touch_chunks_that_are_already_encrypted(
+    db_conn, sample_doc, monkeypatch, db_key
+):
+    """
+    A chunk carrying file_path_enc belongs to some key, and this conversion has
+    no key to read it with. Skipped rather than mangled.
+    """
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    vector_store.ingest_document(db_conn, sample_doc)
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+
+    result = vector_store.reencrypt(None, "a" * 64)
+
+    assert result["converted"] == 0
+    assert result["skipped"] > 0
+    monkeypatch.setenv("PIP_DB_KEY", db_key)
+    assert vector_store.query(db_conn, "ChromaDB", threshold=0.1, top_k=3)

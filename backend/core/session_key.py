@@ -248,11 +248,11 @@ def change_password(current_password: str, new_password: str, db_path: str) -> N
     PowerShell prompt and a virtualenv - which for anyone who installed PIP
     rather than cloned it is the same as there being no way at all.
 
-    Two things it does that the script does not, both required rather than
-    improvements: it re-encrypts the vector index (see vector_store.reencrypt -
-    the script silently orphans it), and it hands the new key to this process,
-    which is holding the old one and would otherwise keep using it against a
-    database that no longer answers to it.
+    The one thing it does that the script cannot: it hands the new key to
+    this process, which is holding the old one and would otherwise keep
+    using it against a database that no longer answers to it. Both now
+    re-encrypt the vector index through vector_store.reencrypt - the
+    script did silently orphan it, which is what prompted that function.
 
     THE ORDER IS THE SAFETY PROPERTY
     --------------------------------
