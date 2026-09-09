@@ -11,11 +11,18 @@
 // application: the launch screen, signing in, choosing a model, onboarding.
 // Those are the moments a person is deciding what this thing is.
 //
-// It does not go in the chat, the profile, or any of the working screens. A
+// It does not go above the chat, the profile, or any of the working screens. A
 // logo above a conversation is a logo somebody has to look past every time
 // they use the product, and PIP already says its name in the window title and
 // the taskbar. Branding that repeats stops being branding and becomes
 // furniture.
+//
+// The one place inside the chat it does belong is the avatar beside each
+// assistant turn, which is not the same thing. That slot is an identity
+// marker - it is the same slot the user's own photograph occupies on the
+// other side of the transcript - and the question it answers is "who said
+// this", not "whose product is this". A letter P there was standing in for
+// the mark PIP already has.
 
 import 'package:flutter/material.dart';
 
@@ -26,10 +33,16 @@ import 'package:flutter/material.dart';
 /// words directly underneath, so a missing decoration should cost the layout a
 /// gap and nothing else. A broken-image glyph on the sign-in screen would look
 /// like the application itself was damaged.
+///
+/// [fallback] overrides that for the one caller where the mark is not
+/// decoration: the avatar beside an assistant message says WHO said it, and an
+/// empty circle there says nobody. That caller passes the letter the avatar
+/// used to draw, so a missing asset costs the mark and not the meaning.
 class PipLogo extends StatelessWidget {
   final double size;
+  final Widget? fallback;
 
-  const PipLogo({super.key, this.size = 64});
+  const PipLogo({super.key, this.size = 64, this.fallback});
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +53,8 @@ class PipLogo extends StatelessWidget {
       // The source is 256px square, so it is only ever scaled DOWN. filterQuality
       // medium is what keeps the blade edges clean at 48 and 64.
       filterQuality: FilterQuality.medium,
-      errorBuilder: (context, error, stack) => SizedBox(width: size, height: size),
+      errorBuilder: (context, error, stack) =>
+          fallback ?? SizedBox(width: size, height: size),
     );
   }
 }

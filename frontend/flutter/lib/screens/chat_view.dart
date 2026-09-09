@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api_client.dart';
+import '../logo.dart';
 import '../markdown.dart';
 import '../profile_picture.dart';
 import '../theme.dart';
@@ -1023,13 +1024,32 @@ class _Avatar extends StatelessWidget {
     final pip = context.pip;
 
     // The assistant's marker is fixed; only the user's can be a photograph.
+    //
+    // The mark rather than the letter P, which was standing in for it. It sits
+    // on the same neutral circle the user's avatar uses rather than on the
+    // accent: the iris has a transparent centre, so a filled accent disc
+    // behind it reads as a ring drawn on a coloured button instead of as the
+    // mark itself. Matching the other side of the transcript also keeps the
+    // two avatars the same object with different contents, which is what they
+    // are.
     if (!isUser) {
       return Container(
         width: 26,
         height: 26,
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: pip.accent, shape: BoxShape.circle),
-        child: Text('P', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: pip.accentOn)),
+        decoration: BoxDecoration(color: pip.surfaceRaised, shape: BoxShape.circle),
+        // Inset, so the ring does not run into the edge of the circle it sits
+        // in - the asset carries almost no margin of its own.
+        child: PipLogo(
+          size: 20,
+          // A missing asset must not leave a blank circle beside a message.
+          // This slot answers "who said this", and an empty one answers it
+          // wrongly rather than not at all.
+          fallback: Text(
+            'P',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: pip.accent),
+          ),
+        ),
       );
     }
 
