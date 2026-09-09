@@ -280,13 +280,39 @@ class _ProvidersViewState extends State<ProvidersView> {
             )
           else
             DropdownButtonFormField<String>(
+              // Without this the button sizes itself to its WIDEST item and
+              // the field then clamps it, so the row inside overflows to the
+              // right by however much the longest model name did not fit -
+              // and every item in the open menu overflows by its own amount,
+              // which is what a console full of "RenderFlex overflowed by N
+              // pixels" turns out to be. isExpanded makes the button take the
+              // width it is given and puts its child in an Expanded, so there
+              // is room to lay out rather than room to exceed.
+              //
+              // It only ever showed below about 720px, because that is where
+              // this screen's own maxWidth stops being the binding constraint
+              // and the window starts being it. A maximised window never saw
+              // it; a narrower one always did.
+              isExpanded: true,
               initialValue: _models!.map((m) => m['name'] as String).contains(_activeModel) ? _activeModel : null,
               decoration: const InputDecoration(labelText: 'Active model'),
               items: [
                 for (final model in _models!)
                   DropdownMenuItem(
                     value: model['name'] as String,
-                    child: Text('${model['name']}${model['size'] != null ? ' (${_formatSize(model['size'] as int)})' : ''}'),
+                    child: Text(
+                      '${model['name']}${model['size'] != null ? ' (${_formatSize(model['size'] as int)})' : ''}',
+                      // Not what fixes the overflow - isExpanded above does
+                      // that on its own, long Hugging Face references
+                      // included. This is about the row a long name lands in:
+                      // a menu item has a fixed height, so a name that wraps
+                      // to two lines is clipped rather than shown. One
+                      // ellipsised line is the honest version of that, and the
+                      // distinguishing part of a GGUF reference is at the
+                      // front anyway.
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                    ),
                   ),
               ],
               onChanged: _switchingModel ? null : _selectModel,

@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-09] claude · Gave the active-model dropdown isExpanded, and covered the providers screen at widths either side of its 720px cap · why: below 720 the dropdown sized itself to its widest model name and the field clamped it, filling the console with one RenderFlex overflow per pulled model · files: frontend/flutter/lib/screens/providers_view.dart, frontend/flutter/test/providers_view_test.dart
+
 - [2026-09-09] claude · Put the PIP mark on the assistant's chat avatar in place of the letter P, and gave PipLogo an optional fallback · why: the avatar answers who said a turn, and a letter was standing in for a mark the app already has · files: frontend/flutter/lib/logo.dart, frontend/flutter/lib/screens/chat_view.dart
 
 - [2026-09-09] claude · Added Cancel to a running model download and Delete to a pulled model · why: a 4GB pull could only be waited out, and models could be added but never removed, so a machine that compared four of them had spent twenty gigabytes with no way back · files: backend/providers/ollama_provider.py, backend/api/server.py, backend/tests/test_llm_catalog.py, frontend/flutter/lib/api_client.dart, frontend/flutter/lib/screens/model_browser.dart, frontend/flutter/test/model_browser_test.dart

@@ -17,6 +17,10 @@ class FakeApi extends ApiClient {
   FakeApi() : super('http://127.0.0.1:8765/api/v1');
 
   List<dynamic> providers = [];
+
+  /// What Ollama has pulled. Empty by default so the consent tests below are
+  /// not also exercising a dropdown.
+  List<dynamic> models = [];
   final List<String> calls = [];
   Object? grantError;
   Object? revokeError;
@@ -25,7 +29,7 @@ class FakeApi extends ApiClient {
   Future<List<dynamic>> getProviders() async => providers;
 
   @override
-  Future<List<dynamic>> getLlmModels() async => [];
+  Future<List<dynamic>> getLlmModels() async => models;
 
   @override
   Future<String> getActiveModel() async => 'llama3.1:8b';
@@ -87,6 +91,7 @@ Future<FakeApi> pumpProviders(WidgetTester tester, List<dynamic> providers) asyn
 }
 
 void main() {
+  _dropdownTests();
   testWidgets('granting asks which scope instead of assuming one', (tester) async {
     final api = await pumpProviders(tester, [provider('anthropic')]);
 
@@ -199,5 +204,80 @@ void main() {
 
     expect(find.textContaining('database is locked'), findsOneWidget);
     expect(find.text('anthropic'), findsOneWidget);
+  });
+}
+
+// --- the active-model dropdown at a narrow window --------------------------
+//
+// Reported from a real run: a console filling with "A RenderFlex overflowed by
+// N pixels on the right", one line per pulled model, each by a different
+// amount. DropdownButtonFormField sizes its button to its WIDEST item and the
+// field then clamps it, so the row inside exceeds by however much the longest
+// name did not fit - and with the menu open, every item too wide for it
+// overflows on its own account, which is where the one-per-model came from.
+//
+// It only appeared below about 720px, because that is where this screen's own
+// maxWidth stops being the binding constraint and the window starts being it.
+// A maximised window never showed it; the developer's `flutter run` window
+// always did - which is why every test here had passed at the 800px default.
+
+void _dropdownTests() {
+  Future<void> pumpAt(WidgetTester tester, double width, FakeApi api) async {
+    tester.view.physicalSize = Size(width, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ProvidersView(api: api))));
+    await tester.pumpAndSettle();
+  }
+
+  FakeApi withModels() => FakeApi()
+    ..providers = [provider('ollama', isCloud: false)]
+    ..models = [
+      for (final entry in const [
+        ['llama3.1:8b', 4700000000], ['qwen2.5:7b', 4700000000],
+        ['mistral:7b', 4100000000], ['gemma2:9b', 5400000000],
+        ['phi3:3.8b', 2200000000], ['deepseek-r1:8b', 4900000000],
+        ['qwen2.5:14b', 9000000000], ['gemma4:latest', 8900000000],
+        ['phi3:mini', 2000000000], ['nomic-embed-text:latest', 274000000],
+        ['deepseek-coder-v2:16b', 8900000000], ['qwen2.5-coder:7b', 4700000000],
+      ])
+        {'name': entry[0], 'size': entry[1]},
+    ];
+
+  // Widths either side of the 720 the screen constrains itself to. A single
+  // width would have kept passing at 800, which is exactly how this reached a
+  // user.
+  for (final width in [320.0, 440.0, 600.0, 660.0, 720.0, 900.0]) {
+    testWidgets('the model dropdown fits its field at $width', (tester) async {
+      await pumpAt(tester, width, withModels());
+      // A RenderFlex overflow is an exception, and an exception fails the test
+      // - so reaching here at all is the assertion. The expect below is for
+      // the reader, and to fail loudly if the dropdown stops being drawn.
+      expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+    });
+  }
+
+  testWidgets('the open menu fits too, one item per model', (tester) async {
+    // The button and the menu are laid out separately, and the report was of
+    // one overflow per model - which is the menu, not the button.
+    final api = withModels();
+    await pumpAt(tester, 440.0, api);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+
+    expect(find.text('mistral:7b (3.8 GB)'), findsWidgets);
+  });
+
+  testWidgets('a Hugging Face reference does not burst the field', (tester) async {
+    // The "Something else" field accepts any GGUF reference, so a name can be
+    // three times the length of anything in the curated list.
+    final api = withModels()
+      ..models = [
+        {'name': 'hf.co/bartowski/Qwen2.5-14B-Instruct-GGUF:Q4_K_M', 'size': 8900000000},
+      ];
+    await pumpAt(tester, 440.0, api);
+
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
   });
 }
