@@ -107,6 +107,12 @@ class BackupViewState extends State<BackupView> {
   /// and a directory listing needs no key, so there is nothing an endpoint
   /// would add except a second way for this to be wrong.
   void refresh() {
+    // The staged restore is re-read here and not only in initState, because
+    // this screen never re-mounts: home_shell keeps every tab alive in an
+    // IndexedStack and calls refresh() when the tab is selected. Without this
+    // the card kept offering to choose a file while the backend already had
+    // one staged - found by opening the screen after staging one.
+    _loadRestoreStatus();
     try {
       final dir = Directory(widget.dataDir);
       if (!dir.existsSync()) {

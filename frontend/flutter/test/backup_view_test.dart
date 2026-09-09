@@ -181,6 +181,35 @@ void main() {
     data.parent.deleteSync(recursive: true);
   });
 
+  testWidgets('refresh re-reads the staged restore, not just initState', (tester) async {
+    // This screen never re-mounts - home_shell keeps every tab alive in an
+    // IndexedStack and calls refresh() when the tab is selected. Reading the
+    // staged restore only in initState meant the card went on offering to
+    // choose a file while one was already staged, which is what it did the
+    // first time it was run.
+    final data = _tempDataDir();
+    final api = _FakeApi();
+    final key = GlobalKey<BackupViewState>();
+
+    await tester.pumpWidget(_wrap(
+      BackupView(key: key, api: api, dataDir: data.path, launch: (_, _) async {}),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose a .pipbak'), findsOneWidget);
+
+    // Something stages a restore while this screen is alive but not visible.
+    api.pending = const {
+      'pending': true, 'source': 'later.pipbak', 'rows': 7, 'tables': 3,
+    };
+    key.currentState!.refresh();
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Ready to restore on the next start'), findsOneWidget);
+    expect(find.text('Choose a .pipbak'), findsNothing);
+
+    data.parent.deleteSync(recursive: true);
+  });
+
   testWidgets('says documents are included, and what is not', (tester) async {
     // This assertion was the exact opposite until document_blobs existed, and
     // the inversion is the feature: the bytes now travel inside the same single
