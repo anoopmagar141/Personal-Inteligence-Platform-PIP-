@@ -19,3 +19,6 @@ python-multipart
 uvicorn
 pytest
 pytest-asyncio
+# The ceiling in pytest.ini needs this to exist; without it the setting is
+# silently ignored and a hang goes back to being invisible.
+pytest-timeout

@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-09] claude · Added a 300s per-test timeout to pytest.ini (thread method) and pytest-timeout to requirements · why: a run of the suite hung silently for 20 minutes with no output to diagnose it by; the ceiling caught the next occurrence and named it - test_ws_chat.py's accumulates_conversation_history_across_turns, blocked in receive_json with every executor thread and the event loop idle · files: pytest.ini, requirements.txt
+
 - [2026-09-09] claude · Wrote the hook-install requirement into docs/CONVENTIONS.md and installed the hooks on this machine · why: core.hooksPath is per-clone and cannot be committed, so the repo carried the cap rule and a LOG entry saying the check was added while no hook was installed to run it · files: docs/CONVENTIONS.md
 
 - [2026-09-09] claude · Rebuilt dist/PIP-Setup.exe from a clean flutter build and verified it: 31,615/31,615 files byte-identical to the payload, sha256 7CE29ABA6F129C21886B473F82C9097CA1BA471862AB4363F9CA6C7AE20D3254 · why: the 76 MB installer in dist/ predated its own payload by 22 minutes and carried an empty version resource, so it was untrusted and replaced rather than explained · files: dist/PIP-Setup.exe (gitignored artefact; recorded here for provenance)
