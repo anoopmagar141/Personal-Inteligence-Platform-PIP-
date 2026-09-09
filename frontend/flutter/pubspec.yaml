@@ -76,6 +76,7 @@ flutter:
   # and the picture inside the app cannot drift apart.
   assets:
     - assets/pip-logo.png
+    - assets/pip-logo-dark.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

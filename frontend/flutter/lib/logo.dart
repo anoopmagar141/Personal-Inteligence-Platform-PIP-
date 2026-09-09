@@ -46,8 +46,15 @@ class PipLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The six nodes are the identity and never change. The hub and the spokes
+    // do: a dark hub on a light ground, a light hub on a dark one. One fixed
+    // pair would lose the middle of the mark on half the surfaces PIP draws
+    // on - the hub against the launch screen, which is dark in both themes,
+    // or against the profile, which is not.
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
     return Image.asset(
-      'assets/pip-logo.png',
+      dark ? 'assets/pip-logo-dark.png' : 'assets/pip-logo.png',
       width: size,
       height: size,
       // The source is 256px square, so it is only ever scaled DOWN. filterQuality

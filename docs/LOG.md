@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-10] claude · Replaced the iris artwork with the six-node mark, rendered it to both .ico files, the wizard panel and a light/dark pair of app assets, and rebuilt the installer from it · why: the mark PIP ships under changed, and one script owning every raster is what stops the window icon, the installer and the picture inside the app drifting apart · files: installer/pip-mark.svg, installer/pip-iris-blue.svg (deleted), scripts/make_icons.py, installer/PIP.iss, frontend/flutter/lib/logo.dart, frontend/flutter/pubspec.yaml, frontend/flutter/assets/*, frontend/flutter/windows/runner/resources/app_icon.ico
+
 - [2026-09-09] claude · Added a 300s per-test timeout to pytest.ini (thread method) and pytest-timeout to requirements · why: a run of the suite hung silently for 20 minutes with no output to diagnose it by; the ceiling caught the next occurrence and named it - test_ws_chat.py's accumulates_conversation_history_across_turns, blocked in receive_json with every executor thread and the event loop idle · files: pytest.ini, requirements.txt
 
 - [2026-09-09] claude · Wrote the hook-install requirement into docs/CONVENTIONS.md and installed the hooks on this machine · why: core.hooksPath is per-clone and cannot be committed, so the repo carried the cap rule and a LOG entry saying the check was added while no hook was installed to run it · files: docs/CONVENTIONS.md

@@ -93,7 +93,7 @@ UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\app\{#AppExeName}
 
 ; The mark, on the installer itself and on the entry in Apps & Features.
-; Generated from installer\pip-iris-blue.svg by scripts\make_icons.py - the
+; Generated from installer\pip-mark.svg by scripts\make_icons.py - the
 ; artwork is the source, and the .ico is checked in beside it so a build never
 ; depends on regenerating one.
 ;

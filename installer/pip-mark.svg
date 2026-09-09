@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 100 100">
+  <title>PIP — the mark</title>
+
+  <!--
+    A hub with six spokes: one centre, six coloured nodes at sixty-degree
+    intervals, starting at the top and going clockwise.
+
+    Two colours here are NOT fixed, and that is the point of listing them
+    separately from the six: the hub and the spokes flip with the background
+    (a dark hub on a light ground, a light hub on a dark one) while the six
+    nodes stay exactly as they are in both. scripts/make_icons.py renders this
+    file twice for that reason and the two values below are what it swaps.
+
+      hub     #111111 on light   #F7F7F5 on dark
+      spokes  #D9D6D0 on light   #3D3D3D on dark
+
+    Geometry, in this 0-100 viewBox: nodes sit 35 from the centre, so the mark
+    spans 86 of the 100 and keeps a margin at every size Windows scales it to.
+  -->
+
+  <g stroke="#D9D6D0" stroke-width="4.5" stroke-linecap="round">
+    <line x1="50" y1="50" x2="50.00" y2="15.00"/>
+    <line x1="50" y1="50" x2="80.31" y2="32.50"/>
+    <line x1="50" y1="50" x2="80.31" y2="67.50"/>
+    <line x1="50" y1="50" x2="50.00" y2="85.00"/>
+    <line x1="50" y1="50" x2="19.69" y2="67.50"/>
+    <line x1="50" y1="50" x2="19.69" y2="32.50"/>
+  </g>
+
+  <circle cx="50.00" cy="15.00" r="8" fill="#C0392B"/>
+  <circle cx="80.31" cy="32.50" r="8" fill="#D6336C"/>
+  <circle cx="80.31" cy="67.50" r="8" fill="#EFA02E"/>
+  <circle cx="50.00" cy="85.00" r="8" fill="#7CB342"/>
+  <circle cx="19.69" cy="67.50" r="8" fill="#4BA3C9"/>
+  <circle cx="19.69" cy="32.50" r="8" fill="#2547D8"/>
+
+  <circle cx="50" cy="50" r="10.5" fill="#111111"/>
+</svg>
