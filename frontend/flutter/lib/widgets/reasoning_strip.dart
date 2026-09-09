@@ -13,7 +13,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
-import 'thinking_orb.dart';
+import 'thinking_mark.dart';
 
 /// One completed step of the pipeline, exactly as the wire carries it.
 class ReasoningStep {
@@ -57,9 +57,12 @@ class ReasoningStrip extends StatelessWidget {
       // may not have run.
       return _Pill(
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          ThinkingOrb(state: active ? OrbState.thinking : OrbState.idle, size: 32),
+          ThinkingMark(state: active ? OrbState.thinking : OrbState.idle, size: 32),
           const SizedBox(width: AppSpacing.sm),
-          Text('Thinking', style: TextStyle(fontSize: 13.5, color: pip.textMuted)),
+          Text(
+            defaultLabelFor(active ? OrbState.thinking : OrbState.idle),
+            style: TextStyle(fontSize: 13.5, color: pip.textMuted),
+          ),
         ]),
       );
     }
@@ -75,7 +78,7 @@ class ReasoningStrip extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
-            ThinkingOrb(
+            ThinkingMark(
               state: active ? orbStateForStage(current.stage) : OrbState.idle,
               size: 32,
             ),

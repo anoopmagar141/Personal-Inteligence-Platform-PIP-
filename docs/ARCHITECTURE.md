@@ -176,6 +176,17 @@ so there is one write path, not two.
   which also holds `profiles.json`, `pip.lock` and `api_token.txt`. A
   directory-level delete would be correct for every profile except that one,
   where it would take every *other* profile's registry entry with it.
+- **A restore is split, and only the half that needs no password is deferred.**
+  `backend/core/restore.py` converts a `.pipbak` into a live database *now*,
+  while the app holds both the backup password and the new one, and records
+  only a rename for the lifespan to perform at the next start. Deferring the
+  whole restore was the obvious design and is the one thing that could not be
+  done - it would mean writing two passwords to disk for the next launch to
+  read. Nothing is recorded until the converted database has been proven: the
+  backup opens, `integrity_check` passes, and the new file opens under the new
+  key with matching row counts. `backup_view.dart` used to state that a restore
+  button could not exist; that was correct about the swap and wrong about the
+  operation.
 - **A profile delete can be recorded rather than performed.** A chat session's
   connection is closed by a submission to its own pinned worker, and
   `server.py`'s disconnect handler documents that such a submission can never

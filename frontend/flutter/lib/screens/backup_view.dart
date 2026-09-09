@@ -24,20 +24,38 @@
 // nothing REACHABLE OVER HTTP can take a full copy of the profile - and that
 // taking one is a deliberate act by somebody who knows the live password.
 //
-// WHY THERE IS NO RESTORE BUTTON
-// ------------------------------
-// A restore replaces the database file the running backend has open, and
-// restore_backup.py refuses while PIP holds the lock. There is no arrangement
-// in which a button inside the running app can do it: the app being open is the
-// thing that stops it. It lives on a Desktop shortcut
-// (scripts/install_shortcuts.ps1), which is also where it is actually needed -
-// a fresh machine, or one whose database is gone, has no app window to click.
+// WHY THE RESTORE BUTTON STAGES INSTEAD OF RESTORING
+// --------------------------------------------------
+// This said, for a long time, that there could be no restore button at all: a
+// restore replaces the database the running backend has open, and
+// restore_backup.py refuses while PIP holds the lock. That was right about the
+// SWAP and wrong about the operation, because a restore is two separable
+// things - converting the backup into a live database, which needs both
+// passwords and touches nothing that is open, and moving the result into
+// place, which needs no password and cannot be done while the file is held.
+//
+// So the button does the first half now and records the second for the next
+// start, where the lifespan performs it before anything opens a database. The
+// conversion is proven before it is recorded - the backup opens, its integrity
+// passes, and the new database opens under the new key with the same row
+// counts - so what waits for the restart is a rename, not a gamble.
+//
+// Deferring the WHOLE restore was the obvious alternative and is the one thing
+// that could not be done: it would mean writing two passwords to disk for the
+// next launch to read. See backend/core/restore.py.
+//
+// scripts/restore_backup.py is still there and still does the whole job in one
+// pass, on the Desktop shortcut (scripts/install_shortcuts.ps1). That is the
+// path for a machine with no app window - a fresh install, or one whose
+// database is gone - which is exactly when a button in the app is unreachable.
 
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../api_client.dart';
 import '../theme.dart';
 
 class BackupView extends StatefulWidget {
@@ -51,13 +69,24 @@ class BackupView extends StatefulWidget {
   /// better test than one that launches nothing.
   final Future<void> Function(String executable, List<String> arguments)? launch;
 
-  const BackupView({super.key, required this.dataDir, this.launch});
+  /// Needed since this screen learned to restore: the staged restore lives in
+  /// the backend, because it has to survive the app being closed - which is
+  /// the very thing that completes it.
+  final ApiClient api;
+
+  const BackupView({super.key, required this.dataDir, required this.api, this.launch});
 
   @override
   State<BackupView> createState() => BackupViewState();
 }
 
 class BackupViewState extends State<BackupView> {
+  /// The staged restore, or null. Read from the backend rather than remembered
+  /// here: it survives closing the app, which is the entire point of it.
+  Map<String, dynamic>? _pendingRestore;
+  bool _busyRestore = false;
+  String? _restoreError;
+
   List<FileSystemEntity> _backups = [];
   String? _error;
   bool _launching = false;
@@ -68,6 +97,7 @@ class BackupViewState extends State<BackupView> {
   void initState() {
     super.initState();
     refresh();
+    _loadRestoreStatus();
   }
 
   /// What is on disk right now, newest first.
@@ -203,6 +233,8 @@ class BackupViewState extends State<BackupView> {
           _exportCard(pip),
           const SizedBox(height: AppSpacing.md),
           _backupsCard(pip),
+          const SizedBox(height: AppSpacing.md),
+          _importCard(pip),
           const SizedBox(height: AppSpacing.md),
           _notIncludedCard(pip),
           const SizedBox(height: AppSpacing.md),
@@ -374,19 +406,178 @@ class BackupViewState extends State<BackupView> {
     );
   }
 
+  /// Ask the backend whether a restore is already staged.
+  ///
+  /// Failure is swallowed: this screen's job is exporting, and a restore that
+  /// could not be reported is not a reason to put an error banner over it.
+  Future<void> _loadRestoreStatus() async {
+    try {
+      final status = await widget.api.restoreStatus();
+      if (!mounted) return;
+      setState(() => _pendingRestore = status['pending'] == true ? status : null);
+    } catch (_) {}
+  }
+
+  Future<void> _pickAndStageRestore() async {
+    final picked = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['pipbak'],
+    );
+    if (picked == null) return;
+
+    // The picker can hand back an entry with no filesystem path (a stream on
+    // some platforms). Nothing here can read those - the backend opens the
+    // file itself, by path - so it is refused rather than half-attempted.
+    final path = picked.path;
+    if (path == null || path.isEmpty) {
+      setState(() => _restoreError = 'That file has no path PIP can read.');
+      return;
+    }
+    if (!mounted) return;
+
+    final passwords = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => _RestoreDialog(fileName: picked.name),
+    );
+    if (passwords == null) return;
+
+    setState(() {
+      _busyRestore = true;
+      _restoreError = null;
+    });
+    try {
+      final staged = await widget.api.stageRestore(
+        path: path,
+        backupPassword: passwords[0],
+        newPassword: passwords[1],
+      );
+      if (!mounted) return;
+      setState(() => _pendingRestore = staged);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _restoreError = e is ApiException ? e.detail : '$e');
+    } finally {
+      if (mounted) setState(() => _busyRestore = false);
+    }
+  }
+
+  Future<void> _cancelRestore() async {
+    setState(() {
+      _busyRestore = true;
+      _restoreError = null;
+    });
+    try {
+      await widget.api.cancelRestore();
+      if (mounted) setState(() => _pendingRestore = null);
+    } catch (e) {
+      if (mounted) setState(() => _restoreError = e is ApiException ? e.detail : '$e');
+    } finally {
+      if (mounted) setState(() => _busyRestore = false);
+    }
+  }
+
+  /// Import a .pipbak and stage it to replace this profile.
+  ///
+  /// The card that used to say a restore button could not exist. That was
+  /// right about the swap and wrong about the operation: converting the backup
+  /// needs both passwords and touches nothing that is open, and only the
+  /// rename has to wait for a restart. See backend/core/restore.py.
+  Widget _importCard(PipPalette pip) {
+    final pending = _pendingRestore;
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.download_outlined, size: 18, color: pip.textMuted),
+              const SizedBox(width: AppSpacing.sm),
+              Text('Restore from a backup',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: pip.text)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Replaces everything in this profile with the contents of a .pipbak. '
+            'You choose a NEW password for it here - a backup carries your data, '
+            'never your live secret.',
+            style: TextStyle(fontSize: 13, color: pip.textMuted, height: 1.55),
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          if (pending != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: pip.accentSoft,
+                borderRadius: AppRadius.sm,
+                border: Border.all(color: pip.accent.withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ready to restore on the next start',
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: pip.accent),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${pending['source']} - ${pending['rows']} rows across '
+                    '${pending['tables']} tables, checked and ready. Close PIP and '
+                    'open it again to finish. Nothing has been replaced yet.',
+                    style: TextStyle(fontSize: 12.5, color: pip.text, height: 1.55),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  GhostButton(
+                    label: 'Cancel the restore',
+                    color: pip.danger,
+                    onTap: _busyRestore ? null : _cancelRestore,
+                  ),
+                ],
+              ),
+            ),
+          ] else
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: _busyRestore ? null : _pickAndStageRestore,
+                  icon: const Icon(Icons.folder_open_outlined, size: 16),
+                  label: Text(_busyRestore ? 'Checking the backup...' : 'Choose a .pipbak'),
+                ),
+              ],
+            ),
+
+          if (_restoreError != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(_restoreError!,
+                style: TextStyle(fontSize: 12.5, color: pip.danger, height: 1.55)),
+          ],
+
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Nothing is replaced until PIP restarts, and what was there is kept '
+            'beside the new database rather than deleted.',
+            style: TextStyle(fontSize: 12.5, color: pip.textFaint, height: 1.55),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _restoreCard(PipPalette pip) {
     const command = r'powershell -ExecutionPolicy Bypass -File scripts\restore_pip.ps1';
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Restoring on another machine',
+          Text('Restoring somewhere else',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: pip.text)),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'There is no restore button, and there cannot be one: a restore replaces the '
-            'database this app has open, so it refuses to run while PIP is running. Use '
-            'the "Restore PIP from backup" Desktop shortcut with PIP closed, or run:',
+            'The card above restores into THIS installation. On a machine where PIP '
+            'is not installed, or whose database is gone, there is no window to click '
+            'in - use the "Restore PIP from backup" Desktop shortcut, or run:',
             style: TextStyle(fontSize: 13, color: pip.textMuted, height: 1.55),
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -427,6 +618,116 @@ class BackupViewState extends State<BackupView> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The two passwords a restore needs, and the one sentence that explains why
+/// there are two.
+///
+/// A .pipbak is encrypted under the password it was exported with, and the
+/// live database is encrypted under the password this machine will use. They
+/// are different secrets on purpose: a backup carries your data across, never
+/// your live key.
+class _RestoreDialog extends StatefulWidget {
+  final String fileName;
+  const _RestoreDialog({required this.fileName});
+
+  @override
+  State<_RestoreDialog> createState() => _RestoreDialogState();
+}
+
+class _RestoreDialogState extends State<_RestoreDialog> {
+  final _backup = TextEditingController();
+  final _fresh = TextEditingController();
+  final _confirm = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _backup.dispose();
+    _fresh.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_backup.text.isEmpty) {
+      setState(() => _error = 'Enter the password this backup was exported with.');
+      return;
+    }
+    if (_fresh.text != _confirm.text) {
+      setState(() => _error = 'Those two passwords are different.');
+      return;
+    }
+    if (_fresh.text.length < 8) {
+      setState(() => _error = 'Use at least 8 characters for the new password.');
+      return;
+    }
+    Navigator.pop(context, [_backup.text, _fresh.text]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Restore ${widget.fileName}?'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Everything in this profile will be replaced by what is in the backup: '
+                'every conversation, everything PIP learned, your decisions and your '
+                'documents.',
+                style: TextStyle(fontSize: 13, height: 1.5, color: context.pip.text),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Nothing is replaced until PIP restarts, and what is there now is kept '
+                'beside the new database rather than deleted.',
+                style: TextStyle(fontSize: 13, height: 1.5, color: context.pip.textMuted),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              TextField(
+                controller: _backup,
+                obscureText: true,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: "The backup's password"),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: _fresh,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password for this machine'),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: _confirm,
+                obscureText: true,
+                onSubmitted: (_) => _submit(),
+                decoration: const InputDecoration(labelText: 'New password again'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'The new password is the one you will sign in with afterwards. The '
+                "backup's own password is not recovered or reused.",
+                style: TextStyle(fontSize: 11.5, height: 1.5, color: context.pip.textFaint),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(_error!, style: TextStyle(fontSize: 12, color: context.pip.danger)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _submit, child: const Text('Check and stage')),
+      ],
     );
   }
 }

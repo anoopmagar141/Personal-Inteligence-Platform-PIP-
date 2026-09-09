@@ -241,6 +241,38 @@ class ApiClient {
     return response.bodyBytes;
   }
 
+  // --- restoring a backup ----------------------------------------------
+  //
+  // A restore is two things and only one of them is blocked by the app being
+  // open. Converting the backup into a live database happens now, while both
+  // passwords are in memory; the swap into place happens at the next start,
+  // because a file that is open cannot be renamed. Nothing is recorded until
+  // the converted database has been proven to open.
+
+  /// Whether a restore is staged and waiting for a restart.
+  Future<Map<String, dynamic>> restoreStatus() async =>
+      await get('/backup/restore') as Map<String, dynamic>;
+
+  /// Verify a .pipbak and stage it to replace this profile at the next start.
+  ///
+  /// The path rather than the bytes: a .pipbak is the whole profile and runs
+  /// to hundreds of megabytes, and the backend is on this same machine.
+  Future<Map<String, dynamic>> stageRestore({
+    required String path,
+    required String backupPassword,
+    required String newPassword,
+  }) async =>
+      await post('/backup/restore', {
+        'path': path,
+        'backup_password': backupPassword,
+        'new_password': newPassword,
+      }) as Map<String, dynamic>;
+
+  /// Discard a staged restore and the temporary files it wrote.
+  Future<void> cancelRestore() async {
+    await delete('/backup/restore');
+  }
+
   Future<Map<String, dynamic>> getStatus() async => await get('/status') as Map<String, dynamic>;
 
   Future<void> completeOnboarding(Map<String, dynamic> payload) async {

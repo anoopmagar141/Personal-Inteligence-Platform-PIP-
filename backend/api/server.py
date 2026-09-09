@@ -18,6 +18,7 @@ from backend.core import (
     pipeline,
     proactive,
     profiles,
+    restore,
     session_key,
     session_lifecycle,
     startup_progress,
@@ -1092,6 +1093,14 @@ try:
         except Exception as e:
             # A convenience file failing to parse must not stop the app opening.
             logger.error(f"Could not process pending profile deletions: {e}")
+        # Same placement and the same reason: a staged restore is a rename of
+        # the database file, which is only possible while nothing holds it.
+        try:
+            installed = restore.drain_pending_restore()
+            if installed:
+                logger.info(f"Installed a staged restore of {installed.get('rows')} rows.")
+        except Exception as e:
+            logger.error(f"Could not install the staged restore: {e}")
         # An older launcher, a test, or a shell that exported it. Adopting the
         # key means those keep working exactly as they did rather than meeting
         # a sign-in screen for a database already open to them.
@@ -2582,6 +2591,84 @@ try:
         """Whether this profile's picture is currently shown on the sign-in
         screen, so the switch can be drawn in the position it is really in."""
         return {"published": profiles.has_signin_picture(profiles.active_slug())}
+
+
+    # --- restoring a backup, from inside the app ------------------------
+    #
+    # A restore is two things, and only one of them is blocked by the
+    # application being open: converting the backup into a live database needs
+    # both passwords and touches nothing that is held, while putting the result
+    # where the database lives needs no password and cannot be done while the
+    # file is open. So the conversion happens here and the swap happens at the
+    # next start - see backend/core/restore.py for why that split is what keeps
+    # the password model intact.
+
+    @app.get(f"{BASE_PREFIX}/backup/restore")
+    def restore_status():
+        """Whether a restore is staged and waiting for a restart."""
+        staged = restore.pending_restore()
+        if not staged:
+            return {"pending": False}
+        return {
+            "pending": True,
+            "source": Path(staged.get("source", "")).name,
+            "rows": staged.get("rows"),
+            "tables": staged.get("tables"),
+            "staged_at": staged.get("staged_at"),
+        }
+
+    @app.post(f"{BASE_PREFIX}/backup/restore")
+    async def stage_restore_route(payload: dict[str, Any]):
+        """
+        Verify a .pipbak and stage it to replace this profile at the next start.
+
+        REQUIRES BEING SIGNED IN, which is not about reading the backup - the
+        backup carries its own password - but about which profile is being
+        replaced. This overwrites the active profile's database, and the only
+        ownership test this application has is that the person could open it.
+
+        The path, not the bytes. A .pipbak is the whole profile and runs to
+        hundreds of megabytes; posting it through multipart to a server on the
+        same machine would copy it twice for nothing. The file is read by a
+        backend running as the same user who chose it in their own file picker.
+
+        async and threaded because this is a full copy of the database plus two
+        PBKDF2 derivations - seconds, not milliseconds.
+        """
+        from fastapi import HTTPException
+
+        source = (payload.get("path") or "").strip()
+        if not source:
+            raise HTTPException(status_code=422, detail="Choose a .pipbak file first.")
+
+        try:
+            staged = await asyncio.to_thread(
+                restore.stage_restore,
+                source,
+                payload.get("backup_password") or "",
+                payload.get("new_password") or "",
+                db_path=_db_path_or_default(),
+                salt_path=str(db_key.salt_path()),
+            )
+        except restore.RestoreError as exc:
+            # The sentence raised IS the answer - "that password did not open
+            # it", "the backup is damaged" - and a 500 would strand it.
+            raise HTTPException(status_code=422, detail=str(exc))
+        except Exception as exc:
+            logger.error(f"Staging a restore failed: {exc}")
+            raise HTTPException(status_code=500, detail=f"The backup could not be read: {exc}")
+
+        return {
+            "pending": True,
+            "source": Path(staged["source"]).name,
+            "rows": staged["rows"],
+            "tables": staged["tables"],
+        }
+
+    @app.delete(f"{BASE_PREFIX}/backup/restore")
+    def cancel_restore_route():
+        """Discard a staged restore and the temporary files it wrote."""
+        return {"cancelled": restore.cancel_pending_restore()}
 
     @app.post(f"{BASE_PREFIX}/rag/ingest")
     def ingest_document(payload: dict[str, Any]):

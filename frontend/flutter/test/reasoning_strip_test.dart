@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pip_flutter_client/theme.dart';
 import 'package:pip_flutter_client/widgets/reasoning_strip.dart';
-import 'package:pip_flutter_client/widgets/thinking_orb.dart';
+import 'package:pip_flutter_client/widgets/thinking_mark.dart';
 
 ReasoningStep _step(String stage, String label, String detail, [String status = 'ok']) =>
     ReasoningStep(stage: stage, label: label, detail: detail, status: status);
@@ -75,16 +75,16 @@ void main() {
       active: false,
     );
 
-    final orb = tester.widget<ThinkingOrb>(find.byType(ThinkingOrb));
+    final orb = tester.widget<ThinkingMark>(find.byType(ThinkingMark));
     expect(orb.state, OrbState.idle);
   });
 
   testWidgets('the orb reflects which stage is running', (tester) async {
     await _pump(tester, [_step('documents', 'Searching your documents', '1 passage')]);
-    expect(tester.widget<ThinkingOrb>(find.byType(ThinkingOrb)).state, OrbState.searching);
+    expect(tester.widget<ThinkingMark>(find.byType(ThinkingMark)).state, OrbState.searching);
 
     await _pump(tester, [_step('writing', 'Writing', 'llama3.1:8b')]);
-    expect(tester.widget<ThinkingOrb>(find.byType(ThinkingOrb)).state, OrbState.writing);
+    expect(tester.widget<ThinkingMark>(find.byType(ThinkingMark)).state, OrbState.writing);
   });
 
   test('an unknown stage falls back to idle rather than guessing', () {

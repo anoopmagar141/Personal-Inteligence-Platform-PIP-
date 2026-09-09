@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pip_flutter_client/api_client.dart';
 import 'package:pip_flutter_client/screens/backup_view.dart';
 import 'package:pip_flutter_client/theme.dart';
 
@@ -23,13 +24,25 @@ Directory _tempDataDir() {
   return Directory('${dir.path}/data')..createSync();
 }
 
+/// The screen learned to restore, so it now needs an API. This answers the one
+/// call it makes on mount and records nothing else - the restore behaviour has
+/// its own tests in backend/tests/test_restore_in_app.py.
+class _FakeApi extends ApiClient {
+  _FakeApi() : super('http://localhost:0', apiToken: 't');
+
+  Map<String, dynamic> pending = const {'pending': false};
+
+  @override
+  Future<Map<String, dynamic>> restoreStatus() async => pending;
+}
+
 void main() {
   testWidgets('lists the .pipbak files that are on disk', (tester) async {
     final data = _tempDataDir();
     File('${data.path}/pip_backup_20260902.pipbak').writeAsBytesSync(List.filled(2048, 7));
     File('${data.path}/notes.txt').writeAsStringSync('not a backup');
 
-    await tester.pumpWidget(_wrap(BackupView(dataDir: data.path, launch: (_, _) async {})));
+    await tester.pumpWidget(_wrap(BackupView(api: _FakeApi(), dataDir: data.path, launch: (_, _) async {})));
     await tester.pumpAndSettle();
 
     expect(find.text('pip_backup_20260902.pipbak'), findsOneWidget);
@@ -43,7 +56,7 @@ void main() {
     // a red failure message would be a claim that something went wrong.
     final data = _tempDataDir();
 
-    await tester.pumpWidget(_wrap(BackupView(dataDir: data.path, launch: (_, _) async {})));
+    await tester.pumpWidget(_wrap(BackupView(api: _FakeApi(), dataDir: data.path, launch: (_, _) async {})));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('No .pipbak files'), findsOneWidget);
@@ -56,7 +69,7 @@ void main() {
     String? executable;
     List<String>? arguments;
 
-    await tester.pumpWidget(_wrap(BackupView(
+    await tester.pumpWidget(_wrap(BackupView(api: _FakeApi(), 
       dataDir: data.path,
       launch: (exe, args) async {
         executable = exe;
@@ -91,7 +104,7 @@ void main() {
     final data = _tempDataDir();
     final key = GlobalKey<BackupViewState>();
 
-    await tester.pumpWidget(_wrap(BackupView(key: key, dataDir: data.path, launch: (_, _) async {})));
+    await tester.pumpWidget(_wrap(BackupView(api: _FakeApi(), key: key, dataDir: data.path, launch: (_, _) async {})));
     await tester.pumpAndSettle();
 
     final root = data.parent.path.replaceAll(r'\', '/');
@@ -107,7 +120,7 @@ void main() {
     // its own is an export anything talking to the backend can perform.
     final data = _tempDataDir();
 
-    await tester.pumpWidget(_wrap(BackupView(dataDir: data.path, launch: (_, _) async {})));
+    await tester.pumpWidget(_wrap(BackupView(api: _FakeApi(), dataDir: data.path, launch: (_, _) async {})));
     await tester.pumpAndSettle();
 
     expect(find.byType(TextField), findsNothing);
@@ -121,18 +134,49 @@ void main() {
     data.parent.deleteSync(recursive: true);
   });
 
-  testWidgets('offers no restore button, and explains why', (tester) async {
-    // Restore replaces the database this app has open. There is no arrangement
-    // in which a button here can do it, so the screen has to say that rather
-    // than leave someone hunting for a control that cannot exist.
+  testWidgets('offers a restore, and still points elsewhere for a dead machine',
+      (tester) async {
+    // This asserted the opposite until the restore was split in two. The screen
+    // now does the half that is possible while the app is open - converting a
+    // backup - and the script keeps the half that is not: a machine with no app
+    // window has nothing here to click.
     final data = _tempDataDir();
 
-    await tester.pumpWidget(_wrap(BackupView(dataDir: data.path, launch: (_, _) async {})));
+    await tester.pumpWidget(_wrap(BackupView(api: _FakeApi(), dataDir: data.path, launch: (_, _) async {})));
     await tester.pumpAndSettle();
 
-    expect(find.text('Restore now'), findsNothing);
-    expect(find.textContaining('no restore button'), findsOneWidget);
+    expect(find.text('Restore from a backup'), findsOneWidget);
+    expect(find.text('Choose a .pipbak'), findsOneWidget);
+    // The old claim must be gone, not merely outvoted by the new card.
+    expect(find.textContaining('no restore button'), findsNothing);
+    // And the script is still named, for the case the button cannot serve.
     expect(find.textContaining('restore_pip.ps1'), findsOneWidget);
+
+    data.parent.deleteSync(recursive: true);
+  });
+
+  testWidgets('a staged restore says it is waiting for a restart', (tester) async {
+    // Nothing is replaced until PIP restarts, and a screen that did not say so
+    // would leave somebody believing their data had already been swapped.
+    final data = _tempDataDir();
+    final api = _FakeApi()
+      ..pending = const {
+        'pending': true,
+        'source': 'pip-20260909T120000Z.pipbak',
+        'rows': 4321,
+        'tables': 19,
+      };
+
+    await tester.pumpWidget(_wrap(BackupView(api: api, dataDir: data.path, launch: (_, _) async {})));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Ready to restore on the next start'), findsOneWidget);
+    expect(find.textContaining('4321 rows'), findsOneWidget);
+    expect(find.textContaining('Nothing has been replaced yet'), findsOneWidget);
+    // Staging is reversible, and the way back has to be visible.
+    expect(find.text('Cancel the restore'), findsOneWidget);
+    // No picker while one is already staged - two would be ambiguous.
+    expect(find.text('Choose a .pipbak'), findsNothing);
 
     data.parent.deleteSync(recursive: true);
   });
@@ -145,7 +189,7 @@ void main() {
     // somebody ends up stuck on a new machine.
     final data = _tempDataDir();
 
-    await tester.pumpWidget(_wrap(BackupView(dataDir: data.path, launch: (_, _) async {})));
+    await tester.pumpWidget(_wrap(BackupView(api: _FakeApi(), dataDir: data.path, launch: (_, _) async {})));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('documents themselves'), findsOneWidget);
@@ -159,7 +203,7 @@ void main() {
     // A fresh machine, before anything has been written. Showing a red failure
     // for the expected state of a new install would train people to ignore it.
     await tester.pumpWidget(_wrap(
-      BackupView(dataDir: '${Directory.systemTemp.path}/pip-does-not-exist', launch: (_, _) async {}),
+      BackupView(api: _FakeApi(), dataDir: '${Directory.systemTemp.path}/pip-does-not-exist', launch: (_, _) async {}),
     ));
     await tester.pumpAndSettle();
 
@@ -173,7 +217,7 @@ void main() {
     // aiming at should never require a debugger to find out.
     final data = _tempDataDir();
 
-    await tester.pumpWidget(_wrap(BackupView(dataDir: data.path, launch: (_, _) async {})));
+    await tester.pumpWidget(_wrap(BackupView(api: _FakeApi(), dataDir: data.path, launch: (_, _) async {})));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('scripts/export_pip.ps1'), findsWidgets);
@@ -191,7 +235,7 @@ void main() {
     // temporary directory that has no scripts/ beside it.
     final data = _tempDataDir();
 
-    await tester.pumpWidget(_wrap(BackupView(dataDir: data.path)));
+    await tester.pumpWidget(_wrap(BackupView(api: _FakeApi(), dataDir: data.path)));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Export now'));

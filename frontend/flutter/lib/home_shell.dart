@@ -356,7 +356,7 @@ class _HomeShellState extends State<HomeShell> {
                 ),
                 DocumentsView(api: widget.api, activeProjectId: _activeProjectId),
                 ProvidersView(api: widget.api),
-                BackupView(key: _backupKey, dataDir: kDataDir),
+                BackupView(key: _backupKey, dataDir: kDataDir, api: widget.api),
                 TraceView(api: widget.api, refreshToken: _traceEpoch),
               ],
             ),
