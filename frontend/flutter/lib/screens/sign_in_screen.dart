@@ -44,6 +44,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../api_client.dart';
 import '../logo.dart';
@@ -166,6 +167,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
   List<_ProfileOption> _profiles = const [];
   String? _activeSlug;
+  bool? _isFirstRun;
 
   /// The published pictures, by slug, for the profiles that have one.
   ///
@@ -200,6 +202,14 @@ class _SignInScreenState extends State<SignInScreen> {
             .map((e) => _ProfileOption.fromJson(e as Map<String, dynamic>))
             .toList();
         _activeSlug = payload['active'] as String?;
+        // A synthetic, unopened default profile is the one state that means
+        // this is a new installation. It is not a profile the person chose,
+        // so showing its password form would leak a registry implementation
+        // detail into the first-run experience.
+        _isFirstRun = _state == AuthState.setup &&
+            _profiles.length == 1 &&
+            _profiles.single.slug == 'default' &&
+            !_profiles.single.exists;
       });
       _loadPictures();
     } catch (_) {
@@ -257,6 +267,10 @@ class _SignInScreenState extends State<SignInScreen> {
         _busy = false;
         _activeSlug = created['slug'] as String?;
         _state = authStateFrom(created['state'] as String? ?? 'setup');
+        // This transition is caused by an explicit Create action. Do not
+        // reclassify it from a stale registry response while the request that
+        // registered the new profile is still settling.
+        _isFirstRun = false;
         _password.clear();
         _confirm.clear();
       });
@@ -268,6 +282,23 @@ class _SignInScreenState extends State<SignInScreen> {
         _error = _sentence(e);
       });
     }
+  }
+
+  Future<void> _chooseImportBackup() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pipbak'],
+    );
+    if (picked == null || !mounted) return;
+    final path = picked.files.single.path;
+    if (path == null || path.isEmpty) {
+      setState(() => _error = 'That backup has no file path PIP can use.');
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _ImportBackupDialog(fileName: picked.files.single.name),
+    );
   }
 
   /// Point the backend at another profile and redress the screen for it.
@@ -518,6 +549,10 @@ class _SignInScreenState extends State<SignInScreen> {
       return _MigrationNotice(header: _profileSwitcher());
     }
 
+    if (_isFirstRun == true) {
+      return _FirstRunWelcome(onCreate: _addProfile, onImport: _chooseImportBackup);
+    }
+
     final switcher = _profileSwitcher();
 
     // The same dark stage and the same field as the launch screen, because
@@ -668,6 +703,101 @@ class _SignInScreenState extends State<SignInScreen> {
       ),
     );
   }
+}
+
+/// The first screen on a new installation.
+///
+/// `setup` also describes a profile that was registered later from the normal
+/// sign-in screen, so it cannot by itself mean "new user". The parent proves
+/// this is the synthetic unopened default profile before this widget is shown.
+class _FirstRunWelcome extends StatelessWidget {
+  final Future<void> Function() onCreate;
+  final Future<void> Function() onImport;
+
+  const _FirstRunWelcome({required this.onCreate, required this.onImport});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: kGatewayStage,
+        body: GatewayFlow(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  decoration: gatewayGlass(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const PipLogo(size: 56),
+                      const SizedBox(height: AppSpacing.lg),
+                      const Text(
+                        'Welcome to PIP',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: kGatewayText),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      const Text(
+                        'Your private AI workspace, stored on this computer.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 13.5, height: 1.5, color: kGatewayTextMuted),
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      FilledButton.icon(
+                        onPressed: onCreate,
+                        icon: const Icon(Icons.person_add_alt),
+                        label: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('Create new profile'),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      OutlinedButton.icon(
+                        onPressed: onImport,
+                        icon: const Icon(Icons.download_outlined),
+                        label: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('Import existing PIP'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+/// First-run restore deliberately does not call the in-app restore route.
+/// That route replaces an *unlocked active* profile, while this screen has no
+/// such ownership proof and its database is not open. The established restore
+/// shortcut runs only after PIP has closed and keeps both passwords out of the
+/// HTTP surface. A `.pipbak` contains data and its backup password, never the
+/// source machine's live password, so the shortcut asks for a new local one.
+class _ImportBackupDialog extends StatelessWidget {
+  final String fileName;
+
+  const _ImportBackupDialog({required this.fileName});
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Import existing PIP'),
+        content: Text(
+          '“$fileName” was selected. To protect your data, PIP does not replace '
+          'a database while it is running. Close PIP, then use the “Restore PIP '
+          'from backup” shortcut installed with PIP and select this file. It will '
+          'ask for the backup password and a new password for this computer. '
+          'After the restore, open PIP and unlock it with that new password.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+        ],
+      );
 }
 
 /// An unencrypted database from before a password was ever set.
@@ -910,7 +1040,7 @@ class _NewProfileDialogState extends State<_NewProfileDialog> {
         borderRadius: AppRadius.sm,
         side: BorderSide(color: Color(0xFF2C2F43)),
       ),
-      title: const Text('Add a profile', style: TextStyle(color: kGatewayText, fontSize: 18)),
+      title: const Text('Create your PIP profile', style: TextStyle(color: kGatewayText, fontSize: 18)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -930,7 +1060,7 @@ class _NewProfileDialogState extends State<_NewProfileDialog> {
             style: const TextStyle(color: kGatewayText, fontSize: 15),
             cursorColor: kGatewayAccent,
             decoration: const InputDecoration(
-              labelText: 'Name',
+              labelText: 'Profile name',
               labelStyle: TextStyle(color: kGatewayTextMuted),
               enabledBorder: OutlineInputBorder(
                 borderSide: BorderSide(color: Color(0xFF2C2F43)),

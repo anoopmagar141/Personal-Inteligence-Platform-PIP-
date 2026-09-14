@@ -60,6 +60,12 @@ class FakeApi extends ApiClient {
     activeProfile = slug;
     return stateAfterSwitch[slug] ?? 'locked';
   }
+
+  @override
+  Future<Map<String, dynamic>> createProfile(String name) async {
+    if (throwThis != null) throw throwThis!;
+    return {'slug': 'my-profile', 'name': name, 'state': 'setup'};
+  }
 }
 
 /// Two profiles, one opened before and one only registered.
@@ -107,6 +113,37 @@ Future<FakeApi> pumpSignIn(
 void main() {
   _legibilityTests();
   _migrationTests();
+  group('first run', () {
+    testWidgets('offers distinct create and import paths', (tester) async {
+      final api = FakeApi()
+        ..profiles = [
+          {'slug': 'default', 'name': 'Default', 'exists': false},
+        ];
+      await pumpSignIn(tester, AuthState.setup, api_: api);
+
+      expect(find.text('Welcome to PIP'), findsOneWidget);
+      expect(find.text('Create new profile'), findsOneWidget);
+      expect(find.text('Import existing PIP'), findsOneWidget);
+      expect(find.text('Choose a password'), findsNothing);
+    });
+
+    testWidgets('creating from welcome moves directly to password setup', (tester) async {
+      final api = FakeApi()
+        ..profiles = [
+          {'slug': 'default', 'name': 'Default', 'exists': false},
+        ];
+      await pumpSignIn(tester, AuthState.setup, api_: api);
+
+      await tester.tap(find.text('Create new profile'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'My profile');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Choose a password'), findsOneWidget);
+      expect(find.text('Welcome to PIP'), findsNothing);
+    });
+  });
   group('authStateFrom', () {
     test('reads the four states the backend reports', () {
       expect(authStateFrom('locked'), AuthState.locked);
