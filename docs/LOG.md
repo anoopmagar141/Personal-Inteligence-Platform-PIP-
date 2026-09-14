@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-14] codex · Aligned the first-run backup picker with the project's desktop file-picker API · why: it exposes the singular static picker used by BackupView · files: frontend/flutter/lib/screens/sign_in_screen.dart, docs/LOG.md
+
 - [2026-09-14] codex · Added an explicit first-run Create/Import gateway before password setup · why: a synthetic empty default profile is not a user-facing account flow · files: frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/test/sign_in_screen_test.dart, docs/LOG.md
 
 - [2026-09-12] codex · Rebuilt PIP-Setup.exe and completed an isolated install, runtime-load, and uninstall smoke test · why: the prior installer predated the app-local Visual C++ runtime commit and its recorded hash no longer matched · files: dist/PIP-Setup.exe, docs/LOG.md

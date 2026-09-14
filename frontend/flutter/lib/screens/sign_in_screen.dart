@@ -285,19 +285,21 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _chooseImportBackup() async {
-    final picked = await FilePicker.platform.pickFiles(
+    // Match BackupView's picker API. This project resolves the desktop
+    // file_picker implementation exposing the singular static call.
+    final picked = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: const ['pipbak'],
     );
     if (picked == null || !mounted) return;
-    final path = picked.files.single.path;
+    final path = picked.path;
     if (path == null || path.isEmpty) {
       setState(() => _error = 'That backup has no file path PIP can use.');
       return;
     }
     await showDialog<void>(
       context: context,
-      builder: (context) => _ImportBackupDialog(fileName: picked.files.single.name),
+      builder: (context) => _ImportBackupDialog(fileName: picked.name),
     );
   }
 
