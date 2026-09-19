@@ -109,8 +109,8 @@ OLLAMA_PRIORITY = 50
 
 def _default_providers(conn) -> list[BaseLLMProvider]:
     """
-    The fallback chain: the local model, plus every endpoint the user has
-    configured and left enabled, in priority order.
+    The fallback chain: the local model (when reachable), plus every endpoint
+    the user has configured and left enabled, in priority order.
 
     Stage 9 tries these in sequence and moves on when one is unreachable, so
     order is the whole of the policy here. Nothing in this function decides
@@ -122,13 +122,19 @@ def _default_providers(conn) -> list[BaseLLMProvider]:
     on. One malformed endpoint should cost the user that endpoint, not the
     ability to hold a conversation, and the local model is usually still in
     the list behind it.
+
+    Ollama is included unconditionally when it is reachable, or when no other
+    provider is configured at all (so the error is "Ollama is unreachable",
+    not a silent empty list). When it IS unreachable and alternatives exist,
+    it is skipped entirely - saving Stage 9 the 2s TCP-timeout penalty that
+    would otherwise hit every message.
     """
     ollama = OllamaProvider(model_name=get_active_model_name(conn))
 
-    configured: list[tuple[int, BaseLLMProvider]] = [(OLLAMA_PRIORITY, ollama)]
+    endpoints: list[tuple[int, BaseLLMProvider]] = []
     for row in llm_endpoint_store.list_endpoints(conn, enabled_only=True):
         try:
-            configured.append((
+            endpoints.append((
                 row["priority"],
                 OpenAICompatibleProvider(
                     model_name=row["model_name"],
@@ -144,11 +150,19 @@ def _default_providers(conn) -> list[BaseLLMProvider]:
                 f"Pipeline: skipping endpoint '{row.get('provider_id')}' - {e}"
             )
 
+    # Ollama: always included when reachable, or when it's the only option.
+    # Skipped when unreachable AND the user has other providers configured,
+    # so a down Ollama does not add a timeout to every message.
+    if ollama.is_available() or not endpoints:
+        endpoints.append((OLLAMA_PRIORITY, ollama))
+    else:
+        logger.info("Pipeline: Ollama unreachable, skipping (other providers configured)")
+
     # Sorted by priority only, and stably, so endpoints sharing a priority keep
     # the order list_endpoints already put them in rather than being reordered
     # by a tiebreak this function invented.
-    configured.sort(key=lambda pair: pair[0])
-    return [provider for _, provider in configured]
+    endpoints.sort(key=lambda pair: pair[0])
+    return [provider for _, provider in endpoints]
 
 
 def _load_last_session_timestamp(conn):

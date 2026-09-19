@@ -197,19 +197,38 @@ class _SignInScreenState extends State<SignInScreen> {
     try {
       final payload = await widget.api.authProfiles();
       if (!mounted) return;
+      final listed = (payload['profiles'] as List<dynamic>? ?? [])
+          .map((e) => _ProfileOption.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final active = payload['active'] as String?;
+
+      // The launcher intentionally starts with no profile environment. If the
+      // backend's base path is not one of the real profiles, make the initial
+      // selection here - in the app, not in PowerShell - before offering any
+      // password field. With several profiles, last-used is the quiet initial
+      // choice and the switcher remains available for an explicit change.
+      final lastUsed = payload['last_used'] as String?;
+      final selected = listed.any((profile) => profile.slug == active)
+          ? active
+          : listed.any((profile) => profile.slug == lastUsed)
+              ? lastUsed
+              : listed.isEmpty
+                  ? null
+                  : listed.first.slug;
+      AuthState? selectedState;
+      if (selected != null && selected != active) {
+        selectedState = authStateFrom(await widget.api.selectProfile(selected));
+        if (!mounted) return;
+      }
       setState(() {
-        _profiles = (payload['profiles'] as List<dynamic>? ?? [])
-            .map((e) => _ProfileOption.fromJson(e as Map<String, dynamic>))
-            .toList();
-        _activeSlug = payload['active'] as String?;
-        // A synthetic, unopened default profile is the one state that means
-        // this is a new installation. It is not a profile the person chose,
-        // so showing its password form would leak a registry implementation
-        // detail into the first-run experience.
-        _isFirstRun = _state == AuthState.setup &&
-            _profiles.length == 1 &&
-            _profiles.single.slug == 'default' &&
-            !_profiles.single.exists;
+        _profiles = listed;
+        _activeSlug = selected ?? active;
+        if (selectedState != null) _state = selectedState;
+        // No registered profile means this is a new installation. The backend
+        // only exposes Default when an older installation really has data in
+        // that location, so an empty list has no account-shaped implementation
+        // detail for this screen to display.
+        _isFirstRun = _state == AuthState.setup && _profiles.isEmpty;
       });
       _loadPictures();
     } catch (_) {
@@ -711,7 +730,7 @@ class _SignInScreenState extends State<SignInScreen> {
 ///
 /// `setup` also describes a profile that was registered later from the normal
 /// sign-in screen, so it cannot by itself mean "new user". The parent proves
-/// this is the synthetic unopened default profile before this widget is shown.
+/// that no registered profile exists before this widget is shown.
 class _FirstRunWelcome extends StatelessWidget {
   final Future<void> Function() onCreate;
   final Future<void> Function() onImport;

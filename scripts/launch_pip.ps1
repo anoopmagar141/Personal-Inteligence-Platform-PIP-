@@ -1,7 +1,8 @@
 # PIP - one-click launcher (production-style, no visible windows).
 #
-# Unlike run_dev.ps1 (kept as-is for dev work: visible windows, an -NoExit
-# terminal for Flutter's hot-reload keys), this script starts Ollama and the
+# Like run_dev.ps1, this script starts the backend locked; it differs by using
+# no visible windows while run_dev keeps a terminal for Flutter's hot-reload
+# keys. This script starts Ollama and the
 # backend fully hidden, launches the native Windows build, then exits itself
 # - "double-click an icon, get a normal app window," not a dev workflow.
 #
@@ -64,6 +65,33 @@ function Write-Phase($phase, $detail) {
 
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 try { Set-Content -Path $progressFile -Value "" -Encoding utf8 } catch { }
+
+# Stale lock cleanup.
+#
+# instance_lock.py's acquire() handles this in Python, but it runs INSIDE
+# uvicorn - and when this script starts the backend hidden with
+# -WindowStyle Hidden and -RedirectStandardError, a crash there is invisible:
+# the process exits, the desktop shortcut did nothing, and the error sits in
+# a log nobody in that situation would think to open. Clearing a dead PID's
+# lock HERE means the most common class of stuck-lock never reaches Python.
+#
+# A live PID is left alone; instance_lock.py's own check is the single-
+# instance guard, not this one, and this script does not import or reproduce
+# the careful GetExitCodeProcess branch that _pid_is_running uses on Windows.
+# Get-Process is coarser (it returns a handle to a stopped-but-held process)
+# but for the stale-lock case - a PID from a previous boot, or a process
+# killed minutes ago whose handle has long been closed - it is sufficient.
+$lockFile = Join-Path $dataDir "pip.lock"
+if (Test-Path $lockFile) {
+    $lockedPid = (Get-Content $lockFile -Raw).Trim()
+    if ($lockedPid -match '^\d+$') {
+        $proc = Get-Process -Id ([int]$lockedPid) -ErrorAction SilentlyContinue
+        if (-not $proc) {
+            Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
+            Write-Phase "lock" "cleared stale lock (pid $lockedPid)"
+        }
+    }
+}
 
 # Ollama, in every state a machine is actually ever in.
 #

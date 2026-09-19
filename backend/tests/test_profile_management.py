@@ -622,12 +622,11 @@ def test_deleting_the_default_profile_leaves_the_applications_own_files(app):
     assert (tmp_path / "api_token.txt").exists()
 
 
-def test_the_default_profile_survives_deletion_as_an_empty_slot(app):
+def test_deleting_the_legacy_default_leaves_no_empty_slot(app):
     """
-    Its registry entry is synthesised whenever it is missing, so that losing
-    the entry can never make the database it points at unreachable. After a
-    delete there is no database, so the slot correctly reads as one that has
-    not been created yet.
+    Default exists only to keep a pre-profile database reachable. Once its
+    data is erased, the sign-in screen must return to the no-account first-run
+    state rather than displaying a new empty Default account.
     """
     client, headers, _ = app
     sign_in(client, headers)
@@ -637,8 +636,7 @@ def test_the_default_profile_survives_deletion_as_an_empty_slot(app):
     )
 
     listed = client.get("/api/v1/auth/profiles", headers=headers).json()["profiles"]
-    default = next(p for p in listed if p["slug"] == "default")
-    assert default["exists"] is False
+    assert listed == []
 
 
 def test_sqlite_sidecars_are_erased_with_the_database(app):

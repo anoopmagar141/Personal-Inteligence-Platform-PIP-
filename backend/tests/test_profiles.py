@@ -36,15 +36,15 @@ def isolated_registry(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_an_installation_with_no_registry_still_has_a_default_profile():
+def test_a_new_installation_with_no_registry_has_no_profile():
     """
-    Nothing is created by reading. An installation that never adds a second
-    profile never grows a profiles.json, and behaves as it did before this
-    module existed.
+    Default is for an installation that predates profiles and actually has
+    data in data/. A clean installation must not show an account it did not
+    create.
     """
     listed = profiles.list_profiles()
 
-    assert [p.slug for p in listed] == [profiles.DEFAULT_SLUG]
+    assert listed == []
     assert not profiles.registry_path().exists(), "listing profiles wrote a file"
 
 
@@ -55,6 +55,7 @@ def test_the_default_profile_points_at_the_unmoved_data_directory(isolated_regis
     the key derivation and Part 10.1 states there is no recovery - so the
     feature is built to avoid ever needing to.
     """
+    (isolated_registry / "pip.db").touch()
     default = profiles.get(profiles.DEFAULT_SLUG)
 
     assert default.data_dir == "."
@@ -68,6 +69,7 @@ def test_a_corrupt_registry_does_not_hide_the_real_database(isolated_registry):
     that will not start because a convenience index is malformed, while the
     database holding everything sits there perfectly readable.
     """
+    (isolated_registry / "pip.db").touch()
     profiles.registry_path().write_text("{ this is not json", encoding="utf-8")
 
     listed = profiles.list_profiles()
@@ -77,6 +79,7 @@ def test_a_corrupt_registry_does_not_hide_the_real_database(isolated_registry):
 
 def test_a_registry_that_forgot_the_default_still_lists_it(isolated_registry):
     """The one profile that must never become unreachable is the one with the data in it."""
+    (isolated_registry / "pip.db").touch()
     profiles.registry_path().write_text(
         json.dumps({
             "profiles": [{
@@ -170,9 +173,26 @@ def test_the_last_used_profile_is_remembered(isolated_registry):
 
 
 def test_the_default_profile_cannot_be_unregistered(isolated_registry):
+    (isolated_registry / "pip.db").touch()
     profiles.register("Priya")
     with pytest.raises(ValueError, match="cannot be unregistered"):
         profiles.remove(profiles.DEFAULT_SLUG)
+
+
+def test_an_empty_default_entry_from_an_older_registry_is_not_listed(isolated_registry):
+    """A placeholder left by the old first-profile flow is not an account."""
+    profiles.registry_path().write_text(
+        json.dumps({
+            "profiles": [
+                {"slug": "default", "name": "Default", "data_dir": ".", "created_at": "2026-09-03T00:00:00Z"},
+                {"slug": "batman", "name": "BatMan", "data_dir": "profiles/batman", "created_at": "2026-09-03T00:00:00Z"},
+            ],
+            "last_used": "batman",
+        }),
+        encoding="utf-8",
+    )
+
+    assert [p.slug for p in profiles.list_profiles()] == ["batman"]
 
 
 def test_unregistering_leaves_the_files_alone(isolated_registry):

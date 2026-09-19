@@ -25,15 +25,14 @@ $root = Split-Path -Parent $PSScriptRoot
 $dataDir = Join-Path $root "data"
 $tokenPath = Join-Path $dataDir "api_token.txt"
 
-# Database key. Originally nothing set PIP_DB_KEY on the real startup path at
-# all, so get_connection() always took its unencrypted fallback and ADR-026's
-# "encrypted at rest" guarantee was dead code in every launch. That was first
-# fixed with a random key persisted to data/db_key.txt - which encrypts, but
-# leaves the key beside the database it decrypts, so anything copying data/ gets
-# both. Part 10.1 specifies the model now used instead: a password typed here,
-# PBKDF2-derived, never written to disk. See scripts/_db_key.ps1.
-. (Join-Path $PSScriptRoot "_db_key.ps1")
-if (-not (Set-PipDbKey -Root $root)) { exit 1 }
+# Start locked. A development launcher must not ask a terminal user to guess
+# which profile's password it wants: profile selection and password entry belong
+# to the sign-in screen, where all registered profiles are visible. Clear a key
+# inherited from a previous shell too, so it cannot silently unlock a profile.
+Remove-Item Env:PIP_DB_KEY -ErrorAction SilentlyContinue
+foreach ($variable in "PIP_DB_PATH", "PIP_SALT_PATH", "PIP_CHROMA_PATH", "PIP_DOCUMENTS_ROOT", "PIP_PROFILE") {
+    Remove-Item "Env:$variable" -ErrorAction SilentlyContinue
+}
 
 # Ollama listens on 11434 by default (see backend/providers/ollama_provider.py's
 # OllamaProvider host default) - a TCP probe is enough to tell "already

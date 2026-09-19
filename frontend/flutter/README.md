@@ -1,17 +1,48 @@
-# pip_flutter_client
+# PIP Flutter client
 
-A new Flutter project.
+PIP is a local-first desktop AI assistant. The Flutter Windows app connects to
+the local PIP backend at `http://127.0.0.1:8765`.
 
-## Getting Started
+## Launch PIP
 
-This project is a starting point for a Flutter application.
+Run these commands from the project root (`Personal Inteligence Platform (PIP)`).
 
-A few resources to get you started if this is your first Flutter project:
+### Normal user launch
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Starts PIP without visible Ollama or backend terminal windows:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```powershell
+.\scripts\launch_pip.ps1
+```
+
+### Developer launch
+
+Starts the Flutter app in debug mode, with visible backend and Ollama terminals
+and backend hot reload:
+
+```powershell
+.\scripts\run_dev.ps1
+```
+
+The developer terminals are intentional: one runs Ollama and the other runs
+the FastAPI backend and its live logs.
+
+## If your terminal is already in `frontend\flutter`
+
+Use either launcher by going up two directories:
+
+```powershell
+# Normal user launch
+..\..\scripts\launch_pip.ps1
+
+# Developer launch
+..\..\scripts\run_dev.ps1
+```
+
+The filenames use an underscore: `launch_pip.ps1` and `run_dev.ps1`.
+
+## Signing in
+
+Neither launcher asks for a profile name or a password in PowerShell. PIP opens
+locked, then the sign-in screen lets the user choose a profile and enter that
+profile's password.

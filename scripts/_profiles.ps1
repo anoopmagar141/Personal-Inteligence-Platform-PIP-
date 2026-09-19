@@ -87,14 +87,18 @@ function Resolve-PipLastProfile {
     them before a password is typed, so the worst case here is that somebody
     clicks one name on a screen they were already looking at.
 
-    $null with one profile - or none - so the caller behaves exactly as it did
-    before profiles existed, and so that data/pip.db is reached by the same code
-    path it always was rather than by an override that happens to name it.
+    $null only when there is no registered profile, or when the sole profile is
+    the legacy one whose data already lives directly in data/. A sole modern
+    profile still needs its own paths selected before the backend starts.
     #>
     param([Parameter(Mandatory = $true)][string]$Root)
 
     $profiles = Get-PipProfiles -Root $Root
-    if ($profiles.Count -le 1) { return $null }
+    if ($profiles.Count -eq 0) { return $null }
+    if ($profiles.Count -eq 1) {
+        if ($profiles[0].data_dir -eq ".") { return $null }
+        return Resolve-PipProfilePaths -Root $Root -Profile $profiles[0]
+    }
 
     $registry = Join-Path $Root "data\profiles.json"
     $lastUsed = try { (Get-Content $registry -Raw -Encoding utf8 | ConvertFrom-Json).last_used } catch { "default" }

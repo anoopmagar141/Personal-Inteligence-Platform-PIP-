@@ -2,9 +2,8 @@
 //
 // Two things here are easy to get wrong in a way nothing else catches. The
 // calling name is optional, so the payload must be able to omit it rather than
-// send an empty string the backend then has to interpret. And the project
-// field creates a real project from whatever is typed into it - including the
-// word somebody types when they mean "none".
+// send an empty string the backend then has to interpret. The system timezone
+// is submitted without becoming another question on the form.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,7 +24,7 @@ class FakeApi extends ApiClient {
 }
 
 Future<void> _pump(WidgetTester tester, FakeApi api, {VoidCallback? onComplete}) async {
-  // The form is nine fields tall and the default 800x600 test surface is not,
+  // The form has several fields and the default 800x600 test surface is not,
   // so the dropdown overflows and the submit button lands off screen - which
   // fails as "the tap did nothing" rather than as a layout complaint. Same
   // treatment chat_scope_test and providers_view_test already give their own
@@ -92,7 +91,7 @@ void main() {
     expect(find.text('Required'), findsOneWidget);
   });
 
-  testWidgets('creates no project when the project field is left blank', (tester) async {
+  testWidgets('uses the local timezone without exposing timezone or project fields', (tester) async {
     final api = FakeApi();
     await _pump(tester, api);
 
@@ -100,17 +99,20 @@ void main() {
     await tester.tap(find.text('Complete setup'));
     await tester.pumpAndSettle();
 
-    expect(api.submitted!.containsKey('current_project'), isFalse);
+    expect(api.submitted!['timezone'], isNotEmpty);
+    expect(find.text('Timezone'), findsNothing);
+    expect(find.text('Current project name'), findsNothing);
+    expect(find.text('Current project description'), findsNothing);
   });
 
   testWidgets('does not promise that anything is locked once set', (tester) async {
-    // It said name, language and timezone were permanent. They are editable
-    // from the profile screen, and had been for a while - the copy was simply
+    // It said some profile details were permanent. They are editable from the
+    // profile screen, and had been for a while - the copy was simply
     // never updated, which is the same class of defect as a docstring
     // describing a code path nobody wired.
     await _pump(tester, FakeApi());
 
     expect(find.textContaining('locked once set'), findsNothing);
-    expect(find.textContaining('change any of this later'), findsOneWidget);
+    expect(find.textContaining('change these details later'), findsOneWidget);
   });
 }

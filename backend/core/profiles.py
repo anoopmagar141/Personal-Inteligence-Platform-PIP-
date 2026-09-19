@@ -147,29 +147,43 @@ def _default_profile() -> Profile:
     )
 
 
+def _has_legacy_default_data() -> bool:
+    """Whether the pre-profile installation has a database worth preserving."""
+    return _default_profile().exists()
+
+
 def load() -> dict[str, Any]:
     """
-    The registry as stored, or a synthetic one describing the original install.
+    The registry as stored, plus the original install only when it has data.
 
-    A corrupt or unreadable registry degrades to the default rather than raising.
-    The alternative is an application that will not start because a convenience
-    index is malformed, while the actual database sits there perfectly readable.
+    A corrupt or unreadable registry degrades to legacy data rather than
+    raising. The alternative is an application that will not start because a
+    convenience index is malformed, while the actual database sits there
+    perfectly readable.
     """
     path = registry_path()
     if not path.exists():
-        return {"profiles": [asdict(_default_profile())], "last_used": DEFAULT_SLUG}
+        legacy = [_default_profile()] if _has_legacy_default_data() else []
+        return {"profiles": [asdict(p) for p in legacy], "last_used": DEFAULT_SLUG}
 
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
         profiles = [Profile(**p) for p in raw.get("profiles", [])]
     except Exception as e:
-        logger.warning(f"profiles.json could not be read ({e}) - falling back to the default profile.")
-        return {"profiles": [asdict(_default_profile())], "last_used": DEFAULT_SLUG}
+        logger.warning(f"profiles.json could not be read ({e}) - falling back to legacy data only.")
+        legacy = [_default_profile()] if _has_legacy_default_data() else []
+        return {"profiles": [asdict(p) for p in legacy], "last_used": DEFAULT_SLUG}
 
-    if not any(p.slug == DEFAULT_SLUG for p in profiles):
-        # The original installation is always present, whatever the file says.
-        # Losing it from the registry must not make the database it points at
-        # unreachable - that database is the one with everything in it.
+    # A previous version registered an empty Default slot when the first real
+    # profile was created. It is not an account and must not appear in the
+    # switcher; keep Default only when it protects an actual legacy database.
+    profiles = [
+        p for p in profiles
+        if p.slug != DEFAULT_SLUG or p.exists()
+    ]
+    if _has_legacy_default_data() and not any(p.slug == DEFAULT_SLUG for p in profiles):
+        # The original installation has data even though its registry entry
+        # was lost. Restore it so that database remains reachable.
         profiles.insert(0, _default_profile())
 
     return {
@@ -247,24 +261,8 @@ def environment_for(profile: Profile) -> dict[str, str]:
     }
 
 
-def activate(slug: str) -> Profile:
-    """
-    Point this process at *slug*'s files. Only ever call this while locked.
-
-    That condition is not a style note. The key held in session_key belongs to
-    the profile that was open when it was derived, and it is also in
-    PIP_DB_KEY, which vector_store reads to decrypt chunk text. Re-pointing the
-    paths while a key is still held would leave one profile's key aimed at
-    another profile's files: SQLCipher would refuse the database, but the
-    Chroma directory would be opened and written under the wrong key's HMAC,
-    which fails silently and permanently. The caller that enforces this is the
-    /auth/profile route, which refuses while unlocked.
-
-    Creates the directories rather than requiring them, because a profile that
-    has been registered but never opened has nothing on disk yet - that is the
-    state new_profile.py leaves behind, and the state a first sign-in resolves.
-    """
-    profile = get(slug)
+def _activate(profile: Profile) -> Profile:
+    """Point the process at an already-resolved profile without opening it."""
     paths = profile.paths()
     paths["db"].parent.mkdir(parents=True, exist_ok=True)
     paths["documents"].mkdir(parents=True, exist_ok=True)
@@ -286,13 +284,43 @@ def activate(slug: str) -> Profile:
     return profile
 
 
+def activate(slug: str) -> Profile:
+    """
+    Point this process at *slug*'s files. Only ever call this while locked.
+
+    That condition is not a style note. The key held in session_key belongs to
+    the profile that was open when it was derived, and it is also in
+    PIP_DB_KEY, which vector_store reads to decrypt chunk text. Re-pointing the
+    paths while a key is still held would leave one profile's key aimed at
+    another profile's files: SQLCipher would refuse the database, but the
+    Chroma directory would be opened and written under the wrong key's HMAC,
+    which fails silently and permanently. The caller that enforces this is the
+    /auth/profile route, which refuses while unlocked.
+
+    Creates the directories rather than requiring them, because a profile that
+    has been registered but never opened has nothing on disk yet - that is the
+    state new_profile.py leaves behind, and the state a first sign-in resolves.
+    """
+    return _activate(get(slug))
+
+
+def activate_empty_installation() -> Profile:
+    """Restore base paths after the final profile is deleted.
+
+    This is a process fallback, not a registered account. The sign-in API will
+    still list no profiles and take the next visitor to the create-profile
+    screen.
+    """
+    return _activate(_default_profile())
+
+
 def _save(profiles: list[Profile], last: str) -> None:
     path = registry_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"profiles": [asdict(p) for p in profiles], "last_used": last}
     # Written whole and replaced, not appended to: a half-written registry is a
-    # file that cannot be parsed, and the fallback above would then silently
-    # hide every profile but the default.
+    # file that cannot be parsed, and the fallback above would then expose
+    # only a legacy Default profile with a real database.
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     temporary.replace(path)
@@ -478,12 +506,9 @@ def delete(slug: str) -> Profile:
 
     THE DEFAULT PROFILE IS NOT EXEMPT
     ---------------------------------
-    Its data is erased like anyone else's. What survives is its registry entry,
-    because load() synthesises it whenever it is missing - the original
-    installation is always listed, and that invariant exists so that losing the
-    entry can never make the database it points at unreachable. The consequence
-    after a delete is that the slot remains and reads as a fresh profile, which
-    is what it now is: there is nothing behind it.
+    Its data is erased like anyone else's. Once its database is gone it is no
+    longer listed: Default protects legacy data, not an empty account-shaped
+    slot on a new installation.
     """
     profile = get(slug)
 

@@ -1,6 +1,6 @@
-// Matches frontend/web/app.js's submitOnboarding() payload shape exactly -
-// same fields, same optional-vs-required split, same POST /onboarding/complete
-// call.
+// Sends only the identity and preference fields the first-run form asks for.
+// The timezone comes from the local Windows account rather than asking the
+// person to identify a setting their computer already knows.
 
 import 'package:flutter/material.dart';
 
@@ -28,9 +28,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _name = TextEditingController();
   final _preferredName = TextEditingController();
   final _language = TextEditingController(text: 'English');
-  final _timezone = TextEditingController();
-  final _projectName = TextEditingController();
-  final _projectDescription = TextEditingController();
   final _skills = TextEditingController();
   final _preferredTools = TextEditingController();
   String _interactionStyle = '';
@@ -48,18 +45,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       'name': _name.text,
       if (_preferredName.text.trim().isNotEmpty) 'preferred_name': _preferredName.text.trim(),
       'language_preference': _language.text,
-      if (_timezone.text.trim().isNotEmpty) 'timezone': _timezone.text.trim(),
+      'timezone': DateTime.now().timeZoneName,
       if (_parseCsv(_skills.text, 3) != null) 'skills': _parseCsv(_skills.text, 3),
       if (_interactionStyle.isNotEmpty) 'interaction_style': _interactionStyle,
       if (_parseCsv(_preferredTools.text, 5) != null) 'preferred_tools': _parseCsv(_preferredTools.text, 5),
     };
-    if (_projectName.text.trim().isNotEmpty) {
-      payload['current_project'] = {
-        'name': _projectName.text.trim(),
-        'description': _projectDescription.text.trim(),
-      };
-    }
-
     try {
       await widget.api.completeOnboarding(payload);
       widget.onComplete();
@@ -74,9 +64,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void dispose() {
     _name.dispose();
     _language.dispose();
-    _timezone.dispose();
-    _projectName.dispose();
-    _projectDescription.dispose();
     _skills.dispose();
     _preferredTools.dispose();
     super.dispose();
@@ -114,7 +101,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'A few questions before we start. You can change any of this later from your profile.',
+                    'Tell PIP a little about you. You can change these details later from your profile.',
                     style: TextStyle(fontSize: 12, color: pip.textMuted, height: 1.5),
                   ),
                   const SizedBox(height: AppSpacing.lg),
@@ -139,27 +126,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     controller: _language,
                     decoration: const InputDecoration(labelText: 'Primary language *', hintText: 'e.g. English'),
                     validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _timezone,
-                    decoration: const InputDecoration(
-                      labelText: 'Timezone',
-                      hintText: 'e.g. Asia/Kathmandu - defaults to UTC',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _projectName,
-                    decoration: const InputDecoration(
-                      labelText: 'Current project name',
-                      hintText: 'optional - leave blank and no project is created',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _projectDescription,
-                    decoration: const InputDecoration(labelText: 'Current project description'),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(

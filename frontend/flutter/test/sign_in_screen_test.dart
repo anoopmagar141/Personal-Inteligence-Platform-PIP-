@@ -25,10 +25,12 @@ class FakeApi extends ApiClient {
   final List<String> selected = [];
   Object? throwThis;
 
-  /// What /auth/profiles answers. Empty by default, which is the shape of an
-  /// installation that has never made a second profile - and therefore the
-  /// shape every test that is not about the switcher should be running under.
-  List<Map<String, dynamic>> profiles = const [];
+  /// What /auth/profiles answers. An empty list is a brand-new installation;
+  /// individual first-run tests opt into that shape explicitly. The normal
+  /// fixture represents an already-registered profile awaiting setup.
+  List<Map<String, dynamic>> profiles = [
+    {'slug': 'default', 'name': 'Default', 'exists': false},
+  ];
   String activeProfile = 'default';
 
   /// What /auth/profile answers for each slug.
@@ -115,10 +117,7 @@ void main() {
   _migrationTests();
   group('first run', () {
     testWidgets('offers distinct create and import paths', (tester) async {
-      final api = FakeApi()
-        ..profiles = [
-          {'slug': 'default', 'name': 'Default', 'exists': false},
-        ];
+      final api = FakeApi()..profiles = const [];
       await pumpSignIn(tester, AuthState.setup, api_: api);
 
       expect(find.text('Welcome to PIP'), findsOneWidget);
@@ -128,10 +127,7 @@ void main() {
     });
 
     testWidgets('creating from welcome moves directly to password setup', (tester) async {
-      final api = FakeApi()
-        ..profiles = [
-          {'slug': 'default', 'name': 'Default', 'exists': false},
-        ];
+      final api = FakeApi()..profiles = const [];
       await pumpSignIn(tester, AuthState.setup, api_: api);
 
       await tester.tap(find.text('Create new profile'));
@@ -308,6 +304,20 @@ void main() {
       await pumpSignIn(tester, AuthState.locked, api_: api);
 
       expect(find.text('Switch'), findsNothing);
+    });
+
+    testWidgets('selects a sole registered profile inside the app', (tester) async {
+      // run_dev deliberately starts with no profile environment. The app must
+      // select the only profile before it asks for that profile's password.
+      final api = FakeApi()
+        ..activeProfile = 'default'
+        ..profiles = [
+          {'slug': 'batman', 'name': 'BatMan', 'exists': true},
+        ];
+      await pumpSignIn(tester, AuthState.setup, api_: api);
+
+      expect(api.selected, ['batman']);
+      expect(find.text('Welcome back'), findsOneWidget);
     });
 
     testWidgets('names the profile being signed in as', (tester) async {

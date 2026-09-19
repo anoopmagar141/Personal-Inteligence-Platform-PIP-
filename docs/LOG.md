@@ -6,6 +6,16 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-19] antigravity · Cleared stale lock before backend startup and made Ollama optional when other endpoints are configured · why: a dead previous session caused silent backend crashes and hardcoding Ollama meant an unnecessary timeout penalty for users with alternative API providers · files: scripts/launch_pip.ps1, backend/core/pipeline.py, backend/api/server.py
+
+- [2026-09-19] codex · Documented normal and developer launch commands and their locked sign-in behavior · why: the Flutter README was a stock template and did not explain the two supported launch paths · files: frontend/flutter/README.md, docs/ARCHITECTURE.md, docs/LOG.md
+
+- [2026-09-19] codex · Made the development launcher profile-neutral and selected its initial profile from the sign-in screen · why: neither a password nor a profile belongs in the terminal before PIP opens · files: scripts/run_dev.ps1, scripts/_profiles.ps1, scripts/launch_pip.ps1, frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/test/sign_in_screen_test.dart, docs/LOG.md
+
+- [2026-09-18] codex · Simplified onboarding and sourced timezone from the local system automatically · why: timezone and current-project prompts added unnecessary first-run form fields · files: frontend/flutter/lib/onboarding_screen.dart, frontend/flutter/test/onboarding_screen_test.dart, docs/LOG.md
+
+- [2026-09-18] codex · Removed the empty Default profile from new-account and first-run flows · why: a placeholder account was displayed beside the profile the user just created · files: backend/core/profiles.py, backend/api/server.py, backend/tests/test_profiles.py, backend/tests/test_profile_management.py, frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/test/sign_in_screen_test.dart, docs/ARCHITECTURE.md, docs/LOG.md
+
 - [2026-09-14] codex · Aligned the first-run backup picker with the project's desktop file-picker API · why: it exposes the singular static picker used by BackupView · files: frontend/flutter/lib/screens/sign_in_screen.dart, docs/LOG.md
 
 - [2026-09-14] codex · Added an explicit first-run Create/Import gateway before password setup · why: a synthetic empty default profile is not a user-facing account flow · files: frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/test/sign_in_screen_test.dart, docs/LOG.md

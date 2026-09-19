@@ -28,11 +28,13 @@ from backend.memory import (
     avatar_store,
     conversation_store,
     decision_log,
+    llm_endpoint_store,
     profile_store,
     vector_store,
     verification,
 )
 from backend.providers.ollama_provider import OllamaProvider
+from backend.providers.openai_compatible_provider import OpenAICompatibleProvider
 from backend.stages import stage_13_profile_update as stage_13
 from shared.ws_spec import ChatRequest, PipelineCompleteEvent, WSChatEvent
 
@@ -931,7 +933,42 @@ def _default_observer_provider(model_name: str):
     # the executor at all - during that path; see the three call sites below
     # for where model_name actually gets resolved (always earlier, off the
     # disconnect/idle-timeout hot path).
-    return OllamaProvider(model_name=model_name)
+    """Build the provider Observer should use — same chain as chat."""
+    ollama = OllamaProvider(model_name=model_name)
+    if ollama.is_available():
+        return ollama
+    # Fall back to the first configured endpoint, if any
+    try:
+        conn = _conn()
+        for row in llm_endpoint_store.list_endpoints(conn, enabled_only=True):
+            return OpenAICompatibleProvider(
+                model_name=row["model_name"],
+                base_url=row["base_url"],
+                provider_id=row["provider_id"],
+                api_key=row["api_key"],
+                is_local=bool(row["is_local"]),
+                supports_response_format=bool(row["supports_response_format"]),
+            )
+    except Exception:
+        pass
+    # No alternative — return Ollama anyway so the error is clear
+    return ollama
+    # Fall back to the first configured endpoint, if any
+    try:
+        conn = _conn()
+        for row in llm_endpoint_store.list_endpoints(conn, enabled_only=True):
+            return OpenAICompatibleProvider(
+                model_name=row["model_name"],
+                base_url=row["base_url"],
+                provider_id=row["provider_id"],
+                api_key=row["api_key"],
+                is_local=bool(row["is_local"]),
+                supports_response_format=bool(row["supports_response_format"]),
+            )
+    except Exception:
+        pass
+    # No alternative — return Ollama anyway so the error is clear
+    return ollama
 
 
 def _idle_timeout_seconds() -> float:
@@ -2135,13 +2172,17 @@ try:
             erased = {"slug": slug, "name": slug}
             deferred = True
 
-        # Point at something that exists, so the sign-in screen this client is
-        # about to show is describing a real profile rather than the paths of
-        # one that was just erased.
-        try:
-            profiles.activate(profiles.last_used())
-        except KeyError:
-            profiles.activate(profiles.DEFAULT_SLUG)
+        # Restore a remaining profile's paths, or base paths if the deletion
+        # left no account at all. Base paths are only a process fallback: the
+        # sign-in API still reports an empty list and shows first-run setup.
+        remaining = profiles.list_profiles()
+        next_slug = profiles.last_used()
+        if any(profile.slug == next_slug for profile in remaining):
+            profiles.activate(next_slug)
+        elif remaining:
+            profiles.activate(remaining[0].slug)
+        else:
+            profiles.activate_empty_installation()
 
         logger.info(f"Profile {slug!r} was deleted at the user's request.")
         return {
@@ -2718,3 +2759,5 @@ try:
 
 except ImportError:
     app = None
+
+

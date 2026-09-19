@@ -27,6 +27,20 @@ exactly three places — `sqlite3`/`sqlcipher3` in `backend/memory/profile_store
 events, imported by the stage that produces them, the pipeline that relays
 them, and the server that forwards them.
 
+## Launch paths
+
+- `scripts/launch_pip.ps1` is the normal user launcher. It starts Ollama and
+  the backend hidden, then opens the built Windows app.
+- `scripts/run_dev.ps1` is the developer launcher. It opens visible Ollama and
+  backend terminals, runs Uvicorn with `--reload`, and starts Flutter in debug
+  mode for hot reload.
+- Both launchers start the backend locked. They do not select a profile or
+  request a password in PowerShell. The Flutter sign-in screen selects an
+  initial registered profile, offers switching, and requests that profile's
+  password. Additionally, the normal launcher performs a pre-flight stale lock
+  cleanup (`data/pip.lock` belonging to a dead PID) so the backend does not
+  silently crash in its hidden window.
+
 ## Data flow: UI to data source
 
 **Chat** (the only WebSocket path):
@@ -125,7 +139,10 @@ so there is one write path, not two.
 - **Provider order is policy.** `pipeline.OLLAMA_PRIORITY = 50` and
   `llm_endpoints.priority` defaults to 100, so a newly configured cloud endpoint
   sits *behind* the local model and cannot silently start sending conversations
-  off the machine. Stage 8 then filters the list and fails closed.
+  off the machine. Ollama is dynamically skipped if it is unreachable and alternative
+  endpoints exist, avoiding an unnecessary timeout penalty for every message, while
+  maintaining the fallback chain if it's the only configured provider. Stage 8 then
+  filters the list and fails closed.
 - **The evidence gate is an allowlist, and fails toward rejection.** Entailment
   is decided by requiring the user's own words to carry a recognised support
   construction for the kind of claim being made — the three the constitution
@@ -166,6 +183,10 @@ so there is one write path, not two.
   else with the disk is that the owner can turn a password into a key that
   opens it. The two irreversible operations ask for the password again on top,
   because being unlocked proves the database was opened, not who is asking now.
+- **New installations have no implicit account.** The profile list is empty
+  until the person creates one. `Default` is retained only for an older
+  installation whose database still lives directly in `data/`; it is never an
+  empty selectable placeholder beside a newly created profile.
 - **`profiles.delete()` erases; `profiles.remove()` does not.** ADR-024's
   "removal is a retraction, not an erasure" still governs `remove()`, whose
   caller cannot be shown to own the data. `delete()` is reachable only after
@@ -261,3 +282,5 @@ so there is one write path, not two.
 - **`data/documents/PIP_CURRENT_STATE.md` is tracked despite `data/documents/`
   being in `.gitignore`** — added deliberately in commit 5a0269c. A new file in
   that directory will *not* be tracked without `git add -f`.
+
+
