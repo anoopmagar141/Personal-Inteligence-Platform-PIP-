@@ -63,12 +63,12 @@ e. If you change structure or a convention, update the matching doc in the same
 
 ## Current focus
 
-Packaging for other machines: `scripts/build_portable.ps1 <out>` (copied
-CPython, not PyInstaller) stages the payload at `<drive>\pip-build\PIP`, not
-`dist/PIP` — ISCC is a MAX_PATH caller (docs/ARCHITECTURE.md). Then
-`scripts/build_installer.ps1` → `dist/PIP-Setup.exe` via `installer/PIP.iss`
-(per-user, no admin, `data/` survives uninstall), or `dist/PIP.zip` without
-Inno Setup. Deliberately out of scope: bundling Ollama, and code signing.
+Reliability freeze: no feature work, speculative cleanup or unevidenced fix
+until the five evidence tracks are classified. The rules, the seven promises
+and the status of each track live in `docs/FREEZE_LIST.md` — read it before
+starting any task, and update it in place rather than writing a new summary.
+Packaging (`scripts/build_portable.ps1`, `build_installer.ps1`) is paused.
+A report may recommend a fix; implementing it needs separate authorization.
 
 ## LOG.md entry format
 
