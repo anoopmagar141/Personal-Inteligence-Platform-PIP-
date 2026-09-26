@@ -3,8 +3,8 @@
 **Canonical document.** Update in place; do not create a second summary.
 Location in the repo: `docs/FREEZE_LIST.md`.
 
-**Status: evidence-first freeze.** Five discovery/test tasks sent; Track 1
-returned (§7.2), four pending. No production code has been changed under
+**Status: evidence-first freeze.** Five discovery/test tasks sent; Tracks 1
+and 2 returned (§7.2, §7.3), three pending. No production code has been changed under
 this freeze.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
@@ -83,7 +83,7 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the six oldest are rolled into
+- `docs/LOG.md` is held at **25 entries**; the seven oldest are rolled into
   three Archive summary lines (done 2026-09-26).
 
 ---
@@ -178,6 +178,12 @@ five current tracks — do not open a sixth investigation from it.
 > before encryption was enabled is not scrubbed. [While running, the key
 > reaches the backend through the process environment — **final clause
 > depends on Track 2**.]
+
+Track 2 has returned (§7.3), and the final clause cannot stay as drafted.
+The key does not *reach* the backend through the environment: the backend
+derives it and then *exports* it there, and every child process inherits
+it. Chunks can also be written in plaintext after sign-out. The corrected
+clause needs an owner decision; a candidate is in §7.3.
 
 ---
 
@@ -279,6 +285,90 @@ deleted) — **recommendations only, nothing implemented:**
 Not in scope, noted: `server.py` `_default_observer_provider` carries an
 unreachable duplicate of its own fallback block after `return ollama`.
 
+### 7.3 Track 2 report — `PIP_DB_KEY` (2026-09-26)
+
+**Stop condition:** which consumers (main DB vs `vector_store`) depend on
+the env key, and which reads are redundant? Two findings, one per
+consumer, as required.
+
+**Method.** Baseline full suite at `db2ddd8`: 1191 pass, 3 fail. All
+three are in `test_llm_endpoint_store.py`, need a running Ollama, and pass
+17/17 with `is_available` patched True. The same run intermittently hangs
+in `test_ws_chat_accumulates_conversation_history_across_turns`, a known
+flake (see `pytest.ini`); it happened once in three runs today. Then two
+mutations, each in a throwaway worktree, full suite each: (A) `_conn()`
+reads `session_key.current_key()` instead of the env; (B) the same for
+`vector_store._get_db_key()`. Plus two temporary behavioural checks,
+since deleted.
+
+**Finding 1 — main DB (`server._conn`, `server.py:1004`): the env read is
+redundant in-process. Category C for the read itself.**
+- Mutation A changed nothing: 1191 pass, the same 3 fail. That is medium
+  evidence ("no test notices").
+- The code path agrees. Every in-process write of the variable is paired
+  with `session_key._key`: set in `unlock`, `set_initial_password` and
+  `change_password` (`session_key.py:190`, `230`, `370`), popped with it in
+  `lock` (`:89`), and adopted into it at lifespan start (`:109`).
+- No other backend code opens the main DB from the env.
+
+**Finding 2 — `vector_store` (`_get_db_key`, `vector_store.py:124`): the
+env read is load-bearing, and it fails open. Category A.**
+- **Not redundant.** `scripts/restore_backup.py:318` sets the env purely so
+  `vector_store` encrypts the rebuilt index; a script process has no
+  `session_key`.
+- Mutation B broke 8 `test_vector_store` tests, but they use the env as
+  their switch for the encrypted path, so that is test mechanism, not
+  production. (A ninth, `test_ws_chat_lazily_creates...`, failed on the
+  race its own comment describes; that path does not use `vector_store`.)
+- The consequence Mutation B *should* have exposed went unnoticed:
+  `test_restore_backup` replaces `rebuild_vector_index` with a stub, so a
+  restore that silently builds a plaintext index is not caught by any
+  test.
+- **Fails open.** With no key in the env, chunk text and the file path are
+  written in plaintext even when the main DB is encrypted (the "no-op
+  passthrough", `vector_store.py:120`). Confirmed by a run of the real
+  functions: signed in, a chunk was stored encrypted; after
+  `session_key.lock()` (what `POST /auth/lock` calls) on the same open
+  connection, the next chunk's text and path were on disk in plaintext,
+  and `check_consistency` then reported the document as drifted.
+- **Reachability in the app is by code reading only, not demonstrated.**
+  `/auth/lock` neither waits for nor cancels `_catch_up_task` (which runs
+  `rebuild_if_drifted`), and a request already running keeps its
+  connection. So an index rebuild or ingest in flight at sign-out writes
+  plaintext.
+- **Prediction, not verified:** a later re-index writes encrypted chunks
+  under the HMAC id but does not remove the plaintext ones, so the
+  plaintext would persist.
+
+**Also confirmed: the key reaches child processes.** After unlock,
+`GET /llm/catalog` runs `nvidia-smi` (`ollama_provider.py:184`) with the
+inherited environment. A stand-in executable received the exact key in
+`PIP_DB_KEY`.
+
+**What this does to the decided outcome (§8.1).** The pre-accepted
+completion was "redundant `vector_store` read + documented main-DB env
+transport". The evidence says the reverse: the main-DB read is the
+redundant one, and the `vector_store` read is the load-bearing transport,
+with a fail-open. The §7.1 warning applied; the expected outcome was not
+the result.
+
+**Recommendations only — nothing implemented:**
+1. `vector_store` fails closed when the main DB is keyed and no key is
+   present, instead of writing plaintext.
+2. `/auth/lock` waits for, or cancels, in-flight index writes before
+   forgetting the key.
+3. Pass the key to `vector_store` explicitly (as `reencrypt` already
+   takes it) rather than through the env. Then the env export, and its
+   inheritance by `nvidia-smi` or any future child, can go.
+4. `test_restore_backup` asserts the rebuilt index is encrypted, not just
+   that the rebuild was called with a key.
+
+**Candidate Promise 7 final clause (owner decision):**
+> While PIP is unlocked, the key is held in the backend's memory and is
+> also exported to its process environment, where child processes inherit
+> it. Index writes made without the key in that environment are stored
+> unencrypted.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -307,7 +397,7 @@ findings.
 | Track | Report | Classification |
 |-------|--------|----------------|
 | 1 Observer/provider gate | Returned 2026-09-26 (§7.2) | C; plus A (startup queue) and D (wording) as recommendations |
-| 2 `PIP_DB_KEY` | Pending | — |
+| 2 `PIP_DB_KEY` | Returned 2026-09-26 (§7.3) | Main DB read: C (redundant). `vector_store` read: A (load-bearing, fails open to plaintext) |
 | 3 PID-reuse lock | Pending | — |
 | 4a Stage 1 routing | Pending | — |
 | 4b Cache safety | Pending | — |
