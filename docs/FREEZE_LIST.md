@@ -3,8 +3,9 @@
 **Canonical document.** Update in place; do not create a second summary.
 Location in the repo: `docs/FREEZE_LIST.md`.
 
-**Status: evidence-first freeze.** Five discovery/test tasks sent, zero
-reports returned. No production code has been changed under this freeze.
+**Status: evidence-first freeze.** Five discovery/test tasks sent; Track 1
+returned (§7.2), four pending. No production code has been changed under
+this freeze.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The seven promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -82,7 +83,7 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is back to **25 entries**; the five oldest were rolled into
+- `docs/LOG.md` is held at **25 entries**; the six oldest are rolled into
   three Archive summary lines (done 2026-09-26).
 
 ---
@@ -155,6 +156,14 @@ happens at the next launch; no mid-session retry is promised.
 7. Manual break-it: weaken the gate, confirm stub count > 0 and the test
    fails, restore.
 
+**As run (Track 1, §7.2):** step 2 uses the idle-timeout trigger, not
+disconnect: under TestClient the disconnect path never reached the
+Observer, and a first draft passed with the gate removed. Step 4 sets both
+locality records (see §7.2 finding 2). Step 6 was too weak as written and
+was strengthened: recovery stamps `observed_at` *before* the Observer runs,
+and a `failed` row has also left the pending queue, so the test asserts the
+queue row is `completed` and the stub received the extraction call.
+
 ### Promise 6 — Nothing leaves the machine without recorded consent
 **Claim:** fail-closed, per-provider consent covering generation and web
 search; nothing preselected.
@@ -226,6 +235,50 @@ Target test file for Track 1:
    (missing state). Do not write it into any promise until both reports
    confirm it independently.
 
+### 7.2 Track 1 report — Observer/provider gate (2026-09-26)
+
+**Stop condition:** does the Observer enforce locality on the real path, not
+via Stage 8 priority or hostname? **Answer: yes. Category C.**
+
+Evidence (strong): `backend/tests/test_observer_provider_authorization.py`,
+real WS session → idle timeout → `_default_observer_provider` →
+`OpenAICompatibleProvider` → counting stub on `127.0.0.1`. Registered
+non-local: 0 stub requests, 0 Ollama calls, the refusal is
+`ObserverLocalProviderError`, and `observed_at` stays NULL. Break-it
+(gate at `stage_11_observer.py:772` disabled): stub receives
+`POST /v1/chat/completions`, both tests fail; restored, both pass. Marked
+local in both records, the real lifespan catch-up processes the session
+(`completed`, one stub call).
+
+Further findings, found by running the code (two temporary tests, since
+deleted) — **recommendations only, nothing implemented:**
+
+1. **Queue-not-fallback breaks at the next launch (category A).** If no
+   local provider exists at startup, recovery sets `observed_at`, the drain
+   gets `ObserverLocalProviderError`, and the row is marked `failed`, which
+   is terminal. A second start does not retry it, so the session is never
+   learned from, even after a local provider is added later. The retry
+   mechanism exists (`pending_observer.RetryableError` → `deferred`), but
+   `drain_pending_on_startup` (`session_lifecycle.py:309`) routes only
+   `ObserverUnavailableError` into it. It fails closed (nothing leaves the
+   machine), but the "queued for next launch" claim does not hold past the
+   first start.
+2. **Locality lives in two records, and they can disagree.**
+   `llm_endpoints.is_local` (the provider's self-report) and
+   `provider_consent.is_cloud`. The Stage 11 gate requires both.
+   `add_endpoint` updates the first on re-save, but inserts the consent row
+   with `ON CONFLICT DO NOTHING`, and no route changes `is_cloud`. So
+   re-saving a non-local endpoint as local leaves it permanently refused.
+   It fails closed, and the only way out is to remove and re-add the
+   endpoint. This conflicts with §2.3 "one source of truth per rule".
+3. **Promise 5 wording names a column that does not exist (category D).**
+   There is no `provider_consent.is_local`. The attested record is
+   `provider_consent.is_cloud` together with `llm_endpoints.is_local`. The
+   wording needs an owner decision; it is not changed here.
+
+Not in scope, noted: `server.py` `_default_observer_provider` carries an
+unreachable duplicate of its own fallback block after `return ollama`.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -253,7 +306,7 @@ findings.
 
 | Track | Report | Classification |
 |-------|--------|----------------|
-| 1 Observer/provider gate | Pending | — |
+| 1 Observer/provider gate | Returned 2026-09-26 (§7.2) | C; plus A (startup queue) and D (wording) as recommendations |
 | 2 `PIP_DB_KEY` | Pending | — |
 | 3 PID-reuse lock | Pending | — |
 | 4a Stage 1 routing | Pending | — |

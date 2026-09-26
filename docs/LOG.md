@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-26] claude · Added the Track 1 Observer/provider-authorization tests and recorded the Track 1 report in FREEZE_LIST §7.2: the locality gate holds on the real path, and a manual break-it confirmed the test catches its removal · why: Promise 5 was claimed but had no outcome test on the real path · files: backend/tests/test_observer_provider_authorization.py, docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-09-26] claude · Adopted the reliability freeze: added docs/FREEZE_LIST.md, pointed AGENTS.md Current focus at it, and archived the five oldest log entries · why: governance promises were claimed but unmeasured, and AGENTS.md still pointed agents at packaging · files: docs/FREEZE_LIST.md, AGENTS.md, docs/LOG.md
 
 - [2026-09-19] antigravity · Cleared stale lock before backend startup and made Ollama optional when other endpoints are configured · why: a dead previous session caused silent backend crashes and hardcoding Ollama meant an unnecessary timeout penalty for users with alternative API providers · files: scripts/launch_pip.ps1, backend/core/pipeline.py, backend/api/server.py
@@ -54,10 +56,8 @@ Format:
 
 - [2026-09-09] claude · Made scripts/set_db_password.py carry the ChromaDB index over to the new key, and taught vector_store.reencrypt to encrypt a plaintext index on a first encryption · why: the script rekeyed only SQLite, so the index went dark while the Documents screen kept reporting it, and a first encryption left every document's text readable on disk in chroma/ · files: scripts/set_db_password.py, backend/memory/vector_store.py, backend/tests/test_set_db_password.py, backend/tests/test_vector_store.py, backend/core/session_key.py, docs/ARCHITECTURE.md
 
-- [2026-09-09] claude · Gave vector_store one resolved_chroma_path() and pointed restore_backup.py's rebuild at it · why: it read the CHROMA_DB_PATH module constant, so every full-suite run renamed the developer's real data/chroma to chroma.superseded-<stamp> from tests that never touched Chroma · files: backend/memory/vector_store.py, scripts/restore_backup.py, backend/tests/test_restore_backup.py
-
 ## Archive
 
-- 2026-09-08–09 (claude, 5 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers) and a pre-commit check for the AGENTS.md 80-line cap.
-- Added the evidence gate between Observer extraction and Stage 12, after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask; see backend/core/evidence_gate.py and its tests.
-- Gave vector_store one resolved_chroma_path() so test runs stopped renaming the developer's real data/chroma.
+- 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
+- 2026-09-09 (claude): added in-app profile creation, rename, password change and permanent deletion plus an opt-in sign-in picture, because profiles previously needed a script and a password change orphaned the ChromaDB index.
+- 2026-09-09 (claude): gave vector_store one resolved_chroma_path() so test runs stopped renaming the developer's real data/chroma.
