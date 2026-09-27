@@ -3,8 +3,8 @@
 **Canonical document.** Update in place; do not create a second summary.
 Location in the repo: `docs/FREEZE_LIST.md`.
 
-**Status: evidence-first freeze.** Five discovery/test tasks sent; Tracks 1–3
-returned (§7.2–§7.4), two pending. No production code has been changed under
+**Status: evidence-first freeze.** Five discovery/test tasks sent; Tracks 1–4a
+returned (§7.2–§7.5), one pending. No production code has been changed under
 this freeze.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
@@ -83,8 +83,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the eight oldest are rolled into
-  four Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the nine oldest are rolled into
+  five Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -435,6 +435,80 @@ tested.
 **Cross-track (§7.1 rule 4):** the prediction that Tracks 2 and 3 would
 both be category B does not hold. Track 3 is B; Track 2 came back C and A.
 
+### 7.5 Track 4a report — Stage 1 routing (2026-09-27)
+
+**Stop condition:** can classification still route an identity or project
+question away from the retrieval it needs? Asserted on what reaches the
+model, not on the intent label. **Answer: yes, for most phrasings tried.
+Category A.** Retrieval exists and works; the classifier disconnects it.
+
+**Mechanism.**
+- Stages 3 (decision log) and 5 (RAG) always run.
+- Only Stage 4 (profile memory) is gated by category, through
+  `stage_04._CATEGORY_TABLES`.
+- `external_information`, `general_knowledge` and every unmapped category
+  fetch `interaction_style` alone. `coding_question` and `research_request`
+  fetch neither identity nor projects.
+- Stage 1 checks categories in order: continuation, external, coding,
+  research, then project, then personal. So any external keyword
+  (`current`, `latest`, `recent`, `today`, `right now`), coding verb or
+  research verb wins over the words "my" and "project".
+
+**Evidence (strong).** A temporary test, since deleted, ran the real
+`pipeline.run_sync` on a real DB seeded with a name (`Zarqa Venn`) and an
+active project (`Heliotrope`). A recording provider captured the exact
+prompt the model received.
+
+| Question | Category | Name in prompt | Project in prompt |
+|---|---|---|---|
+| who am I? | personal | yes | yes |
+| what's my name? | personal | yes | yes |
+| list my projects | project | no | yes |
+| what are my goals? | personal | yes | yes |
+| what is my current project? | external | **no** | **no** |
+| what's the latest on my project? | external | **no** | **no** |
+| what have I been working on recently? | external | **no** | **no** |
+| what am I working on right now? | external | **no** | **no** |
+| what should I do today on my thesis? | external | **no** | **no** |
+| what am I working on? | general | **no** | **no** |
+| where did we leave off? | general | **no** | **no** |
+| help me implement the next step of my project | coding | **no** | **no** |
+| debug the login bug in my project | coding | **no** | **no** |
+| compare my project vs a typical final year project | research | **no** | **no** |
+
+10 of the 14 lost the project. The failures are the ordinary ways to ask
+what you are working on.
+
+**It is worse than missing context.** For "what is my current project?"
+the prompt says `WHAT PIP HAS RECORDED ABOUT THIS USER (the complete
+record, not a sample):` and then lists only the interaction style. Rule 4
+of the same prompt tells the model to answer that it has nothing recorded.
+- The expected answer is therefore a confident *"you have no project
+  recorded"* while the project is in the database. That is the inverse of
+  the fabrication incident: a false negative instead of an invention.
+- Cause: `stage_07` renders "none recorded" only for tables in the
+  category's expected set (`stage_07_context_assembly.py:173–213`). Tables
+  outside it are silently omitted under a header that claims completeness.
+- The model's actual reply was not observed; a fake provider was used.
+
+**Side observation, Promise 6 territory — not investigated.** Five of these
+personal questions also match the Stage 6 web-search trigger. With web
+search consented, the message text would be sent to the search provider.
+It is consent-gated, so this is not a leak; but a question about the user
+triggering a web search is a routing effect, not an intent.
+
+**Recommendations only — nothing implemented:**
+1. Do not let the context header claim a complete record for tables that
+   were not fetched. Either say which were not looked up, or drop
+   "complete".
+2. Fetch identity and active projects for every category. They are small,
+   and the §4 "extra harmless context" reasoning already accepted this for
+   the word "project".
+3. If category precedence is kept, a first-person or "working on" signal
+   should outrank the external, coding and research keywords.
+4. Turn the table above into a permanent test on prompt content, the same
+   shape as the probe.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -465,7 +539,7 @@ findings.
 | 1 Observer/provider gate | Returned 2026-09-26 (§7.2) | C; plus A (startup queue) and D (wording) as recommendations |
 | 2 `PIP_DB_KEY` | Returned 2026-09-26 (§7.3) | Main DB read: C (redundant). `vector_store` read: A (load-bearing, fails open to plaintext) |
 | 3 PID-reuse lock | Returned 2026-09-27 (§7.4) | B: stores a bare PID, so a reused PID blocks startup |
-| 4a Stage 1 routing | Pending | — |
+| 4a Stage 1 routing | Returned 2026-09-27 (§7.5) | A: 10 of 14 identity/project questions lose the project; header then claims a complete record |
 | 4b Cache safety | Pending | — |
 | Promises 1–3 tests | Not yet written | — |
 | Promise 4 threshold measurement | Not started | — |
