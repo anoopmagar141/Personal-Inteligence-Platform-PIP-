@@ -83,8 +83,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the nine oldest are rolled into
-  five Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the ten oldest are rolled into
+  six Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -550,7 +550,7 @@ checks come after the cache read, so neither is consulted.
 
 **Cross-profile.** Profiles are separate password-encrypted databases
 served by one backend process. The cache key has no profile in it, and
-the cache survives sign-out and switching (§7.4 notes the profile paths).
+the cache survives sign-out and switching.
 So an answer built from one profile's documents or record is served to
 another profile that asks the same words within the TTL. **This crosses
 the boundary the per-profile encryption exists to keep.** Demonstrated at

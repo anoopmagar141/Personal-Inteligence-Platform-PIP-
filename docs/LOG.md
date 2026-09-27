@@ -63,3 +63,4 @@ Format:
 - 2026-09-09 (claude): gave vector_store one resolved_chroma_path() so test runs stopped renaming the developer's real data/chroma, and made set_db_password.py carry the ChromaDB index to the new key (encrypting a plaintext index on first encryption).
 - 2026-09-09 (claude): made a profile delete that cannot finish (WinError 32 from a still-open pip.db) record itself and complete at the next start.
 - 2026-09-09 (claude): added Cancel to a running model download and Delete to a pulled model, so a pull no longer had to be waited out and models could be removed.
+- 2026-09-09 (claude): put the PIP mark on the assistant's chat avatar in place of the letter P, with an optional fallback in PipLogo.
