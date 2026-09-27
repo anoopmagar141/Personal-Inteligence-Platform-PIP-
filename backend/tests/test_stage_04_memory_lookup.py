@@ -41,9 +41,10 @@ def test_personal_question_returns_only_relevant_tables(db_conn):
 def test_project_question_returns_only_relevant_tables(db_conn):
     result = stage_04.run(db_conn, "project_question")
     tables = {row["table"] for row in result}
-    assert tables <= {"active_projects", "goal_memory", "interaction_style"}
+    # identity rides along with every category now (stage_04._ALWAYS_TABLES);
+    # what "only relevant" still rules out is the rest of the profile.
+    assert tables <= {"active_projects", "goal_memory", "interaction_style", "identity"}
     assert "skill_memory" not in tables
-    assert "identity" not in tables
 
 
 def test_never_returns_full_profile_dump(db_conn):
@@ -55,7 +56,7 @@ def test_never_returns_full_profile_dump(db_conn):
 def test_unknown_category_falls_back_to_default_tables(db_conn):
     result = stage_04.run(db_conn, "totally_unrecognized_category")
     tables = {row["table"] for row in result}
-    assert tables <= {"interaction_style"}
+    assert tables <= {"interaction_style", "identity", "active_projects"}
 
 
 def test_fails_open_on_error(db_conn, monkeypatch):

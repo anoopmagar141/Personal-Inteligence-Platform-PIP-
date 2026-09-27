@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-28] claude · Made Stage 4 look up identity and active projects for every question category, with a prompt-level test over the 14 Track 4a questions · why: 10 of 14 ordinary ways of asking about your own work reached the model without the project (FREEZE_LIST §7.5) · files: backend/stages/stage_04_memory_lookup.py, backend/tests/test_answers_about_the_user.py, backend/tests/test_stage_04_memory_lookup.py, docs/LOG.md
+
 - [2026-09-28] claude · Recorded the profile boundary fixes in FREEZE_LIST §7.9: four promises, each with an end-to-end test seen failing first, and what they deliberately leave open (plaintext already on disk, same-profile cache staleness, the upload route holding the event loop) · why: the freeze doc is the canonical record of what is enforced · files: docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-09-27] claude · Made a sign-in queue its own catch-up behind one still running from the previous session instead of skipping it, and documented the sign-out boundary in ARCHITECTURE.md · why: signing out and into another profile during a catch-up left the new session with no recovery, drain or index repair at all · files: backend/api/server.py, backend/tests/test_profile_boundary.py, docs/ARCHITECTURE.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-10] claude · Rebuilt dist/PIP-Setup.exe from this code (twice: the first predated the Backup-tab refresh fix found by running it) · why: the shipped installer predated the in-app restore and the thinking mark; final sha256 69F2791DC58E76873103424E0C2E795770FB0E644154DF7E05583A19F220BFCD, app.so 842E8D94 verified identical in build tree and payload · files: dist/PIP-Setup.exe (gitignored artefact; recorded here for provenance)
 
-- [2026-09-10] claude · Added an in-app .pipbak restore: the conversion runs while the app is open, the swap is staged for the next start · why: backup_view.dart said a restore button could not exist, which was true of the swap and not of the conversion - and deferring the whole thing would have meant writing two passwords to disk · files: backend/core/restore.py, backend/api/server.py, backend/tests/test_restore_in_app.py, frontend/flutter/lib/api_client.dart, frontend/flutter/lib/screens/backup_view.dart, frontend/flutter/lib/home_shell.dart, frontend/flutter/test/backup_view_test.dart, docs/ARCHITECTURE.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -71,3 +71,4 @@ Format:
 - 2026-09-09 (claude): wrote the hook-install requirement into docs/CONVENTIONS.md and installed the hooks on this machine, since core.hooksPath is per-clone.
 - 2026-09-09 (claude): added a 300s per-test timeout (thread method) to pytest.ini, after a suite run hung silently for 20 minutes; it later named test_ws_chat's history test as the hang.
 - 2026-09-10 (claude): replaced the thinking orb's dot cloud with the PIP mark turning; the states and the backend's labels were unchanged.
+- 2026-09-10 (claude): added an in-app .pipbak restore - the conversion runs while the app is open, the file swap is staged for the next start.

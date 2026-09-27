@@ -46,6 +46,17 @@ _CATEGORY_TABLES = {
 }
 _DEFAULT_TABLES = {"interaction_style"}
 
+# Looked up for EVERY category, on top of its own set. The two notes above are
+# the same miss fixed twice, one phrasing at a time, and it did not stay fixed:
+# measured through the real pipeline, 10 of 14 ordinary ways of asking about
+# your own work ("what is my current project?", "what am I working on?", "help
+# me implement the next step of my project") were routed to a category whose
+# set held neither identity nor projects (FREEZE_LIST §7.5). Stage 1's keywords
+# will always have a phrasing they miss; who the user is and what they are
+# working on is small enough to send regardless, and it is the context every
+# answer about them needs.
+_ALWAYS_TABLES = {"identity", "active_projects"}
+
 
 def tables_for_category(category: str) -> set[str]:
     """
@@ -59,7 +70,7 @@ def tables_for_category(category: str) -> set[str]:
     invent a plausible list to fill the gap. Exposed here rather than
     duplicated there so the mapping keeps exactly one definition.
     """
-    return _CATEGORY_TABLES.get(category, _DEFAULT_TABLES)
+    return _CATEGORY_TABLES.get(category, _DEFAULT_TABLES) | _ALWAYS_TABLES
 
 
 def run(conn, category: str, retrieval_hint: str = "") -> list[dict]:
