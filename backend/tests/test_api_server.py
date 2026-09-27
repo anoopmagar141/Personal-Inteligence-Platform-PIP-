@@ -31,7 +31,7 @@ def isolated_chroma(tmp_path, monkeypatch):
 def isolated_documents_root(tmp_path, monkeypatch):
     root = tmp_path / "documents"
     root.mkdir()
-    monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", root)
+    monkeypatch.setenv("PIP_DOCUMENTS_ROOT", str(root))
     return root
 
 
@@ -335,7 +335,7 @@ def test_upload_api_rejects_unsupported_extension(conn, isolated_documents_root)
 def test_upload_api_rejects_path_traversal_in_filename(conn, isolated_documents_root, tmp_path):
     # filename is attacker-controlled input (comes straight from the
     # multipart upload) - Path(filename).name must strip any directory
-    # component so "../../evil.txt" can't escape DOCUMENTS_ROOT.
+    # component so "../../evil.txt" can't escape documents_root().
     server.api_upload_document(conn, "../../evil.txt", b"payload")
 
     escaped = tmp_path / "evil.txt"

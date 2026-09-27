@@ -751,11 +751,12 @@ def api_ingest_document(conn, payload: dict[str, Any]) -> dict[str, Any]:
 def api_upload_document(conn, filename: str, content: bytes, project_id: str | None = None) -> dict[str, Any]:
     """
     Accepts raw uploaded bytes (a desktop file picker returns a path outside
-    DOCUMENTS_ROOT, which ingest_document's sandbox check would reject) and
-    writes them under DOCUMENTS_ROOT before ingesting - the only way a picked
-    file can legally enter PIP's memory. filename is taken only for its
+    the active profile's documents_root(), which ingest_document's sandbox
+    check would reject) and writes them under that folder before ingesting -
+    the only way a picked file can legally enter PIP's memory. filename is
+    taken only for its
     basename+extension: Path(filename).name discards any directory component,
-    so a crafted "../../evil.py" can't escape DOCUMENTS_ROOT here either.
+    so a crafted "../../evil.py" can't escape the folder here either.
     """
     safe_name = Path(filename).name
     if not safe_name or safe_name in {".", ".."}:
@@ -764,13 +765,14 @@ def api_upload_document(conn, filename: str, content: bytes, project_id: str | N
     if ext not in vector_store.SUPPORTED_EXTENSIONS:
         raise ValueError(f"Unsupported document extension: {ext}")
 
-    vector_store.DOCUMENTS_ROOT.mkdir(parents=True, exist_ok=True)
-    dest = vector_store.DOCUMENTS_ROOT / safe_name
+    root = vector_store.documents_root()
+    root.mkdir(parents=True, exist_ok=True)
+    dest = root / safe_name
     if dest.exists():
         stem = Path(safe_name).stem
         n = 1
         while dest.exists():
-            dest = vector_store.DOCUMENTS_ROOT / f"{stem} ({n}){ext}"
+            dest = root / f"{stem} ({n}){ext}"
             n += 1
     dest.write_bytes(content)
     return vector_store.ingest_document(conn, str(dest), project_id)
@@ -1068,6 +1070,15 @@ try:
             # rebuild that fails must not skip the Observer recovery below it.
             # Fails open on purpose - a stale index costs answer quality, a
             # raise here would cost the app its startup.
+            # Before the drift check, which would otherwise reject a profile's
+            # documents still recorded under the old shared folder. Its own
+            # try for the same reason as the rebuild's below.
+            try:
+                adopted = vector_store.adopt_shared_documents(conn)
+                if adopted:
+                    logger.info(f"Moved {len(adopted)} document(s) into this profile's own folder.")
+            except Exception as e:
+                logger.error(f"Adopting shared documents failed, continuing: {e}")
             try:
                 rag = vector_store.rebuild_if_drifted(conn)
                 if not rag["ok"]:

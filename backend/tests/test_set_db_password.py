@@ -266,7 +266,7 @@ def test_the_index_still_answers_after_a_real_rekey(script, tmp_path, monkeypatc
         "for RAG and is never authoritative.",
         encoding="utf-8",
     )
-    monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", documents)
+    monkeypatch.setenv("PIP_DOCUMENTS_ROOT", str(documents))
     monkeypatch.setattr(vector_store, "_client", None)
     monkeypatch.setattr(vector_store, "_collection", None)
 

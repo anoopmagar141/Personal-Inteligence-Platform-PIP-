@@ -30,13 +30,13 @@ def isolated_chroma(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolated_documents_root(tmp_path, monkeypatch):
-    # ingest_document() now rejects any file_path outside DOCUMENTS_ROOT
+    # ingest_document() now rejects any file_path outside documents_root()
     # (arbitrary-file-read fix) - without this, every test here would need a
     # file physically inside the real project's data/documents/, and would
     # fail against the real default root entirely in CI.
     root = tmp_path / "documents"
     root.mkdir()
-    monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", root)
+    monkeypatch.setenv("PIP_DOCUMENTS_ROOT", str(root))
     return root
 
 
@@ -204,7 +204,7 @@ def test_oversized_document_raises(db_conn, isolated_documents_root):
 
 
 def test_ingest_rejects_file_outside_documents_root(db_conn, tmp_path, isolated_documents_root):
-    # Security regression test: file_path must resolve inside DOCUMENTS_ROOT.
+    # Security regression test: file_path must resolve inside documents_root().
     # Before this fix, ingest_document() would happily read and embed any
     # file the process could access, with no auth on the endpoint that calls
     # it - a full arbitrary local file read chained with exfiltration via

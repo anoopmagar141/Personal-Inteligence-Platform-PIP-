@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 
 from backend.api import server
 from backend.core import auth, pipeline, response_cache, session_key
-from backend.memory import vector_store
+from backend.memory import profile_store, vector_store
 from backend.providers.base_provider import BaseLLMProvider
 
 API = "/api/v1"
@@ -159,10 +159,6 @@ def test_an_index_write_in_flight_at_sign_out_is_not_stored_in_plaintext(provide
         _new_profile(client, token, "Alice", "alice-password-1")
         documents = Path(os.environ["PIP_DOCUMENTS_ROOT"])
         documents.mkdir(parents=True, exist_ok=True)
-        # The ingestion sandbox is still vector_store's own constant, which
-        # points at the real data/documents; aimed at the profile's folder so
-        # this test cannot write there.
-        monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", documents)
         note = documents / "notes.txt"
         note.write_text(f"Private note {secret} about the Heliotrope rollout.", encoding="utf-8")
 
@@ -186,3 +182,106 @@ def test_an_index_write_in_flight_at_sign_out_is_not_stored_in_plaintext(provide
     assert not any(secret in text for text in stored["documents"]), "chunk text reached disk in plaintext"
     assert not [m for m in stored["metadatas"] if m.get("file_path")], "file path reached disk in plaintext"
     assert result.get("status") != 200, "an ingest that could not be encrypted reported success"
+
+
+def test_an_upload_is_stored_in_its_own_profiles_folder_and_no_other_profile_can_ingest_it(
+    provider, token, tmp_path, monkeypatch
+):
+    """
+    Found end to end (§7.8): /rag/upload wrote into vector_store.DOCUMENTS_ROOT,
+    a constant fixed at import to the installation's data/documents, which a
+    profile switch never re-pointed. Every profile's uploads landed in one
+    shared folder, as the uploaded bytes, where any other profile's ingest
+    would accept them.
+    """
+    with TestClient(server.app) as client:
+        _new_profile(client, token, "Alice", "alice-password-1")
+        alice_documents = Path(os.environ["PIP_DOCUMENTS_ROOT"]).resolve()
+        response = client.post(
+            f"{API}/rag/upload",
+            files={"file": ("diary.txt", b"Alice's diary: the Heliotrope rollout slipped again.", "text/plain")},
+            headers=_headers(token),
+        )
+        assert response.status_code == 200, response.text
+        stored_at = Path(response.json()["file_path"]).resolve()
+        assert client.post(f"{API}/auth/lock", headers=_headers(token)).status_code == 200
+
+        _new_profile(client, token, "Bob", "bob-password-22")
+        bob_ingest = client.post(f"{API}/rag/ingest", json={"file_path": str(stored_at)}, headers=_headers(token))
+
+    assert stored_at.parent == alice_documents, f"Alice's upload was stored in {stored_at.parent}"
+    assert bob_ingest.status_code == 422, "Bob's profile ingested a file from Alice's"
+
+
+def test_a_profiles_documents_in_the_old_shared_folder_are_adopted_into_its_own(
+    provider, token, tmp_path, monkeypatch
+):
+    """
+    Installations from before per-profile uploads have each profile's
+    documents recorded under the one shared folder. With the ingestion
+    sandbox now the profile's own folder, those records would be rejected by
+    the next index rebuild and drop out of search. At sign-in they are copied
+    into the profile's folder and repointed - only files under the old shared
+    folder, so a record from a restored or crafted backup cannot make PIP copy
+    an arbitrary file. The original is left: another profile's record may name
+    the same file.
+    """
+    legacy = tmp_path / "old_shared_documents"
+    legacy.mkdir()
+    monkeypatch.setattr(profile_store, "_DEFAULT_DOCUMENTS_ROOT", legacy)
+    old_file = legacy / "roadmap.txt"
+    old_file.write_text("The Heliotrope roadmap: ship the sync engine before the viva.", encoding="utf-8")
+
+    with TestClient(server.app) as client:
+        _new_profile(client, token, "Bob", "bob-password-22")
+        bob_documents = Path(os.environ["PIP_DOCUMENTS_ROOT"]).resolve()
+        # Let the setup's own catch-up finish first, so the sign-in below is
+        # the one that runs the adoption. What happens when it has not
+        # finished is a separate defect with its own test.
+        _wait_for_catch_up()
+
+        # The state an older version left: a registry row and stored bytes
+        # pointing into the shared folder, with no chunks for this key yet.
+        conn = server._conn()
+        try:
+            cursor = conn.execute(
+                "INSERT INTO documents (file_path, content_hash, chunk_count, status, ingested_at) "
+                "VALUES (?, 'legacy', 1, 'active', '2026-09-01T00:00:00Z')",
+                (str(old_file.resolve()),),
+            )
+            conn.commit()
+            profile_store.store_document_content(conn, cursor.lastrowid, old_file.read_bytes())
+        finally:
+            conn.close()
+
+        assert client.post(f"{API}/auth/lock", headers=_headers(token)).status_code == 200
+        bob = client.get(f"{API}/auth/profiles", headers=_headers(token)).json()["active"]
+        response = client.post(
+            f"{API}/auth/unlock", json={"password": "bob-password-22", "profile": bob}, headers=_headers(token)
+        )
+        assert response.status_code == 200, response.text
+        _wait_for_catch_up()
+
+        documents = client.get(f"{API}/rag/documents", headers=_headers(token)).json()
+        found = client.post(
+            f"{API}/rag/query", json={"query": "Heliotrope roadmap sync engine", "threshold": 0.0}, headers=_headers(token)
+        ).json()
+
+    paths = [Path(d["file_path"]).resolve() for d in documents]
+    assert paths == [bob_documents / "roadmap.txt"], f"registry still points at {paths}"
+    assert (bob_documents / "roadmap.txt").read_bytes() == old_file.read_bytes()
+    assert old_file.exists(), "the shared original was removed; another profile may still name it"
+    hit_paths = {Path(h["file_path"]).resolve() for h in found}
+    assert hit_paths == {bob_documents / "roadmap.txt"}, f"search returned {hit_paths}"
+
+
+def _wait_for_catch_up(timeout: float = 60.0) -> None:
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        task = server._catch_up_task
+        if task is not None and task.done():
+            return
+        time.sleep(0.1)
+    pytest.fail("the sign-in catch-up did not finish")

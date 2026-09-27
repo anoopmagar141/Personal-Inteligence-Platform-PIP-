@@ -23,12 +23,12 @@ def isolated_chroma(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolated_documents_root(tmp_path, monkeypatch):
-    # ingest_document() rejects any file_path outside DOCUMENTS_ROOT
+    # ingest_document() rejects any file_path outside documents_root()
     # (arbitrary-file-read fix) - documents ingested by these tests must
     # actually live inside the (isolated) root.
     root = tmp_path / "documents"
     root.mkdir()
-    monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", root)
+    monkeypatch.setenv("PIP_DOCUMENTS_ROOT", str(root))
     return root
 
 

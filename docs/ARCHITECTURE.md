@@ -233,6 +233,16 @@ so there is one write path, not two.
   encrypted one on a first encryption, since chunk text written before a
   password existed is readable on disk and is exactly what the password
   is being introduced to stop.
+- **A profile's documents live in its own folder, read at call time.**
+  `vector_store.documents_root()` is `profile_store.documents_root()`, which
+  follows `PIP_DOCUMENTS_ROOT` as `profiles.activate()` sets it; uploads are
+  written there and ingest accepts nothing outside it. It used to be a
+  `DOCUMENTS_ROOT` constant fixed at import to `data/documents`, so every
+  profile shared one upload folder and any profile could ingest another's
+  files. Documents an older version recorded under that shared folder are
+  copied into the profile's own and re-indexed by the sign-in catch-up
+  (`vector_store.adopt_shared_documents`) - copied, not moved, since another
+  profile may name the same file, so those originals stay where they were.
 - **The sign-in screen's profile picture is deliberately unencrypted.** That
   screen draws profiles *before* a password exists, so anything it can render
   is by definition readable without one — there is no third option. Publishing

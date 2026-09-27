@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-27] claude · Made uploads and the ingestion sandbox follow the active profile's documents folder, and had the sign-in catch-up copy a profile's documents out of the old shared folder into its own and re-index them · why: every profile's uploads landed in one shared plaintext folder that any profile's ingest accepted (FREEZE_LIST §7.8) · files: backend/memory/vector_store.py, backend/api/server.py, backend/tests/test_profile_boundary.py, backend/tests/test_api_server.py, backend/tests/test_pipeline.py, backend/tests/test_set_db_password.py, backend/tests/test_stage_05_rag_retrieval.py, backend/tests/test_vector_store.py, docs/ARCHITECTURE.md, docs/LOG.md
+
 - [2026-09-27] claude · Made vector_store refuse to read or write the index when the active profile has a password but no key is held, instead of falling back to plaintext · why: an ingest in flight at sign-out stored its chunk text and path in plaintext, and it survived the next sign-in's rebuild (FREEZE_LIST §7.8) · files: backend/memory/vector_store.py, backend/tests/test_profile_boundary.py, docs/LOG.md
 
 - [2026-09-27] claude · Made sign-out empty the response cache, so the next profile to sign in is no longer served the previous one's answers, with an end-to-end test through the real auth and chat routes · why: measured in FREEZE_LIST §7.8, a second profile received an answer built from the first profile's documents with its own model never called · files: backend/core/session_key.py, backend/core/response_cache.py, backend/tests/test_profile_boundary.py, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-09] claude · Added a 300s per-test timeout to pytest.ini (thread method) and pytest-timeout to requirements · why: a run of the suite hung silently for 20 minutes with no output to diagnose it by; the ceiling caught the next occurrence and named it - test_ws_chat.py's accumulates_conversation_history_across_turns, blocked in receive_json with every executor thread and the event loop idle · files: pytest.ini, requirements.txt
 
-- [2026-09-09] claude · Wrote the hook-install requirement into docs/CONVENTIONS.md and installed the hooks on this machine · why: core.hooksPath is per-clone and cannot be committed, so the repo carried the cap rule and a LOG entry saying the check was added while no hook was installed to run it · files: docs/CONVENTIONS.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -68,3 +68,4 @@ Format:
 - 2026-09-09 (claude): corrected the packaging path drift in AGENTS.md and installer/PIP.iss (payload staged at <drive>\pip-build\PIP, not dist/PIP) and recorded the MAX_PATH reason in ARCHITECTURE.md.
 - 2026-09-09 (claude): made scripts/build_installer.ps1 refuse an incomplete, dirty or stale payload and fail a suspiciously small installer.
 - 2026-09-09 (claude): rebuilt dist/PIP-Setup.exe from a clean flutter build and verified 31,615/31,615 files byte-identical to the payload (sha256 7CE29ABA…3254).
+- 2026-09-09 (claude): wrote the hook-install requirement into docs/CONVENTIONS.md and installed the hooks on this machine, since core.hooksPath is per-clone.

@@ -414,7 +414,7 @@ def test_an_empty_retrieval_says_so_rather_than_staying_silent(db_conn):
 def test_a_stage_that_found_something_is_marked_ok(db_conn, tmp_path, monkeypatch):
     root = tmp_path / "documents"
     root.mkdir()
-    monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", root)
+    monkeypatch.setenv("PIP_DOCUMENTS_ROOT", str(root))
     doc = root / "notes.txt"
     doc.write_text("PIP stores structured memory in SQLCipher and vectors in ChromaDB.",
                    encoding="utf-8")

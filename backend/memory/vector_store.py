@@ -32,6 +32,7 @@ import hmac
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any, Optional
 
@@ -166,9 +167,21 @@ def _file_key(db_key: str, file_path: str) -> str:
 # .json/.py cover most of what an attacker would actually want). The embedded
 # content then sits in ChromaDB, retrievable via the equally unauthenticated
 # rag/query endpoint or surfacing on its own in later chat answers. Every
-# ingest now must resolve inside this directory - files the user wants
-# indexed have to actually be placed here first.
-DOCUMENTS_ROOT = Path(__file__).parent.parent.parent / "data" / "documents"
+# ingest now must resolve inside documents_root() - files the user wants
+# indexed have to actually be placed there first.
+def documents_root() -> Path:
+    """
+    The active profile's documents folder: the ingestion sandbox, and where
+    uploads are written.
+
+    Read at call time through profile_store, which follows the profile. This
+    used to be a DOCUMENTS_ROOT constant fixed at import to the installation's
+    data/documents, and a profile switch never moved it - so every profile's
+    uploads landed in one shared folder, and any profile's ingest accepted any
+    other's files (FREEZE_LIST §7.8). profile_store already had the right
+    answer; two definitions of one folder is how this one was wrong.
+    """
+    return profile_store.documents_root()
 
 _client = None
 _collection = None
@@ -317,13 +330,13 @@ def _content_hash(text: str) -> str:
 
 def _validate_file_path(file_path: str) -> Path:
     """
-    Resolves file_path and rejects anything outside DOCUMENTS_ROOT - the only
+    Resolves file_path and rejects anything outside documents_root() - the only
     thing standing between an ingest call and reading an arbitrary file on
     disk. Path.resolve() collapses '..' segments and symlinks before the
     is_relative_to() check, so "data/documents/../../.ssh/id_rsa" is caught
     the same as an absolute path pointed straight at it.
     """
-    root = DOCUMENTS_ROOT.resolve()
+    root = documents_root().resolve()
     resolved = Path(file_path).resolve()
     if not resolved.is_relative_to(root):
         raise ValueError(
@@ -651,6 +664,64 @@ def check_consistency(conn) -> dict[str, Any]:
         "drifted": drifted,
         "ok": not drifted,
     }
+
+
+def adopt_shared_documents(conn) -> list[str]:
+    """
+    Copy this profile's documents out of the old shared folder into its own,
+    and re-index them under their new paths. Returns the new paths.
+
+    Uploads used to land in one data/documents for every profile (see
+    documents_root). Now that the sandbox is the profile's own folder, a
+    record still pointing into the shared one would be rejected by the next
+    rebuild and drop out of search, so the sign-in catch-up runs this first.
+
+    Only files under the old shared folder are taken. A registry row can come
+    from a restored or crafted backup, and copying whatever path it names
+    would let a backup file read anything the process can - the same reason
+    materialise_documents writes only into the documents folder.
+
+    The shared original is copied, not moved: another profile's record may
+    name the same file, and moving it would break that profile instead. The
+    old path's chunks are deleted before re-ingesting, or every adopted
+    document would be found twice. A no-op for a profile whose folder IS the
+    shared one, which is the default profile's.
+    """
+    root = documents_root()
+    shared = profile_store._DEFAULT_DOCUMENTS_ROOT.resolve()
+    if root.resolve() == shared:
+        return []
+
+    adopted = []
+    for doc in list_documents(conn):
+        source = Path(doc["file_path"])
+        try:
+            resolved = source.resolve()
+        except OSError:
+            continue
+        if not resolved.is_relative_to(shared) or not resolved.is_file():
+            continue
+
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            destination = root / resolved.name
+            n = 1
+            while destination.exists():
+                destination = root / f"{resolved.stem} ({n}){resolved.suffix}"
+                n += 1
+            shutil.copy2(resolved, destination)
+
+            _delete_chunks_for_path(_get_collection(), doc["file_path"], _get_db_key())
+            conn.execute("UPDATE documents SET file_path = ? WHERE id = ?", (str(destination), doc["id"]))
+            conn.commit()
+            ingest_document(conn, str(destination), doc["project_id"], force=True)
+            adopted.append(str(destination))
+        except Exception as e:
+            # One document failing must not stop the rest. A row repointed
+            # before its ingest failed is left for the ordinary rebuild, which
+            # now finds it inside the sandbox.
+            logger.error(f"Could not adopt {doc['file_path']} into this profile's folder: {e}")
+    return adopted
 
 
 def rebuild_if_drifted(conn) -> dict[str, Any]:
