@@ -4,7 +4,8 @@
 Location in the repo: `docs/FREEZE_LIST.md`.
 
 **Status: evidence-first freeze.** Five discovery/test tasks sent; All five
-tracks returned (§7.2–§7.6); cross-track synthesis not yet authorized. No production code has been changed under
+tracks returned (§7.2–§7.6); cross-track synthesis done (§7.7). No fix
+authorized yet. No production code has been changed under
 this freeze.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
@@ -83,8 +84,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the ten oldest are rolled into
-  six Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the eleven oldest are rolled into
+  seven Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -577,6 +578,164 @@ clears it) and the TTL.
    was produced for a question Stage 1 has since reclassified.
 4. A permanent two-step test per case above.
 
+### 7.7 Cross-track synthesis (2026-09-27)
+
+Authorized 2026-09-27, run after all five reports were classified (§7.1
+rule 4). Built only from §7.2–§7.6: no new code was run for it. A pattern
+is stated as **confirmed** only when at least two reports show it
+independently. Anything else is labelled.
+
+#### Classification at a glance
+
+| Track | Result | What breaks, as seen from outside |
+|---|---|---|
+| 1 Observer gate | C, plus A and D | Nothing leaves the machine; a session queued at startup is lost for good |
+| 2 `PIP_DB_KEY` | C (main DB), A (`vector_store`) | Index text and file paths written as plaintext after sign-out |
+| 3 PID lock | B | PIP refuses to start when a reused PID is alive |
+| 4a Routing | A | "You have no project recorded" while the project is in the DB |
+| 4b Cache | A | Stale answers replayed; one profile's answer served to another |
+
+The original "gap" list meant *unverified* (§3). Of six findings, only
+one, the Observer gate, turned out to be already enforced.
+
+#### Pattern 1 — the sign-out / profile-switch boundary does not reach work already in memory. Confirmed (Tracks 2, 4b).
+
+- `session_key.lock()` forgets the key, and `/auth/lock` refuses new
+  routes.
+- What already exists in the process is not touched:
+  - Track 2: in-flight index writes read the now-empty env and store
+    plaintext;
+  - Track 4b: the module-level response cache keeps serving answers, now
+    to a different profile.
+- Both break the same thing: per-profile confidentiality, which Promise 7
+  and the per-profile password exist to provide.
+- Neither defect was found by looking at the boundary. They are separate
+  mechanisms that fail at one moment.
+- **Unverified link shared by both:** neither report drove the real
+  `/auth/lock` → `/auth/profile` → unlock route sequence end to end. One
+  such test would confirm or refute both at once (see "next evidence").
+
+#### Pattern 2 — one rule, two copies. Confirmed present in all five tracks; confirmed harmful in three.
+
+§2.3 "one source of truth per rule" is broken in every track:
+
+| Track | Rule | Copy 1 | Copy 2 | Observed effect |
+|---|---|---|---|---|
+| 1 | Is this provider local? | `llm_endpoints.is_local` | `provider_consent.is_cloud` | Re-saving as local leaves the provider permanently refused |
+| 2 | What is the key? | `session_key._key` | env `PIP_DB_KEY` | Paired in the backend, but the env copy is also the script transport and is inherited by `nvidia-smi` |
+| 3 | Is PIP running? | `_pid_is_running` (Python) | `Get-Process` (launcher) | Both miss reuse; a fix to one leaves the other wrong |
+| 4a | What was the model told exists? | `stage_04._CATEGORY_TABLES` | `stage_07` "complete record" header | The header claims completeness for tables never fetched |
+| 4b | Is this answer still valid? | Write-time checks (TTL 0, decision override) | Read path (none) | Stale answers served past both rules |
+
+Only Tracks 1 and 4a show the copies actually *disagreeing* in a run, and
+4b shows one copy bypassed; in 2 and 3 the copies can drift but were not
+seen to. So the confirmed claim is: the duplication is present in all
+five, and it produced a wrong outcome in three (1, 4a, 4b).
+
+#### Pattern 3 — mechanisms built as fail-closed held; mechanisms treated as optional carried correctness and failed open. Confirmed (Tracks 1, 3 vs 2, 4a, 4b).
+
+- **Designed to refuse, and did:**
+  - the Observer locality gate (1): zero requests, and the break-it was
+    caught;
+  - the instance lock (3): refuses, never steals.
+- **Designed as a convenience, and failed open where correctness depended
+  on them:**
+  - `vector_store`'s "no-op passthrough" without a key (2);
+  - the category default of `interaction_style` only (4a);
+  - the response cache, documented as "never load-bearing for
+    correctness" (4b), which the §7.6 evidence contradicts.
+
+The safety-critical defects all sit in the second group. Implication,
+labelled as a *recommendation* rather than a finding: classify a component
+by what it can cause, not by what it was built for. If a component can
+change what the user is told, or what reaches disk, §2.3 "fail closed"
+applies to it.
+
+#### Pattern 4 — the tests hid the defect; they did not merely miss it. Confirmed (all five).
+
+| Track | How the existing or planned test concealed it |
+|---|---|
+| 1 | The planned step 6 would pass on failure (`observed_at` is set before the Observer runs); the first draft passed with the gate removed, because the disconnect path never ran under TestClient |
+| 2 | `test_restore_backup` stubs the rebuild; `test_vector_store` runs an encrypted DB with a plaintext index as the default case |
+| 3 | `test_acquire_raises_when_a_live_different_pid_holds_the_lock` pins "any live PID blocks" using a non-PIP holder, without naming the consequence |
+| 4a | `test_stage_01_intent_classifier.py` makes 19 assertions on the category label and none on what reaches the prompt |
+| 4b | `test_pipeline.py`'s autouse `isolated_response_cache` fixture was added because a cached answer from one test served a later one. That *is* the production defect; the fixture removed the symptom from the suite |
+
+This is §2.2 ("assert on outcomes, not return values") and §5 ("a guard
+nobody has watched fail is not a guard") confirmed from the other side: in
+each track the test sat one layer too far in, or cleaned away the state
+the defect lives in. The 4b case is the sharpest. Test isolation is right
+for the suite, but it removed the only place the defect had ever been
+seen, and the fixture's comment was never turned into a product finding.
+
+#### Pattern 5 — keys that identify less than the thing they stand for. Confirmed (Tracks 3, 4b).
+
+- The lock treats a PID as a process, but a PID names a process only for
+  its lifetime (3).
+- The cache treats message + project as an answer's identity, but the
+  answer also depends on profile, documents and decisions (4b).
+- Both are missing-state defects (category B in shape, even where the
+  track as a whole is A).
+- The same fix shape applies to both: add the missing identity (creation
+  time; profile and record version) to the key.
+- This is the missing-state pattern §7.1 predicted for Tracks 2 and 3.
+  That prediction was wrong about Track 2 but right in kind: it appears
+  in 3 and 4b.
+
+#### Not confirmed — kept as predictions
+
+- Plaintext chunks survive a later re-index (Track 2; code reading only).
+- In-flight writes during sign-out are reachable in practice (Track 2;
+  timing not demonstrated).
+- A real model answers "no project recorded" (4a; a fake provider was
+  used).
+- The `test_ws_chat` hang (once in three full runs) is independent of
+  Track 1's test file (not measured).
+
+#### What this means for the promises (owner decisions; nothing rewritten here)
+
+- **The largest defects fall outside the seven promises.** Cross-profile
+  answers (4b) and wrong answers about the user (4a) break no written
+  promise, because none covers them: exactly the §2.5 limit. Candidates:
+  - **Promise 8, profile isolation:** nothing derived from one profile's
+    data is served to, or stored under, another profile.
+  - **Promise 9, current record:** an answer about the user reflects the
+    record as it is when asked. Never a cached answer from before it
+    changed, and never "none recorded" for data that was not looked up.
+- **Promise 5:** "queued for the next launch" holds for one launch only
+  (Track 1 A), and the named column does not exist (Track 1 D).
+- **Promise 7:** the final clause is decided by Track 2. Pattern 1 adds
+  that encryption at rest can be bypassed at the moment of sign-out.
+  Candidate wording is in §7.3.
+
+#### Suggested order for authorizing fixes (a recommendation, not a decision)
+
+1. **The profile boundary (Pattern 1):** Track 2 recommendations 1–2 and
+   4b recommendation 1. They are confidentiality defects and share one
+   boundary, so one regression test covers both.
+2. **Answers about the user (4a + 4b, compounding):** 4a recommendations
+   1–2 and 4b recommendation 2.
+3. **Lost learning:** Track 1 finding 1, a locality refusal at startup
+   being terminal.
+4. **Availability:** the Track 3 lock identity.
+5. **Wording:** Promises 5 and 7, plus the decision on Promises 8–9.
+
+Each fix follows §2.2: test first on the outcome, break it once, one
+commit per promise.
+
+#### Single highest-value next evidence
+
+One end-to-end test through the real routes:
+1. Sign in to profile A and index a document.
+2. Ask a technical question (so the answer is cached).
+3. Start an index rebuild and sign out mid-rebuild.
+4. Switch to profile B, sign in, and ask the same question.
+5. Assert: B's model is called; B's answer contains nothing from A; and
+   no plaintext chunk exists in A's index.
+
+It would move two of the "not confirmed" items above to confirmed or
+refuted, and it becomes Pattern 1's permanent regression test.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -612,7 +771,7 @@ findings.
 | Promises 1–3 tests | Not yet written | — |
 | Promise 4 threshold measurement | Not started | — |
 | Database census | Not run | — |
-| Cross-track synthesis | Not authorized | — |
+| Cross-track synthesis | Done 2026-09-27 (§7.7) | 5 confirmed patterns; 2 candidate promises; fix order recommended |
 
 ---
 
