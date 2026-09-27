@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-27] claude · Recorded the Track 4b cache-safety report in FREEZE_LIST §7.6: a cached no-context answer was replayed after a matching document and a matching decision existed, and one profile's document-based answer was served to another profile in the same process · why: cache freshness was enforced only at write time and the key carries no profile · files: docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-09-27] claude · Recorded the Track 4a Stage 1 routing report in FREEZE_LIST §7.5: 10 of 14 realistic identity/project questions reached the model without the seeded project, under a header claiming the complete record · why: routing had been checked on intent labels, never on what the model is actually given · files: docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-09-27] claude · Recorded the Track 3 PID-reuse lock report in FREEZE_LIST §7.4: the lock stores a bare PID, so a lock naming a live non-PIP process blocks the app, the restore script and the launcher's cleanup alike · why: the lock was assumed to identify the PIP process, and nothing had checked what it stores · files: docs/FREEZE_LIST.md, docs/LOG.md
@@ -53,8 +55,6 @@ Format:
 - [2026-09-09] claude · Corrected the packaging path drift in AGENTS.md and installer/PIP.iss and recorded the MAX_PATH reason in ARCHITECTURE.md · why: both said the payload is built at dist/PIP while build_installer.ps1 stages it at <drive>\pip-build\PIP · files: AGENTS.md, installer/PIP.iss, docs/ARCHITECTURE.md
 
 - [2026-09-09] claude · Gave the active-model dropdown isExpanded, and covered the providers screen at widths either side of its 720px cap · why: below 720 the dropdown sized itself to its widest model name and the field clamped it, filling the console with one RenderFlex overflow per pulled model · files: frontend/flutter/lib/screens/providers_view.dart, frontend/flutter/test/providers_view_test.dart
-
-- [2026-09-09] claude · Put the PIP mark on the assistant's chat avatar in place of the letter P, and gave PipLogo an optional fallback · why: the avatar answers who said a turn, and a letter was standing in for a mark the app already has · files: frontend/flutter/lib/logo.dart, frontend/flutter/lib/screens/chat_view.dart
 
 ## Archive
 

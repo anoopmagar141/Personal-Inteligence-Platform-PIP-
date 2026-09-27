@@ -3,8 +3,8 @@
 **Canonical document.** Update in place; do not create a second summary.
 Location in the repo: `docs/FREEZE_LIST.md`.
 
-**Status: evidence-first freeze.** Five discovery/test tasks sent; Tracks 1–4a
-returned (§7.2–§7.5), one pending. No production code has been changed under
+**Status: evidence-first freeze.** Five discovery/test tasks sent; All five
+tracks returned (§7.2–§7.6); cross-track synthesis not yet authorized. No production code has been changed under
 this freeze.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
@@ -509,6 +509,74 @@ triggering a web search is a routing effect, not an intent.
 4. Turn the table above into a permanent test on prompt content, the same
    shape as the probe.
 
+### 7.6 Track 4b report — cache safety (2026-09-27)
+
+**Stop condition:** can a no-context answer be cached and replayed after
+the correct context exists? Two-step behavioural test. **Answer: yes, and
+across profiles. Category A.** Freshness rules exist, but the replay path
+is not connected to them.
+
+**Mechanism (`response_cache.py`, `pipeline.py:306`).**
+- The cache is a module-level dict held in process memory. Its key is
+  `sha256(normalised message + project_id)`.
+- It is checked after Stage 1 and **before** Stages 3–9. A hit therefore
+  skips the decision log, the profile lookup, RAG and the model.
+- The TTL is fixed when the answer is written: 24h for `general_knowledge`
+  and `technical_explanation`, 1h for `external_information`, 0 for
+  personal and project questions.
+- The "decision log always overrides" rule (Part 7.1) is enforced only at
+  write time (`decision_log_hit=`). The read does not consult the category
+  or the decision log.
+- Nothing outside `pipeline.py` references the cache. Nothing invalidates
+  it on new documents, decisions, profile changes, sign-out or profile
+  switch.
+
+**Evidence (strong).** Temporary tests, since deleted, ran the real
+pipeline with a recording provider. In each case step 1 asked with no
+context and step 2 asked again after the context was added. A control
+repeated step 2 with the cache cleared, to show the new context would
+have been used.
+
+| Case | Step 2, cache as-is | Control, cache cleared |
+|---|---|---|
+| Document ingested after caching ("explain how the Heliotrope sync engine works", technical, 24h) | model **not called**; `NO-CONTEXT ANSWER` replayed | model called; document in prompt |
+| Decision logged after caching ("what is the best database for a desktop app") | model **not called**; stale answer replayed | model called; decision in prompt |
+| Profile A's document-based answer, same question asked against profile B's database in the same process | B received **A's answer**; B's model not called | — |
+
+The decision case breaks two stated rules at once. Once the decision
+exists, the question is classified `project_question` (TTL 0, "never
+cached"), and it matches the decision that "always overrides". Both
+checks come after the cache read, so neither is consulted.
+
+**Cross-profile.** Profiles are separate password-encrypted databases
+served by one backend process. The cache key has no profile in it, and
+the cache survives sign-out and switching (§7.4 notes the profile paths).
+So an answer built from one profile's documents or record is served to
+another profile that asks the same words within the TTL. **This crosses
+the boundary the per-profile encryption exists to keep.** Demonstrated at
+the pipeline level with two databases in one process; the real
+sign-out → switch → sign-in route sequence was not driven end to end.
+
+**Interaction with 4a (not separately tested).** "what am I working on?"
+is `general_knowledge`, so after §7.5's "you have no project recorded"
+answer it would be cached and replayed for 24h. "what is my current
+project?" (`external_information`) would be replayed for 1h. The two
+defects compound; they remain separate causes (§6).
+
+**Bounded by:** process lifetime (the cache is memory-only, so a restart
+clears it) and the TTL.
+
+**Recommendations only — nothing implemented:**
+1. Include the active profile in the key, and clear the cache on sign-out
+   and on profile switch. This is the confidentiality item and the most
+   urgent.
+2. Consult freshness at read time, not only at write time. Re-check the
+   decision log before serving, or version the key by the last change to
+   documents, decisions and profile.
+3. Do not cache an answer whose context contained no user record, or that
+   was produced for a question Stage 1 has since reclassified.
+4. A permanent two-step test per case above.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -540,7 +608,7 @@ findings.
 | 2 `PIP_DB_KEY` | Returned 2026-09-26 (§7.3) | Main DB read: C (redundant). `vector_store` read: A (load-bearing, fails open to plaintext) |
 | 3 PID-reuse lock | Returned 2026-09-27 (§7.4) | B: stores a bare PID, so a reused PID blocks startup |
 | 4a Stage 1 routing | Returned 2026-09-27 (§7.5) | A: 10 of 14 identity/project questions lose the project; header then claims a complete record |
-| 4b Cache safety | Pending | — |
+| 4b Cache safety | Returned 2026-09-27 (§7.6) | A: stale no-context answers replayed after documents/decisions exist; one profile's answer served to another |
 | Promises 1–3 tests | Not yet written | — |
 | Promise 4 threshold measurement | Not started | — |
 | Database census | Not run | — |
