@@ -1017,9 +1017,17 @@ try:
 
         Called from two places that cannot both be right about timing - the
         lifespan, and whichever of unlock/setup opened the database - so the
-        guard lives here rather than at each call site. Calling it twice is a
-        no-op rather than a second drain: the second call would open its own
-        connection and race the first over the same pending_observer rows.
+        guard lives here rather than at each call site.
+
+        A call while a catch-up is still running QUEUES a new one behind it
+        rather than being a no-op. Two at once would each open a connection
+        and race over the same pending_observer rows, which is why this used
+        to decline outright - but a catch-up belongs to the session that
+        started it, and it can run for minutes (the drain is a ~130s pass per
+        queued session). Declining meant that signing out and into another
+        profile inside that window gave the new session no catch-up at all:
+        nothing recovered, drained or re-indexed. Queued, the two run one
+        after the other and never share rows.
 
         THE SECOND GUARD IS NOT AN OPTIMISATION
 
@@ -1046,9 +1054,23 @@ try:
             db_path.exists() and db_path.stat().st_size > 0
         ):
             return
-        if _catch_up_task is not None and not _catch_up_task.done():
+        previous = _catch_up_task
+        if previous is None or previous.done():
+            _catch_up_task = asyncio.create_task(asyncio.to_thread(_catch_up_blocking))
             return
-        _catch_up_task = asyncio.create_task(asyncio.to_thread(_catch_up_blocking))
+
+        async def after_previous() -> None:
+            # wait(), not await: the previous run's outcome is its own, and a
+            # cancelled wrapper must not cancel the run it is waiting behind.
+            await asyncio.wait([previous])
+            try:
+                await asyncio.to_thread(_catch_up_blocking)
+            except LockedError:
+                # Signed out again before this got its turn. Nothing to do -
+                # the next sign-in queues its own.
+                pass
+
+        _catch_up_task = asyncio.create_task(after_previous())
 
     def _catch_up_blocking() -> None:
         conn = _conn()

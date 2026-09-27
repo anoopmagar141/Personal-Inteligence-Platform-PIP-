@@ -275,6 +275,74 @@ def test_a_profiles_documents_in_the_old_shared_folder_are_adopted_into_its_own(
     assert hit_paths == {bob_documents / "roadmap.txt"}, f"search returned {hit_paths}"
 
 
+def test_a_sign_in_gets_its_own_catch_up_while_the_previous_sessions_is_still_running(
+    provider, token, monkeypatch
+):
+    """
+    Found while fixing the index boundary: _start_catch_up() declined to start
+    when a catch-up was already running, on the reasoning that two would race
+    over the same queue. But a catch-up belongs to the session that started
+    it, and it can run for minutes - the Observer drain is a ~130s pass per
+    queued session. Signing out and into another profile inside that window
+    left the new session with no catch-up at all: nothing recovered, nothing
+    drained, no index repair.
+
+    Asserted on the outcome catch-up exists for: a conversation that a killed
+    session left unobserved is recovered at the next sign-in.
+    """
+    with TestClient(server.app) as client:
+        bob = _new_profile(client, token, "Bob", "bob-password-22")
+        _wait_for_catch_up()
+        # A conversation the Observer never saw - what a killed session leaves.
+        # A second message is sent and seen to start before disconnecting, as
+        # in test_ws_chat: the first turn is persisted after "done", and a
+        # disconnect at "done" can beat it.
+        with client.websocket_connect(f"/ws/chat?token={token}") as ws:
+            assert ws.receive_json()["type"] == "session_info"
+            ws.send_json({"message": "I moved the Heliotrope backend to FastAPI last week"})
+            while ws.receive_json()["type"] != "done":
+                pass
+            ws.send_json({"message": "and the tests to pytest"})
+            assert ws.receive_json()["type"] in ("stage", "stage_hint")
+        assert _unobserved_conversations() == 1
+        assert client.post(f"{API}/auth/lock", headers=_headers(token)).status_code == 200
+
+        # Alice signs in; her catch-up is held mid-run across her sign-out.
+        held, release = threading.Event(), threading.Event()
+        real_adopt = vector_store.adopt_shared_documents
+
+        def hold_first_call(conn):
+            if not held.is_set():
+                held.set()
+                release.wait(30)
+            return real_adopt(conn)
+
+        monkeypatch.setattr(vector_store, "adopt_shared_documents", hold_first_call)
+        _new_profile(client, token, "Alice", "alice-password-1")
+        assert held.wait(30), "Alice's catch-up never started"
+        assert client.post(f"{API}/auth/lock", headers=_headers(token)).status_code == 200
+
+        assert client.post(f"{API}/auth/profile", json={"slug": bob}, headers=_headers(token)).status_code == 200
+        response = client.post(
+            f"{API}/auth/unlock", json={"password": "bob-password-22", "profile": bob}, headers=_headers(token)
+        )
+        assert response.status_code == 200, response.text
+        release.set()
+        _wait_for_catch_up()
+
+        assert _unobserved_conversations() == 0, "Bob's sign-in never ran its own catch-up"
+
+
+def _unobserved_conversations() -> int:
+    conn = server._conn()
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM conversations c WHERE c.observed_at IS NULL "
+            "AND EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id)"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
 def _wait_for_catch_up(timeout: float = 60.0) -> None:
     import time
 

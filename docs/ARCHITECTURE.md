@@ -79,7 +79,8 @@ Stages 11–13 (Observer, validation, profile write) run once per session — on
 idle timeout, disconnect, clean shutdown (queued to `pending_observer`), or, for
 a killed process, rebuilt at the next startup from `conversations` /`messages`
 where `observed_at IS NULL`. Catch-up drains in a background task, never inline
-before serving.
+before serving. Every sign-in gets its own: one still running from a previous
+session queues the next behind it rather than standing in for it.
 
 Each memory candidate then passes **two independent gates, in this order**:
 
@@ -233,6 +234,18 @@ so there is one write path, not two.
   encrypted one on a first encryption, since chunk text written before a
   password existed is readable on disk and is exactly what the password
   is being introduced to stop.
+- **Sign-out takes the session's in-process state with it.** One backend
+  process serves every profile, so the key is not the only thing a session
+  leaves behind. `session_key.lock()` - the path every sign-out, delete and
+  switch goes through - also empties the response cache, which is keyed on
+  the message alone and would otherwise answer the next profile with the last
+  one's replies. Work already running when the key goes keeps its database
+  connection, so `vector_store` refuses to read or write the index when the
+  active profile has a salt but no key is held (`IndexLockedError`) instead of
+  falling back to plaintext. And the next sign-in's catch-up is queued behind
+  any still running rather than skipped. All three were measured through the
+  real routes (FREEZE_LIST §7.8) and are pinned by
+  `backend/tests/test_profile_boundary.py`.
 - **A profile's documents live in its own folder, read at call time.**
   `vector_store.documents_root()` is `profile_store.documents_root()`, which
   follows `PIP_DOCUMENTS_ROOT` as `profiles.activate()` sets it; uploads are

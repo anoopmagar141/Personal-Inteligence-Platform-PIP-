@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-27] claude · Made a sign-in queue its own catch-up behind one still running from the previous session instead of skipping it, and documented the sign-out boundary in ARCHITECTURE.md · why: signing out and into another profile during a catch-up left the new session with no recovery, drain or index repair at all · files: backend/api/server.py, backend/tests/test_profile_boundary.py, docs/ARCHITECTURE.md, docs/LOG.md
+
 - [2026-09-27] claude · Made uploads and the ingestion sandbox follow the active profile's documents folder, and had the sign-in catch-up copy a profile's documents out of the old shared folder into its own and re-index them · why: every profile's uploads landed in one shared plaintext folder that any profile's ingest accepted (FREEZE_LIST §7.8) · files: backend/memory/vector_store.py, backend/api/server.py, backend/tests/test_profile_boundary.py, backend/tests/test_api_server.py, backend/tests/test_pipeline.py, backend/tests/test_set_db_password.py, backend/tests/test_stage_05_rag_retrieval.py, backend/tests/test_vector_store.py, docs/ARCHITECTURE.md, docs/LOG.md
 
 - [2026-09-27] claude · Made vector_store refuse to read or write the index when the active profile has a password but no key is held, instead of falling back to plaintext · why: an ingest in flight at sign-out stored its chunk text and path in plaintext, and it survived the next sign-in's rebuild (FREEZE_LIST §7.8) · files: backend/memory/vector_store.py, backend/tests/test_profile_boundary.py, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-10] claude · Replaced the thinking orb's dot cloud with the PIP mark turning · why: the dots were a port of somebody else's idea and read as a second application beside the six-node mark; the states and the backend's own labels are unchanged · files: frontend/flutter/lib/widgets/thinking_mark.dart, frontend/flutter/lib/widgets/reasoning_strip.dart, frontend/flutter/test/reasoning_strip_test.dart
 
-- [2026-09-09] claude · Added a 300s per-test timeout to pytest.ini (thread method) and pytest-timeout to requirements · why: a run of the suite hung silently for 20 minutes with no output to diagnose it by; the ceiling caught the next occurrence and named it - test_ws_chat.py's accumulates_conversation_history_across_turns, blocked in receive_json with every executor thread and the event loop idle · files: pytest.ini, requirements.txt
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -69,3 +69,4 @@ Format:
 - 2026-09-09 (claude): made scripts/build_installer.ps1 refuse an incomplete, dirty or stale payload and fail a suspiciously small installer.
 - 2026-09-09 (claude): rebuilt dist/PIP-Setup.exe from a clean flutter build and verified 31,615/31,615 files byte-identical to the payload (sha256 7CE29ABA…3254).
 - 2026-09-09 (claude): wrote the hook-install requirement into docs/CONVENTIONS.md and installed the hooks on this machine, since core.hooksPath is per-clone.
+- 2026-09-09 (claude): added a 300s per-test timeout (thread method) to pytest.ini, after a suite run hung silently for 20 minutes; it later named test_ws_chat's history test as the hang.
