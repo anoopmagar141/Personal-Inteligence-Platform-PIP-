@@ -3,8 +3,8 @@
 **Canonical document.** Update in place; do not create a second summary.
 Location in the repo: `docs/FREEZE_LIST.md`.
 
-**Status: evidence-first freeze.** Five discovery/test tasks sent; Tracks 1
-and 2 returned (§7.2, §7.3), three pending. No production code has been changed under
+**Status: evidence-first freeze.** Five discovery/test tasks sent; Tracks 1–3
+returned (§7.2–§7.4), two pending. No production code has been changed under
 this freeze.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
@@ -83,8 +83,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the seven oldest are rolled into
-  three Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the eight oldest are rolled into
+  four Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -369,6 +369,72 @@ the result.
 > it. Index writes made without the key in that environment are stored
 > unencrypted.
 
+### 7.4 Track 3 report — PID-reuse lock (2026-09-27)
+
+**Stop condition:** can the lock tell the original PIP process from a later
+process with the same PID? First, what identity does it store? **Answer:
+no. It stores a bare PID and nothing else. Category B (missing state).**
+
+**What exists.**
+- `instance_lock.acquire()` (`instance_lock.py:131`) writes `str(os.getpid())`
+  to `data/pip.lock`.
+- Every consumer reads only that integer and asks whether it is alive:
+  - `acquire()` itself, via `_pid_is_running`: GetExitCodeProcess on
+    Windows, `kill(pid, 0)` on POSIX;
+  - `restore_backup.py:148`, `merge_projects.py:87` and
+    `seed_demo_conversation.py:254`, all through `_pid_is_running`;
+  - `launch_pip.ps1:84`, via `Get-Process`;
+  - `_db.py`, `clear_poisoned_snapshot.py`, `retract_fabricated_candidates.py`
+    and the two `seed_project_*` scripts, which only print a note.
+- **What is missing:** anything that identifies *which* process, such as
+  the process creation time or the executable. With a bare PID, "the PIP
+  that wrote this" and "whatever now has that number" are the same state.
+
+**Evidence (strong for the mechanism).** PID reuse was simulated, not waited
+for (§6): the lock was pointed at a live `ping.exe`, which is exactly the
+state recycling leaves behind. In a temporary test, since deleted:
+- The real app lifespan refused to start with `AlreadyRunningError`
+  ("PIP backend is already running (pid N) … Stop that instance first").
+- `restore_backup.refuse_if_pip_is_running()` exited: "PIP appears to be
+  running".
+- The launcher's stale-lock block, run verbatim, kept the lock: `Get-Process`
+  reported `PING`.
+- Control: once `ping` exited, `acquire()` took the lock over.
+
+The existing suite already pins this behaviour without naming it:
+`test_acquire_raises_when_a_live_different_pid_holds_the_lock` uses the
+pytest *parent* process, which is not PIP, as the holder.
+
+**What broken looks like.** It fails *safe* for data: it refuses and
+never steals, so two writers are never allowed. It fails *hard* for the
+user:
+- The backend does not start, and when the launcher starts it hidden
+  that failure is invisible (by the launcher's own comment at `:71`; not
+  demonstrated here).
+- Restore and merge refuse to run.
+- The error tells the user to stop "that instance" by PID, which after
+  reuse is an unrelated process.
+- The launcher's cleanup cannot help, because it asks the same question
+  with the same missing state.
+
+**Not measured:** how often Windows actually reuses a stale PID. That is a
+property of the OS and was deliberately not tested (§6).
+
+**Recommendation only — nothing implemented:** store the holder's process
+creation time next to the PID, and treat the lock as held only if a live
+process with that PID has that creation time. Every Python consumer
+already goes through `_pid_is_running`, so one function changes. The
+launcher's PowerShell check is a second copy of the rule and would need
+the same field (§2.3, one source of truth).
+
+**Noted, out of scope:** `acquire()` checks the file and then writes it
+without an atomic create, so two backends starting at the same instant
+could both take the lock. That is a race, not PID reuse, and was not
+tested.
+
+**Cross-track (§7.1 rule 4):** the prediction that Tracks 2 and 3 would
+both be category B does not hold. Track 3 is B; Track 2 came back C and A.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -398,7 +464,7 @@ findings.
 |-------|--------|----------------|
 | 1 Observer/provider gate | Returned 2026-09-26 (§7.2) | C; plus A (startup queue) and D (wording) as recommendations |
 | 2 `PIP_DB_KEY` | Returned 2026-09-26 (§7.3) | Main DB read: C (redundant). `vector_store` read: A (load-bearing, fails open to plaintext) |
-| 3 PID-reuse lock | Pending | — |
+| 3 PID-reuse lock | Returned 2026-09-27 (§7.4) | B: stores a bare PID, so a reused PID blocks startup |
 | 4a Stage 1 routing | Pending | — |
 | 4b Cache safety | Pending | — |
 | Promises 1–3 tests | Not yet written | — |

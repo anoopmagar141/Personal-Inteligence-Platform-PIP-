@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-27] claude · Recorded the Track 3 PID-reuse lock report in FREEZE_LIST §7.4: the lock stores a bare PID, so a lock naming a live non-PIP process blocks the app, the restore script and the launcher's cleanup alike · why: the lock was assumed to identify the PIP process, and nothing had checked what it stores · files: docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-09-26] claude · Recorded the Track 2 PIP_DB_KEY report in FREEZE_LIST §7.3: the main-DB env read is redundant, the vector_store read is load-bearing and fails open (chunks written after sign-out land in plaintext), and nvidia-smi inherits the key · why: Promise 7's final clause depended on it, and the pre-accepted outcome predicted the opposite · files: docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-09-26] claude · Added the Track 1 Observer/provider-authorization tests and recorded the Track 1 report in FREEZE_LIST §7.2: the locality gate holds on the real path, and a manual break-it confirmed the test catches its removal · why: Promise 5 was claimed but had no outcome test on the real path · files: backend/tests/test_observer_provider_authorization.py, docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,10 +56,9 @@ Format:
 
 - [2026-09-09] claude · Added Cancel to a running model download and Delete to a pulled model · why: a 4GB pull could only be waited out, and models could be added but never removed, so a machine that compared four of them had spent twenty gigabytes with no way back · files: backend/providers/ollama_provider.py, backend/api/server.py, backend/tests/test_llm_catalog.py, frontend/flutter/lib/api_client.dart, frontend/flutter/lib/screens/model_browser.dart, frontend/flutter/test/model_browser_test.dart
 
-- [2026-09-09] claude · Made a profile delete that cannot finish now record itself and complete at the next start · why: deleting a profile that had been chatted in failed with WinError 32, because a chat connection's close is abandoned by design and leaves pip.db open for the life of the process · files: backend/core/profiles.py, backend/api/server.py, frontend/flutter/lib/screens/profile_view.dart, backend/tests/test_profile_management.py, frontend/flutter/test/profile_management_test.dart, docs/ARCHITECTURE.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
 - 2026-09-09 (claude): added in-app profile creation, rename, password change and permanent deletion plus an opt-in sign-in picture, because profiles previously needed a script and a password change orphaned the ChromaDB index.
 - 2026-09-09 (claude): gave vector_store one resolved_chroma_path() so test runs stopped renaming the developer's real data/chroma, and made set_db_password.py carry the ChromaDB index to the new key (encrypting a plaintext index on first encryption).
+- 2026-09-09 (claude): made a profile delete that cannot finish (WinError 32 from a still-open pip.db) record itself and complete at the next start.
