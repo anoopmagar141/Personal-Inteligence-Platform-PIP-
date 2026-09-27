@@ -224,7 +224,11 @@ def test_system_instructions_do_not_claim_memory_the_context_may_not_hold():
 
 def test_system_instructions_require_admitting_missing_data():
     text = stage_07._DEFAULT_SYSTEM_INSTRUCTIONS.lower()
-    assert "do not have it recorded" in text
+    # "in front of you", not "recorded": a fact can be missing from the context
+    # because its section was not looked up for this question, and the model
+    # must not report that as the user having none (FREEZE_LIST §7.5).
+    assert "do not have it in front of you" in text
+    assert "a plausible guess is always wrong" in text
 
 
 def test_set_membership_rows_are_not_rendered_as_redundant_pairs():

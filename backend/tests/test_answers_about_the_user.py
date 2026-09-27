@@ -93,3 +93,44 @@ def test_every_question_reaches_the_model_with_the_users_identity_and_projects(s
 
     assert NAME in prompt, "identity was not in the prompt"
     assert PROJECT in prompt, "the active project was not in the prompt"
+
+
+def _add_goal(conn, text):
+    conn.execute(
+        "INSERT INTO goal_memory (goal_text, confidence, created_at, updated_at) "
+        "VALUES (?, 0.9, '2026-09-20T00:00:00Z', '2026-09-20T00:00:00Z')",
+        (text,),
+    )
+    conn.commit()
+
+
+def test_the_prompt_does_not_present_what_was_looked_up_as_the_whole_record(seeded):
+    """
+    "what is my current project?" is external_information, which does not
+    look up goals. The prompt used to head what it did look up "the complete
+    record, not a sample", and its rule 4 told the model to answer that
+    anything missing was not recorded - so a user with a recorded goal who
+    asked about it this way would be told, confidently, that there was none
+    (FREEZE_LIST §7.5).
+    """
+    _add_goal(seeded, "Finish the viva demo by November")
+
+    prompt = _prompt_for(seeded, "what is my current project?")
+
+    assert "the complete record" not in prompt
+    not_looked_up = [line for line in prompt.splitlines() if line.startswith("Not looked up for this question:")]
+    assert not_looked_up, "the prompt does not say what was left out"
+    assert "Goals" in not_looked_up[0]
+    assert "Projects" not in not_looked_up[0]
+
+
+def test_a_user_with_no_projects_is_still_told_so_plainly(conn):
+    """
+    The guard against invented projects is the "none recorded" line for a
+    table that WAS looked up. Narrowing the header must not lose it.
+    """
+    profile_store.complete_onboarding(conn, name=NAME, language_preference="English")
+
+    prompt = _prompt_for(conn, "what am I working on?")
+
+    assert "Projects: none recorded." in prompt

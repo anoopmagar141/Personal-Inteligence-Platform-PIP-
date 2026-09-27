@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-28] claude · Stopped the prompt presenting what Stage 4 looked up as the user's whole record: the header now says each section is complete and names the sections not looked up, and rule 4 says 'not in front of you' instead of 'not recorded' · why: a fact in a section the category never fetched was to be reported as not recorded (FREEZE_LIST §7.5) · files: backend/stages/stage_07_context_assembly.py, backend/tests/test_answers_about_the_user.py, backend/tests/test_stage_07_context_assembly.py, docs/LOG.md
+
 - [2026-09-28] claude · Made Stage 4 look up identity and active projects for every question category, with a prompt-level test over the 14 Track 4a questions · why: 10 of 14 ordinary ways of asking about your own work reached the model without the project (FREEZE_LIST §7.5) · files: backend/stages/stage_04_memory_lookup.py, backend/tests/test_answers_about_the_user.py, backend/tests/test_stage_04_memory_lookup.py, docs/LOG.md
 
 - [2026-09-28] claude · Recorded the profile boundary fixes in FREEZE_LIST §7.9: four promises, each with an end-to-end test seen failing first, and what they deliberately leave open (plaintext already on disk, same-profile cache staleness, the upload route holding the event loop) · why: the freeze doc is the canonical record of what is enforced · files: docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-10] claude · Replaced the iris artwork with the six-node mark, rendered it to both .ico files, the wizard panel and a light/dark pair of app assets, and rebuilt the installer from it · why: the mark PIP ships under changed, and one script owning every raster is what stops the window icon, the installer and the picture inside the app drifting apart · files: installer/pip-mark.svg, installer/pip-iris-blue.svg (deleted), scripts/make_icons.py, installer/PIP.iss, frontend/flutter/lib/logo.dart, frontend/flutter/pubspec.yaml, frontend/flutter/assets/*, frontend/flutter/windows/runner/resources/app_icon.ico
 
-- [2026-09-10] claude · Rebuilt dist/PIP-Setup.exe from this code (twice: the first predated the Backup-tab refresh fix found by running it) · why: the shipped installer predated the in-app restore and the thinking mark; final sha256 69F2791DC58E76873103424E0C2E795770FB0E644154DF7E05583A19F220BFCD, app.so 842E8D94 verified identical in build tree and payload · files: dist/PIP-Setup.exe (gitignored artefact; recorded here for provenance)
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -72,3 +72,4 @@ Format:
 - 2026-09-09 (claude): added a 300s per-test timeout (thread method) to pytest.ini, after a suite run hung silently for 20 minutes; it later named test_ws_chat's history test as the hang.
 - 2026-09-10 (claude): replaced the thinking orb's dot cloud with the PIP mark turning; the states and the backend's labels were unchanged.
 - 2026-09-10 (claude): added an in-app .pipbak restore - the conversion runs while the app is open, the file swap is staged for the next start.
+- 2026-09-10 (claude): rebuilt dist/PIP-Setup.exe twice from this code (the first predated a Backup-tab refresh fix found by running it); final sha256 69F2791D…BFCD.

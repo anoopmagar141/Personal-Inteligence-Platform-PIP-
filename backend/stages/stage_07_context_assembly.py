@@ -67,16 +67,19 @@ _DEFAULT_SYSTEM_INSTRUCTIONS = (
     "3. A section marked 'none recorded' means the user genuinely has none. Say "
     "so plainly - do not treat it as missing data to fill in.\n"
     "4. If the context does not contain a fact about the user that was asked "
-    "for, say you do not have it recorded, and stop. An honest 'I don't have "
-    "that recorded' is always correct; a plausible guess is always wrong.\n"
+    "for, say you do not have it in front of you, and stop. A section listed "
+    "as not looked up is not evidence either way. An honest 'I don't have "
+    "that in front of me' is always correct; a plausible guess is always "
+    "wrong.\n"
     "5. These rules cover facts about the user only. For general questions - "
     "how something works, what a term means, help with a problem - answer "
     "normally and fully from your own knowledge. Absence from the context is "
     "not a reason to refuse; it only means the question was not about the "
     "user's records.\n"
     "6. Write in your own words to the user. The headings and annotations below "
-    "('complete list', '3 recorded') are notes to you about how far the record "
-    "extends - never repeat them back as if they were part of the answer."
+    "('complete list', '3 recorded', 'not looked up') are notes to you about how "
+    "far the record extends - never repeat them back as if they were part of "
+    "the answer."
 )
 
 # Human-readable section names. The profile arrives as flat (table, field,
@@ -209,11 +212,20 @@ def _format_profile(
         body = "\n".join(_profile_line(r) for r in rows)
         blocks.append(f"{header}\n{body}")
 
-    return _truncate_to_tokens(
-        "WHAT PIP HAS RECORDED ABOUT THIS USER (the complete record, not a sample):\n\n"
-        + "\n\n".join(blocks),
-        max_tokens,
-    )
+    # Each section is complete; the set of sections is not. This header used to
+    # say "the complete record, not a sample" over whatever Stage 4 had looked
+    # up for the category, and rule 4 then told the model that anything absent
+    # was not recorded - so a goal on record, asked about in a phrasing routed
+    # to a category that does not fetch goals, was confidently denied
+    # (FREEZE_LIST §7.5). The sections left out are named, and named first,
+    # where truncation cannot drop the line.
+    header = "WHAT PIP HAS RECORDED ABOUT THIS USER (each section below is complete):\n"
+    if expected_tables is not None:
+        skipped = [label for table, label in _TABLE_LABELS.items() if table not in expected_tables]
+        if skipped:
+            header += f"Not looked up for this question: {', '.join(skipped)}.\n"
+
+    return _truncate_to_tokens(header + "\n" + "\n\n".join(blocks), max_tokens)
 
 
 def _format_snapshot(snapshot: Optional[dict[str, Any]], max_tokens: int) -> str:
