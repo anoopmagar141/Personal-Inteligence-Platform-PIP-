@@ -5,7 +5,8 @@ Location in the repo: `docs/FREEZE_LIST.md`.
 
 **Status: evidence-first freeze.** Five discovery/test tasks sent; All five
 tracks returned (§7.2–§7.6); cross-track synthesis done (§7.7); end-to-end
-profile boundary test run (§7.8); profile boundary fixes landed (§7.9). No production code has been changed under
+profile boundary test run (§7.8); profile boundary fixes landed (§7.9); answers-about-the-user fixes landed
+(§7.10). No production code has been changed under
 this freeze.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
@@ -84,8 +85,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the twenty oldest are rolled into
-  sixteen Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the twenty-one oldest are rolled into
+  seventeen Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -848,6 +849,56 @@ the next sign-in then skipped its own catch-up because one "was running".
   for the four paths above. Writing it as a promise is still an owner
   decision (§7.7).
 
+### 7.10 Answers-about-the-user fixes (authorized 2026-09-28)
+
+§7.7's suggested item 2: §7.5 (4a) recommendations 1–2 and §7.6 (4b)
+recommendation 2. The same method as §7.9: each test was seen failing on
+the unfixed code, then the smallest change, then the full suite, one
+commit per promise. The tests are in
+`backend/tests/test_answers_about_the_user.py` and assert on the prompt the
+model receives through the real pipeline.
+
+| Commit | Promise | Mechanism | Seen failing before the fix as |
+|---|---|---|---|
+| `55d1523` | Every question reaches the model with the user's identity and active projects | `stage_04._ALWAYS_TABLES` added to every category's table set | 11 of the 14 Track 4a questions |
+| `3173f60` | The prompt never presents what was looked up as the whole record | The Stage 7 header says each section is complete and names the sections not looked up; rule 4 now says "not in front of you" instead of "not recorded" | "the complete record" still in the prompt |
+| `111c43e` | A cached answer is never served after the user's record changes | A `record_version` counter bumped by triggers on `RECORD_TABLES` is part of the cache key | Stale answer served, with the model never called, after a document, a decision and a new project |
+
+The last full-suite run was 1219 passed.
+
+**Two test-design corrections, recorded because §5 applies to our own
+tests too:**
+- The first cache tests asked about "the Heliotrope sync engine" while
+  Heliotrope was the seeded project. That made the question a project
+  question, which is never cached, so the control failed and every
+  staleness case passed on the unfixed code. The questions were changed
+  until the control passed and the cases failed.
+- The control (`test_an_unchanged_record_is_still_answered_from_the_cache`)
+  stays as a guard. A trigger on a table written on the per-message path
+  would quietly switch the cache off, and this test would catch it.
+
+**Flake measured, not assumed.** `test_ws_chat_lazily_creates_…` failed
+once under full-suite load during this work (its second failure today).
+It replaces `pipeline.run`, so none of these changes run inside it. Run in
+isolation it passed 15/15 on the change and 15/15 on the previous commit.
+
+**Deliberately not covered (still open):**
+- **Whether a real model behaves better with the new header and rule 4 is
+  not measured.** The tests check what the model is told, not what it
+  says. The fabrication incident is why rule 4 exists; its protection
+  against guessing is kept word for word, and only "recorded" became "in
+  front of you".
+- §7.5 recommendation 3 (letting first-person signals outrank Stage 1's
+  external, coding and research keywords) was not authorized. With
+  identity and projects always sent, it now matters only for the other
+  tables (goals, skills, preferences), which the prompt now names as not
+  looked up.
+- Personal questions that match the web-search trigger (§7.5 side note,
+  Promise 6) are unchanged.
+- The cache key still ignores conversation history, as before this work.
+- **Candidate Promise 9 (current record)** now has mechanisms and tests
+  for all three of its parts. Writing it down is an owner decision.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -886,6 +937,7 @@ findings.
 | Cross-track synthesis | Done 2026-09-27 (§7.7) | 5 confirmed patterns; 2 candidate promises; fix order recommended |
 | End-to-end profile boundary | Run 2026-09-27 (§7.8); now `test_profile_boundary.py` | Cross-profile cache and in-flight plaintext confirmed via real routes; uploads not per-profile and plaintext on disk (A) |
 | Profile boundary fixes | Landed 2026-09-27 (§7.9) | 4 promises enforced and tested; plaintext already on disk and same-profile staleness still open |
+| Answers-about-the-user fixes | Landed 2026-09-28 (§7.10) | 3 promises enforced and tested; real-model effect of the new header unmeasured |
 
 ---
 
