@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-27] claude · Ran the end-to-end profile boundary test through the real routes and recorded it in FREEZE_LIST §7.8: profile B was served profile A's document-based answer, an ingest in flight at sign-out stored plaintext that survived A's next sign-in, and uploads go to one shared plaintext folder rather than the profile's own · why: §7.7 named it the single test that could confirm or refute Pattern 1 · files: docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-09-27] claude · Wrote the cross-track synthesis in FREEZE_LIST §7.7: five patterns each confirmed by two or more track reports (the sign-out/profile-switch boundary misses in-memory work; duplicated rules; optional components failing open; tests concealing the defect; under-identifying keys), plus candidate Promises 8-9 and a suggested fix order · why: all five tracks were classified and the owner authorized the synthesis · files: docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-09-27] claude · Recorded the Track 4b cache-safety report in FREEZE_LIST §7.6: a cached no-context answer was replayed after a matching document and a matching decision existed, and one profile's document-based answer was served to another profile in the same process · why: cache freshness was enforced only at write time and the key carries no profile · files: docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-09] claude · Made scripts/build_installer.ps1 refuse to compile an incomplete, dirty or stale payload, and fail a suspiciously small installer · why: a 76 MB PIP-Setup.exe had been produced from a payload that had not finished assembling, and nothing in the pipeline could tell that from a success · files: scripts/build_installer.ps1
 
-- [2026-09-09] claude · Corrected the packaging path drift in AGENTS.md and installer/PIP.iss and recorded the MAX_PATH reason in ARCHITECTURE.md · why: both said the payload is built at dist/PIP while build_installer.ps1 stages it at <drive>\pip-build\PIP · files: AGENTS.md, installer/PIP.iss, docs/ARCHITECTURE.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -65,3 +65,4 @@ Format:
 - 2026-09-09 (claude): added Cancel to a running model download and Delete to a pulled model, so a pull no longer had to be waited out and models could be removed.
 - 2026-09-09 (claude): put the PIP mark on the assistant's chat avatar in place of the letter P, with an optional fallback in PipLogo.
 - 2026-09-09 (claude): gave the active-model dropdown isExpanded and covered the providers screen either side of its 720px cap, ending a RenderFlex overflow per pulled model.
+- 2026-09-09 (claude): corrected the packaging path drift in AGENTS.md and installer/PIP.iss (payload staged at <drive>\pip-build\PIP, not dist/PIP) and recorded the MAX_PATH reason in ARCHITECTURE.md.

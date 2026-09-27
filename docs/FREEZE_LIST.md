@@ -4,8 +4,8 @@
 Location in the repo: `docs/FREEZE_LIST.md`.
 
 **Status: evidence-first freeze.** Five discovery/test tasks sent; All five
-tracks returned (§7.2–§7.6); cross-track synthesis done (§7.7). No fix
-authorized yet. No production code has been changed under
+tracks returned (§7.2–§7.6); cross-track synthesis done (§7.7); end-to-end
+profile boundary test run (§7.8). No fix authorized yet. No production code has been changed under
 this freeze.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
@@ -84,8 +84,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the eleven oldest are rolled into
-  seven Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the twelve oldest are rolled into
+  eight Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -684,9 +684,9 @@ seen, and the fixture's comment was never turned into a product finding.
 
 #### Not confirmed — kept as predictions
 
-- Plaintext chunks survive a later re-index (Track 2; code reading only).
-- In-flight writes during sign-out are reachable in practice (Track 2;
-  timing not demonstrated).
+- ~~Plaintext chunks survive a later re-index~~ — confirmed in §7.8.
+- ~~In-flight writes during sign-out are reachable in practice~~ —
+  confirmed on `/rag/ingest` in §7.8.
 - A real model answers "no project recorded" (4a; a fake provider was
   used).
 - The `test_ws_chat` hang (once in three full runs) is independent of
@@ -736,6 +736,64 @@ One end-to-end test through the real routes:
 It would move two of the "not confirmed" items above to confirmed or
 refuted, and it becomes Pattern 1's permanent regression test.
 
+### 7.8 End-to-end profile boundary test (2026-09-27)
+
+This is the §7.7 "single highest-value next evidence" test, run through the
+real routes (`/auth/profiles`, `/auth/setup`, `/rag/upload`, `/rag/ingest`,
+`/ws/chat`, `/auth/lock`, `/auth/profile`, `/auth/unlock`) under a real
+lifespan. It lives outside the suite (see "status of the test").
+
+**Patched, and why:**
+- the model provider, replaced by a recorder, so we see exactly what the
+  model would be sent;
+- the Observer, a no-op here because it is unrelated and would reach for
+  Ollama;
+- `vector_store.DOCUMENTS_ROOT`, a module constant aimed at the real
+  `data/documents`, redirected to a temp folder so the test cannot write
+  user data;
+- a one-shot pause before the index write, so that sign-out lands while an
+  ingest is in flight. It changes timing only.
+
+**Results:**
+
+| Claim under test | Result |
+|---|---|
+| Profile B is served profile A's answer (4b) | **Confirmed.** Bob, signed into his own new profile, asked the same question and received `ANSWER#1 citing QUOKKA-7`, Alice's answer built from Alice's document. `cache_hit: True`; Bob's model was never called. |
+| An index write in flight at sign-out is stored in plaintext (Track 2) | **Confirmed on `/rag/ingest`.** Event order: ingest paused at the index write → `/auth/lock` returned 200 with no key held → ingest returned 200. The chunk text and its file path were stored in plaintext in Alice's index. |
+| The plaintext survives a later re-index (Track 2 prediction) | **Confirmed.** Alice signed back in and catch-up finished. The plaintext chunk and plaintext path were still on disk, and no encrypted copy was added (2 chunks before and after). |
+| The same through `/rag/upload` | **Not reproduced**, and not reachable in this form. The upload chunk was stored encrypted. `/rag/upload` is an `async` route that runs the embedding synchronously, so it holds the event loop and `/auth/lock` cannot run until it ends. That is **inferred from timing** (44.7s with a 30s pause, against 12.8s via `/rag/ingest`), not measured directly. It also means an upload stalls every other request while it embeds; that is out of scope and noted only. |
+
+**New finding: uploaded documents are neither per-profile nor encrypted
+on disk. Category A.**
+- `profiles._activate` re-points `PIP_DOCUMENTS_ROOT`.
+- But `/rag/upload` writes to `vector_store.DOCUMENTS_ROOT`
+  (`server.py:767–775`), a constant fixed at import.
+- `_validate_file_path` checks ingest paths against that same constant.
+- Observed: Alice's uploads landed in the shared folder, not in
+  `profiles/alice/documents`; both profiles' own `documents` folders
+  stayed empty; and both files were visible from Bob's side.
+- The uploaded file is written as the uploaded bytes: `heliotrope.txt` on
+  disk contained `QUOKKA-7` in plaintext.
+- This contradicts Promise 7's "document text … encrypted at rest" for
+  the upload copy. It also means one profile's documents sit where
+  another profile's ingest would accept them.
+
+**Effect on §7.7.**
+- Pattern 1 now has three confirmed mechanisms, all through real routes:
+  the cache, in-flight index writes, and the upload folder.
+- Two of §7.7's four "not confirmed" items are now confirmed:
+  in-flight writes are reachable, and plaintext survives a re-index.
+- The remaining two (the real model's answer in 4a, the `test_ws_chat`
+  hang) are unchanged.
+- Candidate Promise 8 (profile isolation) is now broken three ways.
+
+**Status of the test.** It prints observations rather than asserting
+correct behaviour, because all three defects are present and a test that
+asserts the fix would fail. Kept outside the repository pending a decision:
+- commit it as a strict `xfail` that turns green when fixed; or
+- commit it with the fix, as Pattern 1's regression test (§2.2: test in
+  the same commit as the change).
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -772,6 +830,7 @@ findings.
 | Promise 4 threshold measurement | Not started | — |
 | Database census | Not run | — |
 | Cross-track synthesis | Done 2026-09-27 (§7.7) | 5 confirmed patterns; 2 candidate promises; fix order recommended |
+| End-to-end profile boundary | Run 2026-09-27 (§7.8) | Cross-profile cache and in-flight plaintext confirmed via real routes; uploads not per-profile and plaintext on disk (A) |
 
 ---
 
