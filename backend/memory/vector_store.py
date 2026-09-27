@@ -40,6 +40,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sentence_transformers import SentenceTransformer
 
 from backend.config.settings import get_settings
+from backend.core import db_key as db_key_module
 from backend.core.types import now_utc
 from backend.memory import profile_store
 
@@ -117,12 +118,31 @@ DEFAULT_MAX_DOCUMENT_SIZE_MB = _RAG["max_document_size_mb"]
 # path), while the actual path is stored separately, Fernet-encrypted, purely
 # for display once a query has already found the right chunks.
 #
-# When PIP_DB_KEY isn't set at all (dev/test default, same as
-# profile_store.get_connection()'s unencrypted sqlite3 fallback), everything
-# below is a no-op passthrough - chunks and file_path are stored and read
-# back as plain text, exactly as before this fix.
+# When PIP_DB_KEY isn't set and the profile has never had a password (dev/test
+# default, same as profile_store.get_connection()'s unencrypted sqlite3
+# fallback), everything below is a no-op passthrough - chunks and file_path are
+# stored and read back as plain text, exactly as before this fix.
+#
+# A missing key on a profile that HAS a password is a different situation and
+# is refused, not passed through. It used to be read as the first case, and it
+# is what a sign-out leaves behind: an ingest or index rebuild already running
+# when the key was forgotten carried on and stored its chunk text and file path
+# in the clear, in an index that was otherwise encrypted - measured end to end,
+# and still there after the next sign-in's rebuild (FREEZE_LIST §7.8). Refusing
+# here, before anything is written, leaves no half-ingested document: the
+# registry row is only inserted after the chunks, so the next signed-in rebuild
+# finds nothing to repair and the user can simply add the file again.
+class IndexLockedError(RuntimeError):
+    """The profile is password-protected and no key is held to encrypt with."""
+
+
 def _get_db_key() -> Optional[str]:
-    return os.environ.get("PIP_DB_KEY") or None
+    key = os.environ.get("PIP_DB_KEY") or None
+    if key is None and db_key_module.salt_path().exists():
+        raise IndexLockedError(
+            "This profile is locked - sign in again to add to or search its documents."
+        )
+    return key
 
 
 def _fernet(db_key: str) -> Fernet:

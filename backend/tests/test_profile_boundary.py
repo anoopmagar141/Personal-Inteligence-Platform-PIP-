@@ -16,6 +16,7 @@ Ollama on disconnect).
 """
 
 import os
+import threading
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ from fastapi.testclient import TestClient
 
 from backend.api import server
 from backend.core import auth, pipeline, response_cache, session_key
+from backend.memory import vector_store
 from backend.providers.base_provider import BaseLLMProvider
 
 API = "/api/v1"
@@ -124,3 +126,63 @@ def test_an_answer_cached_before_sign_out_is_not_served_to_the_next_profile(prov
     assert len(provider.calls) == calls_before + 1, "Bob's question never reached his model"
     assert not bob_hints.get("cache_hit")
     assert bob_answer != alice_answer
+
+
+def test_an_index_write_in_flight_at_sign_out_is_not_stored_in_plaintext(provider, token, monkeypatch):
+    """
+    Found end to end (§7.8): an ingest that had read its connection before
+    sign-out and wrote to the index after it stored the chunk text and file
+    path in plaintext, and the plaintext was still there after the profile's
+    next sign-in and index rebuild. vector_store reads the key from the
+    environment at write time and, finding none, treated the profile as one
+    that never had a password.
+
+    The pause is the only thing added to the real path: a one-shot hold just
+    before the index write, so sign-out lands in that window every run rather
+    than by luck. It changes when, not what.
+    """
+    secret = "ZEBRAFINCH-9"
+    reached, release = threading.Event(), threading.Event()
+    armed = {"on": False}
+    real_get_collection = vector_store._get_collection
+
+    def pause_once_before_the_index_write():
+        if armed["on"] and threading.current_thread() is not threading.main_thread():
+            armed["on"] = False
+            reached.set()
+            release.wait(30)
+        return real_get_collection()
+
+    monkeypatch.setattr(vector_store, "_get_collection", pause_once_before_the_index_write)
+
+    with TestClient(server.app, raise_server_exceptions=False) as client:
+        _new_profile(client, token, "Alice", "alice-password-1")
+        documents = Path(os.environ["PIP_DOCUMENTS_ROOT"])
+        documents.mkdir(parents=True, exist_ok=True)
+        # The ingestion sandbox is still vector_store's own constant, which
+        # points at the real data/documents; aimed at the profile's folder so
+        # this test cannot write there.
+        monkeypatch.setattr(vector_store, "DOCUMENTS_ROOT", documents)
+        note = documents / "notes.txt"
+        note.write_text(f"Private note {secret} about the Heliotrope rollout.", encoding="utf-8")
+
+        armed["on"] = True
+        result = {}
+        ingest = threading.Thread(
+            target=lambda: result.update(
+                status=client.post(f"{API}/rag/ingest", json={"file_path": str(note)}, headers=_headers(token)).status_code
+            )
+        )
+        ingest.start()
+        assert reached.wait(60), "the ingest never reached the index write"
+        assert client.post(f"{API}/auth/lock", headers=_headers(token)).status_code == 200
+        assert not session_key.is_unlocked()
+        release.set()
+        ingest.join(60)
+
+        monkeypatch.setattr(vector_store, "_get_collection", real_get_collection)
+        stored = vector_store._get_collection().get(include=["documents", "metadatas"])
+
+    assert not any(secret in text for text in stored["documents"]), "chunk text reached disk in plaintext"
+    assert not [m for m in stored["metadatas"] if m.get("file_path")], "file path reached disk in plaintext"
+    assert result.get("status") != 200, "an ingest that could not be encrypted reported success"

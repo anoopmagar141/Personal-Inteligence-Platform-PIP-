@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-27] claude · Made vector_store refuse to read or write the index when the active profile has a password but no key is held, instead of falling back to plaintext · why: an ingest in flight at sign-out stored its chunk text and path in plaintext, and it survived the next sign-in's rebuild (FREEZE_LIST §7.8) · files: backend/memory/vector_store.py, backend/tests/test_profile_boundary.py, docs/LOG.md
+
 - [2026-09-27] claude · Made sign-out empty the response cache, so the next profile to sign in is no longer served the previous one's answers, with an end-to-end test through the real auth and chat routes · why: measured in FREEZE_LIST §7.8, a second profile received an answer built from the first profile's documents with its own model never called · files: backend/core/session_key.py, backend/core/response_cache.py, backend/tests/test_profile_boundary.py, docs/LOG.md
 
 - [2026-09-27] claude · Ran the end-to-end profile boundary test through the real routes and recorded it in FREEZE_LIST §7.8: profile B was served profile A's document-based answer, an ingest in flight at sign-out stored plaintext that survived A's next sign-in, and uploads go to one shared plaintext folder rather than the profile's own · why: §7.7 named it the single test that could confirm or refute Pattern 1 · files: docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-09] claude · Wrote the hook-install requirement into docs/CONVENTIONS.md and installed the hooks on this machine · why: core.hooksPath is per-clone and cannot be committed, so the repo carried the cap rule and a LOG entry saying the check was added while no hook was installed to run it · files: docs/CONVENTIONS.md
 
-- [2026-09-09] claude · Rebuilt dist/PIP-Setup.exe from a clean flutter build and verified it: 31,615/31,615 files byte-identical to the payload, sha256 7CE29ABA6F129C21886B473F82C9097CA1BA471862AB4363F9CA6C7AE20D3254 · why: the 76 MB installer in dist/ predated its own payload by 22 minutes and carried an empty version resource, so it was untrusted and replaced rather than explained · files: dist/PIP-Setup.exe (gitignored artefact; recorded here for provenance)
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -67,3 +67,4 @@ Format:
 - 2026-09-09 (claude): gave the active-model dropdown isExpanded and covered the providers screen either side of its 720px cap, ending a RenderFlex overflow per pulled model.
 - 2026-09-09 (claude): corrected the packaging path drift in AGENTS.md and installer/PIP.iss (payload staged at <drive>\pip-build\PIP, not dist/PIP) and recorded the MAX_PATH reason in ARCHITECTURE.md.
 - 2026-09-09 (claude): made scripts/build_installer.ps1 refuse an incomplete, dirty or stale payload and fail a suspiciously small installer.
+- 2026-09-09 (claude): rebuilt dist/PIP-Setup.exe from a clean flutter build and verified 31,615/31,615 files byte-identical to the payload (sha256 7CE29ABA…3254).
