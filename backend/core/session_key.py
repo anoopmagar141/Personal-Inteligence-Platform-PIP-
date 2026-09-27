@@ -44,7 +44,7 @@ import threading
 import time
 from pathlib import Path
 
-from backend.core import db_key
+from backend.core import db_key, response_cache
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +81,22 @@ def lock() -> None:
     which was true and was the whole problem: unlock had an endpoint and a
     screen, lock had neither, so once PIP was open the only way to close it
     was to end the process.
+
+    Also empties the response cache, and it is here rather than in the sign-out
+    route because this is the one thing every way out of a session goes
+    through - sign-out, profile deletion, and switching, which is refused
+    until this has run. The cache lives for the life of the process and is
+    keyed on the message alone, so without this the next profile to sign in
+    was served the previous one's answers: measured end to end, a second
+    profile asking the same question got an answer built from the first
+    profile's documents, with its own model never called (FREEZE_LIST §7.8).
     """
     global _key, _failed_attempts
     with _guard:
         _key = None
         _failed_attempts = 0
     os.environ.pop("PIP_DB_KEY", None)
+    response_cache.clear()
 
 
 def adopt_environment_key() -> bool:

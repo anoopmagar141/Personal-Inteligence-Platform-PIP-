@@ -115,5 +115,9 @@ def set(
 
 
 def clear() -> None:
-    """Test/ops convenience - not called anywhere in the pipeline itself."""
+    """
+    Called by session_key.lock(), so nothing cached in one signed-in session
+    survives into the next - which may be a different profile's. Not called
+    anywhere in the pipeline itself.
+    """
     _cache.clear()
