@@ -136,7 +136,12 @@ so there is one write path, not two.
 - **The response cache sits between Stage 2 and Stage 7**, so a hit skips
   Stages 3–9, not just the LLM call. TTLs are per intent category in
   `backend/config/settings.json`; `project_question` and `personal_question` are
-  `0`, `general_knowledge` is 86400.
+  `0`, `general_knowledge` is 86400. The key also carries
+  `profile_store.record_version()`, a counter that database triggers bump on
+  any write to a table the context can draw from (`RECORD_TABLES`), so an
+  answer cached before a document, decision or profile change is never
+  served after it - the TTL and decision-log rules alone are only checked
+  when an answer is stored.
 - **Provider order is policy.** `pipeline.OLLAMA_PRIORITY = 50` and
   `llm_endpoints.priority` defaults to 100, so a newly configured cloud endpoint
   sits *behind* the local model and cannot silently start sending conversations
@@ -237,9 +242,9 @@ so there is one write path, not two.
 - **Sign-out takes the session's in-process state with it.** One backend
   process serves every profile, so the key is not the only thing a session
   leaves behind. `session_key.lock()` - the path every sign-out, delete and
-  switch goes through - also empties the response cache, which is keyed on
-  the message alone and would otherwise answer the next profile with the last
-  one's replies. Work already running when the key goes keeps its database
+  switch goes through - also empties the response cache, whose key names no
+  profile and would otherwise answer the next profile with the last one's
+  replies. Work already running when the key goes keeps its database
   connection, so `vector_store` refuses to read or write the index when the
   active profile has a salt but no key is held (`IndexLockedError`) instead of
   falling back to plaintext. And the next sign-in's catch-up is queued behind

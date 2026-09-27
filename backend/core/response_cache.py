@@ -54,8 +54,16 @@ def _normalize(message: str) -> str:
     return " ".join(message.strip().lower().split())
 
 
-def cache_key(user_message: str, project_id: Optional[str]) -> str:
-    raw = _normalize(user_message) + "|" + (project_id or "")
+def cache_key(user_message: str, project_id: Optional[str], record_version: Optional[int] = None) -> str:
+    # record_version is profile_store.record_version(): it moves whenever
+    # anything the answer could have been built from changes, so an answer
+    # cached before a new document, decision or profile edit is simply never
+    # found again. It used to be absent, and the TTL and decision-log rules
+    # were checked only when an answer was stored - after the record changed,
+    # the old answer kept being served (FREEZE_LIST §7.6).
+    raw = _normalize(user_message) + "|" + (project_id or "") + "|" + (
+        "" if record_version is None else str(record_version)
+    )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -67,7 +75,9 @@ def ttl_for_category(category: str) -> int:
     return settings[ttl_key]
 
 
-def get(user_message: str, project_id: Optional[str] = None) -> Optional[dict[str, Any]]:
+def get(
+    user_message: str, project_id: Optional[str] = None, record_version: Optional[int] = None
+) -> Optional[dict[str, Any]]:
     """
     Returns {"response_text": str, "stage_hints": dict} for a live cache entry,
     else None. Failure mode: any lookup error returns None (fail open - the
@@ -75,7 +85,7 @@ def get(user_message: str, project_id: Optional[str] = None) -> Optional[dict[st
     correctness, so a broken cache must never block a response).
     """
     try:
-        key = cache_key(user_message, project_id)
+        key = cache_key(user_message, project_id, record_version)
         entry = _cache.get(key)
         if entry is None:
             return None
@@ -96,6 +106,7 @@ def set(
     response_text: str,
     stage_hints: dict[str, Any],
     decision_log_hit: bool = False,
+    record_version: Optional[int] = None,
 ) -> None:
     """
     Writes a response at the category's TTL, unless the response involved a
@@ -110,7 +121,7 @@ def set(
     ttl = ttl_for_category(category)
     if ttl <= 0:
         return
-    key = cache_key(user_message, project_id)
+    key = cache_key(user_message, project_id, record_version)
     _cache[key] = (time.monotonic() + ttl, response_text, stage_hints)
 
 

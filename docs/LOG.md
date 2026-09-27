@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-28] claude · Keyed the response cache on a record version that database triggers bump on any write to a table the context draws from, so a cached answer is never served after a document, decision or profile change · why: an answer cached with no context was replayed after matching context existed (FREEZE_LIST §7.6) · files: backend/core/schema.sql, backend/memory/profile_store.py, backend/core/response_cache.py, backend/core/pipeline.py, backend/tests/test_answers_about_the_user.py, docs/ARCHITECTURE.md, docs/LOG.md
+
 - [2026-09-28] claude · Stopped the prompt presenting what Stage 4 looked up as the user's whole record: the header now says each section is complete and names the sections not looked up, and rule 4 says 'not in front of you' instead of 'not recorded' · why: a fact in a section the category never fetched was to be reported as not recorded (FREEZE_LIST §7.5) · files: backend/stages/stage_07_context_assembly.py, backend/tests/test_answers_about_the_user.py, backend/tests/test_stage_07_context_assembly.py, docs/LOG.md
 
 - [2026-09-28] claude · Made Stage 4 look up identity and active projects for every question category, with a prompt-level test over the 14 Track 4a questions · why: 10 of 14 ordinary ways of asking about your own work reached the model without the project (FREEZE_LIST §7.5) · files: backend/stages/stage_04_memory_lookup.py, backend/tests/test_answers_about_the_user.py, backend/tests/test_stage_04_memory_lookup.py, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-10] claude · Shipped MSVCP140/VCRUNTIME140/VCRUNTIME140_1 in the payload's app\ folder and made the payload gate require them · why: the Flutter exe imports them, a clean Windows install has none, and this build machine's System32 hid that from every test · files: scripts/build_portable.ps1, scripts/build_installer.ps1, docs/ARCHITECTURE.md
 
-- [2026-09-10] claude · Replaced the iris artwork with the six-node mark, rendered it to both .ico files, the wizard panel and a light/dark pair of app assets, and rebuilt the installer from it · why: the mark PIP ships under changed, and one script owning every raster is what stops the window icon, the installer and the picture inside the app drifting apart · files: installer/pip-mark.svg, installer/pip-iris-blue.svg (deleted), scripts/make_icons.py, installer/PIP.iss, frontend/flutter/lib/logo.dart, frontend/flutter/pubspec.yaml, frontend/flutter/assets/*, frontend/flutter/windows/runner/resources/app_icon.ico
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -73,3 +73,4 @@ Format:
 - 2026-09-10 (claude): replaced the thinking orb's dot cloud with the PIP mark turning; the states and the backend's labels were unchanged.
 - 2026-09-10 (claude): added an in-app .pipbak restore - the conversion runs while the app is open, the file swap is staged for the next start.
 - 2026-09-10 (claude): rebuilt dist/PIP-Setup.exe twice from this code (the first predated a Backup-tab refresh fix found by running it); final sha256 69F2791D…BFCD.
+- 2026-09-10 (claude): replaced the iris artwork with the six-node mark across both .ico files, the installer wizard and the app assets, and rebuilt the installer from it.

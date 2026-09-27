@@ -380,6 +380,52 @@ def initialize_schema(conn) -> None:
     rebuild_active_projects_if_stale(conn)
     backfill_document_blobs(conn)
     seed_provider_consent(conn)
+    install_record_version_triggers(conn)
+
+
+# Every table whose contents can reach the model's context: the profile
+# sections Stage 4 renders, the decision log Stage 3 searches, the documents
+# RAG indexes and the session snapshot. A write to any of them bumps
+# record_version (see schema.sql), which is part of the response cache key.
+#
+# Measured before this existed: an answer cached with no context was served,
+# the model never called, after a matching document was indexed and after a
+# matching decision was logged (FREEZE_LIST §7.6). The cache enforced its
+# freshness rules only when it stored an answer, never when it served one.
+#
+# None of these is written on the per-message path - that would bump the
+# version on every turn and quietly turn the cache off, which
+# test_an_unchanged_record_is_still_answered_from_the_cache exists to catch.
+RECORD_TABLES = (
+    "identity",
+    "skill_memory",
+    "preference_memory",
+    "goal_memory",
+    "interaction_style",
+    "active_projects",
+    "topic_interests",
+    "preferred_tools",
+    "document_access_patterns",
+    "decision_log",
+    "documents",
+    "session_snapshot",
+)
+
+
+def install_record_version_triggers(conn) -> None:
+    for table in RECORD_TABLES:
+        for event in ("INSERT", "UPDATE", "DELETE"):
+            conn.execute(
+                f"CREATE TRIGGER IF NOT EXISTS record_version_{table}_{event.lower()} "
+                f"AFTER {event} ON {table} BEGIN "
+                f"UPDATE record_version SET version = version + 1 WHERE id = 1; END"
+            )
+    conn.commit()
+
+
+def record_version(conn) -> int:
+    row = conn.execute("SELECT version FROM record_version WHERE id = 1").fetchone()
+    return int(row[0]) if row else 0
 
 
 def store_document_content(conn, document_id: int, content: bytes) -> None:

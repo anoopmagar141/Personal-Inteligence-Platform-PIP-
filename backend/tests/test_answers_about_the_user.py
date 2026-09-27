@@ -134,3 +134,83 @@ def test_a_user_with_no_projects_is_still_told_so_plainly(conn):
     prompt = _prompt_for(conn, "what am I working on?")
 
     assert "Projects: none recorded." in prompt
+
+
+
+# Each question is one Stage 1 files as technical_explanation, which is cached
+# for 24h - and none of them names the seeded project, since a message naming
+# an active project is a project_question and never cached at all. A first
+# draft asked about "the Heliotrope sync engine" and so tested nothing: the
+# control failed and every staleness case passed on the unfixed code.
+
+
+def _ask_twice(conn, question, change) -> tuple[RecordingProvider, dict]:
+    """Ask, apply `change`, ask the same words again. Returns the provider the
+    second ask used and its stage hints."""
+    pipeline.run_sync(conn, question, providers=[RecordingProvider()])
+    change()
+    second = RecordingProvider()
+    result = pipeline.run_sync(conn, question, providers=[second])
+    return second, result["stage_hints"]
+
+
+def test_an_unchanged_record_is_still_answered_from_the_cache(seeded):
+    """The control: the fixes below must not work by switching the cache off."""
+    second, hints = _ask_twice(seeded, "explain how a write-ahead journal works", lambda: None)
+
+    assert hints.get("cache_hit") is True
+    assert second.prompts == []
+
+
+def test_a_cached_answer_is_not_served_after_a_document_is_added(seeded):
+    """§7.6: replayed with the model never called, after a document that
+    answers the question had been indexed."""
+    from pathlib import Path
+    import os
+
+    def add_document():
+        root = Path(os.environ["PIP_DOCUMENTS_ROOT"])
+        root.mkdir(parents=True, exist_ok=True)
+        doc = root / "journal.txt"
+        doc.write_text(
+            "How a write-ahead journal works: every change is appended to the journal "
+            "before it is applied, so a crash can be replayed. Codename QUOKKA-7.",
+            encoding="utf-8",
+        )
+        vector_store.ingest_document(seeded, str(doc))
+
+    second, _ = _ask_twice(seeded, "explain how a write-ahead journal works", add_document)
+
+    assert second.prompts, "the cached answer was served after the document was added"
+    assert "QUOKKA-7" in second.prompts[-1]
+
+
+def test_a_cached_answer_is_not_served_after_a_decision_is_logged(seeded):
+    """§7.6: the decision log "always overrides" was enforced only when an
+    answer was stored, never when one was served - here the question even
+    becomes a never-cached project question once the decision exists."""
+    from backend.memory import decision_log
+
+    def log_decision():
+        decision_log.create_decision(
+            seeded,
+            text="We decided to order sync edits with vector clocks instead of timestamps",
+            reasoning="because device clocks drift",
+            alternatives="wall-clock timestamps",
+        )
+
+    second, _ = _ask_twice(seeded, "explain how vector clocks work", log_decision)
+
+    assert second.prompts, "the cached answer was served after the decision was logged"
+    assert "instead of timestamps" in second.prompts[-1]
+
+
+def test_a_cached_answer_is_not_served_after_the_profile_changes(seeded):
+    second, _ = _ask_twice(
+        seeded,
+        "explain how a bloom filter works",
+        lambda: profile_store.create_project(seeded, "Quillwort", "A second project"),
+    )
+
+    assert second.prompts, "the cached answer was served after a project was added"
+    assert "Quillwort" in second.prompts[-1]

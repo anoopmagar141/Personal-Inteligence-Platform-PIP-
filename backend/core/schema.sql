@@ -576,3 +576,21 @@ CREATE TABLE IF NOT EXISTS document_blobs (
     stored_at TEXT NOT NULL,
     FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
 );
+
+-- record_version Table
+--
+-- One counter that moves whenever anything a cached answer could have been
+-- built from changes. The response cache keys on it, so an answer cached
+-- before a document, decision or profile change is never served after it.
+--
+-- Bumped by triggers rather than by the code that writes, because that code
+-- is everywhere - ingestion, the Observer, corrections, decisions, projects -
+-- and a writer added later would have to remember. A trigger cannot be
+-- forgotten. The triggers themselves are created by
+-- profile_store.install_record_version_triggers() from one list of tables, so
+-- the list lives in exactly one place.
+CREATE TABLE IF NOT EXISTS record_version (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    version INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO record_version (id, version) VALUES (1, 0);

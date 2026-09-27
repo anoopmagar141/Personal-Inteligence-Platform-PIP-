@@ -39,7 +39,7 @@ import logging
 from typing import Any, Callable, Generator, Optional, Union
 
 from backend.core import response_cache, trace
-from backend.memory import llm_endpoint_store
+from backend.memory import llm_endpoint_store, profile_store
 from backend.memory import session_snapshot
 from backend.providers.base_provider import BaseLLMProvider
 from backend.providers.ollama_provider import OllamaProvider
@@ -303,7 +303,23 @@ def run(
 
     # Response Cache (Part 7.1) - positioned here (between Stage 2 and Stage 7)
     # deliberately: a hit skips Stages 3-9 entirely, not just Stage 9's LLM call.
-    cached = response_cache.get(user_message, project_id)
+    #
+    # Keyed on the record version as well as the message, so nothing cached
+    # before the user's documents, decisions or profile changed is served
+    # after. Read once, here: an answer is stored under the version it was
+    # built from. If it cannot be read the cache is skipped both ways for this
+    # turn - serving a possibly stale answer is the failure this key exists
+    # to prevent.
+    try:
+        record_version = profile_store.record_version(conn)
+    except Exception as e:
+        logger.error(f"Pipeline: could not read the record version, bypassing the cache: {e}")
+        record_version = None
+    cached = (
+        response_cache.get(user_message, project_id, record_version)
+        if record_version is not None
+        else None
+    )
     if cached is not None:
         trace.stage_log(conn, trace_id, "response_cache", "ok", "cache hit, skipping Stages 3-9")
         cache_hint = dict(cached["stage_hints"])
@@ -475,11 +491,12 @@ def run(
     status = aggregate["status"]
     trace.stage_log(conn, trace_id, "stage_09_llm_streaming", "error" if status == "error" else "ok", f"status={status}", error_detail=aggregate["error"] or "")
 
-    if status == "success":
+    if status == "success" and record_version is not None:
         response_cache.set(
             user_message, project_id, intent_result["category"],
             aggregate["response_text"], aggregate["stage_hints"],
             decision_log_hit=bool(decision_entries),
+            record_version=record_version,
         )
 
     # Stage 10
