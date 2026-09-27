@@ -5,7 +5,7 @@ Location in the repo: `docs/FREEZE_LIST.md`.
 
 **Status: evidence-first freeze.** Five discovery/test tasks sent; All five
 tracks returned (§7.2–§7.6); cross-track synthesis done (§7.7); end-to-end
-profile boundary test run (§7.8). No fix authorized yet. No production code has been changed under
+profile boundary test run (§7.8); profile boundary fixes landed (§7.9). No production code has been changed under
 this freeze.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
@@ -84,8 +84,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the sixteen oldest are rolled into
-  twelve Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the seventeen oldest are rolled into
+  thirteen Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -789,10 +789,64 @@ on disk. Category A.**
 
 **Status of the test.** It prints observations rather than asserting
 correct behaviour, because all three defects are present and a test that
-asserts the fix would fail. Kept outside the repository pending a decision:
+asserts the fix would fail. It was kept outside the repository pending a
+decision, and was superseded by `test_profile_boundary.py` (§7.9):
 - commit it as a strict `xfail` that turns green when fixed; or
 - commit it with the fix, as Pattern 1's regression test (§2.2: test in
   the same commit as the change).
+
+### 7.9 Profile boundary fixes (authorized 2026-09-27)
+
+This is the first fix authorization under the freeze: §7.7's suggested
+item 1, plus the §7.8 upload finding. Each fix followed §2.2:
+- a promise, and the mechanism that enforces it;
+- an end-to-end test through the real routes, **seen failing on the
+  unfixed code** for the stated reason (which is the break-it);
+- the smallest change, then the full suite;
+- one commit per promise.
+
+All five tests are in `backend/tests/test_profile_boundary.py`, which is
+now Pattern 1's regression test.
+
+| Commit | Promise | Mechanism | Seen failing before the fix as |
+|---|---|---|---|
+| `a1a1a6b` | An answer cached in one session is never served after it ends, in particular to the next profile | `session_key.lock()` empties the response cache | Bob's question never reached his model |
+| `a37da7c` | No chunk or file path is written to the index in plaintext while the profile's DB is encrypted | `vector_store._get_db_key()` raises `IndexLockedError` when the profile has a salt but no key is held | chunk text reached disk in plaintext |
+| `be74d70` | A document uploaded in a profile is stored in that profile's folder, and no other profile can ingest it | `vector_store.documents_root()` follows the profile; the `DOCUMENTS_ROOT` constant is removed; `adopt_shared_documents()` copies legacy records in at sign-in | the upload was stored in the shared folder; the legacy record was never adopted |
+| `9327887` | Each sign-in runs its own catch-up | `_start_catch_up()` queues behind a running catch-up instead of skipping | Bob's unobserved conversation was never recovered |
+
+The full suite passed after every commit; the last run was 1199 passed.
+
+**The fourth promise was not in the authorized list.** It was found while
+fixing the second one. The catch-up started by `/auth/setup` was still
+running at sign-out, and it hit the new refusal, which was correct. But
+the next sign-in then skipped its own catch-up because one "was running".
+- This corrects the claim made when the fixes were planned, that
+  fail-closed "covers" Track 2 recommendation 2. The refusal stopped the plaintext,
+  but the refused work was never redone until catch-ups were queued.
+- It was fixed under the same authorization, because it sits on the same
+  boundary and a sign-in with no catch-up is a new session left without
+  its recovery. Flagged here so the owner can object.
+
+**Deliberately not covered (still open):**
+- **Plaintext already on disk is not scrubbed.** That covers:
+  - chunks written by the old in-flight path;
+  - the originals left in the old shared folder (copied, not moved,
+    because another profile may name the same file);
+  - uploaded files, which are still written to the profile's folder as
+    the uploaded bytes.
+
+  The last contradicts Promise 7's "document text … encrypted at rest"
+  for the file copy. It now needs a wording decision or a separate fix.
+- **Same-profile staleness** (§7.6 recommendation 2): a new document or
+  decision still does not invalidate a cached answer within one session.
+  That is item 2 of the fix order.
+- **`/rag/upload` holds the event loop while it embeds** (§7.8, inferred
+  from timing). This is out of scope, and it is also why that route could
+  not interleave with sign-out.
+- **Promise 8 wording.** Profile isolation now has mechanisms and tests
+  for the four paths above. Writing it as a promise is still an owner
+  decision (§7.7).
 
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
@@ -830,7 +884,8 @@ findings.
 | Promise 4 threshold measurement | Not started | — |
 | Database census | Not run | — |
 | Cross-track synthesis | Done 2026-09-27 (§7.7) | 5 confirmed patterns; 2 candidate promises; fix order recommended |
-| End-to-end profile boundary | Run 2026-09-27 (§7.8) | Cross-profile cache and in-flight plaintext confirmed via real routes; uploads not per-profile and plaintext on disk (A) |
+| End-to-end profile boundary | Run 2026-09-27 (§7.8); now `test_profile_boundary.py` | Cross-profile cache and in-flight plaintext confirmed via real routes; uploads not per-profile and plaintext on disk (A) |
+| Profile boundary fixes | Landed 2026-09-27 (§7.9) | 4 promises enforced and tested; plaintext already on disk and same-profile staleness still open |
 
 ---
 
