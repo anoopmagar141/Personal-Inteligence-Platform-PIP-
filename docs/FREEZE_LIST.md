@@ -6,10 +6,10 @@ Location in the repo: `docs/FREEZE_LIST.md`.
 **Status: evidence-first freeze, fixing by explicit authorization.** All
 five evidence tracks returned (§7.2–§7.6); cross-track synthesis done
 (§7.7); end-to-end profile boundary test run (§7.8). Production code has
-changed only under three explicit authorizations, each fix test-first with
+changed only under four explicit authorizations, each fix test-first with
 the test seen failing: profile boundary (§7.9), answers about the user
-(§7.10), lost learning (§7.11). Everything else in §7.7's fix order is
-still frozen.
+(§7.10), lost learning (§7.11), lock identity (§7.12). Everything else in
+§7.7's fix order is still frozen.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The seven promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -87,8 +87,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the twenty-four oldest are rolled into
-  twenty Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the twenty-five oldest are rolled into
+  twenty-one Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -935,6 +935,57 @@ isolation it passed 15/15 on the change and 15/15 on the previous commit.
 start until a local provider exists. The check happens before any call, so
 a start with none still sends nothing.
 
+### 7.12 Lock identity fix (authorized 2026-09-28)
+
+§7.7's suggested item 4: the §7.4 recommendation.
+
+- **Promise:** the instance lock counts as held only by the process that
+  took it. A later process handed the same PID does not block PIP.
+- **Mechanism:** `data/pip.lock` holds `<pid> <creation time>`.
+  `instance_lock.holder()` is the only place the rule is decided: held
+  means that PID is alive **and** was created at that time. A creation
+  time that cannot be read counts as held, so it fails toward refusing a
+  free lock, never taking a held one. Every gate asks `holder()`:
+  - `acquire()`;
+  - the `restore_backup`, `merge_projects` and `seed_demo_conversation`
+    gates;
+  - the launcher, through the backend's own Python.
+  A bare-PID file keeps its old meaning.
+- **Tests:** `backend/tests/test_lock_identity.py`. A real holder takes
+  the lock and exits, then the PID in the file is pointed at a live
+  `ping.exe`, which is the state reuse leaves. On the unfixed code the
+  backend, the restore script and the launcher's real block, cut from
+  `launch_pip.ps1`, each refused. They were three tests, seen failing
+  separately, and each passes now. The control, a live holder, is still
+  refused by all three.
+- **Commit:** `c940bed`.
+- **Full suite:** 1220 passed and 4 failed. One was a lifespan test that
+  read the file with `int()`; it was fixed in the same commit, and its
+  file now passes 65/65. The other three are the Ollama-dependent tests
+  (§7.3).
+
+**Two decisions made during the fix (the owner may object):**
+- **The launcher no longer repeats the rule in PowerShell.** The obvious
+  port compares `Process.StartTime`, which is local time. Converting it
+  back can be an hour off for a process started in the hour the clocks go
+  back, and that error deletes a *live* lock, which is the one failure
+  this lock exists to prevent. The launcher now asks `holder()` through
+  Python, so the rule has one copy (§2.3).
+- **Every script that parsed the file with `int()` had to change with the
+  format.** Otherwise they would have read the new format as "not
+  running", and a restore would have run over a live database.
+
+**Not covered (still open):**
+- `acquire()` still checks the file and then writes it without an atomic
+  create. That is the §7.4 race note; it is not PID reuse, and it was not
+  tested.
+- The Linux branch of `_process_started_at` (`/proc/<pid>/stat`) is
+  untested; this machine is Windows. Anywhere else the time is not
+  recorded, and the lock behaves as before.
+- Five note-only scripts (`_db.py` and four seed/cleanup scripts) print
+  the file's raw contents, now including the creation time. That is
+  cosmetic.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -964,7 +1015,7 @@ findings.
 |-------|--------|----------------|
 | 1 Observer/provider gate | Returned 2026-09-26 (§7.2) | C; plus A (startup queue, fixed §7.11) and D (wording, open) |
 | 2 `PIP_DB_KEY` | Returned 2026-09-26 (§7.3) | Main DB read: C (redundant). `vector_store` read: A (load-bearing, fails open to plaintext) |
-| 3 PID-reuse lock | Returned 2026-09-27 (§7.4) | B: stores a bare PID, so a reused PID blocks startup |
+| 3 PID-reuse lock | Returned 2026-09-27 (§7.4) | B: stores a bare PID, so a reused PID blocks startup (fixed §7.12) |
 | 4a Stage 1 routing | Returned 2026-09-27 (§7.5) | A: 10 of 14 identity/project questions lose the project; header then claims a complete record |
 | 4b Cache safety | Returned 2026-09-27 (§7.6) | A: stale no-context answers replayed after documents/decisions exist; one profile's answer served to another |
 | Promises 1–3 tests | Not yet written | — |
@@ -975,6 +1026,7 @@ findings.
 | Profile boundary fixes | Landed 2026-09-27 (§7.9) | 4 promises enforced and tested; plaintext already on disk and same-profile staleness still open |
 | Answers-about-the-user fixes | Landed 2026-09-28 (§7.10) | 3 promises enforced and tested; real-model effect of the new header unmeasured |
 | Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
+| Lock identity fix | Landed 2026-09-28 (§7.12) | Reused PIDs no longer block PIP; atomic-create race and Linux branch untested |
 
 ---
 

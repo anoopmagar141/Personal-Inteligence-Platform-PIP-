@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-28] claude · Recorded the lock identity fix in FREEZE_LIST §7.12, including the two decisions taken during it (the launcher asks holder() through Python; every int() parser moved with the format) · why: the freeze doc is the canonical record of what is enforced · files: docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-09-28] claude · Made the instance lock record the holder's creation time beside its PID and made every gate (backend, launcher, restore, merge, demo seed) ask instance_lock.holder(), so a reused PID no longer reads as PIP running · why: a lock naming a live non-PIP process blocked all of them (FREEZE_LIST §7.4) · files: backend/core/instance_lock.py, scripts/launch_pip.ps1, scripts/restore_backup.py, scripts/merge_projects.py, scripts/seed_demo_conversation.py, backend/tests/test_lock_identity.py, backend/tests/test_instance_lock.py, backend/tests/test_api_server.py, docs/ARCHITECTURE.md, docs/LOG.md
 
 - [2026-09-28] claude · Recorded the lost-learning fix in FREEZE_LIST §7.11, marked §7.2 finding 1 fixed, and corrected the doc's status line, which still said no production code had changed under the freeze · why: claims match mechanisms (§2.3) · files: docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-18] codex · Simplified onboarding and sourced timezone from the local system automatically · why: timezone and current-project prompts added unnecessary first-run form fields · files: frontend/flutter/lib/onboarding_screen.dart, frontend/flutter/test/onboarding_screen_test.dart, docs/LOG.md
 
-- [2026-09-18] codex · Removed the empty Default profile from new-account and first-run flows · why: a placeholder account was displayed beside the profile the user just created · files: backend/core/profiles.py, backend/api/server.py, backend/tests/test_profiles.py, backend/tests/test_profile_management.py, frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/test/sign_in_screen_test.dart, docs/ARCHITECTURE.md, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -78,3 +78,4 @@ Format:
 - 2026-09-12 (codex): rebuilt PIP-Setup.exe and completed an isolated install, runtime-load and uninstall smoke test.
 - 2026-09-14 (codex): added an explicit first-run Create/Import gateway before password setup, replacing a synthetic empty default profile.
 - 2026-09-14 (codex): aligned the first-run backup picker with the project's desktop file-picker API.
+- 2026-09-18 (codex): removed the empty Default profile from new-account and first-run flows.
