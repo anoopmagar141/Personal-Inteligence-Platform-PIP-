@@ -88,8 +88,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the twenty-six oldest are rolled into
-  twenty-two Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the twenty-seven oldest are rolled into
+  twenty-three Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -348,7 +348,8 @@ deleted) — **recommendations only, nothing implemented:**
 3. **Promise 5 wording names a column that does not exist (category D).**
    There is no `provider_consent.is_local`. The attested record is
    `provider_consent.is_cloud` together with `llm_endpoints.is_local`. The
-   wording needs an owner decision; it is not changed here.
+   wording needs an owner decision; it is not changed here. **Resolved
+   2026-09-28: Promise 5 reworded in §4 (`2003817`).**
 
 Not in scope, noted: `server.py` `_default_observer_provider` carries an
 unreachable duplicate of its own fallback block after `return ollama`.
@@ -1081,11 +1082,11 @@ findings.
 
 | Track | Report | Classification |
 |-------|--------|----------------|
-| 1 Observer/provider gate | Returned 2026-09-26 (§7.2) | C; plus A (startup queue, fixed §7.11) and D (wording, open) |
-| 2 `PIP_DB_KEY` | Returned 2026-09-26 (§7.3) | Main DB read: C (redundant). `vector_store` read: A (load-bearing, fails open to plaintext) |
+| 1 Observer/provider gate | Returned 2026-09-26 (§7.2) | C; plus A (startup queue, fixed §7.11) and D (wording, fixed in §4 Promise 5). Finding 2, two locality records, still open |
+| 2 `PIP_DB_KEY` | Returned 2026-09-26 (§7.3) | Main DB read: C (redundant, unchanged). `vector_store` read: A (load-bearing, failed open to plaintext; now fails closed, §7.9). Key still exported to the environment, stated in Promise 7 |
 | 3 PID-reuse lock | Returned 2026-09-27 (§7.4) | B: stores a bare PID, so a reused PID blocks startup (fixed §7.12) |
-| 4a Stage 1 routing | Returned 2026-09-27 (§7.5) | A: 10 of 14 identity/project questions lose the project; header then claims a complete record |
-| 4b Cache safety | Returned 2026-09-27 (§7.6) | A: stale no-context answers replayed after documents/decisions exist; one profile's answer served to another |
+| 4a Stage 1 routing | Returned 2026-09-27 (§7.5) | A: 10 of 14 identity/project questions lost the project; header claimed a complete record. Recommendations 1–2 fixed (§7.10); 3, Stage 1 precedence, open |
+| 4b Cache safety | Returned 2026-09-27 (§7.6) | A: stale answers replayed after documents or decisions existed; one profile's answer served to another. Cross-profile fixed (§7.9), staleness fixed (§7.10) |
 | Promises 1–3 tests | Not yet written | — |
 | Promise 4 threshold measurement | Not started | — |
 | Database census | Not run | — |

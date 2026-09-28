@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-28] claude · Brought the FREEZE_LIST §8.2 status table up to date with the fixes and wording that landed after each track reported, and marked Track 1 finding 3 resolved · why: the table still listed the Promise 5 wording as open and did not say 2, 4a or 4b had been fixed · files: docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-09-28] claude · Applied the decided promise wording: Promise 5 names both locality records and the queue-until-later-start behaviour, Promise 7 gets its final key clause and states the unencrypted upload copy as a limitation, Promises 8 (profile isolation) and 9 (current record) are adopted, and AGENTS.md's Current focus no longer ties the freeze to the tracks being classified · why: owner decision on §7.7 item 5 · files: docs/FREEZE_LIST.md, AGENTS.md, docs/LOG.md
 
 - [2026-09-28] claude · Recorded the lock identity fix in FREEZE_LIST §7.12, including the two decisions taken during it (the launcher asks holder() through Python; every int() parser moved with the format) · why: the freeze doc is the canonical record of what is enforced · files: docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-19] codex · Documented normal and developer launch commands and their locked sign-in behavior · why: the Flutter README was a stock template and did not explain the two supported launch paths · files: frontend/flutter/README.md, docs/ARCHITECTURE.md, docs/LOG.md
 
-- [2026-09-19] codex · Made the development launcher profile-neutral and selected its initial profile from the sign-in screen · why: neither a password nor a profile belongs in the terminal before PIP opens · files: scripts/run_dev.ps1, scripts/_profiles.ps1, scripts/launch_pip.ps1, frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/test/sign_in_screen_test.dart, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -80,3 +80,4 @@ Format:
 - 2026-09-14 (codex): aligned the first-run backup picker with the project's desktop file-picker API.
 - 2026-09-18 (codex): removed the empty Default profile from new-account and first-run flows.
 - 2026-09-18 (codex): simplified onboarding and sourced the timezone from the local system automatically.
+- 2026-09-19 (codex): made the development launcher profile-neutral, with the initial profile chosen on the sign-in screen.
