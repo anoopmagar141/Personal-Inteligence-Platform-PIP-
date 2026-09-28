@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-28] claude · Added end-to-end tests for Promises 1-3 through the real session-end path and recorded them in FREEZE_LIST §7.13: all three hold, each break-it seen failing, plus two findings (decision candidates bypass the evidence gate; immutable field names can be shadowed in preference_memory) · why: the graded governance layer had no tests for its own promises · files: backend/tests/test_observer_governance.py, docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-09-28] claude · Brought the FREEZE_LIST §8.2 status table up to date with the fixes and wording that landed after each track reported, and marked Track 1 finding 3 resolved · why: the table still listed the Promise 5 wording as open and did not say 2, 4a or 4b had been fixed · files: docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-09-28] claude · Applied the decided promise wording: Promise 5 names both locality records and the queue-until-later-start behaviour, Promise 7 gets its final key clause and states the unencrypted upload copy as a limitation, Promises 8 (profile isolation) and 9 (current record) are adopted, and AGENTS.md's Current focus no longer ties the freeze to the tracks being classified · why: owner decision on §7.7 item 5 · files: docs/FREEZE_LIST.md, AGENTS.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-19] antigravity · Cleared stale lock before backend startup and made Ollama optional when other endpoints are configured · why: a dead previous session caused silent backend crashes and hardcoding Ollama meant an unnecessary timeout penalty for users with alternative API providers · files: scripts/launch_pip.ps1, backend/core/pipeline.py, backend/api/server.py
 
-- [2026-09-19] codex · Documented normal and developer launch commands and their locked sign-in behavior · why: the Flutter README was a stock template and did not explain the two supported launch paths · files: frontend/flutter/README.md, docs/ARCHITECTURE.md, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -81,3 +81,4 @@ Format:
 - 2026-09-18 (codex): removed the empty Default profile from new-account and first-run flows.
 - 2026-09-18 (codex): simplified onboarding and sourced the timezone from the local system automatically.
 - 2026-09-19 (codex): made the development launcher profile-neutral, with the initial profile chosen on the sign-in screen.
+- 2026-09-19 (codex): documented the normal and developer launch commands and their locked sign-in behaviour.

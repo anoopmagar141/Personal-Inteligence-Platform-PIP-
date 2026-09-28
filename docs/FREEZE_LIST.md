@@ -88,8 +88,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the twenty-seven oldest are rolled into
-  twenty-three Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the twenty-eight oldest are rolled into
+  twenty-four Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -116,16 +116,24 @@ gate → Stage 12 → Stage 13.
 storage that skips governance. A static import guard is a guard, not a
 proof. A valid candidate must still be written; rejecting everything
 proves the wrong property.
+**Evidence (2026-09-28):** holds for memory candidates -
+`backend/tests/test_observer_governance.py`, break-its seen failing (§7.13).
+Decision candidates and the snapshot take separate gates (§7.13 finding 1).
 
 ### Promise 2 — Observer cannot write immutable fields
 **Claim:** name, language, timezone change only by the user directly.
 **Must prove:** a grounded, gate-passing candidate for these fields cannot
 reach a DB write — tested on DB state, not on the enforcer's return value.
+**Evidence (2026-09-28):** holds - the identity row never changes, three
+independent layers (§7.13). A same-named preference can still be learned and
+shown beside it (§7.13 finding 2).
 
 ### Promise 3 — Gated fields require confirmation
 **Claim:** a gated field is not persisted without prior user confirmation.
 **Must prove:** the write is unreachable without confirmation, on real DB
 state. A JSON rule naming the field is not evidence.
+**Evidence (2026-09-28):** holds for all four gated patterns, using shapes
+the real gate accepts; written only after `resolve_pending` (§7.13).
 
 ### Promise 4 — Stored memory is supported by the user's words
 **Limitation:** grounding proves a quote was said, not that it supports
@@ -1051,6 +1059,76 @@ a start with none still sends nothing.
   the file's raw contents, now including the creation time. That is
   cosmetic.
 
+### 7.13 Promises 1–3 tests (authorized 2026-09-28)
+
+This was the council's "one thing to do first" (council transcript,
+2026-09-28). The work is tests, not fixes. Result: **all three promises
+hold on the current code. Category C.**
+
+**Method.** `backend/tests/test_observer_governance.py` drives the real
+session-end path, `stage_11_observer.run_session_end`, on an onboarded
+profile.
+- A scripted stand-in plays the Observer's LLM, which is the untrusted
+  part; everything after it is real (grounding, the evidence gate, Stage 12
+  with the Constitution, and Stage 13).
+- Every assertion is on database state.
+- Promise 3 uses candidate shapes the **real** gate accepts, taken from the
+  held-out evaluation set.
+- Promise 2 forces the gate to say yes: that is the worst case the promise
+  has to survive.
+
+| Promise | Test | Result on the current code | Break-it (throwaway worktree) |
+|---|---|---|---|
+| 1 | A supported candidate is written (so the chain doesn't just reject everything) | Pass | — |
+| 1 | In a mixed extraction, every profile write is one the Constitution approved, and the profile changes by exactly those writes | Pass | Stage 13 also writing DISCARD/HARD_REJECT: **fails** |
+| 1 | Census: outside the tests, only Stage 13 calls `write_approved_candidate`, and only Stage 13 and the verification loop call `create_memory_candidate` | Pass (medium evidence, §5) | A second caller added in Stage 11: **fails** |
+| 2 | name, language_preference and timezone: a gate-passing candidate never changes `identity`, and is not queued as a question | Pass ×3 | The immutable rule alone removed: still passes, because the two other layers hold. Every layer opened: fails on the *queue* assertion (the conflict path queued it). Identity approved outright: **fails on identity unchanged** ×3 |
+| 3 | goal_memory.\*, interaction_style.\*, active_projects.\*, skill_memory.\*.level: not written until confirmed, queued once, written after `resolve_pending` | Pass ×4 | The gated rule removed: **fails** ×4 |
+
+**Identity is guarded three times over.** The immutable-field rule; the
+writable-tables list, which excludes `identity`; and
+`write_approved_candidate`, which has no identity branch at all. Breaking
+any one of them leaves the promise intact.
+
+**Findings from the probes (temporary tests, since deleted).
+Recommendations only; each needs an owner decision.**
+
+1. **Promise 1 is narrower in the code than in its wording (category D).**
+   The claim covers the Observer's *memory candidates*, and for those it
+   holds. But the Observer also produces **decision candidates** and a
+   **session snapshot**, and neither goes through the evidence gate or the
+   Constitution.
+   - A decision must quote words the user actually said (an ungrounded one
+     was dropped).
+   - It is then scored on deterministic signals.
+   - With two or more signals it is **auto-logged** into the decision log,
+     which Stage 3 puts into prompts. Probe: "I'm going with FastAPI
+     because Flask has no native async, instead of Django" → logged
+     directly.
+
+   The snapshot has its own grounding gate (`_snapshot_may_overwrite…`).
+   Either the wording of Promise 1 names these separate gates, or decisions
+   are routed through the evidence gate.
+2. **The immutable fields can be shadowed in preferences (category A or
+   D).** The Constitution matches immutable fields by *field name*, in any
+   table. `preference_memory` is Observer-writable, and there is no stored
+   preference named `language_preference` for the rule to see. On the real
+   path (real gate, real Constitution), "I prefer French, please answer me
+   in French from now on" wrote `preference_memory.language_preference =
+   French`; `language` and `timezone` did the same. The prompt then holds
+   both `language_preference: English` (identity) and
+   `language_preference: French` (preferences).
+   - The identity row itself never changed, so Promise 2 holds as worded.
+   - The user did say it, so this may be legitimate learning.
+   - But the model is shown two conflicting values for a field the promise
+     calls immutable.
+   - Options: refuse immutable field names in every table; map them to a
+     pending question for the user; or state it as a limitation.
+
+**Not covered:** the snapshot's own gate is not separately tested; and the
+verification loop's queue writes were only counted in the census, not
+exercised.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1087,7 +1165,7 @@ findings.
 | 3 PID-reuse lock | Returned 2026-09-27 (§7.4) | B: stores a bare PID, so a reused PID blocks startup (fixed §7.12) |
 | 4a Stage 1 routing | Returned 2026-09-27 (§7.5) | A: 10 of 14 identity/project questions lost the project; header claimed a complete record. Recommendations 1–2 fixed (§7.10); 3, Stage 1 precedence, open |
 | 4b Cache safety | Returned 2026-09-27 (§7.6) | A: stale answers replayed after documents or decisions existed; one profile's answer served to another. Cross-profile fixed (§7.9), staleness fixed (§7.10) |
-| Promises 1–3 tests | Not yet written | — |
+| Promises 1–3 tests | Written 2026-09-28 (§7.13) | C: all three hold, each break-it seen failing; two findings (decisions skip the gate; immutable names shadowed in preferences) |
 | Promise 4 threshold measurement | Not started | — |
 | Database census | Not run | — |
 | Cross-track synthesis | Done 2026-09-27 (§7.7) | 5 confirmed patterns; 2 candidate promises; fix order recommended |
