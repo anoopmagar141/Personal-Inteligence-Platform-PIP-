@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-28] claude · Recorded the lost-learning fix in FREEZE_LIST §7.11, marked §7.2 finding 1 fixed, and corrected the doc's status line, which still said no production code had changed under the freeze · why: claims match mechanisms (§2.3) · files: docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-09-28] claude · Made the startup drain keep a session the Observer refused for want of a local provider queued for a later start, instead of filing it as terminally failed · why: Promise 5's queue-for-next-launch held for one launch only, so such a session was never learned from (FREEZE_LIST §7.2 finding 1) · files: backend/core/session_lifecycle.py, backend/stages/stage_11_observer.py, backend/tests/test_observer_provider_authorization.py, docs/LOG.md
 
 - [2026-09-28] claude · Recorded the answers-about-the-user fixes in FREEZE_LIST §7.10: three promises with tests seen failing first, a corrected cache test that had passed on the unfixed code, and what stays open · why: the freeze doc is the canonical record of what is enforced · files: docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-14] codex · Aligned the first-run backup picker with the project's desktop file-picker API · why: it exposes the singular static picker used by BackupView · files: frontend/flutter/lib/screens/sign_in_screen.dart, docs/LOG.md
 
-- [2026-09-14] codex · Added an explicit first-run Create/Import gateway before password setup · why: a synthetic empty default profile is not a user-facing account flow · files: frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/test/sign_in_screen_test.dart, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -76,3 +76,4 @@ Format:
 - 2026-09-10 (claude): replaced the iris artwork with the six-node mark across both .ico files, the installer wizard and the app assets, and rebuilt the installer from it.
 - 2026-09-10 (claude): shipped MSVCP140/VCRUNTIME140/VCRUNTIME140_1 in the payload's app folder and made the payload gate require them, since a clean Windows install has none.
 - 2026-09-12 (codex): rebuilt PIP-Setup.exe and completed an isolated install, runtime-load and uninstall smoke test.
+- 2026-09-14 (codex): added an explicit first-run Create/Import gateway before password setup, replacing a synthetic empty default profile.

@@ -3,11 +3,13 @@
 **Canonical document.** Update in place; do not create a second summary.
 Location in the repo: `docs/FREEZE_LIST.md`.
 
-**Status: evidence-first freeze.** Five discovery/test tasks sent; All five
-tracks returned (§7.2–§7.6); cross-track synthesis done (§7.7); end-to-end
-profile boundary test run (§7.8); profile boundary fixes landed (§7.9); answers-about-the-user fixes landed
-(§7.10). No production code has been changed under
-this freeze.
+**Status: evidence-first freeze, fixing by explicit authorization.** All
+five evidence tracks returned (§7.2–§7.6); cross-track synthesis done
+(§7.7); end-to-end profile boundary test run (§7.8). Production code has
+changed only under three explicit authorizations, each fix test-first with
+the test seen failing: profile boundary (§7.9), answers about the user
+(§7.10), lost learning (§7.11). Everything else in §7.7's fix order is
+still frozen.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The seven promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -85,8 +87,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the twenty-two oldest are rolled into
-  eighteen Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the twenty-three oldest are rolled into
+  nineteen Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -270,7 +272,7 @@ deleted) — **recommendations only, nothing implemented:**
    `drain_pending_on_startup` (`session_lifecycle.py:309`) routes only
    `ObserverUnavailableError` into it. It fails closed (nothing leaves the
    machine), but the "queued for next launch" claim does not hold past the
-   first start.
+   first start. **Fixed 2026-09-28 in `2306831` (§7.11).**
 2. **Locality lives in two records, and they can disagree.**
    `llm_endpoints.is_local` (the provider's self-report) and
    `provider_consent.is_cloud`. The Stage 11 gate requires both.
@@ -899,6 +901,40 @@ isolation it passed 15/15 on the change and 15/15 on the previous commit.
 - **Candidate Promise 9 (current record)** now has mechanisms and tests
   for all three of its parts. Writing it down is an owner decision.
 
+### 7.11 Lost-learning fix (authorized 2026-09-28)
+
+§7.7's suggested item 3: §7.2 finding 1.
+
+- **Promise:** a session the Observer could not process for lack of a
+  local provider stays queued, and is processed at a later start once one
+  exists, with nothing sent anywhere in between.
+- **Mechanism:** `drain_pending_on_startup` translates
+  `ObserverLocalProviderError` into `pending_observer.RetryableError`, as it
+  already did for `ObserverUnavailableError`, so the row is deferred instead
+  of `failed`.
+- **Test:**
+  `test_a_session_refused_at_startup_for_locality_stays_queued_for_a_later_start`
+  in `backend/tests/test_observer_provider_authorization.py`. It uses the
+  real lifespan catch-up twice, with a loopback stub recorded as not local
+  and then as local. On the unfixed code it failed with `['failed']`. It
+  passes now, and the stub receives nothing until the second start.
+- **Commit:** `2306831`. It also corrects two Stage 11 docstrings that
+  called the locality error a caller programming error and said LLM
+  failures fail open.
+- **Full suite:** 1217 passed and 3 failed. The three are the
+  `test_llm_endpoint_store` tests that need a running Ollama (down on this
+  machine, same assertion as the §7.3 baseline).
+
+**Still open from Track 1:**
+- Finding 2 (locality in two records that re-saving can leave in
+  disagreement).
+- Finding 3 (the Promise 5 wording names a column that does not exist).
+- The unreachable duplicate block in `_default_observer_provider`.
+
+**Unchanged by design:** a row deferred for locality is re-checked at every
+start until a local provider exists. The check happens before any call, so
+a start with none still sends nothing.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -926,7 +962,7 @@ findings.
 
 | Track | Report | Classification |
 |-------|--------|----------------|
-| 1 Observer/provider gate | Returned 2026-09-26 (§7.2) | C; plus A (startup queue) and D (wording) as recommendations |
+| 1 Observer/provider gate | Returned 2026-09-26 (§7.2) | C; plus A (startup queue, fixed §7.11) and D (wording, open) |
 | 2 `PIP_DB_KEY` | Returned 2026-09-26 (§7.3) | Main DB read: C (redundant). `vector_store` read: A (load-bearing, fails open to plaintext) |
 | 3 PID-reuse lock | Returned 2026-09-27 (§7.4) | B: stores a bare PID, so a reused PID blocks startup |
 | 4a Stage 1 routing | Returned 2026-09-27 (§7.5) | A: 10 of 14 identity/project questions lose the project; header then claims a complete record |
@@ -938,6 +974,7 @@ findings.
 | End-to-end profile boundary | Run 2026-09-27 (§7.8); now `test_profile_boundary.py` | Cross-profile cache and in-flight plaintext confirmed via real routes; uploads not per-profile and plaintext on disk (A) |
 | Profile boundary fixes | Landed 2026-09-27 (§7.9) | 4 promises enforced and tested; plaintext already on disk and same-profile staleness still open |
 | Answers-about-the-user fixes | Landed 2026-09-28 (§7.10) | 3 promises enforced and tested; real-model effect of the new header unmeasured |
+| Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
 
 ---
 
