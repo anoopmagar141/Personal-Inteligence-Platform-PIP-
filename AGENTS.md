@@ -63,12 +63,12 @@ e. If you change structure or a convention, update the matching doc in the same
 
 ## Current focus
 
-Reliability freeze: no feature work, speculative cleanup or unevidenced fix
-until the five evidence tracks are classified. The rules, the seven promises
-and the status of each track live in `docs/FREEZE_LIST.md` — read it before
-starting any task, and update it in place rather than writing a new summary.
-Packaging (`scripts/build_portable.ps1`, `build_installer.ps1`) is paused.
-A report may recommend a fix; implementing it needs separate authorization.
+Reliability freeze: no feature work or speculative cleanup. Code changes
+only as fixes the owner authorizes, test-first, one commit per promise
+(`docs/FREEZE_LIST.md` §2). The promises, their evidence and every fix's
+status live there - read it before any task, update it in place rather
+than writing a new summary. Packaging is paused. A report may recommend a
+fix; implementing it needs separate authorization.
 
 ## LOG.md entry format
 

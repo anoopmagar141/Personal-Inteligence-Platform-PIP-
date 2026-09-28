@@ -8,11 +8,12 @@ five evidence tracks returned (§7.2–§7.6); cross-track synthesis done
 (§7.7); end-to-end profile boundary test run (§7.8). Production code has
 changed only under four explicit authorizations, each fix test-first with
 the test seen failing: profile boundary (§7.9), answers about the user
-(§7.10), lost learning (§7.11), lock identity (§7.12). Everything else in
-§7.7's fix order is still frozen.
+(§7.10), lost learning (§7.11), lock identity (§7.12). §7.7's fix order is
+complete: the promise wording was decided 2026-09-28 (§4 now holds nine
+promises). Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
-4 The seven promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
+4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
 8 Status · 9 Conversation record · 10 Background · 11 Freeze rule
 
 ---
@@ -87,8 +88,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the twenty-five oldest are rolled into
-  twenty-one Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the twenty-six oldest are rolled into
+  twenty-two Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -106,7 +107,7 @@ original list meant **unverified**, not "bug requiring code".
 
 ---
 
-## 4. The seven promises
+## 4. The nine promises
 
 ### Promise 1 — Observer writes only through governance
 **Claim:** Observer candidates reach memory only via grounding → evidence
@@ -137,16 +138,31 @@ comparing FastAPI and Flask".
 > measured.
 
 ### Promise 5 — Observer runs only on authorized local providers
-**Wording (decided):**
-> The Observer runs only against providers recorded as local in
-> `provider_consent.is_local`. PIP does not independently verify the
-> machine boundary; `is_local` is attested, never inferred from hostname.
+**Wording (decided 2026-09-28):**
+> The Observer runs only against a provider recorded as local in both of
+> its records: the endpoint's own entry (`llm_endpoints.is_local`; Ollama
+> is local by definition) and its consent entry
+> (`provider_consent.is_cloud = 0`). Both are attested by whoever configured
+> the endpoint, never inferred from the hostname; PIP does not verify the
+> machine boundary. When no provider passes, nothing is sent and the
+> session stays queued; it is processed at a later start or sign-in once
+> one does. No mid-session retry is promised.
+
+**Limitation:** re-saving an existing endpoint as local updates only
+`llm_endpoints`, so it stays refused until it is removed and added again
+(§7.2 finding 2, not fixed).
 
 **Reason:** a loopback address is not proof of locality (tunnels, remote
 `OLLAMA_HOST`). Claiming proof would overclaim.
-**Decided behavior:** Ollama down and no local provider → the Observer does
-not run and the transcript is queued. Never a cloud fallback. Catch-up
-happens at the next launch; no mid-session retry is promised.
+**Enforced by:** the Stage 11 gate (`stage_11_observer.py`, `run()`),
+which requires both records; `drain_pending_on_startup` keeps a refused
+session queued (§7.11).
+**Evidence:** `backend/tests/test_observer_provider_authorization.py` - zero
+requests to a loopback provider recorded as not local, break-it caught
+(§7.2); a refused session processed at a later start (§7.11).
+**History:** the first decided wording named `provider_consent.is_local`,
+which does not exist (§7.2 finding 3), and "catch-up at the next launch"
+held for one launch only until §7.11.
 **Pinned test (Track 1):**
 1. Counting stub on `127.0.0.1`, registered with `is_local = false`.
 2. Ollama unavailable; trigger the real Observer path with a non-trivial
@@ -176,18 +192,66 @@ five current tracks — do not open a sixth investigation from it.
 
 ### Promise 7 — Encryption at rest
 **Rejected wording:** "Disk access alone yields only ciphertext."
-**Corrected wording:**
-> The database, document text, and file paths are encrypted at rest under
-> a password-derived key. Embeddings are not encrypted. Plaintext written
-> before encryption was enabled is not scrubbed. [While running, the key
-> reaches the backend through the process environment — **final clause
-> depends on Track 2**.]
+**Wording (decided 2026-09-28):**
+> Each profile's database is encrypted at rest under a key derived from
+> its password. The document index stores chunk text and file paths
+> encrypted under the same key; embeddings are not encrypted. Uploaded
+> documents are also kept as ordinary files in the profile's documents
+> folder, unencrypted - the encrypted copy is the one inside the database.
+> Unencrypted by design: profile names in the profile registry, and a
+> sign-in picture if the user publishes one. Plaintext written before a
+> password was set, or by versions before §7.9, is not scrubbed. While a
+> profile is signed in, its key is held in the backend's memory and also
+> in its process environment, which every child process inherits.
 
-Track 2 has returned (§7.3), and the final clause cannot stay as drafted.
-The key does not *reach* the backend through the environment: the backend
-derives it and then *exports* it there, and every child process inherits
-it. Chunks can also be written in plaintext after sign-out. The corrected
-clause needs an owner decision; a candidate is in §7.3.
+**Limitation kept by decision:** the uploaded-file copy stays unencrypted
+on disk. The alternative - keeping only the database copy and writing
+files out only when a rebuild needs them - is a code change and was not
+authorized.
+**Enforced by:** SQLCipher on the database; Fernet/HMAC in `vector_store`
+under the same key, which refuses to write without it (§7.9).
+**Evidence:** §7.3 (key consumers and child-process inheritance, measured);
+§7.8 (upload file on disk in plaintext, measured); `test_profile_boundary.py`
+(no plaintext index writes after sign-out).
+**History:** "document text is encrypted" overstated it - true of the
+database copy, not of the uploaded file (§7.8); the key clause waited on
+Track 2, which found the backend exports the key rather than receiving it.
+
+### Promise 8 — Profile isolation
+**Claim (adopted 2026-09-28):** nothing derived from one profile's data is
+served to another profile or stored under it.
+**Enforced by** the sign-out boundary every profile switch passes through:
+`session_key.lock()` empties the response cache; `vector_store` refuses
+index reads and writes when the active profile has a password but no key is
+held (`IndexLockedError`); uploads and ingestion are confined to the active
+profile's own documents folder (`vector_store.documents_root()`).
+**Evidence:** `backend/tests/test_profile_boundary.py`, through the real
+routes, each test seen failing first (§7.8, §7.9).
+**Limitations:** one backend process serves every profile, so isolation
+rests on these mechanisms, not on OS process separation. A chat connection
+already open at sign-out keeps its connection until the client drops it -
+the guarantee is that no *new* work reaches the data. Files an older
+version put in the shared `data/documents` folder stay there.
+**Origin:** not in the original seven; the defects it covers were found by
+the tracks and broke no written promise (§7.7, the §2.5 limit).
+
+### Promise 9 — Answers reflect the current record
+**Claim (adopted 2026-09-28):** an answer about the user reflects their
+record as it is when asked.
+**Enforced by:** every question reaches the model with the user's identity
+and active projects (`stage_04._ALWAYS_TABLES`); the context never presents
+what was looked up as the whole record, and names the sections it did not
+look up (Stage 7 header, rule 4); a cached answer is never served after the
+record changes (`record_version`, bumped by triggers on every table the
+context draws from).
+**Evidence:** `backend/tests/test_answers_about_the_user.py`, asserting on
+the prompt the model receives (§7.10).
+**Limitations:** goals, skills, preferences and tools are still fetched by
+question category, so a phrasing Stage 1 misroutes gets "not in front of
+me" for them rather than the answer. The tests check what the model is
+told, not what it says; its replies are not measured.
+**Origin:** as Promise 8 - found by Tracks 4a and 4b, outside the original
+seven.
 
 ---
 
@@ -1008,6 +1072,10 @@ findings.
 | Stage 1 split into 4a/4b | Decided |
 | `FREEZE_LIST.md` is the single canonical record | Decided |
 | Full Constitution mutation audit deferred | Decided |
+| Promise 5 reworded: both locality records; queued until a later start or sign-in (2026-09-28) | Decided |
+| Promise 7 final wording, including the key-in-environment clause; uploaded file copy stated as a limitation, not fixed (2026-09-28) | Decided |
+| Promise 8, profile isolation, adopted (2026-09-28) | Decided |
+| Promise 9, answers reflect the current record, adopted (2026-09-28) | Decided |
 
 ### 8.2 Evidence status (facts; need reports)
 
