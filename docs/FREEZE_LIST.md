@@ -88,8 +88,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the twenty-nine oldest are rolled into
-  twenty-five Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the thirty-one oldest are rolled into
+  twenty-seven Archive summary lines (done 2026-09-26).
 
 ---
 
@@ -144,6 +144,12 @@ comparing FastAPI and Flask".
 > evidence-gate and Stage 12 threshold checks. Whether a genuine quote
 > actually supports the claim drawn from it has not been separately
 > measured.
+
+**Evidence (2026-09-28):** measured end to end on 37 labelled conversations
+with the real model (§7.14): 88–90% of learned memories true, the one false
+memory being sarcasm; recall 30–39%, mostly lost at the gate. The gate alone
+(`scripts/eval_evidence_gate.py`): 0 false accepts on 40 tuned and 25
+held-out cases. The wording above predates both.
 
 ### Promise 5 — Observer runs only on authorized local providers
 **Wording (decided 2026-09-28):**
@@ -1129,6 +1135,123 @@ Recommendations only; each needs an owner decision.**
 verification loop's queue writes were only counted in the census, not
 exercised.
 
+### 7.14 End-to-end Observer measurement (authorized 2026-09-28)
+
+This was the council's main recommendation: measure the learning path as a
+person meets it, rather than the gate alone.
+
+**Method.** `scripts/eval_observer_end_to_end.py` runs each of 37 labelled
+conversations (`backend/tests/observer_cases.py`) through the real local
+model and `run_session_end()`, on a fresh isolated profile, and reads what
+was learned from the database. The conversations contain 23 facts the user
+states and 25 traps:
+- third parties, hypotheticals and questions;
+- negation, the past, retractions and sarcasm;
+- words only the assistant said;
+- the immutable fields;
+- small talk, and mixed sessions.
+
+The labels were committed in `1256b51`, before the first full run. Three
+runs, because the model samples. The raw per-case output is in
+`docs/eval/observer_end_to_end_2026-09-28.md`.
+
+**Conditions:** model `qwen2.5:7b`, the only one pulled on this machine;
+the code defaults to `llama3.1:8b`, which was not measured. Every profile
+was in its first two weeks, where the Constitution accepts only candidates
+the model labels *explicit*.
+
+**Results.** The three runs agree closely.
+
+| | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| Precision, memory tables (true / true + false) | 8/9 | 9/10 | 7/8 |
+| Precision, including decision-log entries (hand-reviewed) | 10/12 (83%) | 10/13 (77%) | 10/12 (83%) |
+| **Recall**: stated facts learned (written or queued for confirmation) | 8/23 (35%) | 9/23 (39%) | 7/23 (30%) |
+| …of which written outright | 3 | 4 | 3 |
+| Traps reaching a belief table | 1/25 | 1/25 | 1/25 |
+
+**Precision is high, and its one failure is systematic.** The same false
+memory appeared in all three runs. "Sure, because Internet Explorer is my
+favourite browser. Obviously." was stored as a preferred tool: the gate
+judged it `EVIDENCE_SUFFICIENT` and the Constitution approved it. The
+Firefox the user actually tests on was hard-rejected. **The gate cannot
+read sarcasm**, which the council predicted; the gate corpus has no
+sarcasm cases. Every other trap category held in every run: third
+parties, hypotheticals, questions, negation, the past, the assistant's
+words, a forged role line, and the immutable fields.
+
+**Decisions are the weaker gate, as §7.13 predicted.** The keyword labels
+could not classify 3–4 rows per run; all of them were decision-log
+entries, auto-logged without the evidence gate. Reviewed by hand:
+- Six stated a decision the user did make ("ship the beta in May", "run a
+  half marathon in April", "continue using pytest", "won't learn Java"
+  after "I'll pass").
+- Four overstated a tentative remark as a decision:
+  - "I'm not convinced" about Java was logged twice as a decision;
+  - "probably not worth it" became "decided against rewriting in Elixir";
+  - "to stay with Go" was logged though the user never said it.
+
+The overstatements are what pull the combined precision down to 77–83%.
+
+**Recall is low, and it has three causes.** Each cause is visible in the
+funnel of every run.
+1. **The evidence gate rejects plain true statements (the largest loss).**
+   All of these were judged `EVIDENCE_NOT_ENTAILING` and discarded:
+   - "Please keep your answers short from now on";
+   - "I keep all my notes in Obsidian these days";
+   - "I work mostly in TypeScript";
+   - "I really like detailed explanations";
+   - "I'm learning Rust";
+   - "I write all my essays in LaTeX";
+   - "a payments service" (as a project).
+
+   The gate's support-language lists do not recognise ordinary phrasings.
+   The gate evaluation's one held-out false reject,
+   `held_accept_tool_habit`, is this same Obsidian phrasing. What looked
+   like one miss there is most of the recall loss here.
+2. **The model labels first-person facts as "inferred", inconsistently.**
+   "I've been writing Python professionally for six years" and Go "for
+   four years" passed the gate but were labelled *inferred*, and a
+   first-two-weeks profile discards those
+   (`threshold_violation_week_1_2`). Re-run, the same Go statement was
+   labelled *explicit* and correctly queued for confirmation. With the
+   label *explicit*, all three affected facts would have been queued
+   (checked directly against Stage 12).
+3. **The model extracts nothing** for some facts: repeated questions about
+   vector clocks (a topic interest), "It's Kotlin", and "I deploy
+   everything with Docker Compose" (extracted, then dropped by grounding).
+
+**What this means for the thesis.** "Learns only what the user actually
+said" is close to true for memory: about 9 in 10 of what it learns is
+true, and the one failure is sarcasm, every time. But it learns roughly a
+third of what users plainly say, and writes outright fewer than a fifth of
+the facts stated. Most of the rest is either queued for confirmation or
+lost at the gate. The gate trades recall for precision more steeply than
+the gate-only evaluation showed. Decisions, which skip the gate, are
+where overstatement gets in.
+
+**Limitations of this measurement:**
+- n is small: 23 facts and 25 traps.
+- The labels were written by the measuring agent, not independently.
+- Keyword matching could misclassify a row. Every non-TRUE row was
+  reviewed by hand (listed above); the TRUE rows were not.
+- One model (not the code's default), a first-two-weeks profile only, and
+  English only.
+- The queued-for-confirmation facts are counted as learned, but whether
+  a user confirms them is not measured.
+
+**Recommendations only; nothing changed:**
+1. Add sarcasm cases to the gate corpus, and decide how the gate should
+   treat them.
+2. Widen the gate's support language for plain first-person statements
+   ("I keep…", "I work mostly in…", "please keep…"), measured against both
+   corpora so that precision is watched while recall rises.
+3. Stop relying on the model's explicit/inferred label for first-person
+   statements, or relax the weeks 1–2 rule for gated tables, which already
+   ask the user.
+4. Route decisions through the evidence gate (§7.13 finding 1). That is
+   where the overstatements come from.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1166,6 +1289,7 @@ findings.
 | 4a Stage 1 routing | Returned 2026-09-27 (§7.5) | A: 10 of 14 identity/project questions lost the project; header claimed a complete record. Recommendations 1–2 fixed (§7.10); 3, Stage 1 precedence, open |
 | 4b Cache safety | Returned 2026-09-27 (§7.6) | A: stale answers replayed after documents or decisions existed; one profile's answer served to another. Cross-profile fixed (§7.9), staleness fixed (§7.10) |
 | Promises 1–3 tests | Written 2026-09-28 (§7.13) | C: all three hold, each break-it seen failing; two findings (decisions skip the gate; immutable names shadowed in preferences) |
+| End-to-end Observer measurement | Run 2026-09-28 (§7.14) | 37 conversations, 3 runs, qwen2.5:7b: precision 88–90% (memory), 77–83% with decisions; recall 30–39%; sarcasm gets through |
 | Promise 4 threshold measurement | Not started | — |
 | Database census | Not run | — |
 | Cross-track synthesis | Done 2026-09-27 (§7.7) | 5 confirmed patterns; 2 candidate promises; fix order recommended |
