@@ -604,7 +604,7 @@ def test_lifespan_releases_the_lock_on_clean_shutdown(tmp_path, monkeypatch):
 
     with TestClient(server.app):
         assert lock_path.exists()
-        assert int(lock_path.read_text()) == os.getpid()
+        assert int(lock_path.read_text().split()[0]) == os.getpid()  # "<pid> <creation time>"
 
     assert not lock_path.exists()
 

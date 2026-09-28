@@ -253,14 +253,12 @@ def refuse_if_pip_is_running() -> None:
     """
     from backend.core import instance_lock
 
+    # holder(), not a parse of our own: the file carries the holder's creation
+    # time as well as its PID, so a reused PID is not read as PIP running - and
+    # a hand-rolled int() of the new format would have read "not running".
     lock_path = instance_lock._lock_path()
-    if not lock_path.exists():
-        return
-    try:
-        pid = int(lock_path.read_text(encoding="utf-8").strip())
-    except ValueError:
-        return
-    if instance_lock._pid_is_running(pid):
+    pid = instance_lock.holder(lock_path)
+    if pid is not None:
         sys.exit(f"ERROR: PIP appears to be running (pid {pid}). Close it and try again.")
 
 

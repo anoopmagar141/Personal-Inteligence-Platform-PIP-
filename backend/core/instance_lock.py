@@ -21,6 +21,19 @@
 # not a conflict: that's what happens on every FastAPI TestClient lifespan
 # cycle within one pytest process (many sequential startups, one PID), and
 # it's just correct - a process can't conflict with itself.
+#
+# THE FILE NAMES A PROCESS, NOT A NUMBER
+#
+# The file is "<pid> <creation time>". It used to be the PID alone, and a PID
+# names a process only for its lifetime: once the PIP that wrote it was gone and
+# the OS handed the number to something else, every gate read "PIP is running"
+# - the backend refused to start, restore and merge refused to run, and the
+# launcher's cleanup kept the lock (FREEZE_LIST §7.4). The creation time is what
+# tells the original holder from a later process with the same number.
+# holder() is the one place that decides; every gate asks it.
+#
+# A file with a PID and no creation time - written before this, or where the
+# time could not be read - keeps the old meaning: held if that PID is alive.
 
 import logging
 import os
@@ -127,37 +140,114 @@ def _pid_is_running(pid: int) -> bool:
         return True
 
 
+def _process_started_at(pid: int) -> int | None:
+    """
+    When `pid`'s current process was created, as an opaque integer that only
+    has to compare equal for the same process - or None if it cannot be read.
+
+    Windows: the creation FILETIME from GetProcessTimes, the same value .NET's
+    Process.StartTime.ToFileTimeUtc() returns, which is what the launcher
+    compares against. Linux: field 22 of /proc/<pid>/stat, the start time in
+    clock ticks since boot. Anywhere else, None.
+    """
+    if pid <= 0:
+        return None
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.GetProcessTimes.argtypes = [ctypes.c_void_p] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return None
+        try:
+            created, exited, kernel, user = (wintypes.FILETIME() for _ in range(4))
+            if not kernel32.GetProcessTimes(
+                handle, ctypes.byref(created), ctypes.byref(exited), ctypes.byref(kernel), ctypes.byref(user)
+            ):
+                return None
+            return (created.dwHighDateTime << 32) | created.dwLowDateTime
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        return int(stat.rsplit(")", 1)[1].split()[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _read_lock(path: Path) -> tuple[int, int | None] | None:
+    """(pid, creation time or None) from the lock file, or None if unreadable."""
+    try:
+        fields = path.read_text(encoding="utf-8").split()
+        pid = int(fields[0])
+        started = int(fields[1]) if len(fields) > 1 else None
+    except (OSError, ValueError, IndexError):
+        return None
+    return pid, started
+
+
+def holder(path: Path | None = None) -> int | None:
+    """
+    The PID of the process that holds the lock, or None if nothing does.
+
+    Held means the recorded PID is alive AND, when a creation time was
+    recorded, that PID's process was created at that time - otherwise the
+    number has been reused by something else and the lock is stale.
+
+    A creation time that cannot be read now (another user's process, say)
+    counts as held: the failure this allows is refusing a lock that was free,
+    never taking one that was held - the same direction _pid_is_running fails.
+    """
+    lock = path or _lock_path()
+    record = _read_lock(lock) if lock.exists() else None
+    if record is None:
+        return None
+    pid, recorded = record
+    if not _pid_is_running(pid):
+        return None
+    if recorded is not None:
+        current = _process_started_at(pid)
+        if current is not None and current != recorded:
+            return None
+    return pid
+
+
 def acquire() -> None:
     """
     Claims the single-instance lock for the current process. Raises
     AlreadyRunningError if a different, still-live process already holds it.
     Safe to call repeatedly from the same process (tests re-entering the
     FastAPI lifespan, one TestClient after another).
+
+    Always rewrites the file once it knows nobody else holds it. Returning early
+    when the file already named our PID was right while the file held only a
+    PID; with the creation time in it, a file naming our PID can have been left
+    by an earlier, dead PIP whose number we were handed - and leaving its
+    record in place would have every other gate read our running process as
+    stale.
     """
     path = _lock_path()
     our_pid = os.getpid()
 
-    if path.exists():
-        try:
-            existing_pid = int(path.read_text(encoding="utf-8").strip())
-        except (ValueError, OSError):
-            existing_pid = -1
-
-        if existing_pid == our_pid:
-            return  # already ours - nothing to do
-
-        if _pid_is_running(existing_pid):
-            raise AlreadyRunningError(
-                f"PIP backend is already running (pid {existing_pid}, lock file {path}). "
-                "Stop that instance first, or delete the lock file if it's actually dead."
-            )
-
-        logger.warning(
-            f"Found a stale lock file at {path} (pid {existing_pid} is not running) - taking over the lock."
+    current = holder(path)
+    if current is not None and current != our_pid:
+        raise AlreadyRunningError(
+            f"PIP backend is already running (pid {current}, lock file {path}). "
+            "Stop that instance first, or delete the lock file if it's actually dead."
         )
+    if current is None and path.exists():
+        logger.warning(f"Found a stale lock file at {path} - its process is gone - taking over the lock.")
 
+    started = _process_started_at(our_pid)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(our_pid), encoding="utf-8")
+    path.write_text(f"{our_pid}" if started is None else f"{our_pid} {started}", encoding="utf-8")
 
 
 def release() -> None:
@@ -165,10 +255,10 @@ def release() -> None:
     path = _lock_path()
     if not path.exists():
         return
-    try:
-        existing_pid = int(path.read_text(encoding="utf-8").strip())
-    except (ValueError, OSError):
+    record = _read_lock(path)
+    if record is None:
         return
+    existing_pid, _ = record
     if existing_pid == os.getpid():
         try:
             path.unlink()

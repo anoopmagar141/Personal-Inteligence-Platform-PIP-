@@ -160,14 +160,12 @@ def refuse_if_pip_is_running() -> None:
     # definition of where the lock lives and it honours PIP_LOCK_PATH, so this
     # check follows the same override every other entry point does instead of
     # reading a path that only happens to match today.
+    # holder(), not a parse of our own: the file carries the holder's creation
+    # time as well as its PID, so a reused PID is not read as PIP running - and
+    # a hand-rolled int() of the new format would have read "not running".
     lock_path = instance_lock._lock_path()
-    if not lock_path.exists():
-        return
-    try:
-        pid = int(lock_path.read_text(encoding="utf-8").strip())
-    except ValueError:
-        return
-    if instance_lock._pid_is_running(pid):
+    pid = instance_lock.holder(lock_path)
+    if pid is not None:
         sys.exit(
             f"ERROR: PIP appears to be running (pid {pid} holds {lock_path}). "
             "Close it first - a restore replaces the database it has open."

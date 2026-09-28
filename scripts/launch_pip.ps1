@@ -75,21 +75,31 @@ try { Set-Content -Path $progressFile -Value "" -Encoding utf8 } catch { }
 # a log nobody in that situation would think to open. Clearing a dead PID's
 # lock HERE means the most common class of stuck-lock never reaches Python.
 #
-# A live PID is left alone; instance_lock.py's own check is the single-
-# instance guard, not this one, and this script does not import or reproduce
-# the careful GetExitCodeProcess branch that _pid_is_running uses on Windows.
-# Get-Process is coarser (it returns a handle to a stopped-but-held process)
-# but for the stale-lock case - a PID from a previous boot, or a process
-# killed minutes ago whose handle has long been closed - it is sufficient.
+# The decision is instance_lock.holder()'s, asked through the same Python the
+# backend is about to run under - not a second copy of the rule in PowerShell.
+# This used to be one: a Get-Process on the PID alone. The lock file now
+# records the holder's creation time as well, because a bare PID is reused
+# and a reused PID read as "PIP is running" here, in the backend and in the
+# restore and merge scripts alike (FREEZE_LIST §7.4). Porting the comparison
+# to PowerShell was the obvious fix and the wrong one: Process.StartTime is
+# local time, and converting it back to the recorded stamp can be an hour off
+# for a process started in the hour the clocks go back - which would delete a
+# LIVE lock and let a second backend start. Exit 0 means nothing holds it;
+# anything else, including Python failing to answer, leaves the file alone.
 $lockFile = Join-Path $dataDir "pip.lock"
 if (Test-Path $lockFile) {
-    $lockedPid = (Get-Content $lockFile -Raw).Trim()
-    if ($lockedPid -match '^\d+$') {
-        $proc = Get-Process -Id ([int]$lockedPid) -ErrorAction SilentlyContinue
-        if (-not $proc) {
-            Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
-            Write-Phase "lock" "cleared stale lock (pid $lockedPid)"
-        }
+    Push-Location $root
+    try {
+        & $pipPython -c "import sys; from pathlib import Path; from backend.core import instance_lock; sys.exit(0 if instance_lock.holder(Path(sys.argv[1])) is None else 3)" $lockFile 2>$null
+        $stale = ($LASTEXITCODE -eq 0)
+    } catch {
+        $stale = $false
+    } finally {
+        Pop-Location
+    }
+    if ($stale) {
+        Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
+        Write-Phase "lock" "cleared stale lock"
     }
 }
 

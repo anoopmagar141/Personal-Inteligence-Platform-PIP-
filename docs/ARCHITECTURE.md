@@ -38,8 +38,12 @@ them, and the server that forwards them.
   request a password in PowerShell. The Flutter sign-in screen selects an
   initial registered profile, offers switching, and requests that profile's
   password. Additionally, the normal launcher performs a pre-flight stale lock
-  cleanup (`data/pip.lock` belonging to a dead PID) so the backend does not
-  silently crash in its hidden window.
+  cleanup so the backend does not silently crash in its hidden window.
+  `data/pip.lock` holds `<pid> <creation time>`, and stale means
+  `instance_lock.holder()` finds no live process with both - a bare PID is
+  reused, and a reused one used to block PIP from starting. The launcher asks
+  that function through Python rather than repeating the rule in PowerShell,
+  whose local-time `StartTime` can misjudge a live lock across a DST change.
 
 ## Data flow: UI to data source
 

@@ -17,13 +17,13 @@ def isolated_lock(tmp_path, monkeypatch):
 def test_acquire_creates_lock_file_with_own_pid(isolated_lock):
     instance_lock.acquire()
     assert isolated_lock.exists()
-    assert int(isolated_lock.read_text()) == os.getpid()
+    assert int(isolated_lock.read_text().split()[0]) == os.getpid()  # "<pid> <creation time>"
 
 
 def test_acquire_is_idempotent_for_the_same_process(isolated_lock):
     instance_lock.acquire()
     instance_lock.acquire()  # must not raise - same PID re-entering
-    assert int(isolated_lock.read_text()) == os.getpid()
+    assert int(isolated_lock.read_text().split()[0]) == os.getpid()  # "<pid> <creation time>"
 
 
 def test_acquire_raises_when_a_live_different_pid_holds_the_lock(isolated_lock):
@@ -43,13 +43,13 @@ def test_acquire_takes_over_a_stale_lock(isolated_lock):
     isolated_lock.write_text(str(dead_pid))
 
     instance_lock.acquire()  # must not raise
-    assert int(isolated_lock.read_text()) == os.getpid()
+    assert int(isolated_lock.read_text().split()[0]) == os.getpid()  # "<pid> <creation time>"
 
 
 def test_acquire_takes_over_a_corrupt_lock_file(isolated_lock):
     isolated_lock.write_text("not-a-pid")
     instance_lock.acquire()
-    assert int(isolated_lock.read_text()) == os.getpid()
+    assert int(isolated_lock.read_text().split()[0]) == os.getpid()  # "<pid> <creation time>"
 
 
 def test_release_removes_lock_owned_by_this_process(isolated_lock):
@@ -128,7 +128,7 @@ def test_a_lock_left_by_a_killed_process_is_taken_over(tmp_path, monkeypatch):
     finally:
         child.wait()
 
-    assert lock.read_text(encoding="utf-8").strip() == str(os.getpid()), (
+    assert lock.read_text(encoding="utf-8").split()[0] == str(os.getpid()), (
         "the stale lock should have been taken over"
     )
 
