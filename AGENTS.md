@@ -15,11 +15,12 @@ user through a deterministic Constitution enforcer.
 - **DB:** SQLite via SQLCipher (`sqlcipher3`), schema in
   `backend/core/schema.sql`. Raw SQL, no ORM.
 - **Vectors:** ChromaDB (`data/chroma/`), rebuildable, never authoritative.
-- **LLM:** Ollama (local, default `llama3.1:8b`) + an OpenAI-compatible
-  provider for configured endpoints.
+- **LLM:** Ollama over HTTP via `urllib` (local, default `llama3.1:8b`) + an
+  OpenAI-compatible provider for configured endpoints.
 - **Key packages:** backend — `fastapi`, `uvicorn`, `sqlcipher3`,
   `cryptography`, `chromadb`, `grpcio==1.83.1` (exact pin — see
-  `requirements.txt`), `sentence-transformers`, `pypdf`, `ddgs`, `ollama`.
+  `requirements.txt`), `sentence-transformers`, `pypdf`, `ddgs` (`ollama`
+  is listed there but imported nowhere).
   Flutter — `http`, `web_socket_channel`, `file_picker`, `cupertino_icons`
   (unimported but required; see the comment in `pubspec.yaml`).
 
@@ -28,9 +29,9 @@ user through a deterministic Constitution enforcer.
 - `backend/api/` — `server.py` only: `create_app()`, middleware, all routes.
 - `backend/core/` — pipeline orchestrator, auth, DB key/session key, instance
   lock, constitution enforcer + `constitutional.json`, `schema.sql`, trace.
-- `backend/memory/` — the **only** place `sqlite3`/`chromadb` may be imported;
-  one module per store, module-level functions taking `conn` first.
-- `backend/stages/` — `stage_00_*` … `stage_13_*`, one `run()` each.
+- `backend/memory/` — one module per store, functions taking `conn` first.
+- `backend/stages/` — `stage_00_*` … `stage_13_*`, one `run()` each. Neither
+  it nor `api/` may import `sqlite3`/`chromadb`/`ollama` (hook-enforced).
 - `backend/providers/` — `base_provider.py` + one file per LLM provider.
 - `backend/config/` — `settings.json` (all tunables) and its loader.
 - `backend/tests/` — pytest, one file per module under test.
@@ -41,8 +42,7 @@ user through a deterministic Constitution enforcer.
 - `frontend/cli/` — `pip_cli.py`, a urllib-based CLI over the same REST surface.
 - `scripts/` — PowerShell launchers/builders and Python maintenance scripts;
   `pre-commit` (ADR-025 import guard) is installed via `install_hooks.ps1`.
-- `config/` — `provider_consent.json`, first-run seed data only, never read at
-  runtime.
+- `config/` — `provider_consent.json`, first-run seed only, not read at runtime.
 - `installer/` — Inno Setup `PIP.iss` and app icons.
 - `data/` — runtime state (db, chroma, logs, profiles). `dist/` — build
   output. Both gitignored.

@@ -7,10 +7,14 @@ flagged rather than smoothed over.
 
 Four, with a dependency rule enforced by a git hook (`scripts/pre-commit`,
 ADR-025): **nothing under `backend/stages/` or `backend/api/` may import
-`sqlite3`, `chromadb` or `ollama` directly.** In practice the drivers appear in
-exactly three places — `sqlite3`/`sqlcipher3` in `backend/memory/profile_store.py`,
-`chromadb` in `backend/memory/vector_store.py`, and the Ollama client behind
-`backend/providers/`.
+`sqlite3`, `chromadb` or `ollama` directly.** The hook guards only those two
+directories. In practice, inside `backend/`, `sqlite3`/`sqlcipher3` are imported
+in `backend/memory/profile_store.py` and, lazily, in `backend/core/restore.py`
+(which opens a `.pipbak` itself); `chromadb` only in
+`backend/memory/vector_store.py`. Several `scripts/` also import `sqlcipher3`
+directly. Nothing imports the `ollama` package even though `requirements.txt`
+lists it: `backend/providers/ollama_provider.py` speaks Ollama's HTTP API
+through `urllib`.
 
 1. **Transport** — `backend/api/server.py`. FastAPI app, middleware, routes,
    the WebSocket handler. Also holds the `api_*(conn, ...)` functions, which are
@@ -311,8 +315,4 @@ so there is one write path, not two.
   the Flutter one is built and shipped. The CLI is still tested (12 tests in
   `backend/tests/test_cli.py`, which imports `frontend.cli.pip_cli` — the one
   place a backend test reaches into `frontend/`); `frontend/web/` has no tests.
-- **`data/documents/PIP_CURRENT_STATE.md` is tracked despite `data/documents/`
-  being in `.gitignore`** — added deliberately in commit 5a0269c. A new file in
-  that directory will *not* be tracked without `git add -f`.
-
-
+- **`ollama` is a declared dependency that nothing imports** (see Layers).

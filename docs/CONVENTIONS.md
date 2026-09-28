@@ -19,9 +19,10 @@ than a winner picked.
   → `backend/api/server.py` (`_conn`, `_bearer_token`, `_db_path_or_default`)
 - **Flutter screens live in `lib/screens/`, reusable widgets in `lib/widgets/`,
   cross-cutting singletons at `lib/` root.** → `lib/screens/projects_view.dart`,
-  `lib/widgets/thinking_orb.dart`, `lib/theme.dart`
+  `lib/widgets/thinking_mark.dart`, `lib/theme.dart`
 - **Inconsistent:** screen filenames use three suffixes — `*_view.dart` (nine
-  files), `*_screen.dart` (`lib/screens/sign_in_screen.dart`), and no suffix at
+  files), `*_screen.dart` (`lib/screens/sign_in_screen.dart`,
+  `lib/screens/model_setup_screen.dart`), and no suffix at
   all (`lib/screens/model_browser.dart`). `onboarding_screen.dart` also sits at
   `lib/` root rather than in `lib/screens/`, unlike `sign_in_screen.dart`.
 
@@ -51,8 +52,11 @@ than a winner picked.
 - **Data is fetched in `initState()` and stored in a nullable field; `null`
   means "not loaded yet", an empty list means "loaded, nothing there".** The
   build method branches on that. → `lib/screens/decisions_view.dart:53`
-- **Every `setState` after an `await` is guarded by `if (mounted)`** (53
-  occurrences across `lib/`). → `lib/screens/decisions_view.dart:71`
+- **`setState` after an `await` is guarded by `mounted`.**
+  → `lib/screens/decisions_view.dart:71`
+- **Inconsistent:** the guard is written two ways — wrapping, `if (mounted)`
+  (`lib/screens/decisions_view.dart:71`), and early return,
+  `if (!mounted) return;` (`lib/main.dart:191`). Both are common.
 - **Shared state uses a top-level `ValueNotifier` only where the alternative is
   threading a parameter through four widgets**, and the reasoning is documented
   in the file. There is exactly one. → `lib/profile_picture.dart:43`
@@ -65,20 +69,21 @@ than a winner picked.
 - **Stages fail open, and the pipeline wraps each call anyway.** Every stage
   invocation in `pipeline.run()` sits in `try/except` with a documented empty or
   safe fallback, logged to the trace rather than raised.
-  → `backend/core/pipeline.py:258` onward (Stage 0, and every stage after it)
+  → `backend/core/pipeline.py:272` onward (Stage 0, and every stage after it)
 - **The memory layer raises `ValueError` with the sentence explaining the
   refusal; routes convert it to `HTTPException(422)`.** The sentence is the
-  answer the user sees. → `backend/api/server.py:1762` (`correct_memory`)
+  answer the user sees. → `backend/api/server.py:2266` (`correct_memory`)
 - **One malformed row costs that row, not the operation.** A provider row that
   cannot be constructed is skipped with a warning and the chain continues.
-  → `backend/core/pipeline.py:142`
+  → `backend/core/pipeline.py:148`
 - **Dart: API failures become `ApiException`, whose `detail` unwraps FastAPI's
   `{"detail": …}` envelope**; screens store `error.toString()` in a nullable
   `_error` field and render it. → `lib/api_client.dart:17`
-- **Inconsistent:** the catch variable is `catch (error)` in 25 places and
-  `catch (e)` in 8 (`lib/screens/model_browser.dart:75`,
-  `lib/screens/sign_in_screen.dart:212`, others). No functional difference;
-  match the file you are in.
+- **Inconsistent:** a used catch variable is named both `catch (error)`
+  (`lib/screens/decisions_view.dart`) and `catch (e)`
+  (`lib/screens/backup_view.dart:135`). No functional difference; match the
+  file you are in. `catch (_)` marks an error deliberately discarded
+  (`lib/api_client.dart:34`).
 
 ## Async and threading
 
@@ -96,7 +101,7 @@ than a winner picked.
   → `backend/api/server.py` (lifespan shutdown block)
 - **Streaming is a generator, not a callback.** `pipeline.run()` yields wire
   events and finishes with one `pipeline_complete` sentinel.
-  → `backend/core/pipeline.py:217`
+  → `backend/core/pipeline.py:231`
 
 ## Configuration
 
@@ -104,7 +109,7 @@ than a winner picked.
   `get_settings()` at call time**, not captured at import.
   → `backend/memory/decision_log.py:77`
 - **Paths are overridable by environment variable with a default**, so tests can
-  isolate them. → `backend/api/server.py:50` (`PIP_DB_PATH`)
+  isolate them. → `backend/api/server.py:60` (`PIP_DB_PATH`)
 - **Inconsistent / dead config:** `settings.json` contains keys nothing reads —
   `observer.model` (the model actually comes from
   `pipeline.get_active_model_name()`, falling back to the hardcoded
@@ -163,7 +168,7 @@ than a winner picked.
   `tmp_path`, kept as a table so that adding an override without isolating it is
   a visible omission. Adding a new `PIP_*` path override means adding it here.
   → `backend/tests/conftest.py:17`
-- **Inconsistent:** 13 of 58 backend test files define their own local `conn`
+- **Inconsistent:** 16 of 67 backend test files define their own local `conn`
   fixture (`sqlite3.connect(tmp_path / "pip.db")` + `initialize_schema`) instead
   of a shared one; `conftest.py` provides `db_key` and isolation but no `conn`.
   → `backend/tests/test_decision_log.py:9`

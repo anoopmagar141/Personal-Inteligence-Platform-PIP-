@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-28] claude · Checked the agent-context layer against the code and corrected the drift: a renamed widget (thinking_orb → thinking_mark), six stale line citations, stale test/fixture counts, a deleted file still listed as tracked, the claim that only backend/memory imports the DB drivers (backend/core/restore.py does too), and the Ollama 'client' that is really urllib over HTTP with the `ollama` package unimported · why: the docs are read as ground truth before every task · files: AGENTS.md, docs/ARCHITECTURE.md, docs/CONVENTIONS.md, docs/LOG.md
+
 - [2026-09-28] claude · Ran the end-to-end Observer measurement (37 conversations, 3 runs, qwen2.5:7b) and recorded it in FREEZE_LIST §7.14 with the raw report in docs/eval/: memory precision 88-90% (the one false memory is sarcasm, every run), recall 30-39% (lost mostly at the evidence gate), and decisions auto-logged with overstatements · why: the thesis had only been measured at the gate · files: docs/eval/observer_end_to_end_2026-09-28.md, docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-09-28] claude · Added a labelled conversation set and an end-to-end Observer measurement script (real local model through grounding, the evidence gate, the Constitution and Stage 13), committed before the first full run so the labels cannot be tuned to results · why: the council found the thesis measured only at the gate, never end to end · files: backend/tests/observer_cases.py, scripts/eval_observer_end_to_end.py, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-26] claude · Recorded the Track 2 PIP_DB_KEY report in FREEZE_LIST §7.3: the main-DB env read is redundant, the vector_store read is load-bearing and fails open (chunks written after sign-out land in plaintext), and nvidia-smi inherits the key · why: Promise 7's final clause depended on it, and the pre-accepted outcome predicted the opposite · files: docs/FREEZE_LIST.md, docs/LOG.md
 
-- [2026-09-26] claude · Added the Track 1 Observer/provider-authorization tests and recorded the Track 1 report in FREEZE_LIST §7.2: the locality gate holds on the real path, and a manual break-it confirmed the test catches its removal · why: Promise 5 was claimed but had no outcome test on the real path · files: backend/tests/test_observer_provider_authorization.py, docs/FREEZE_LIST.md, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -84,3 +84,4 @@ Format:
 - 2026-09-19 (codex): documented the normal and developer launch commands and their locked sign-in behaviour.
 - 2026-09-19 (antigravity): cleared a stale lock before backend startup and made Ollama optional when other endpoints are configured.
 - 2026-09-26 (claude): adopted the reliability freeze - added docs/FREEZE_LIST.md and pointed AGENTS.md's Current focus at it.
+- 2026-09-26 (claude): added the Track 1 Observer/provider-authorization tests and recorded in FREEZE_LIST §7.2 that the locality gate holds on the real path, with a manual break-it confirming the test catches its removal.
