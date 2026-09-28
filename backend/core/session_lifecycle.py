@@ -307,13 +307,21 @@ def drain_pending_on_startup(conn, provider: BaseLLMProvider) -> dict[str, list]
     def observer_runner(transcript: str) -> None:
         try:
             observer.run_session_end(conn, transcript, provider)
-        except observer.ObserverUnavailableError as e:
+        except (observer.ObserverUnavailableError, observer.ObserverLocalProviderError) as e:
             # The queue owns retry semantics and deliberately knows nothing
             # about Stage 11 (see pending_observer's module note), so the
             # translation lives here - this is the one module that imports
             # both. Without it the drain would file an unreachable Ollama as
             # permanently 'failed', which loses the transcript just as surely
             # as dropping it.
+            #
+            # A locality refusal is the same case from the other side: the
+            # only provider on offer is not recorded as local, so nothing was
+            # attempted and nothing was sent. It used to fall through to
+            # 'failed', and startup recovery has already marked the
+            # conversation observed by then - so a session caught by a start
+            # with no local model was never learned from, even once one was
+            # configured (FREEZE_LIST §7.2 finding 1).
             raise pending_observer.RetryableError(str(e)) from e
 
     return pending_observer.drain(conn, observer_runner)

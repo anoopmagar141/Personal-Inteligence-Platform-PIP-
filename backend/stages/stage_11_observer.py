@@ -316,7 +316,14 @@ _EXTRACTION_SCHEMA: dict[str, Any] = {
 
 
 class ObserverLocalProviderError(Exception):
-    """Raised when Observer is given a non-local provider (ADR-033 Rule 4)."""
+    """
+    Raised when Observer is given a non-local provider (ADR-033 Rule 4).
+
+    Not only a caller mistake: it is what every session end meets when Ollama
+    is down and the only configured endpoint is not recorded as local. Nothing
+    has been sent when it is raised, and the session is still owed its pass -
+    the startup drain treats it as retryable, like ObserverUnavailableError.
+    """
 
 
 class ObserverUnavailableError(Exception):
@@ -742,10 +749,12 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
     """
     Single-pass extraction over a full session transcript, capped at
     observer.max_session_tokens - see _cap_transcript().
-    Failure mode: fails open (Part 7 Stage 11 spec: "profile unchanged, snapshot not
-    updated"). Any LLM/network failure or unparseable output returns an empty result
-    rather than raising - the only exception is ObserverLocalProviderError, which is
-    a caller programming error (Rule 4 violation), not a runtime failure.
+    Failure mode: unparseable output fails open (Part 7 Stage 11 spec: "profile
+    unchanged, snapshot not updated") and returns an empty result. Two failures
+    raise instead, because nothing was extracted and the session is still owed a
+    pass: ObserverUnavailableError (the LLM could not be reached) and
+    ObserverLocalProviderError (the provider is not recorded as local - raised
+    before anything is sent). The startup drain retries both.
 
     conn is required for the Rule 4 check below - this used to trust
     provider.get_model_info()["is_local"] alone, which is whatever the

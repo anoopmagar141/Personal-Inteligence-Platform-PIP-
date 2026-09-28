@@ -275,3 +275,32 @@ def test_a_session_refused_for_locality_is_observed_at_the_next_start_once_the_p
     assert statuses == ["completed"]
     assert [r for r in stub.requests if r[0] == "POST"] == [("POST", "/v1/chat/completions")]
     assert ollama_down == []
+
+
+def test_a_session_refused_at_startup_for_locality_stays_queued_for_a_later_start(
+    db_path, tmp_path, monkeypatch, stub, ollama_down
+):
+    """
+    Promise 5's "queued for the next launch" held for exactly one launch
+    (FREEZE_LIST §7.2 finding 1). Startup recovery marks the conversation
+    observed as it queues it; the drain then got ObserverLocalProviderError,
+    which it filed as 'failed' - terminal, never retried. So a session caught
+    by a start with no local provider was never learned from, even after one
+    was added. It must stay queued instead, still with nothing sent anywhere.
+    """
+    _register_stub(db_path, stub, is_local=False)
+    conversation_id, outcomes = _hold_one_session(monkeypatch, tmp_path)
+    assert outcomes == ["ObserverLocalProviderError"]
+
+    first = _run_startup_catch_up(db_path)
+
+    assert first != ["failed"], "a locality refusal at startup was filed as terminal"
+    assert first == ["processing"], "the session did not stay queued"
+    assert stub.requests == []
+
+    _mark_stub_local(db_path)
+    second = _run_startup_catch_up(db_path)
+
+    assert second == ["completed"]
+    assert [r for r in stub.requests if r[0] == "POST"] == [("POST", "/v1/chat/completions")]
+    assert ollama_down == []

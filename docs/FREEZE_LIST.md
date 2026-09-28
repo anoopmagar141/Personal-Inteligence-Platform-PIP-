@@ -85,8 +85,8 @@ test.
 - `AGENTS.md` is at its **80-line cap**. Its "Current focus" section now
   points here (done 2026-09-26; still 80 lines, stale packaging text
   removed).
-- `docs/LOG.md` is held at **25 entries**; the twenty-one oldest are rolled into
-  seventeen Archive summary lines (done 2026-09-26).
+- `docs/LOG.md` is held at **25 entries**; the twenty-two oldest are rolled into
+  eighteen Archive summary lines (done 2026-09-26).
 
 ---
 

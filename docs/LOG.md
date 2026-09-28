@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-09-28] claude · Made the startup drain keep a session the Observer refused for want of a local provider queued for a later start, instead of filing it as terminally failed · why: Promise 5's queue-for-next-launch held for one launch only, so such a session was never learned from (FREEZE_LIST §7.2 finding 1) · files: backend/core/session_lifecycle.py, backend/stages/stage_11_observer.py, backend/tests/test_observer_provider_authorization.py, docs/LOG.md
+
 - [2026-09-28] claude · Recorded the answers-about-the-user fixes in FREEZE_LIST §7.10: three promises with tests seen failing first, a corrected cache test that had passed on the unfixed code, and what stays open · why: the freeze doc is the canonical record of what is enforced · files: docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-09-28] claude · Keyed the response cache on a record version that database triggers bump on any write to a table the context draws from, so a cached answer is never served after a document, decision or profile change · why: an answer cached with no context was replayed after matching context existed (FREEZE_LIST §7.6) · files: backend/core/schema.sql, backend/memory/profile_store.py, backend/core/response_cache.py, backend/core/pipeline.py, backend/tests/test_answers_about_the_user.py, docs/ARCHITECTURE.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-14] codex · Added an explicit first-run Create/Import gateway before password setup · why: a synthetic empty default profile is not a user-facing account flow · files: frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/test/sign_in_screen_test.dart, docs/LOG.md
 
-- [2026-09-12] codex · Rebuilt PIP-Setup.exe and completed an isolated install, runtime-load, and uninstall smoke test · why: the prior installer predated the app-local Visual C++ runtime commit and its recorded hash no longer matched · files: dist/PIP-Setup.exe, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -75,3 +75,4 @@ Format:
 - 2026-09-10 (claude): rebuilt dist/PIP-Setup.exe twice from this code (the first predated a Backup-tab refresh fix found by running it); final sha256 69F2791D…BFCD.
 - 2026-09-10 (claude): replaced the iris artwork with the six-node mark across both .ico files, the installer wizard and the app assets, and rebuilt the installer from it.
 - 2026-09-10 (claude): shipped MSVCP140/VCRUNTIME140/VCRUNTIME140_1 in the payload's app folder and made the payload gate require them, since a clean Windows install has none.
+- 2026-09-12 (codex): rebuilt PIP-Setup.exe and completed an isolated install, runtime-load and uninstall smoke test.
