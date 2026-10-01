@@ -1252,6 +1252,27 @@ where overstatement gets in.
 4. Route decisions through the evidence gate (§7.13 finding 1). That is
    where the overstatements come from.
 
+### 7.15 Launch-checklist UI fixes (authorized 2026-10-01)
+
+A read-only audit of the Flutter client against the half of a web launch
+checklist that applies to a desktop app (LOG 2026-10-01) found four
+problems. The owner authorized all four, in this order, one commit each.
+
+**Fix 1 - text contrast.**
+- **Promise:** every text colour (text, muted, faint) in both palettes and
+  on the sign-in stage is at least 4.5:1 on every surface it can sit on.
+- **Mechanism:** the colour values themselves; `test/theme_test.dart` is
+  the guard. Faint had been held to 3:1 as "metadata", but 3:1 is the
+  large-text bar and faint is set at 11-13.5px in about sixty places.
+- **Evidence:** the raised bar failed on the old palette in four places
+  (light faint 2.86:1 and light muted 4.38:1 on surfaceRaised, dark faint
+  3.22:1, sign-in faint 3.87:1 on the card). New values: light muted
+  #5A5F6E, light faint #676C7C, dark faint #858A9A, sign-in faint
+  #7B8195, all >= 4.61:1. A second test keeps faint quieter than muted.
+  Full Flutter suite 302/302.
+- **Not covered:** colours set as literals outside the palette (the
+  sign-in screen's error red, chart and glow tints) are not in the test.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1298,6 +1319,7 @@ findings.
 | Answers-about-the-user fixes | Landed 2026-09-28 (§7.10) | 3 promises enforced and tested; real-model effect of the new header unmeasured |
 | Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
 | Lock identity fix | Landed 2026-09-28 (§7.12) | Reused PIDs no longer block PIP; atomic-create race and Linux branch untested |
+| Launch-checklist UI fixes | Landing 2026-10-01 (§7.15) | Fix 1 contrast landed |
 
 ---
 

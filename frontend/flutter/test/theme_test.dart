@@ -7,10 +7,13 @@
 // wrong on screen), and that every colour pairing the app relies on clears a
 // measured contrast ratio rather than an opinion about it.
 //
-// Thresholds are WCAG 2.1: 4.5:1 for body text, 3:1 for the incidental
-// metadata that is deliberately quiet. The faint pairings are held to the
-// lower bar honestly rather than exempted - "it's only a timestamp" is how a
-// 2.5:1 grey survives a review.
+// Thresholds are WCAG 2.1 AA: 4.5:1 for every text colour on every surface it
+// can sit on. Faint used to be held to 3:1 as "incidental metadata", but 3:1 is
+// the bar for LARGE text (24px, or 18.7px bold) and faint is set at 11-13.5px
+// in about sixty places - hints, timestamps, the backup warnings, the
+// composer's placeholder. Measured in the 2026-10-01 audit it was 2.86:1 on
+// the light raised panel, which is the "it's only a timestamp" grey the old
+// comment warned about, passing because the bar had been lowered to meet it.
 
 import 'dart:math' as math;
 
@@ -18,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pip_flutter_client/theme.dart';
+import 'package:pip_flutter_client/widgets/gateway_flow.dart';
 
 /// WCAG relative luminance.
 double _luminance(Color color) {
@@ -83,10 +87,13 @@ void main() {
       final pip = entry.value;
 
       test('$name: body text is readable everywhere it is used', () {
-        expectReadable('$name text on bg', pip.text, pip.bg, 4.5);
-        expectReadable('$name text on surface', pip.text, pip.surface, 4.5);
-        expectReadable('$name muted text on surface', pip.textMuted, pip.surface, 4.5);
-        expectReadable('$name muted text on bg', pip.textMuted, pip.bg, 4.5);
+        // All three surfaces, not just the two a text colour is "usually" on:
+        // surfaceRaised is the composer, chips and hover rows, and it is the
+        // lightest background in the light palette - the one that failed.
+        for (final bg in {'bg': pip.bg, 'surface': pip.surface, 'surfaceRaised': pip.surfaceRaised}.entries) {
+          expectReadable('$name text on ${bg.key}', pip.text, bg.value, 4.5);
+          expectReadable('$name muted text on ${bg.key}', pip.textMuted, bg.value, 4.5);
+        }
       });
 
       test('$name: the primary button label is readable on the accent', () {
@@ -101,11 +108,31 @@ void main() {
         expectReadable('$name accent on accentSoft', pip.accent, pip.accentSoft, 4.5);
       });
 
-      test('$name: faint metadata still clears the large-text minimum', () {
-        expectReadable('$name faint text on surface', pip.textFaint, pip.surface, 3.0);
-        expectReadable('$name faint text on bg', pip.textFaint, pip.bg, 3.0);
+      test('$name: faint text clears the body-text minimum, because it is body-sized', () {
+        for (final bg in {'bg': pip.bg, 'surface': pip.surface, 'surfaceRaised': pip.surfaceRaised}.entries) {
+          expectReadable('$name faint text on ${bg.key}', pip.textFaint, bg.value, 4.5);
+        }
+      });
+
+      test('$name: faint stays quieter than muted', () {
+        // The point of having both. Raising faint to 4.5:1 must not quietly
+        // turn it into a second muted.
+        expect(contrast(pip.textFaint, pip.surface), lessThan(contrast(pip.textMuted, pip.surface)));
       });
     }
+
+    test('sign-in stage: faint and muted text are readable on the stage and its cards', () {
+      // The gateway screens draw on their own fixed dark palette rather than
+      // the theme's (gateway_flow.dart explains why), so the theme tests above
+      // never see it. 0xFF15161F is the card, field and dialog fill used
+      // throughout sign_in_screen.dart; faint sits on both it and the stage.
+      const card = Color(0xFF15161F);
+      for (final bg in {'stage': kGatewayStage, 'card': card}.entries) {
+        expectReadable('gateway text on ${bg.key}', kGatewayText, bg.value, 4.5);
+        expectReadable('gateway muted text on ${bg.key}', kGatewayTextMuted, bg.value, 4.5);
+        expectReadable('gateway faint text on ${bg.key}', kGatewayTextFaint, bg.value, 4.5);
+      }
+    });
   });
 
   group('resolution', () {

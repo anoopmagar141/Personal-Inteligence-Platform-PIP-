@@ -47,7 +47,9 @@ import '../theme.dart';
 const kGatewayStage = Color(0xFF060608);
 const kGatewayText = Color(0xFFF2F3F8);
 const kGatewayTextMuted = Color(0xFF9AA0B4);
-const kGatewayTextFaint = Color(0xFF6E7488);
+// Was #6E7488: 4.35:1 on the stage and 3.87:1 on the card fill, under the
+// 4.5:1 body-text minimum it is set at (11.5-12px). See test/theme_test.dart.
+const kGatewayTextFaint = Color(0xFF7B8195);
 const kGatewayAccent = Color(0xFF8B8BF5);
 
 /// A panel that reads as glass over the field rather than as a hole in it.

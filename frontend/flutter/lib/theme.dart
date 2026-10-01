@@ -56,14 +56,21 @@ class PipPalette extends ThemeExtension<PipPalette> {
   ///   * danger was #DC2626, which is 4.23:1 on its own soft tint - the exact
   ///     pairing used for refusal messages, i.e. the text that appears
   ///     precisely when something has gone wrong.
+  ///
+  /// And again on 2026-10-01, when the bar for textFaint moved from 3:1 to
+  /// 4.5:1 because it is set at body sizes, not large ones: light textFaint
+  /// #8A8FA0 -> #676C7C (2.86:1 -> 4.64:1 on surfaceRaised), dark textFaint
+  /// #6B7080 -> #858A9A (3.22:1 -> 4.61:1). Light textMuted #6B7080 ->
+  /// #5A5F6E went with it, partly because it was itself 4.38:1 on
+  /// surfaceRaised and partly so faint stays quieter than muted.
   static const light = PipPalette(
     bg: Color(0xFFF7F8FB),
     surface: Color(0xFFFFFFFF),
     surfaceRaised: Color(0xFFF0F1F6),
     border: Color(0xFFE3E6ED),
     text: Color(0xFF1A1D26),
-    textMuted: Color(0xFF6B7080),
-    textFaint: Color(0xFF8A8FA0),
+    textMuted: Color(0xFF5A5F6E),
+    textFaint: Color(0xFF676C7C),
     accent: Color(0xFF4F46E5),
     accentSoft: Color(0xFFEEF0FD),
     accentOn: Color(0xFFFFFFFF),
@@ -86,7 +93,7 @@ class PipPalette extends ThemeExtension<PipPalette> {
     border: Color(0xFF2A2F3D),
     text: Color(0xFFE8EAF0),
     textMuted: Color(0xFF9AA0B0),
-    textFaint: Color(0xFF6B7080),
+    textFaint: Color(0xFF858A9A),
     accent: Color(0xFF8B8BF5),
     accentSoft: Color(0xFF232447),
     accentOn: Color(0xFF14162B),
