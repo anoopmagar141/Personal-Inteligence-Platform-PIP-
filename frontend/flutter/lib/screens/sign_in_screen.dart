@@ -381,6 +381,12 @@ class _SignInScreenState extends State<SignInScreen> {
       setState(() => _error = 'Those two passwords are different.');
       return;
     }
+    // Setup only. An existing password is whatever it is, and refusing to send
+    // it would lock out anyone whose password predates the rule.
+    if (_isSetup && !isLongEnoughPassword(password)) {
+      setState(() => _error = 'Use at least $kMinPasswordLength characters.');
+      return;
+    }
 
     setState(() {
       _busy = true;

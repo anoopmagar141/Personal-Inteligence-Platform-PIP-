@@ -357,6 +357,25 @@ void main() {
       expect(api.calls.where((c) => c.startsWith('password:')), isEmpty);
     });
 
+    testWidgets('refuses a short new password without a round trip', (tester) async {
+      // Same reason as the mismatch: the client knows the rule, and asking
+      // the server costs a full re-encryption to be told it.
+      final api = await pumpProfile(tester);
+      await scrollToAccount(tester);
+
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), 'old-password');
+      await tester.enterText(fields.at(1), 'seven77');
+      await tester.enterText(fields.at(2), 'seven77');
+      await tester.tap(find.widgetWithText(FilledButton, 'Change password'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Use at least 8 characters.'), findsOneWidget);
+      expect(api.calls.where((c) => c.startsWith('password:')), isEmpty);
+    });
+
     testWidgets('warns that the new password cannot be recovered', (tester) async {
       await pumpProfile(tester);
       await scrollToAccount(tester);

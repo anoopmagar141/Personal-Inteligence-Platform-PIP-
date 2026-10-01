@@ -14,6 +14,18 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+/// The shortest password the backend accepts, for a new profile, a password
+/// change or a restore. The backend is the authority and refuses anything
+/// shorter; the client checks first only because the server's answer costs a
+/// key derivation, or for a change a full re-encryption, to arrive.
+/// test/password_rule_test.dart holds this to the backend's own numbers.
+const kMinPasswordLength = 8;
+
+/// Whether [password] meets [kMinPasswordLength], counted the way the backend
+/// counts it. Python's len() counts code points; Dart's String.length counts
+/// UTF-16 units, which would make four emoji eight characters long.
+bool isLongEnoughPassword(String password) => password.runes.length >= kMinPasswordLength;
+
 class ApiException implements Exception {
   final int statusCode;
   final String body;

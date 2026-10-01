@@ -10,7 +10,9 @@ changed only under four explicit authorizations, each fix test-first with
 the test seen failing: profile boundary (§7.9), answers about the user
 (§7.10), lost learning (§7.11), lock identity (§7.12). §7.7's fix order is
 complete: the promise wording was decided 2026-09-28 (§4 now holds nine
-promises). Anything further needs a new authorization.
+promises). On 2026-10-01 the owner authorized four UI fixes from a
+launch-checklist audit (§7.15), all landed. Anything further needs a new
+authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1315,6 +1317,27 @@ problems. The owner authorized all four, in this order, one commit each.
   screen shorter than about 615px logical (where the clamp applies) still
   overflows it. Dialogs were not laid out at the minimum.
 
+**Fix 4 - the password minimum, checked before the round trip.**
+- **Promise:** choosing a first password, changing it and restoring a
+  backup all refuse a password under the backend's minimum before calling
+  the backend, and the client's minimum is the backend's.
+- **Mechanism:** `kMinPasswordLength` and `isLongEnoughPassword()` in
+  `lib/api_client.dart`, used by all three forms. It counts code points
+  (`runes`), as Python's `len()` does. Unlock is not checked: an existing
+  password is sent as it is. The backend stays the authority.
+- **Evidence:** sign-in setup and change-password each gained a test that
+  a 7-character password never reaches the API. Both failed on the old
+  code, which sent it and waited for the server. A third failing test
+  covered four emoji, which are 4 code points but 8 UTF-16 units.
+  `test/password_rule_test.dart` finds every `len(...password...) < N` in
+  `session_key.py` and `restore.py` (three) and holds the constant to
+  them. Break-it: at 6 the rule test and both screen tests fail. The old
+  server-refusal test now types a long password, so it still tests the
+  server's message. Full Flutter suite 311/311.
+- **Not covered:** the backend's blank-password check (`strip()`) is not
+  mirrored. A password of eight spaces passes the client and is refused
+  by the server.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1361,7 +1384,7 @@ findings.
 | Answers-about-the-user fixes | Landed 2026-09-28 (§7.10) | 3 promises enforced and tested; real-model effect of the new header unmeasured |
 | Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
 | Lock identity fix | Landed 2026-09-28 (§7.12) | Reused PIDs no longer block PIP; atomic-create race and Linux branch untested |
-| Launch-checklist UI fixes | Landing 2026-10-01 (§7.15) | Fixes 1-3 landed: contrast, control names, minimum window |
+| Launch-checklist UI fixes | Landed 2026-10-01 (§7.15) | All four landed: contrast, control names, minimum window, password minimum. Open: hover-only delete control, sidebar does not scroll |
 
 ---
 

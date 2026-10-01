@@ -666,8 +666,8 @@ class _RestoreDialogState extends State<_RestoreDialog> {
       setState(() => _error = 'Those two passwords are different.');
       return;
     }
-    if (_fresh.text.length < 8) {
-      setState(() => _error = 'Use at least 8 characters for the new password.');
+    if (!isLongEnoughPassword(_fresh.text)) {
+      setState(() => _error = 'Use at least $kMinPasswordLength characters for the new password.');
       return;
     }
     Navigator.pop(context, [_backup.text, _fresh.text]);

@@ -270,16 +270,47 @@ void main() {
       expect(api.created, ['matching-password']);
     });
 
+    testWidgets('refuses a password under the minimum before asking the server',
+        (tester) async {
+      // The server refuses it too, but only after a quarter-second of key
+      // derivation, and the client already knows the rule (kMinPasswordLength).
+      final api = await pumpSignIn(tester, AuthState.setup);
+
+      await tester.enterText(find.byType(TextField).first, 'seven77');
+      await tester.enterText(find.byType(TextField).last, 'seven77');
+      await tester.tap(find.text('Create password'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Use at least 8 characters.'), findsOneWidget);
+      expect(api.created, isEmpty);
+    });
+
+    testWidgets('counts characters the way the server does', (tester) async {
+      // Four keys are four characters to Python's len() but eight UTF-16 code
+      // units to Dart's String.length. Counting units would wave this through
+      // and leave the server to refuse it.
+      final api = await pumpSignIn(tester, AuthState.setup);
+
+      await tester.enterText(find.byType(TextField).first, '🔑🔑🔑🔑');
+      await tester.enterText(find.byType(TextField).last, '🔑🔑🔑🔑');
+      await tester.tap(find.text('Create password'));
+      await tester.pumpAndSettle();
+
+      expect(api.created, isEmpty);
+    });
+
     testWidgets('surfaces the server\'s refusal of a weak password',
         (tester) async {
+      // Long enough to pass the client's own check, so this is still the
+      // server's refusal being shown and not the client's.
       await pumpSignIn(
         tester,
         AuthState.setup,
         throwThis: Exception('422 {"detail":"Use at least 8 characters."}'),
       );
 
-      await tester.enterText(find.byType(TextField).first, 'short');
-      await tester.enterText(find.byType(TextField).last, 'short');
+      await tester.enterText(find.byType(TextField).first, 'weak-but-long');
+      await tester.enterText(find.byType(TextField).last, 'weak-but-long');
       await tester.tap(find.text('Create password'));
       await tester.pumpAndSettle();
 

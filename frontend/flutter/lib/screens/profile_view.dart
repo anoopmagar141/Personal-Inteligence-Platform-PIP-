@@ -1807,6 +1807,10 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       setState(() => _error = 'Those two passwords are different.');
       return;
     }
+    if (!isLongEnoughPassword(_next.text)) {
+      setState(() => _error = 'Use at least $kMinPasswordLength characters.');
+      return;
+    }
     Navigator.pop(context, [_current.text, _next.text]);
   }
 
