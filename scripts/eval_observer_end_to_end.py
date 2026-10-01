@@ -20,7 +20,7 @@ same table conftest.py isolates - so a run cannot touch real data.
 What is learned is read from the database, not from the pipeline's return
 value: new or changed rows in the profile tables, new questions in the
 pending queue, and new decision-log entries (the Observer's decisions reach
-prompts too, through a different gate - FREEZE_LIST §7.13).
+prompts too, through a different gate - FREEZE_LIST section 7.13).
 
     precision  learned rows that match a fact the user stated, over learned
                rows that match either a stated fact or a trap. UNLABELLED
@@ -44,6 +44,11 @@ import tempfile
 import time
 from collections import Counter
 from pathlib import Path
+
+# Fail with the interpreter you used, not a wrong install instruction.
+import _venv
+
+_venv.require("sqlcipher3")
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))

@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-10-01] claude · Gave scripts/eval_observer_end_to_end.py the _venv.require("sqlcipher3") guard and replaced the section sign in its docstring with "section" · why: test_venv_guard failed on both since the script was added in 1256b51 · files: scripts/eval_observer_end_to_end.py, docs/LOG.md
+
 - [2026-10-01] claude · Made first-password setup and change-password refuse a password under the backend's 8-character minimum before the round trip, through one kMinPasswordLength (counted in code points, as Python's len() does) that restore now shares and a test holds to the backend's own numbers · why: only restore checked locally, so the other two paid a key derivation or a full re-encryption to be told · files: frontend/flutter/lib/api_client.dart, frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/lib/screens/profile_view.dart, frontend/flutter/lib/screens/backup_view.dart, frontend/flutter/test/password_rule_test.dart, frontend/flutter/test/sign_in_screen_test.dart, frontend/flutter/test/profile_management_test.dart, docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-10-01] claude · Gave the Windows window a minimum client size of 800x640 logical (WM_GETMINMAXINFO, DPI-scaled, clamped to the work area), defined once in flutter_window.h and read from there by a layout test of every tab; tool/check_min_window.py confirms the release build holds it · why: the window could be dragged to a sliver and the sidebar and four screens overflowed below 800x615 · files: frontend/flutter/windows/runner/flutter_window.h, frontend/flutter/windows/runner/flutter_window.cpp, frontend/flutter/test/minimum_window_test.dart, frontend/flutter/tool/check_min_window.py, docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-27] claude · Made sign-out empty the response cache, so the next profile to sign in is no longer served the previous one's answers, with an end-to-end test through the real auth and chat routes · why: measured in FREEZE_LIST §7.8, a second profile received an answer built from the first profile's documents with its own model never called · files: backend/core/session_key.py, backend/core/response_cache.py, backend/tests/test_profile_boundary.py, docs/LOG.md
 
-- [2026-09-27] claude · Ran the end-to-end profile boundary test through the real routes and recorded it in FREEZE_LIST §7.8: profile B was served profile A's document-based answer, an ingest in flight at sign-out stored plaintext that survived A's next sign-in, and uploads go to one shared plaintext folder rather than the profile's own · why: §7.7 named it the single test that could confirm or refute Pattern 1 · files: docs/FREEZE_LIST.md, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -90,3 +90,4 @@ Format:
 - 2026-09-27 (claude): recorded the Track 4a Stage 1 routing report in FREEZE_LIST §7.5 - 10 of 14 identity/project questions reached the model without the seeded project, under a header claiming the complete record.
 - 2026-09-27 (claude): recorded the Track 4b cache-safety report in FREEZE_LIST §7.6 - stale cached answers were replayed after a matching document or decision existed, and one profile's answer was served to another.
 - 2026-09-27 (claude): wrote the cross-track synthesis in FREEZE_LIST §7.7 - five patterns confirmed by two or more reports (sign-out boundary missing in-memory work, duplicated rules, optional parts failing open, tests concealing defects, under-identifying keys).
+- 2026-09-27 (claude): ran the end-to-end profile boundary test and recorded it in FREEZE_LIST §7.8 - profile B was served A's document answer, an ingest in flight at sign-out stored plaintext, and uploads shared one plaintext folder.
