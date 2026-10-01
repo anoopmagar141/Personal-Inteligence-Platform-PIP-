@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-10-01] claude · Gave the Windows window a minimum client size of 800x640 logical (WM_GETMINMAXINFO, DPI-scaled, clamped to the work area), defined once in flutter_window.h and read from there by a layout test of every tab; tool/check_min_window.py confirms the release build holds it · why: the window could be dragged to a sliver and the sidebar and four screens overflowed below 800x615 · files: frontend/flutter/windows/runner/flutter_window.h, frontend/flutter/windows/runner/flutter_window.cpp, frontend/flutter/test/minimum_window_test.dart, frontend/flutter/tool/check_min_window.py, docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-10-01] claude · Gave every icon-only control a name a screen reader can read (send/stop, delete conversation, sidebar toggle, collapsed sidebar items) and narrowed the collapsed sidebar header's padding, which clipped the toggle by 2px · why: the audit found no Semantics in lib/ and 13 tappables announced only as 'button' · files: frontend/flutter/lib/home_shell.dart, frontend/flutter/lib/screens/chat_view.dart, frontend/flutter/test/control_labels_test.dart, docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-10-01] claude · Raised every text colour to WCAG AA (4.5:1) on every surface in both palettes and on the sign-in stage: light muted #5A5F6E, light faint #676C7C, dark faint #858A9A, sign-in faint #7B8195; theme_test now holds faint to the body-text bar and covers surfaceRaised and the gateway palette · why: faint was 2.86-3.87:1 on 11-13px text, passing a 3:1 large-text bar it was never eligible for · files: frontend/flutter/lib/theme.dart, frontend/flutter/lib/widgets/gateway_flow.dart, frontend/flutter/test/theme_test.dart, docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-27] claude · Wrote the cross-track synthesis in FREEZE_LIST §7.7: five patterns each confirmed by two or more track reports (the sign-out/profile-switch boundary misses in-memory work; duplicated rules; optional components failing open; tests concealing the defect; under-identifying keys), plus candidate Promises 8-9 and a suggested fix order · why: all five tracks were classified and the owner authorized the synthesis · files: docs/FREEZE_LIST.md, docs/LOG.md
 
-- [2026-09-27] claude · Recorded the Track 4b cache-safety report in FREEZE_LIST §7.6: a cached no-context answer was replayed after a matching document and a matching decision existed, and one profile's document-based answer was served to another profile in the same process · why: cache freshness was enforced only at write time and the key carries no profile · files: docs/FREEZE_LIST.md, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -88,3 +88,4 @@ Format:
 - 2026-09-26 (claude): recorded the Track 2 PIP_DB_KEY report in FREEZE_LIST §7.3 - the vector_store read is load-bearing and fails open, and nvidia-smi inherits the key.
 - 2026-09-27 (claude): recorded the Track 3 PID-reuse lock report in FREEZE_LIST §7.4 - the lock stored a bare PID, so a reused PID blocked the app, the restore script and the launcher (fixed in §7.12).
 - 2026-09-27 (claude): recorded the Track 4a Stage 1 routing report in FREEZE_LIST §7.5 - 10 of 14 identity/project questions reached the model without the seeded project, under a header claiming the complete record.
+- 2026-09-27 (claude): recorded the Track 4b cache-safety report in FREEZE_LIST §7.6 - stale cached answers were replayed after a matching document or decision existed, and one profile's answer was served to another.

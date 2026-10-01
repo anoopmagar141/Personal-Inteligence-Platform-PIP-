@@ -1292,6 +1292,29 @@ problems. The owner authorized all four, in this order, one commit each.
   hovers its row, so it is named but not reachable by keyboard. Dialogs
   and the sign-in screens are not walked.
 
+**Fix 3 - a minimum window size.**
+- **Promise:** the window cannot be made smaller than a client area every
+  screen fits, 800x640 logical, unless the monitor's usable area is itself
+  smaller.
+- **Mechanism:** `WM_GETMINMAXINFO` in `windows/runner/flutter_window.cpp`.
+  The size is defined once, as `kMinClientWidth`/`kMinClientHeight` in
+  `flutter_window.h`. The frame is measured from the live window, scaled
+  for the monitor's DPI, and clamped to the work area.
+- **Evidence:** `test/minimum_window_test.dart` reads the two constants
+  from the header and lays out every tab and the first-run sign-in screen
+  at that size in Segoe UI. It failed before the fix (header defined
+  none). Break-it: at 600px height it fails with the sidebar's 15px
+  overflow. `tool/check_min_window.py` launches the release build and
+  asks for 400x300. Before the fix the client area went to 252x163; after
+  it, 800x640 at 1.5x scale. Full Flutter suite 307/307.
+- **Chosen smaller than proposed.** The audit suggested about 1024x640;
+  800x640 is the smallest size that measured clean. It leaves more room on
+  small laptop screens, and the clamp covers the rest.
+- **Not covered:** the exe check is a script, not part of `flutter test`,
+  because it needs a release build. The sidebar still cannot scroll, so a
+  screen shorter than about 615px logical (where the clamp applies) still
+  overflows it. Dialogs were not laid out at the minimum.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1338,7 +1361,7 @@ findings.
 | Answers-about-the-user fixes | Landed 2026-09-28 (§7.10) | 3 promises enforced and tested; real-model effect of the new header unmeasured |
 | Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
 | Lock identity fix | Landed 2026-09-28 (§7.12) | Reused PIDs no longer block PIP; atomic-create race and Linux branch untested |
-| Launch-checklist UI fixes | Landing 2026-10-01 (§7.15) | Fix 1 contrast and fix 2 control names landed |
+| Launch-checklist UI fixes | Landing 2026-10-01 (§7.15) | Fixes 1-3 landed: contrast, control names, minimum window |
 
 ---
 
