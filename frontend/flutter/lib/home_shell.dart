@@ -262,18 +262,32 @@ class _HomeShellState extends State<HomeShell> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.md),
+                  // Narrower sides when collapsed: 72px less 24px each side
+                  // left 24px for a 26px toggle, which clipped it by 2px.
+                  // Found by control_labels_test, the first test to collapse
+                  // the sidebar.
+                  padding: EdgeInsets.fromLTRB(
+                    _collapsed ? AppSpacing.md : AppSpacing.lg,
+                    AppSpacing.lg,
+                    _collapsed ? AppSpacing.md : AppSpacing.lg,
+                    AppSpacing.md,
+                  ),
                   child: Row(
                     mainAxisAlignment: _collapsed ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
                     children: [
                       if (!_collapsed)
                         Text('PIP', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: pip.accent)),
-                      InkWell(
-                        onTap: () => setState(() => _collapsed = !_collapsed),
-                        borderRadius: AppRadius.sm,
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Icon(_collapsed ? Icons.chevron_right : Icons.chevron_left, size: 18, color: pip.textMuted),
+                      // A chevron alone is "button" to a screen reader. The
+                      // Tooltip is what gives it a name (control_labels_test).
+                      Tooltip(
+                        message: _collapsed ? 'Expand sidebar' : 'Collapse sidebar',
+                        child: InkWell(
+                          onTap: () => setState(() => _collapsed = !_collapsed),
+                          borderRadius: AppRadius.sm,
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(_collapsed ? Icons.chevron_right : Icons.chevron_left, size: 18, color: pip.textMuted),
+                          ),
                         ),
                       ),
                     ],
@@ -414,20 +428,25 @@ class _SidebarItem extends StatelessWidget {
         ],
       ],
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
-      child: Material(
-        color: selected ? pip.accentSoft : Colors.transparent,
+    final item = Material(
+      color: selected ? pip.accentSoft : Colors.transparent,
+      borderRadius: AppRadius.sm,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: AppRadius.sm,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: AppRadius.sm,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            child: collapsed ? Center(child: row) : row,
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: collapsed ? Center(child: row) : row,
         ),
       ),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      // Collapsed, the label Text is gone and the item is an icon. The tooltip
+      // puts the name back, for the mouse and for a screen reader alike.
+      // Expanded, the visible label already names it, and a tooltip repeating
+      // it would only be noise.
+      child: collapsed ? Tooltip(message: label, child: item) : item,
     );
   }
 }

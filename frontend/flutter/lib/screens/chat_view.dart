@@ -627,8 +627,8 @@ class ChatViewState extends State<ChatView> {
                                     ),
                                   const Spacer(),
                                   _isStreaming
-                                      ? _SendButton(enabled: true, onTap: _stop, icon: Icons.stop_rounded, color: pip.danger)
-                                      : _SendButton(enabled: true, onTap: _send, icon: Icons.arrow_upward_rounded),
+                                      ? _SendButton(enabled: true, onTap: _stop, icon: Icons.stop_rounded, tooltip: 'Stop', color: pip.danger)
+                                      : _SendButton(enabled: true, onTap: _send, icon: Icons.arrow_upward_rounded, tooltip: 'Send'),
                                 ],
                               ),
                             ],
@@ -848,12 +848,15 @@ class _ConversationRowState extends State<_ConversationRow> {
                     ),
                   ),
                   if (_hovering)
-                    InkWell(
-                      onTap: widget.onDelete,
-                      borderRadius: AppRadius.sm,
-                      child: Padding(
-                        padding: EdgeInsets.all(2),
-                        child: Icon(Icons.close, size: 14, color: pip.textFaint),
+                    Tooltip(
+                      message: 'Delete conversation',
+                      child: InkWell(
+                        onTap: widget.onDelete,
+                        borderRadius: AppRadius.sm,
+                        child: Padding(
+                          padding: EdgeInsets.all(2),
+                          child: Icon(Icons.close, size: 14, color: pip.textFaint),
+                        ),
                       ),
                     ),
                 ],
@@ -901,25 +904,31 @@ class _SendButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
   final IconData icon;
+  /// Required, not optional: the button is an icon and nothing else, so this
+  /// is its only name - for a screen reader as much as for the mouse.
+  final String tooltip;
   /// Null means the palette's accent - a default argument has to be a
   /// compile-time constant, which a theme-resolved color cannot be.
   final Color? color;
-  const _SendButton({required this.enabled, required this.onTap, required this.icon, this.color});
+  const _SendButton({required this.enabled, required this.onTap, required this.icon, required this.tooltip, this.color});
 
   @override
   Widget build(BuildContext context) {
     final pip = context.pip;
-    return Material(
-      color: enabled ? (color ?? pip.accent) : pip.surfaceRaised,
-      borderRadius: AppRadius.sm,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: enabled ? (color ?? pip.accent) : pip.surfaceRaised,
         borderRadius: AppRadius.sm,
-        child: Container(
-          width: 40,
-          height: 40,
-          alignment: Alignment.center,
-          child: Icon(icon, size: 18, color: enabled ? pip.accentOn : pip.textFaint),
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: AppRadius.sm,
+          child: Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            child: Icon(icon, size: 18, color: enabled ? pip.accentOn : pip.textFaint),
+          ),
         ),
       ),
     );

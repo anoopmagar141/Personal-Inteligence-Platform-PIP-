@@ -1273,6 +1273,25 @@ problems. The owner authorized all four, in this order, one commit each.
 - **Not covered:** colours set as literals outside the palette (the
   sign-in screen's error red, chart and glow tints) are not in the test.
 
+**Fix 2 - names for icon-only controls.**
+- **Promise:** every control a screen reader can tap, on every tab, with
+  the sidebar open or collapsed, has a name it can read.
+- **Mechanism:** a `Tooltip` on each icon-only control (send/stop, delete
+  conversation, the sidebar toggle, and each sidebar item while
+  collapsed). `_SendButton` now requires its tooltip, so a new one cannot
+  be built without a name.
+- **Evidence:** `test/control_labels_test.dart` walks the semantics tree,
+  not the widget tree, and fails on any tappable node with neither label
+  nor tooltip. On the old code it found 13: the toggle, send, delete, and
+  ten collapsed items (nine tabs and Sign out). It passes now. Full
+  Flutter suite 305/305.
+- **Found on the way:** collapsing the sidebar overflowed its header by
+  2px (24px of room for a 26px toggle). This test is the first to
+  collapse it, so the padding fix went in the same commit.
+- **Not covered:** the delete control still exists only while the mouse
+  hovers its row, so it is named but not reachable by keyboard. Dialogs
+  and the sign-in screens are not walked.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1319,7 +1338,7 @@ findings.
 | Answers-about-the-user fixes | Landed 2026-09-28 (§7.10) | 3 promises enforced and tested; real-model effect of the new header unmeasured |
 | Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
 | Lock identity fix | Landed 2026-09-28 (§7.12) | Reused PIDs no longer block PIP; atomic-create race and Linux branch untested |
-| Launch-checklist UI fixes | Landing 2026-10-01 (§7.15) | Fix 1 contrast landed |
+| Launch-checklist UI fixes | Landing 2026-10-01 (§7.15) | Fix 1 contrast and fix 2 control names landed |
 
 ---
 

@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-10-01] claude · Gave every icon-only control a name a screen reader can read (send/stop, delete conversation, sidebar toggle, collapsed sidebar items) and narrowed the collapsed sidebar header's padding, which clipped the toggle by 2px · why: the audit found no Semantics in lib/ and 13 tappables announced only as 'button' · files: frontend/flutter/lib/home_shell.dart, frontend/flutter/lib/screens/chat_view.dart, frontend/flutter/test/control_labels_test.dart, docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-10-01] claude · Raised every text colour to WCAG AA (4.5:1) on every surface in both palettes and on the sign-in stage: light muted #5A5F6E, light faint #676C7C, dark faint #858A9A, sign-in faint #7B8195; theme_test now holds faint to the body-text bar and covers surfaceRaised and the gateway palette · why: faint was 2.86-3.87:1 on 11-13px text, passing a 3:1 large-text bar it was never eligible for · files: frontend/flutter/lib/theme.dart, frontend/flutter/lib/widgets/gateway_flow.dart, frontend/flutter/test/theme_test.dart, docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-10-01] claude · Audited the Flutter client against the applicable half of a web launch checklist, read-only, no code changed: textFaint fails WCAG AA in both themes (2.86-3.82:1, ~59 uses) and kGatewayTextFaint on the sign-in fields (3.23-3.87:1); no Semantics anywhere, send/stop, delete-chat, sidebar toggle and collapsed nav items are unlabelled icons; client password checks skip the backend's 8-char minimum on setup and change-password; outbound traffic is loopback or HTTPS, and no route stores a remote provider endpoint yet; no minimum window size, and a temporary Segoe-UI widget probe (deleted) found the sidebar overflowing at 800x600 and four screens overflowing at 640x480 and below; startup could not be timed because Windows Application Control blocks torch's DLL in this shell · why: the owner asked for the audit before any authorized fixes · files: docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-27] claude · Recorded the Track 4b cache-safety report in FREEZE_LIST §7.6: a cached no-context answer was replayed after a matching document and a matching decision existed, and one profile's document-based answer was served to another profile in the same process · why: cache freshness was enforced only at write time and the key carries no profile · files: docs/FREEZE_LIST.md, docs/LOG.md
 
-- [2026-09-27] claude · Recorded the Track 4a Stage 1 routing report in FREEZE_LIST §7.5: 10 of 14 realistic identity/project questions reached the model without the seeded project, under a header claiming the complete record · why: routing had been checked on intent labels, never on what the model is actually given · files: docs/FREEZE_LIST.md, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -87,3 +87,4 @@ Format:
 - 2026-09-26 (claude): added the Track 1 Observer/provider-authorization tests and recorded in FREEZE_LIST §7.2 that the locality gate holds on the real path, with a manual break-it confirming the test catches its removal.
 - 2026-09-26 (claude): recorded the Track 2 PIP_DB_KEY report in FREEZE_LIST §7.3 - the vector_store read is load-bearing and fails open, and nvidia-smi inherits the key.
 - 2026-09-27 (claude): recorded the Track 3 PID-reuse lock report in FREEZE_LIST §7.4 - the lock stored a bare PID, so a reused PID blocked the app, the restore script and the launcher (fixed in §7.12).
+- 2026-09-27 (claude): recorded the Track 4a Stage 1 routing report in FREEZE_LIST §7.5 - 10 of 14 identity/project questions reached the model without the seeded project, under a header claiming the complete record.
