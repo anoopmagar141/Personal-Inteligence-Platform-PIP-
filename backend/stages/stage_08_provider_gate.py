@@ -18,7 +18,9 @@
 # Gate logic (in evaluation order):
 #   1. Look up provider_id in provider_consent table.
 #   2. If no row → hard stop (fail-closed, see above).
-#   3. If is_cloud = 0 → local provider, no consent needed → pass.
+#   3. If is_cloud = 0 → local provider, no consent needed → pass - but only
+#      when the provider itself also reports being local. If it does not, the
+#      two records disagree → hard stop (see run()).
 #   4. If revoked = 1 → consent was previously granted but revoked → hard stop.
 #   5. If user_consented = 0 → not consented → hard stop.
 #   6. If consent_scope does not permit the requested operation → hard stop.
@@ -66,6 +68,8 @@ def run(
     conn,
     provider_id: str,
     requested_scope: str = "full_inference",
+    *,
+    provider_is_local: bool,
 ) -> ConsentRecord:
     """Run the provider consent gate for *provider_id*.
 
@@ -75,6 +79,10 @@ def run(
             "web_search").
         requested_scope: The operation scope the caller needs (e.g.
             "full_inference", "web_search_only"). Defaults to "full_inference".
+        provider_is_local: What the provider itself reports - for a configured
+            endpoint, its llm_endpoints.is_local. Required, with no default: a
+            caller that does not say is a caller this gate cannot check, and
+            the one way to find out it forgot is a TypeError.
 
     Returns:
         ConsentRecord if all checks pass.
@@ -101,8 +109,21 @@ def run(
     consent_scope = row["consent_scope"]
     revoked = bool(row["revoked"])
 
-    # Check 2 — local providers need no consent gate.
+    # Check 2 — local providers need no consent gate. Local means BOTH records
+    # say so, the rule Stage 11's Observer gate already applies: the consent
+    # record alone is written once, when an endpoint is first saved, and never
+    # updated. An endpoint saved as local and re-saved as remote kept a "not
+    # cloud" record, and an endpoint saved under the built-in "ollama" id
+    # borrowed Ollama's - and this check sent both the full prompt with no
+    # consent (FREEZE_LIST §7.16, D-04). When the records disagree, the consent
+    # given to a local provider is not consent for a remote one: hard stop.
     if not is_cloud:
+        if not provider_is_local:
+            raise ProviderConsentError(
+                f"Provider '{provider_id}' is recorded as local in its consent entry but "
+                "reports itself as not local. The two records disagree, so nothing is sent. "
+                "Remove the endpoint and add it again as remote to record consent for it."
+            )
         return ConsentRecord(
             provider_id=provider_id,
             is_cloud=is_cloud,

@@ -59,8 +59,29 @@ def add_endpoint(
 
     The consent row is only INSERTed, never updated, so re-saving an endpoint
     cannot quietly re-grant consent that the user has since revoked - the one
-    thing an "upsert everything" would get wrong.
+    thing an "upsert everything" would get wrong. The flip side is that a
+    re-save changing is_local leaves the consent row describing the old
+    endpoint; stage_08 refuses a provider whose two records disagree, so that
+    fails closed (FREEZE_LIST §7.16, D-04).
+
+    Refuses an id that already has a consent record but no endpoint: that id
+    belongs to a provider that is not an endpoint - the built-in "ollama" or
+    "web_search" - and consent is recorded per id. Saved under "ollama", an
+    endpoint borrowed Ollama's local record; under "web_search", consent given
+    to web search would have covered it. remove_endpoint deletes both records,
+    so a removed endpoint's id is free again.
     """
+    taken = conn.execute(
+        "SELECT 1 FROM provider_consent WHERE provider_id = ? "
+        "AND provider_id NOT IN (SELECT provider_id FROM llm_endpoints)",
+        (provider_id,),
+    ).fetchone()
+    if taken:
+        raise ValueError(
+            f"'{provider_id}' is the id of a built-in provider, and its consent cannot be "
+            "shared with an endpoint. Choose another id."
+        )
+
     conn.execute(
         """
         INSERT INTO llm_endpoints (

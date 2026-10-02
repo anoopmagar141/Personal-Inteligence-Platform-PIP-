@@ -13,10 +13,10 @@ complete: the promise wording was decided 2026-09-28 (§4 now holds nine
 promises). On 2026-10-01 the owner authorized four UI fixes from a
 launch-checklist audit (§7.15), all landed. A product-wide validation pass
 the same day (§7.16, report only) found four high-or-critical defects in
-backup/restore, deployment and consent. The owner authorized the D-01
-and D-03 fixes, and then D-15, a sign-out/cache race found while verifying
-D-03 (§7.19); all three landed 2026-10-02 (§7.17, §7.18, §7.20). D-02 and
-D-04 are open. Anything further needs a new authorization.
+backup/restore, deployment and consent. The owner authorized the D-01,
+D-03 and D-04 fixes, and D-15, a sign-out/cache race found while verifying
+D-03 (§7.19); all four landed 2026-10-02 (§7.17, §7.18, §7.20, §7.21).
+D-02 is open. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -209,6 +209,24 @@ queue row is `completed` and the stub received the extraction call.
 search; nothing preselected.
 **Scope:** test the enforcement boundary; no redesign. **Not** one of the
 five current tracks — do not open a sixth investigation from it.
+**Enforced by (2026-10-02):** Stage 8, on every provider and on web search.
+- An unknown provider is refused.
+- A provider counts as local, needing no consent, only when both its own
+  report and its consent record say so; a disagreement is refused.
+- Anything else needs consent: recorded, unrevoked, and covering the
+  operation.
+- Consent is recorded per provider id, and `add_endpoint` refuses the id of
+  a built-in provider, so an id names one provider only (§7.21).
+
+**Evidence:** `backend/tests/test_consent_before_sending.py` asserts on what
+reaches a counting stub through the real pipeline (§7.21).
+**Limitations:**
+- Locality is attested, as in Promise 5: an endpoint saved as local by
+  whoever configured it is believed.
+- The built-in Ollama is local by definition. An Ollama `*-cloud` model
+  would pass as local (D-08, §7.16, not fixed).
+- An endpoint re-saved from remote to local stays refused until it is
+  removed and added again (§7.2 finding 2).
 
 ### Promise 7 — Encryption at rest
 **Rejected wording:** "Disk access alone yields only ciphertext."
@@ -1401,7 +1419,7 @@ failing probe is its defect's regression test once a fix is authorized.
 | D-01 | Critical | B | A restore swaps `pip.db` and `salt.bin` but leaves the old `pip.db-wal`. SQLite replays it, so the restored profile opens with neither the new password nor the old one (its salt was moved aside). Same shape in `restore_backup.py`. `profiles.delete()` already handles sidecars. **Fixed 2026-10-02 (§7.17).** | Deterministic probe plus 2 of 3 real-process restores |
 | D-02 | High | env | The backend cannot import under Smart App Control: torch is unsigned and imported eagerly via `vector_store.py:41`. Confirmed on the staged payload `D:\pip-build\PIP` | Import fails in the payload's own Python |
 | D-03 | High | A | Export from the Backup screen fails with exactly one profile: `export_pip.ps1:62` passes `--db-path` only for `Count -gt 1` and falls back to `data/pip.db`. **Fixed 2026-10-02 (§7.18).** | Launcher's own condition on an isolated copy, plus a control |
-| D-04 | High (latent) | A/B | Stage 8 trusts `provider_consent.is_cloud` alone, and `add_endpoint` never updates it. A local→remote re-save, or an endpoint registered as `ollama`, was sent the full prompt with no consent. The reverse of §7.2 finding 2. No route adds endpoints yet | Counting stub through the real pipeline |
+| D-04 | High (latent) | A/B | Stage 8 trusts `provider_consent.is_cloud` alone, and `add_endpoint` never updates it. A local→remote re-save, or an endpoint registered as `ollama`, was sent the full prompt with no consent. The reverse of §7.2 finding 2. No route adds endpoints yet. **Fixed 2026-10-02 (§7.21).** | Counting stub through the real pipeline |
 | D-05 | Medium | A | After a restart the backend serves the unencrypted `default` slot until a profile is chosen. `GET /status` created a plaintext `data/pip.db`, and a chat sent then was stored in plaintext; a phantom "Default" profile appeared and the next launch said `needs_migration`. The Flutter client avoids the window; the CLI does not | Real-process journey, canary on disk |
 | D-06 | Medium | D/A | Deleting a document leaves its plaintext file and its `document_blobs` content, so it also travels in later backups | Through `DELETE /rag/documents` |
 | D-07 | Medium | A | A restored document whose original absolute path exists is never re-indexed: write-back is skipped, and the rebuild's ingest refuses a path outside the profile. Retrieval is empty on every sign-in while the Documents screen lists it | Real-process restore |
@@ -1710,6 +1728,83 @@ same boundary.
   number are unreachable but kept until their TTL or the next sign-out
   empties the cache.
 
+### 7.21 Consent locality fix, D-04 (authorized and landed 2026-10-02)
+
+The §7.16 D-04 recommendation, by the same method. It also gives Promise 6,
+which had no tests, its evidence (§4).
+
+- **Promise:** nothing is sent to a provider that is not local without
+  the user's consent for that provider. A provider counts as local only
+  when both its records say so, and an endpoint cannot borrow the consent
+  record of a provider that is not an endpoint.
+- **Mechanism:** three parts.
+  - **Stage 8 takes the provider's own claim.** For a configured endpoint
+    that is `llm_endpoints.is_local`; the built-in Ollama is local by
+    definition. The claim is a required argument, so a caller that leaves
+    it out gets a TypeError rather than the old consent-only behaviour.
+    The consent record alone was written when an endpoint was first saved
+    and never updated.
+  - **Both records must say local.** When the consent record says local
+    and the provider does not, the records disagree and the gate refuses.
+    That is the rule Stage 11 already applies to the Observer. Web search
+    is never local.
+  - **`add_endpoint` refuses a built-in id.** It refuses an id that has a
+    consent record but no endpoint record: a built-in provider's,
+    `ollama` or `web_search`. Consent is recorded per id, so the id has to
+    name one provider. `remove_endpoint` deletes both records, so a
+    removed endpoint's id is free again; a hard-coded list of ids would
+    have been a third copy of them.
+- **Tests:** `backend/tests/test_consent_before_sending.py`, 11 tests,
+  through the real pipeline with a counting stub standing in for each
+  provider.
+  - **Seen failing first.** Five fail on the unfixed code:
+    - an endpoint re-saved as remote, which was sent the prompt;
+    - an endpoint under `ollama` and under `web_search`, neither refused;
+    - an `ollama`-named row already in a database from before the refusal,
+      which was sent the prompt as if local;
+    - web search under a consent record wrongly saying local, which
+      searched.
+  - **Controls (pass before and after):** a local endpoint is used
+    without consent; unconsented, revoked and other-endpoint consent send
+    nothing; consent for web search only does not cover conversations; web
+    search runs only while consented.
+  - **Where the rule is pinned:** three gate unit tests in
+    `test_stage_08_provider_gate.py` (disagreement refused, a cloud record
+    still needs consent, the claim cannot be left out). The 16 existing
+    gate calls in that file and `test_ticket5_providers.py` now state
+    their provider's locality; their assertions are unchanged.
+- **The built-in Ollama is not collateral.** An `ollama`-named impostor
+  tried first is refused while the real Ollama beside it still answers.
+  The gate judges each provider by its own claim, not by the id they
+  share.
+- **Break-it:** six mutations, each caught:
+  - the disagreement no longer refused (4 tests);
+  - the provider's claim ignored (2);
+  - web search claiming local (1);
+  - the built-in-id refusal removed (2);
+  - the refusal widened to block re-saves (3, two of them existing
+    endpoint-store tests);
+  - the claim made optional and defaulting to local (1).
+- **Ollama-dependent tests:** the three `test_llm_endpoint_store` tests
+  that need a running Ollama were run with it up and passed (17/17 in
+  that file), since they go through the changed `add_endpoint`.
+- **Commit:** the one that adds this section.
+- **Full suite:** 1266 passed, 1 failed, run with Ollama up so its three
+  dependent tests ran too. The one failure is the cached-answer test that
+  needs real embeddings (§7.17).
+
+**Not covered (still open):**
+- **Locality is still attested, not verified.** An endpoint saved as local
+  by whoever configured it is believed (Promise 5's wording, kept).
+- **D-08 is unaffected.** The built-in Ollama is local by definition, so
+  an Ollama `*-cloud` model would still pass as local.
+- **§7.2 finding 2 is unchanged.** An endpoint re-saved from remote to
+  local stays refused until it is removed and added again: it fails
+  closed. With this fix, a local-to-remote re-save is refused too, for the
+  same reason. Neither silently sends anything.
+- **No route adds endpoints yet,** so the defect and the fix are latent
+  for the shipped app. The tests pin the behaviour for when one does.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1757,11 +1852,12 @@ findings.
 | Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
 | Lock identity fix | Landed 2026-09-28 (§7.12) | Reused PIDs no longer block PIP; atomic-create race and Linux branch untested |
 | Launch-checklist UI fixes | Landed 2026-10-01 (§7.15) | All four landed: contrast, control names, minimum window, password minimum. Open: hover-only delete control, sidebar does not scroll |
-| Product-wide validation pass | Run 2026-10-01 (§7.16), report only | Boundaries, consent (ordinary cases), crash recovery and isolation held. D-01 restore over stale WAL (critical) fixed in §7.17, D-03 one-profile export fixed in §7.18. Open: D-02 Smart App Control blocks the backend, D-04 consent fail-open on id reuse, plus 5 medium and 4 low |
+| Product-wide validation pass | Run 2026-10-01 (§7.16), report only | Boundaries, consent (ordinary cases), crash recovery and isolation held. D-01 restore over stale WAL (critical) fixed in §7.17, D-03 one-profile export in §7.18, D-04 consent fail-open on id reuse in §7.21. Open: D-02 Smart App Control blocks the backend, plus 5 medium and 4 low |
 | D-01 restore sidecars fix | Landed 2026-10-02 (§7.17) | Both installers move the replaced database's `-wal`/`-shm`/`-journal` aside under the kept copy's name; 10 tests, 10 break-it mutations caught. Open: D-14 (a restore staged before its profile is deleted is still installed), profiles already damaged before the fix |
 | D-03 one-profile export fix | Landed 2026-10-02 (§7.18) | `export_pip.ps1` takes its profile from the shared `Resolve-PipLastProfile` and always sets the salt with the database; 6 tests through the real wrapper under PowerShell 5.1, 6 break-it mutations caught. Noted: the resolver's one-profile branch never runs under 5.1 (same answer by its fallback) |
 | Sign-out cache race (D-15) | Found 2026-10-02 (§7.19) | A: an answer written to the cache after sign-out cleared it is served to the next profile; deterministic with the write delayed (5/5); the §7.9 guard failed 7-8 of 20 runs alone. Fixed in §7.20 |
 | D-15 sign-out cache fix | Landed 2026-10-02 (§7.20) | Every cache key carries the session generation sign-out moves, taken per chat connection; also closes an open socket being served the next session's answers. 3 tests seen failing first, 4 break-it mutations caught; the §7.9 guard 159/160 after the fix (one early failure, output not kept) |
+| D-04 consent locality fix | Landed 2026-10-02 (§7.21) | Stage 8 counts a provider as local only when its own claim and its consent record agree; `add_endpoint` refuses built-in ids. 11 outcome tests (5 seen failing first), 3 gate unit tests, 6 break-it mutations caught. Promise 6 now has evidence. Open: locality attested not verified, D-08, §7.2 finding 2 |
 
 ---
 

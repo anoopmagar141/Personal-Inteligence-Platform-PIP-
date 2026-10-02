@@ -39,7 +39,7 @@ set `PIP_PROBE_BACKUP=<dir>\zarqa-1.pipbak` (backup password
 
 | File | Covers | Expected on `f66a309` |
 |---|---|---|
-| `probe_consent.py` | Promise 6 through the real pipeline | C4, C5 fail (D-04); 8 pass |
+| `probe_consent.py` | Promise 6 through the real pipeline | C4, C5 fail (D-04); 8 pass. Since the D-04 fix (FREEZE_LIST §7.21): C4 passes, and C5 stops at `add_endpoint` with the new refusal of a built-in id - reported as a failure only because this probe predates the refusal. The permanent tests are in `backend/tests/test_consent_before_sending.py` |
 | `probe_boundaries.py` | route auth census, WS, traversal, ownership, document delete | D1 fails (D-06); 28 pass |
 | `probe_provider_failures.py` | missing model, Ollama down, Ollama hung | 3 pass |
 | `probe_reintroduction.py` | dismissed / duplicate pending questions | RI1 ×4 fail (D-12); RI2 ×4 pass |

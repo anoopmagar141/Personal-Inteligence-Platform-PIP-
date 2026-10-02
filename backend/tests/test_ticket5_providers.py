@@ -245,7 +245,7 @@ def test_end_to_end_revoke_then_gate_blocks():
           user_consented=1, consent_scope="web_search_only")
 
     # Gate passes before revocation
-    record = gate.run(conn, "web_search", requested_scope="web_search_only")
+    record = gate.run(conn, "web_search", requested_scope="web_search_only", provider_is_local=False)
     assert record.user_consented is True
     assert record.revoked is False
 
@@ -254,7 +254,7 @@ def test_end_to_end_revoke_then_gate_blocks():
 
     # Gate must now hard-stop
     with pytest.raises(ProviderConsentError) as exc:
-        gate.run(conn, "web_search", requested_scope="web_search_only")
+        gate.run(conn, "web_search", requested_scope="web_search_only", provider_is_local=False)
     assert "revoked" in str(exc.value)
 
 
@@ -272,12 +272,12 @@ def test_end_to_end_grant_consent_then_gate_passes():
 
     # Gate blocks before consent
     with pytest.raises(ProviderConsentError):
-        gate.run(conn, "web_search", requested_scope="web_search_only")
+        gate.run(conn, "web_search", requested_scope="web_search_only", provider_is_local=False)
 
     # Grant consent via the API function (same function /consent CLI calls)
     api_grant_consent(conn, "web_search", "web_search_only")
 
     # Gate now passes
-    record = gate.run(conn, "web_search", requested_scope="web_search_only")
+    record = gate.run(conn, "web_search", requested_scope="web_search_only", provider_is_local=False)
     assert record.user_consented is True
     assert record.revoked is False

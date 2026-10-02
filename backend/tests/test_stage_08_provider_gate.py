@@ -123,7 +123,7 @@ class TestLocalProviderPassesWithNoConsentNeeded:
     def test_local_provider_passes(self):
         conn = _make_conn()
         _insert_provider(conn, provider_id="ollama", is_cloud=False, user_consented=0)
-        record = gate.run(conn, "ollama")
+        record = gate.run(conn, "ollama", provider_is_local=True)
         assert isinstance(record, ConsentRecord)
         assert record.provider_id == "ollama"
         assert record.is_cloud is False
@@ -132,7 +132,7 @@ class TestLocalProviderPassesWithNoConsentNeeded:
         """is_cloud=False means the gate never checks user_consented."""
         conn = _make_conn()
         _insert_provider(conn, provider_id="local_embedder", is_cloud=False, user_consented=0)
-        record = gate.run(conn, "local_embedder")
+        record = gate.run(conn, "local_embedder", provider_is_local=True)
         assert isinstance(record, ConsentRecord)
 
     def test_local_provider_passes_even_with_revoked_1(self):
@@ -140,8 +140,36 @@ class TestLocalProviderPassesWithNoConsentNeeded:
         conn = _make_conn()
         _insert_provider(conn, provider_id="ollama", is_cloud=False,
                          user_consented=1, revoked=1)
-        record = gate.run(conn, "ollama")
+        record = gate.run(conn, "ollama", provider_is_local=True)
         assert isinstance(record, ConsentRecord)
+
+
+class TestBothRecordsMustSayLocal:
+    def test_a_local_record_does_not_pass_a_provider_that_reports_not_local(self):
+        """D-04 (FREEZE_LIST §7.16): the consent record said local, written when
+        the endpoint was first saved as local; the endpoint no longer is."""
+        conn = _make_conn()
+        _insert_provider(conn, provider_id="box", is_cloud=False, user_consented=1)
+        with pytest.raises(ProviderConsentError) as exc:
+            gate.run(conn, "box", provider_is_local=False)
+        assert "disagree" in str(exc.value)
+
+    def test_a_cloud_record_still_needs_consent_from_a_provider_claiming_local(self):
+        """The other disagreement fails closed too: a provider's own claim to be
+        local never stands in for consent the record says it needs."""
+        conn = _make_conn()
+        _insert_provider(conn, provider_id="box", is_cloud=True, user_consented=0,
+                         consent_scope="full_inference")
+        with pytest.raises(ProviderConsentError):
+            gate.run(conn, "box", provider_is_local=True)
+
+    def test_a_caller_cannot_leave_the_claim_out(self):
+        """Required, so a caller that forgets is told at once rather than
+        silently trusting the consent record alone."""
+        conn = _make_conn()
+        _insert_provider(conn, provider_id="ollama", is_cloud=False, user_consented=1)
+        with pytest.raises(TypeError):
+            gate.run(conn, "ollama")
 
 
 class TestCloudProviderBlockedWhenUnconsented:
@@ -150,7 +178,7 @@ class TestCloudProviderBlockedWhenUnconsented:
         _insert_provider(conn, provider_id="web_search", is_cloud=True,
                          user_consented=0, consent_scope="web_search_only")
         with pytest.raises(ProviderConsentError) as exc:
-            gate.run(conn, "web_search")
+            gate.run(conn, "web_search", provider_is_local=False)
         assert "not been consented" in str(exc.value)
         assert "web_search" in str(exc.value)
 
@@ -160,7 +188,7 @@ class TestCloudProviderPassesWhenConsented:
         conn = _make_conn()
         _insert_provider(conn, provider_id="web_search", is_cloud=True,
                          user_consented=1, consent_scope="web_search_only")
-        record = gate.run(conn, "web_search", requested_scope="web_search_only")
+        record = gate.run(conn, "web_search", requested_scope="web_search_only", provider_is_local=False)
         assert isinstance(record, ConsentRecord)
         assert record.user_consented is True
         assert record.revoked is False
@@ -170,7 +198,7 @@ class TestCloudProviderPassesWhenConsented:
         conn = _make_conn()
         _insert_provider(conn, provider_id="openai", is_cloud=True,
                          user_consented=1, consent_scope="full_inference")
-        record = gate.run(conn, "openai", requested_scope="web_search_only")
+        record = gate.run(conn, "openai", requested_scope="web_search_only", provider_is_local=False)
         assert isinstance(record, ConsentRecord)
 
 
@@ -180,7 +208,7 @@ class TestCloudProviderBlockedWhenRevoked:
         _insert_provider(conn, provider_id="web_search", is_cloud=True,
                          user_consented=1, consent_scope="web_search_only", revoked=1)
         with pytest.raises(ProviderConsentError) as exc:
-            gate.run(conn, "web_search")
+            gate.run(conn, "web_search", provider_is_local=False)
         assert "revoked" in str(exc.value)
         assert "web_search" in str(exc.value)
 
@@ -189,7 +217,7 @@ class TestCloudProviderBlockedWhenRevoked:
         _insert_provider(conn, provider_id="web_search", is_cloud=True,
                          user_consented=1, consent_scope="web_search_only", revoked=1)
         with pytest.raises(ProviderConsentError) as exc:
-            gate.run(conn, "web_search")
+            gate.run(conn, "web_search", provider_is_local=False)
         assert "/consent" in str(exc.value)
 
 
@@ -199,7 +227,7 @@ class TestNoRowExistsCaseFailClosed:
         conn = _make_conn()
         # Table is empty — no row for "new_provider"
         with pytest.raises(ProviderConsentError) as exc:
-            gate.run(conn, "new_provider")
+            gate.run(conn, "new_provider", provider_is_local=False)
         assert "No consent record found" in str(exc.value)
         assert "new_provider" in str(exc.value)
         assert "Fail-closed" in str(exc.value)
@@ -209,7 +237,7 @@ class TestNoRowExistsCaseFailClosed:
         conn = _make_conn()
         _insert_provider(conn, provider_id="ollama", is_cloud=False, user_consented=1)
         with pytest.raises(ProviderConsentError):
-            gate.run(conn, "unknown_cloud_provider")
+            gate.run(conn, "unknown_cloud_provider", provider_is_local=False)
 
 
 class TestScopeEnforcement:
@@ -218,7 +246,7 @@ class TestScopeEnforcement:
         _insert_provider(conn, provider_id="restricted", is_cloud=True,
                          user_consented=1, consent_scope="none")
         with pytest.raises(ProviderConsentError) as exc:
-            gate.run(conn, "restricted")
+            gate.run(conn, "restricted", provider_is_local=False)
         assert "none" in str(exc.value)
 
     def test_web_search_only_scope_blocks_full_inference_request(self):
@@ -226,5 +254,5 @@ class TestScopeEnforcement:
         _insert_provider(conn, provider_id="web_search", is_cloud=True,
                          user_consented=1, consent_scope="web_search_only")
         with pytest.raises(ProviderConsentError) as exc:
-            gate.run(conn, "web_search", requested_scope="full_inference")
+            gate.run(conn, "web_search", requested_scope="full_inference", provider_is_local=False)
         assert "does not cover" in str(exc.value)

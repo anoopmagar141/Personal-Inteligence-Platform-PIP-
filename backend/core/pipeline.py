@@ -218,9 +218,16 @@ def _gate_providers(conn, trace_id: str, providers: list[BaseLLMProvider]) -> li
     """Stage 8: only providers that pass consent make it into Stage 9's fallback list."""
     gated = []
     for provider in providers:
-        provider_id = provider.get_model_info().get("provider_id", _DEFAULT_PROVIDER_ID)
+        model_info = provider.get_model_info()
+        provider_id = model_info.get("provider_id", _DEFAULT_PROVIDER_ID)
         try:
-            stage_08.run(conn, provider_id, requested_scope="full_inference")
+            # The provider's own claim, so the gate can check it against the
+            # consent record (D-04). A provider that does not report one
+            # counts as not local.
+            stage_08.run(
+                conn, provider_id, requested_scope="full_inference",
+                provider_is_local=bool(model_info.get("is_local")),
+            )
             gated.append(provider)
         except stage_08.ProviderConsentError as e:
             trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", f"{provider_id} blocked", error_detail=str(e))
@@ -418,7 +425,11 @@ def run(
     try:
         if stage_06.matches_trigger(user_message):
             try:
-                stage_08.run(conn, "web_search", requested_scope="web_search_only")
+                # A search engine on the internet is never local, whatever its
+                # consent record says.
+                stage_08.run(
+                    conn, "web_search", requested_scope="web_search_only", provider_is_local=False
+                )
             except stage_08.ProviderConsentError as e:
                 trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", "web_search blocked", error_detail=str(e))
                 logger.warning(f"Pipeline: web_search blocked by Stage 8: {e}")

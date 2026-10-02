@@ -160,7 +160,11 @@ so there is one write path, not two.
   off the machine. Ollama is dynamically skipped if it is unreachable and alternative
   endpoints exist, avoiding an unnecessary timeout penalty for every message, while
   maintaining the fallback chain if it's the only configured provider. Stage 8 then
-  filters the list and fails closed.
+  filters the list and fails closed. It counts a provider as local - needing no
+  consent - only when both the provider's own report and its consent record say
+  so, the rule Stage 11 already applies to the Observer; a disagreement is a
+  refusal. An endpoint cannot be saved under the id of a built-in provider
+  (`ollama`, `web_search`), since consent is recorded per id (FREEZE_LIST §7.21).
 - **The evidence gate is an allowlist, and fails toward rejection.** Entailment
   is decided by requiring the user's own words to carry a recognised support
   construction for the kind of claim being made — the three the constitution
