@@ -11,8 +11,10 @@ the test seen failing: profile boundary (§7.9), answers about the user
 (§7.10), lost learning (§7.11), lock identity (§7.12). §7.7's fix order is
 complete: the promise wording was decided 2026-09-28 (§4 now holds nine
 promises). On 2026-10-01 the owner authorized four UI fixes from a
-launch-checklist audit (§7.15), all landed. Anything further needs a new
-authorization.
+launch-checklist audit (§7.15), all landed. A product-wide validation pass
+the same day (§7.16, report only) found four high-or-critical defects in
+backup/restore, deployment and consent; none is fixed. Anything further
+needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1338,6 +1340,78 @@ problems. The owner authorized all four, in this order, one commit each.
   mirrored. A password of eight spaces passes the client and is refused
   by the server.
 
+### 7.16 Product-wide validation pass (2026-10-01, report only)
+
+Requested by the owner: validate every implemented workflow end to end,
+from outside. **No production code changed.** Full record, condition matrix
+and per-defect reproduction:
+`docs/eval/reliability_validation_2026-10-01.md`. The probes and the
+real-process journey drivers are in `docs/eval/reliability_2026-10-01/`.
+They are named `probe_*.py` so the suite never collects them, and each
+failing probe is its defect's regression test once a fix is authorized.
+
+**Conditions.** Revision `f66a309`.
+- Every run used isolated data dirs; the real `data/` was never opened.
+- Live model `qwen2.5:7b`.
+- **Smart App Control is on and blocks torch's unsigned DLL.** The backend
+  suite and every real backend process therefore ran with a stand-in
+  embedder (hashed bag-of-words). No retrieval-quality result is claimed.
+
+**Suites.**
+- Flutter: analyze clean, 311/311 tests, release build OK.
+- Backend as-is: 842 passed, and 28 failed at import on the torch block.
+  That block is the only failure cause.
+- Backend with the stand-in: 1230 passed, 4 failed.
+  - 3 need Ollama and pass once it is up (17/17).
+  - 1 is retrieval-dependent and does not hold under the stand-in.
+
+**Held (strong evidence):**
+- **REST census:** all 64 REST method+path pairs refuse 3 kinds of bad
+  credential; every gated pair returns 423 while locked; 7 path-encoding
+  variants never serve data.
+- **WebSocket:** token and origin checks hold (3 + 8 cases).
+- **Traversal:** slugs and delete/ingest paths cannot escape their folders.
+- **Profile ownership:** another profile cannot be renamed or deleted.
+- **Two profiles on one machine:** fully isolated.
+- **Consent:** unconsented, revoked, wrong-scope, other-endpoint and
+  revoked-then-re-saved endpoints get zero requests. Web search does not
+  run on a fresh install or after revoke.
+- **Force-kill mid-conversation (real process):** the transcript is
+  identical, the lock is taken over, and the Observer catch-up processes
+  the session.
+- **Provider failures:** stop-generation, a missing model, Ollama down and
+  Ollama hung each fail cleanly in 4-12 s.
+- **Backups:** the exported `.pipbak` holds no plaintext. Six kinds of bad
+  backup are refused with nothing staged. A clean restore reproduces
+  conversations, messages, decisions, projects, profile and documents
+  exactly.
+- **Installer payload:** carries no developer data.
+
+**Defects (recommendations only; each needs an owner decision):**
+
+| ID | Sev. | Cat. | Finding | Evidence |
+|---|---|---|---|---|
+| D-01 | Critical | B | A restore swaps `pip.db` and `salt.bin` but leaves the old `pip.db-wal`. SQLite replays it, so the restored profile opens with neither the new password nor the old one (its salt was moved aside). Same shape in `restore_backup.py`. `profiles.delete()` already handles sidecars | Deterministic probe plus 2 of 3 real-process restores |
+| D-02 | High | env | The backend cannot import under Smart App Control: torch is unsigned and imported eagerly via `vector_store.py:41`. Confirmed on the staged payload `D:\pip-build\PIP` | Import fails in the payload's own Python |
+| D-03 | High | A | Export from the Backup screen fails with exactly one profile: `export_pip.ps1:62` passes `--db-path` only for `Count -gt 1` and falls back to `data/pip.db` | Launcher's own condition on an isolated copy, plus a control |
+| D-04 | High (latent) | A/B | Stage 8 trusts `provider_consent.is_cloud` alone, and `add_endpoint` never updates it. A local→remote re-save, or an endpoint registered as `ollama`, was sent the full prompt with no consent. The reverse of §7.2 finding 2. No route adds endpoints yet | Counting stub through the real pipeline |
+| D-05 | Medium | A | After a restart the backend serves the unencrypted `default` slot until a profile is chosen. `GET /status` created a plaintext `data/pip.db`, and a chat sent then was stored in plaintext; a phantom "Default" profile appeared and the next launch said `needs_migration`. The Flutter client avoids the window; the CLI does not | Real-process journey, canary on disk |
+| D-06 | Medium | D/A | Deleting a document leaves its plaintext file and its `document_blobs` content, so it also travels in later backups | Through `DELETE /rag/documents` |
+| D-07 | Medium | A | A restored document whose original absolute path exists is never re-indexed: write-back is skipped, and the rebuild's ingest refuses a path outside the profile. Retrieval is empty on every sign-in while the Documents screen lists it | Real-process restore |
+| D-08 | Medium | D | `/llm/pull` accepts any name and this Ollama has cloud enabled, so a `*-cloud` model would carry chat and the Observer off the machine as "local" `ollama` | Code reading only (would contact an external service) |
+| D-09 | Medium | A | "Close PIP and open it again to finish" does not apply a restore: the launcher reuses the running backend, so the swap waits for an unclean exit, which feeds D-01 | Code reading |
+| D-10-13 | Low | | 500s for malformed onboarding input and a bit-flipped backup; a dismissed memory question is re-asked when the same words recur; Unlock sits below the fold at 1280x720 | Probes, screenshot |
+
+**Not run:**
+- a clean-VM installer lifecycle;
+- a real remote provider;
+- long-running use (resource leaks);
+- driving the UI (one screenshot only);
+- retrieval quality (the torch block).
+
+**Exit criteria not met:** D-01 to D-04 are open, and the supported
+migration workflow failed.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1385,6 +1459,7 @@ findings.
 | Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
 | Lock identity fix | Landed 2026-09-28 (§7.12) | Reused PIDs no longer block PIP; atomic-create race and Linux branch untested |
 | Launch-checklist UI fixes | Landed 2026-10-01 (§7.15) | All four landed: contrast, control names, minimum window, password minimum. Open: hover-only delete control, sidebar does not scroll |
+| Product-wide validation pass | Run 2026-10-01 (§7.16), report only | Boundaries, consent (ordinary cases), crash recovery and isolation held. Open: D-01 restore over stale WAL (critical), D-02 Smart App Control blocks the backend, D-03 one-profile export, D-04 consent fail-open on id reuse, plus 5 medium and 4 low |
 
 ---
 

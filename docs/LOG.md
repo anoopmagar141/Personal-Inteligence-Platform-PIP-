@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-10-01] claude · Ran a product-wide validation pass, report only, no production code changed: route-auth census, WebSocket, traversal, profile isolation, ordinary consent cases and force-kill recovery held; found D-01 (in-app restore over a leftover pip.db-wal leaves the profile unopenable), D-02 (Smart App Control blocks torch so the backend cannot import, payload included), D-03 (Backup screen export fails with one profile), D-04 (consent fails open when an endpoint is re-saved local to remote or named ollama), plus 5 medium and 4 low; recorded in FREEZE_LIST §7.16 with the full report and probes in docs/eval/ · why: the owner asked for every workflow to be validated from outside · files: docs/eval/reliability_validation_2026-10-01.md, docs/eval/reliability_2026-10-01/, docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-10-01] claude · Gave scripts/eval_observer_end_to_end.py the _venv.require("sqlcipher3") guard and replaced the section sign in its docstring with "section" · why: test_venv_guard failed on both since the script was added in 1256b51 · files: scripts/eval_observer_end_to_end.py, docs/LOG.md
 
 - [2026-10-01] claude · Made first-password setup and change-password refuse a password under the backend's 8-character minimum before the round trip, through one kMinPasswordLength (counted in code points, as Python's len() does) that restore now shares and a test holds to the backend's own numbers · why: only restore checked locally, so the other two paid a key derivation or a full re-encryption to be told · files: frontend/flutter/lib/api_client.dart, frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/lib/screens/profile_view.dart, frontend/flutter/lib/screens/backup_view.dart, frontend/flutter/test/password_rule_test.dart, frontend/flutter/test/sign_in_screen_test.dart, frontend/flutter/test/profile_management_test.dart, docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-27] claude · Made vector_store refuse to read or write the index when the active profile has a password but no key is held, instead of falling back to plaintext · why: an ingest in flight at sign-out stored its chunk text and path in plaintext, and it survived the next sign-in's rebuild (FREEZE_LIST §7.8) · files: backend/memory/vector_store.py, backend/tests/test_profile_boundary.py, docs/LOG.md
 
-- [2026-09-27] claude · Made sign-out empty the response cache, so the next profile to sign in is no longer served the previous one's answers, with an end-to-end test through the real auth and chat routes · why: measured in FREEZE_LIST §7.8, a second profile received an answer built from the first profile's documents with its own model never called · files: backend/core/session_key.py, backend/core/response_cache.py, backend/tests/test_profile_boundary.py, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -91,3 +91,4 @@ Format:
 - 2026-09-27 (claude): recorded the Track 4b cache-safety report in FREEZE_LIST §7.6 - stale cached answers were replayed after a matching document or decision existed, and one profile's answer was served to another.
 - 2026-09-27 (claude): wrote the cross-track synthesis in FREEZE_LIST §7.7 - five patterns confirmed by two or more reports (sign-out boundary missing in-memory work, duplicated rules, optional parts failing open, tests concealing defects, under-identifying keys).
 - 2026-09-27 (claude): ran the end-to-end profile boundary test and recorded it in FREEZE_LIST §7.8 - profile B was served A's document answer, an ingest in flight at sign-out stored plaintext, and uploads shared one plaintext folder.
+- 2026-09-27 (claude): made sign-out empty the response cache, so a second profile is no longer served the first profile's answers, with an end-to-end test through the real auth and chat routes.
