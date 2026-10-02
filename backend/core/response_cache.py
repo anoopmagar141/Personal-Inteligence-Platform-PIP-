@@ -49,21 +49,44 @@ _CATEGORY_TO_TTL_KEY = {
 # key -> (expires_at, response_text, stage_hints)
 _cache: dict[str, tuple[float, str, dict[str, Any]]] = {}
 
+# Which signed-in session an entry belongs to. clear() - every sign-out - moves
+# it, and it is part of every key. Emptying the cache at sign-out was not
+# enough on its own: an answer still being written when the session ended
+# landed after the clear, and the next profile was served it; and a chat
+# connection left open through the sign-out shared one cache with whoever
+# signed in next (FREEZE_LIST §7.19, D-15). A caller captures the number when
+# its session's work begins and reads and writes under it, so an entry from an
+# ended session is never found by a later one.
+_generation = 0
+
 
 def _normalize(message: str) -> str:
     return " ".join(message.strip().lower().split())
 
 
-def cache_key(user_message: str, project_id: Optional[str], record_version: Optional[int] = None) -> str:
+def generation() -> int:
+    """The current session's number - capture it when the session's work begins."""
+    return _generation
+
+
+def cache_key(
+    user_message: str,
+    project_id: Optional[str],
+    record_version: Optional[int] = None,
+    generation: Optional[int] = None,
+) -> str:
     # record_version is profile_store.record_version(): it moves whenever
     # anything the answer could have been built from changes, so an answer
     # cached before a new document, decision or profile edit is simply never
     # found again. It used to be absent, and the TTL and decision-log rules
     # were checked only when an answer was stored - after the record changed,
     # the old answer kept being served (FREEZE_LIST §7.6).
+    #
+    # generation is the session the caller captured; None means the current
+    # one, for callers with no session of their own to name.
     raw = _normalize(user_message) + "|" + (project_id or "") + "|" + (
         "" if record_version is None else str(record_version)
-    )
+    ) + "|" + str(_generation if generation is None else generation)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -76,7 +99,10 @@ def ttl_for_category(category: str) -> int:
 
 
 def get(
-    user_message: str, project_id: Optional[str] = None, record_version: Optional[int] = None
+    user_message: str,
+    project_id: Optional[str] = None,
+    record_version: Optional[int] = None,
+    generation: Optional[int] = None,
 ) -> Optional[dict[str, Any]]:
     """
     Returns {"response_text": str, "stage_hints": dict} for a live cache entry,
@@ -85,7 +111,7 @@ def get(
     correctness, so a broken cache must never block a response).
     """
     try:
-        key = cache_key(user_message, project_id, record_version)
+        key = cache_key(user_message, project_id, record_version, generation)
         entry = _cache.get(key)
         if entry is None:
             return None
@@ -107,6 +133,7 @@ def set(
     stage_hints: dict[str, Any],
     decision_log_hit: bool = False,
     record_version: Optional[int] = None,
+    generation: Optional[int] = None,
 ) -> None:
     """
     Writes a response at the category's TTL, unless the response involved a
@@ -121,7 +148,7 @@ def set(
     ttl = ttl_for_category(category)
     if ttl <= 0:
         return
-    key = cache_key(user_message, project_id, record_version)
+    key = cache_key(user_message, project_id, record_version, generation)
     _cache[key] = (time.monotonic() + ttl, response_text, stage_hints)
 
 
@@ -130,5 +157,11 @@ def clear() -> None:
     Called by session_key.lock(), so nothing cached in one signed-in session
     survives into the next - which may be a different profile's. Not called
     anywhere in the pipeline itself.
+
+    Moves the generation as well as emptying the cache: the emptying covers
+    what was stored before the sign-out, the generation what an ended session
+    stores, or asks for, after it.
     """
+    global _generation
+    _generation += 1
     _cache.clear()

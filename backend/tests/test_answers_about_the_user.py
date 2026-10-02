@@ -10,7 +10,7 @@ while the model was being handed nothing about the user's projects.
 
 import pytest
 
-from backend.core import pipeline, response_cache
+from backend.core import pipeline, response_cache, session_key
 from backend.memory import profile_store, vector_store
 from backend.memory.profile_store import get_connection, initialize_schema
 from backend.providers.base_provider import BaseLLMProvider
@@ -152,6 +152,33 @@ def _ask_twice(conn, question, change) -> tuple[RecordingProvider, dict]:
     second = RecordingProvider()
     result = pipeline.run_sync(conn, question, providers=[second])
     return second, result["stage_hints"]
+
+
+class SigningOutProvider(RecordingProvider):
+    """A model that is still answering when its session signs out."""
+
+    def chat(self, *args, **kwargs):
+        session_key.lock()
+        yield from super().chat(*args, **kwargs)
+
+
+def test_an_answer_finished_after_its_session_signed_out_is_not_cached_for_the_next(seeded):
+    """
+    D-15 (§7.19), at the pipeline itself. The sign-out lands mid-answer, so the
+    write comes after the cache was emptied - and must not be found by the
+    session that follows. That holds only if the session is fixed when the
+    question arrives: taken when the answer is stored, it would be the next
+    session's. Moving the write ahead of done would not help either; this
+    sign-out lands before done.
+    """
+    question = "explain how a write-ahead journal works"
+    pipeline.run_sync(seeded, question, providers=[SigningOutProvider()])
+    second = RecordingProvider()
+
+    result = pipeline.run_sync(seeded, question, providers=[second])
+
+    assert second.prompts, "the next session was served an answer written after its predecessor signed out"
+    assert not result["stage_hints"].get("cache_hit")
 
 
 def test_an_unchanged_record_is_still_answered_from_the_cache(seeded):

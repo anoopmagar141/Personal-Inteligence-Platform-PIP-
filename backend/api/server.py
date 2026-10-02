@@ -18,6 +18,7 @@ from backend.core import (
     pipeline,
     proactive,
     profiles,
+    response_cache,
     restore,
     session_key,
     session_lifecycle,
@@ -844,6 +845,7 @@ async def stream_pipeline_to_websocket(
     project_id: str | None = None,
     executor=None,
     incoming: Optional[asyncio.Queue] = None,
+    cache_generation: Optional[int] = None,
 ) -> dict[str, Any]:
     """
     Bridges pipeline.run()'s synchronous generator into the async WebSocket
@@ -893,6 +895,7 @@ async def stream_pipeline_to_websocket(
     gen = pipeline.run(
         conn, user_message, conversation_history=conversation_history,
         project_id=project_id, should_stop=stop_event.is_set,
+        cache_generation=cache_generation,
     )
 
     while True:
@@ -1441,6 +1444,14 @@ try:
         # exiting - so the process that stopped waiting for it still could not
         # shut down. See pinned_executor.py for the measurement.
         executor = pinned_executor.PinnedExecutor(name=f"pip-ws-{id(websocket)}")
+        # The session this connection belongs to, for the response cache: every
+        # question on it reads and writes under this number, including one
+        # still running when the session signs out, or one asked on this socket
+        # after it has (FREEZE_LIST §7.19, D-15). Taken BEFORE the database is
+        # opened, not after: a sign-out between the two then fails the open,
+        # where taken after, this connection could carry the next session's
+        # number while holding the previous session's database.
+        cache_generation = response_cache.generation()
         conn = await loop.run_in_executor(executor, _conn)
         # observer_model_name: resolved once here, not re-queried from the
         # idle-timeout/disconnect paths below - see _default_observer_provider's
@@ -1622,6 +1633,7 @@ try:
                     project_id=project_id,
                     executor=executor,
                     incoming=incoming,
+                    cache_generation=cache_generation,
                 )
 
                 conversation_history.append({"role": "user", "content": user_message})

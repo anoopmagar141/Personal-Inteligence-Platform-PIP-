@@ -91,18 +91,23 @@ def _new_profile(client, token, name, password) -> str:
 
 
 def _ask(client, token, question) -> tuple[str, dict]:
-    text, hints = "", {}
     with client.websocket_connect(f"/ws/chat?token={token}") as ws:
         assert ws.receive_json()["type"] == "session_info"
-        ws.send_json({"message": question})
-        while True:
-            event = ws.receive_json()
-            if event["type"] == "stage_hint":
-                hints = event["data"]
-            elif event["type"] == "token":
-                text += event["data"]
-            elif event["type"] in ("done", "error", "stopped"):
-                break
+        return _answer(ws, question)
+
+
+def _answer(ws, question) -> tuple[str, dict]:
+    """One question on a socket that is already open."""
+    text, hints = "", {}
+    ws.send_json({"message": question})
+    while True:
+        event = ws.receive_json()
+        if event["type"] == "stage_hint":
+            hints = event["data"]
+        elif event["type"] == "token":
+            text += event["data"]
+        elif event["type"] in ("done", "error", "stopped"):
+            break
     return text.strip(), hints
 
 
@@ -126,6 +131,71 @@ def test_an_answer_cached_before_sign_out_is_not_served_to_the_next_profile(prov
     assert len(provider.calls) == calls_before + 1, "Bob's question never reached his model"
     assert not bob_hints.get("cache_hit")
     assert bob_answer != alice_answer
+
+
+def test_an_answer_still_being_written_at_sign_out_is_not_served_to_the_next_profile(
+    provider, token, monkeypatch
+):
+    """
+    D-15 (§7.19). An answer reaches the client before it reaches the cache:
+    Stage 9 yields done, and the write comes after. A sign-out in that gap
+    emptied the cache first, and the write then put Alice's answer back, for
+    Bob. The test above lost that race 7-8 runs in 20; here the order is made
+    certain instead of waited for - Alice's write is held until her sign-out
+    has finished.
+    """
+    signed_out = threading.Event()
+    written = threading.Event()
+    real_set = response_cache.set
+
+    def write_after_sign_out(*args, **kwargs):
+        signed_out.wait(timeout=10)
+        try:
+            return real_set(*args, **kwargs)
+        finally:
+            written.set()
+
+    monkeypatch.setattr(response_cache, "set", write_after_sign_out)
+
+    with TestClient(server.app) as client:
+        _new_profile(client, token, "Alice", "alice-password-1")
+        alice_answer, _ = _ask(client, token, QUESTION)
+        assert not written.is_set(), "the write came before sign-out, so this tests nothing"
+        assert client.post(f"{API}/auth/lock", headers=_headers(token)).status_code == 200
+        signed_out.set()
+        assert written.wait(timeout=10), "Alice's answer never reached the cache write"
+
+        _new_profile(client, token, "Bob", "bob-password-22")
+        calls_before = len(provider.calls)
+        bob_answer, bob_hints = _ask(client, token, QUESTION)
+
+    assert len(provider.calls) == calls_before + 1, "Bob was served Alice's answer, written after she signed out"
+    assert not bob_hints.get("cache_hit")
+    assert bob_answer != alice_answer
+
+
+def test_a_chat_left_open_through_sign_out_is_not_served_the_next_profiles_answers(provider, token):
+    """
+    A chat connection opened before a sign-out keeps working after it - the
+    limitation Promise 8 states - and it shares one cache with whoever signs
+    in next. Alice's socket, still open after Bob had signed in and asked the
+    same question, must not be served Bob's answer.
+    """
+    with TestClient(server.app) as client:
+        _new_profile(client, token, "Alice", "alice-password-1")
+        with client.websocket_connect(f"/ws/chat?token={token}") as alice_ws:
+            assert alice_ws.receive_json()["type"] == "session_info"
+            assert client.post(f"{API}/auth/lock", headers=_headers(token)).status_code == 200
+
+            _new_profile(client, token, "Bob", "bob-password-22")
+            bob_answer, _ = _ask(client, token, QUESTION)
+
+            calls_before = len(provider.calls)
+            alice_answer, alice_hints = _answer(alice_ws, QUESTION)
+
+    assert len(provider.calls) == calls_before + 1, "Alice's open chat was served Bob's cached answer"
+    assert not alice_hints.get("cache_hit")
+    assert alice_answer != bob_answer
 
 
 def test_an_index_write_in_flight_at_sign_out_is_not_stored_in_plaintext(provider, token, monkeypatch):

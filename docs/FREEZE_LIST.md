@@ -14,9 +14,9 @@ promises). On 2026-10-01 the owner authorized four UI fixes from a
 launch-checklist audit (§7.15), all landed. A product-wide validation pass
 the same day (§7.16, report only) found four high-or-critical defects in
 backup/restore, deployment and consent. The owner authorized the D-01
-and D-03 fixes; both landed 2026-10-02 (§7.17, §7.18). D-02 and D-04 are
-open, and so is D-15, a sign-out/cache race found while verifying D-03
-(§7.19). Anything further needs a new authorization.
+and D-03 fixes, and then D-15, a sign-out/cache race found while verifying
+D-03 (§7.19); all three landed 2026-10-02 (§7.17, §7.18, §7.20). D-02 and
+D-04 are open. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -241,7 +241,9 @@ Track 2, which found the backend exports the key rather than receiving it.
 **Claim (adopted 2026-09-28):** nothing derived from one profile's data is
 served to another profile or stored under it.
 **Enforced by** the sign-out boundary every profile switch passes through:
-`session_key.lock()` empties the response cache; `vector_store` refuses
+`session_key.lock()` empties the response cache and moves the session
+generation every cache key carries, so nothing one session caches is found
+by another (§7.20); `vector_store` refuses
 index reads and writes when the active profile has a password but no key is
 held (`IndexLockedError`); uploads and ingestion are confined to the active
 profile's own documents folder (`vector_store.documents_root()`).
@@ -249,9 +251,12 @@ profile's own documents folder (`vector_store.documents_root()`).
 routes, each test seen failing first (§7.8, §7.9).
 **Limitations:** one backend process serves every profile, so isolation
 rests on these mechanisms, not on OS process separation. A chat connection
-already open at sign-out keeps its connection until the client drops it -
-the guarantee is that no *new* work reaches the data. Files an older
-version put in the shared `data/documents` folder stay there.
+already open at sign-out keeps its connection until the client drops it,
+and questions asked on it are still answered from its own profile's
+database; what it can no longer do is exchange cached answers with a later
+session (§7.20). *(Corrected 2026-10-02: this used to say no new work
+reaches the data, which §7.20's open-chat test shows it does.)* Files an
+older version put in the shared `data/documents` folder stay there.
 **Origin:** not in the original seven; the defects it covers were found by
 the tracks and broke no written promise (§7.7, the §2.5 limit).
 
@@ -1626,6 +1631,84 @@ cross-profile cache failed:
   also land mid-stream.
 - **The guard:** the §7.9 test is right; the code it guards is not. Its
   failure rate on this machine is the race's rate, not noise.
+- **Fixed 2026-10-02 (§7.20).**
+
+### 7.20 Sign-out cache fix, D-15 (authorized and landed 2026-10-02)
+
+The §7.19 recommendation, by the same method, plus one more channel to the
+same boundary.
+
+- **Promise:** an answer cached by one signed-in session is never served
+  to another. That includes an answer still being written when its
+  session signs out, and a question asked on a chat connection left open
+  through the sign-out.
+- **Mechanism:** the response cache keeps a generation, and every key
+  carries it.
+  - `clear()` moves it, as well as emptying the cache. That is every
+    sign-out, through `session_key.lock()`.
+  - Each chat connection takes the generation once, when it opens, before
+    its database is opened. Every question on that connection reads and
+    writes under that number. `pipeline.run` takes one when the question
+    arrives if it is not given one.
+  - So an entry from an ended session sits under a number no later
+    session looks up, and an old connection looks only under its own.
+- **The second channel (found while writing the fix; covered under this
+  authorization and flagged so the owner can object):**
+  - A chat socket opened before a sign-out keeps working after it, as
+    Promise 8 states, and it shared one cache with whoever signed in next.
+  - Alice's socket, still open after Bob had signed in and asked, was
+    served Bob's cached answer.
+  - It is the same boundary as §7.19, seen from the other side. Taking the
+    number per connection rather than per question closes it.
+- **Tests:** three, each seen failing on the unfixed code:
+  - `test_an_answer_still_being_written_at_sign_out_is_not_served_to_the_next_profile`
+    (route). Alice's cache write is held until her sign-out has finished,
+    which is the order the race produces, and the test checks the write
+    had not come first. On the old code Bob was served Alice's answer in
+    3 of 3 runs.
+  - `test_a_chat_left_open_through_sign_out_is_not_served_the_next_profiles_answers`
+    (route). On the old code Alice's open socket was served Bob's answer
+    in 3 of 3 runs.
+  - `test_an_answer_finished_after_its_session_signed_out_is_not_cached_for_the_next`
+    (pipeline). The model signs the session out mid-answer, so the write
+    lands after the cache was emptied and before `done`. That is why
+    moving the write ahead of `done` would not have been enough.
+- **The §7.9 guard:** 7–8 of 20 runs failed before the fix (§7.19). After
+  it, 159 of 160 passed: 19 of 20, then 40 of 40, then 100 of 100 with
+  every failing run's output kept.
+  - The single failure came in the first batch, whose output was not
+    kept. Nothing found since accounts for it: no path remains by which a
+    later session's lookup can match an entry an earlier one wrote. It is
+    recorded rather than rounded away.
+- **Break-it:** four mutations, each caught:
+  - sign-out no longer moving the generation (3 tests);
+  - the generation dropped from the key (3 tests);
+  - the connection no longer passing its number (the open-chat test);
+  - the pipeline no longer taking one when the question arrives (the
+    mid-answer test).
+
+  A control, that an unchanged record is still answered from the cache,
+  passed under every mutation. So the fix does not work by switching the
+  cache off.
+- **Commit:** the one that adds this section.
+- **Full suite:** 1249 passed, 4 failed. The 4 are the known ones
+  (§7.17); the §7.9 guard passed.
+
+**Not covered (still open):**
+- **The connection takes its number before opening its database.** A
+  sign-out landing between the two fails the open. Only a complete
+  sign-in of another profile inside that gap would give the connection the
+  wrong pairing, and the database it then opened would be the next
+  profile's: a boundary problem of its own, not the cache's. A sign-in
+  derives a key for hundreds of milliseconds, and the gap is between two
+  consecutive statements. Not tested.
+- **An open chat connection still answers after sign-out,** from its own
+  profile's database. Promise 8's limitation is now worded to say so.
+  What §7.20 removes is that connection's exchange with other sessions
+  through the cache.
+- **Old entries stay in memory.** Entries written under an ended session's
+  number are unreachable but kept until their TTL or the next sign-out
+  empties the cache.
 
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
@@ -1677,7 +1760,8 @@ findings.
 | Product-wide validation pass | Run 2026-10-01 (§7.16), report only | Boundaries, consent (ordinary cases), crash recovery and isolation held. D-01 restore over stale WAL (critical) fixed in §7.17, D-03 one-profile export fixed in §7.18. Open: D-02 Smart App Control blocks the backend, D-04 consent fail-open on id reuse, plus 5 medium and 4 low |
 | D-01 restore sidecars fix | Landed 2026-10-02 (§7.17) | Both installers move the replaced database's `-wal`/`-shm`/`-journal` aside under the kept copy's name; 10 tests, 10 break-it mutations caught. Open: D-14 (a restore staged before its profile is deleted is still installed), profiles already damaged before the fix |
 | D-03 one-profile export fix | Landed 2026-10-02 (§7.18) | `export_pip.ps1` takes its profile from the shared `Resolve-PipLastProfile` and always sets the salt with the database; 6 tests through the real wrapper under PowerShell 5.1, 6 break-it mutations caught. Noted: the resolver's one-profile branch never runs under 5.1 (same answer by its fallback) |
-| Sign-out cache race (D-15) | Found 2026-10-02 (§7.19), report only | A: an answer written to the cache after sign-out cleared it is served to the next profile; deterministic with the write delayed (5/5); the §7.9 guard fails 7-8 of 20 runs alone, at `f66a309` and now. Not fixed |
+| Sign-out cache race (D-15) | Found 2026-10-02 (§7.19) | A: an answer written to the cache after sign-out cleared it is served to the next profile; deterministic with the write delayed (5/5); the §7.9 guard failed 7-8 of 20 runs alone. Fixed in §7.20 |
+| D-15 sign-out cache fix | Landed 2026-10-02 (§7.20) | Every cache key carries the session generation sign-out moves, taken per chat connection; also closes an open socket being served the next session's answers. 3 tests seen failing first, 4 break-it mutations caught; the §7.9 guard 159/160 after the fix (one early failure, output not kept) |
 
 ---
 

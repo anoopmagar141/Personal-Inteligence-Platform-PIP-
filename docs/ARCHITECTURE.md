@@ -149,7 +149,11 @@ so there is one write path, not two.
   any write to a table the context can draw from (`RECORD_TABLES`), so an
   answer cached before a document, decision or profile change is never
   served after it - the TTL and decision-log rules alone are only checked
-  when an answer is stored.
+  when an answer is stored. And it carries the signed-in session's
+  generation (`response_cache.generation()`), which every sign-out moves:
+  each chat connection reads and writes under the one it took when it opened,
+  so nothing a session stores or asks for crosses into a later one
+  (FREEZE_LIST §7.20).
 - **Provider order is policy.** `pipeline.OLLAMA_PRIORITY = 50` and
   `llm_endpoints.priority` defaults to 100, so a newly configured cloud endpoint
   sits *behind* the local model and cannot silently start sending conversations
@@ -257,7 +261,10 @@ so there is one write path, not two.
   leaves behind. `session_key.lock()` - the path every sign-out, delete and
   switch goes through - also empties the response cache, whose key names no
   profile and would otherwise answer the next profile with the last one's
-  replies. Work already running when the key goes keeps its database
+  replies, and moves its generation: emptying covers what was stored before
+  the sign-out, the generation what a session still answering at sign-out
+  stores after it, or a chat socket left open through it asks. Work already
+  running when the key goes keeps its database
   connection, so `vector_store` refuses to read or write the index when the
   active profile has a salt but no key is held (`IndexLockedError`) instead of
   falling back to plaintext. And the next sign-in's catch-up is queued behind

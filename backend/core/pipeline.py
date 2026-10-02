@@ -238,6 +238,7 @@ def run(
     max_tokens: int = 2000,
     timeout_seconds: int = 30,
     should_stop: Optional[Callable[[], bool]] = None,
+    cache_generation: Optional[int] = None,
 ) -> Generator[Union[WSChatEvent, PipelineCompleteEvent], None, None]:
     """
     Runs Stages 0-10 for one user message. A generator: yields every Stage 9 event
@@ -251,7 +252,14 @@ def run(
     raising something it wasn't supposed to, so one unexpected exception doesn't
     take down the whole pipeline. Falls back to that stage's documented empty/safe
     output and logs to trace_log rather than propagating.
+
+    cache_generation names the signed-in session this question belongs to; the
+    chat connection passes the one it captured when it opened. Without one it
+    is taken now, as the question arrives - never later, at the cache write,
+    by which time a sign-out may have ended the session (FREEZE_LIST §7.19).
     """
+    if cache_generation is None:
+        cache_generation = response_cache.generation()
     trace_id = trace.generate_trace_id()
     # Logs the message's LENGTH, never its text.
     #
@@ -316,7 +324,7 @@ def run(
         logger.error(f"Pipeline: could not read the record version, bypassing the cache: {e}")
         record_version = None
     cached = (
-        response_cache.get(user_message, project_id, record_version)
+        response_cache.get(user_message, project_id, record_version, generation=cache_generation)
         if record_version is not None
         else None
     )
@@ -497,6 +505,7 @@ def run(
             aggregate["response_text"], aggregate["stage_hints"],
             decision_log_hit=bool(decision_entries),
             record_version=record_version,
+            generation=cache_generation,
         )
 
     # Stage 10
