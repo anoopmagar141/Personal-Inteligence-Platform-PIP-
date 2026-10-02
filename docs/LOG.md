@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-10-02] claude · Recorded D-15 in FREEZE_LIST §7.19, report only, no code changed: the pipeline writes an answer to the response cache after Stage 9's done has reached the client, so a sign-out in that gap empties the cache before the write and the signed-out profile's answer is served to the next profile; deterministic with the write delayed (5/5, probe_cache_race.py), and the §7.9 guard fails 7-8 of 20 runs alone at f66a309 and now · why: that guard failed in the D-03 full suite and had to be explained before the fix could be called clean · files: docs/FREEZE_LIST.md, docs/eval/reliability_2026-10-01/probes/probe_cache_race.py, docs/eval/reliability_2026-10-01/README.md, docs/LOG.md
+
 - [2026-10-02] claude · Made scripts/export_pip.ps1 take the profile to export from the shared Resolve-PipLastProfile (the rule launch_pip.ps1 uses) instead of its own copy that chose only for more than one profile, and set the salt with the database every time, clearing an inherited PIP_SALT_PATH for the original layout; test_export_launcher.py runs the real wrapper under Windows PowerShell 5.1 with a recording stand-in for export_backup.py (4 of 6 fail on the old wrapper), 6 break-it mutations each caught; recorded in FREEZE_LIST §7.18 with the observation that Resolve-PipLastProfile's one-profile branch never runs under 5.1 · why: a new installation's sole profile lives in data/profiles/<slug>/, so Export read a data/pip.db that was not there (D-03) · files: scripts/export_pip.ps1, backend/tests/test_export_launcher.py, docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-10-02] claude · Made both restore installers (restore._install and scripts/restore_backup.py install) move the replaced database's -wal/-shm/-journal aside under the kept copy's name, each checked on its own and undone on a refused rename, from one profiles.SQLITE_SIDECAR_SUFFIXES that delete() now also erases by; 10 tests (8 fail on the old code, the 2 rollback guards cannot), 10 break-it mutations each caught; recorded in FREEZE_LIST §7.17 with D-14 (a restore staged before its profile is deleted is still installed) left open · why: a WAL a crash left beside pip.db was replayed onto the restored database, which then opened with neither password (D-01) · files: backend/core/restore.py, backend/core/profiles.py, scripts/restore_backup.py, backend/tests/test_restore_in_app.py, backend/tests/test_restore_backup.py, docs/ARCHITECTURE.md, docs/FREEZE_LIST.md, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-28] claude · Recorded the profile boundary fixes in FREEZE_LIST §7.9: four promises, each with an end-to-end test seen failing first, and what they deliberately leave open (plaintext already on disk, same-profile cache staleness, the upload route holding the event loop) · why: the freeze doc is the canonical record of what is enforced · files: docs/FREEZE_LIST.md, docs/LOG.md
 
-- [2026-09-27] claude · Made a sign-in queue its own catch-up behind one still running from the previous session instead of skipping it, and documented the sign-out boundary in ARCHITECTURE.md · why: signing out and into another profile during a catch-up left the new session with no recovery, drain or index repair at all · files: backend/api/server.py, backend/tests/test_profile_boundary.py, docs/ARCHITECTURE.md, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -94,3 +94,4 @@ Format:
 - 2026-09-27 (claude): made sign-out empty the response cache, so a second profile is no longer served the first profile's answers, with an end-to-end test through the real auth and chat routes.
 - 2026-09-27 (claude): made vector_store refuse to read or write the index when a password-protected profile's key is not held, instead of writing chunk text and paths in plaintext.
 - 2026-09-27 (claude): made uploads and ingestion follow the active profile's own documents folder, with the sign-in catch-up copying documents out of the old shared folder and re-indexing them.
+- 2026-09-27 (claude): made each sign-in queue its own catch-up behind one still running instead of skipping it, so a profile switched to mid-catch-up still gets its recovery.

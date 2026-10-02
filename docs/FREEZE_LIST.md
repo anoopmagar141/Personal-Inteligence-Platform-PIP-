@@ -15,7 +15,8 @@ launch-checklist audit (§7.15), all landed. A product-wide validation pass
 the same day (§7.16, report only) found four high-or-critical defects in
 backup/restore, deployment and consent. The owner authorized the D-01
 and D-03 fixes; both landed 2026-10-02 (§7.17, §7.18). D-02 and D-04 are
-open. Anything further needs a new authorization.
+open, and so is D-15, a sign-out/cache race found while verifying D-03
+(§7.19). Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1581,6 +1582,51 @@ The §7.16 D-03 recommendation, by the same method.
 - The desktop-shortcut restore (`restore_pip.ps1`) still writes the
   legacy Default slot (§7.16 report, section 11), unchanged.
 
+### 7.19 Answer cached after sign-out, D-15 (found 2026-10-02, report only)
+
+Found while running the D-03 full suite, when §7.9's guard for the
+cross-profile cache failed:
+`test_an_answer_cached_before_sign_out_is_not_served_to_the_next_profile`.
+
+- **Mechanism (category A, Pattern 1 again).** Stage 9 yields `done` and
+  the server forwards it. Only then does the pipeline write the answer
+  into the response cache (`pipeline.py`, after the Stage 9 loop). So a
+  client that already has the whole answer can sign out before the write
+  happens:
+  - `session_key.lock()` empties the cache;
+  - the write then lands after it;
+  - the signed-out profile's answer is back in a cache whose key names no
+    profile.
+
+  §7.9 made sign-out clear what the cache held at that moment. It does
+  not stop work already in flight from writing afterwards.
+- **Evidence:**
+  - **Deterministic:** with only `response_cache.set` delayed by one
+    second, Bob was served `ANSWER#1`, Alice's answer, from the cache in
+    5 of 5 runs, and his model was never called. Bob is a new profile
+    asking Alice's question after she signed out. Probe:
+    `docs/eval/reliability_2026-10-01/probes/probe_cache_race.py`.
+  - **Natural rate:** the §7.9 test, run alone with runs interleaved,
+    failed 8 of 20 at `12a0386` and 7 of 20 at `f66a309`. It has been
+    failing for a real reason all along. Full-suite runs pass it more
+    often, which is how it went unnoticed.
+- **Reach in the app:** low likelihood, but the cost is Promise 8. It
+  needs three things to line up:
+  - the sign-out lands between the end of streaming and the cache write.
+    That gap is normally milliseconds, but the write follows a trace
+    write to the database, which can wait out its 5 s busy timeout;
+  - the next profile asks the same words, with the same project;
+  - it has the same `record_version`. Two new profiles start with the
+    same counter: the probe's cache hit shows it.
+- **Severity:** medium.
+- **Recommendation only:** tie the write to the session that asked. For
+  example, capture a sign-out epoch when the question arrives and refuse
+  the write once it has moved, or put the epoch in the cache key. Moving
+  the write ahead of `done` would not close it, because a sign-out can
+  also land mid-stream.
+- **The guard:** the §7.9 test is right; the code it guards is not. Its
+  failure rate on this machine is the race's rate, not noise.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1631,6 +1677,7 @@ findings.
 | Product-wide validation pass | Run 2026-10-01 (§7.16), report only | Boundaries, consent (ordinary cases), crash recovery and isolation held. D-01 restore over stale WAL (critical) fixed in §7.17, D-03 one-profile export fixed in §7.18. Open: D-02 Smart App Control blocks the backend, D-04 consent fail-open on id reuse, plus 5 medium and 4 low |
 | D-01 restore sidecars fix | Landed 2026-10-02 (§7.17) | Both installers move the replaced database's `-wal`/`-shm`/`-journal` aside under the kept copy's name; 10 tests, 10 break-it mutations caught. Open: D-14 (a restore staged before its profile is deleted is still installed), profiles already damaged before the fix |
 | D-03 one-profile export fix | Landed 2026-10-02 (§7.18) | `export_pip.ps1` takes its profile from the shared `Resolve-PipLastProfile` and always sets the salt with the database; 6 tests through the real wrapper under PowerShell 5.1, 6 break-it mutations caught. Noted: the resolver's one-profile branch never runs under 5.1 (same answer by its fallback) |
+| Sign-out cache race (D-15) | Found 2026-10-02 (§7.19), report only | A: an answer written to the cache after sign-out cleared it is served to the next profile; deterministic with the write delayed (5/5); the §7.9 guard fails 7-8 of 20 runs alone, at `f66a309` and now. Not fixed |
 
 ---
 
