@@ -14,9 +14,10 @@ promises). On 2026-10-01 the owner authorized four UI fixes from a
 launch-checklist audit (§7.15), all landed. A product-wide validation pass
 the same day (§7.16, report only) found four high-or-critical defects in
 backup/restore, deployment and consent. The owner authorized the D-01,
-D-03 and D-04 fixes, and D-15, a sign-out/cache race found while verifying
-D-03 (§7.19); all four landed 2026-10-02 (§7.17, §7.18, §7.20, §7.21).
-D-02 is open. Anything further needs a new authorization.
+D-03 and D-04 fixes; D-15, a sign-out/cache race found while verifying D-03
+(§7.19); and D-14, a staged restore surviving its profile's deletion (found
+while reviewing D-01). All five landed 2026-10-02 (§7.17, §7.18, §7.20,
+§7.21, §7.22). D-02 is open. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1521,6 +1522,7 @@ The §7.16 D-01 recommendation, by the same method as §7.9–§7.12.
   - **Recommendation only:** `delete()` cancels a pending restore whose
     target is under the profile, or the drain refuses a target whose
     profile is no longer registered.
+  - **Fixed 2026-10-02 (§7.22)**, by the first of those.
 - `scripts/migrate_encrypt_db.py` keeps its own sidecar list (`-wal`,
   `-shm`, no `-journal`) and deletes them after a checkpoint and close.
   Low risk; not changed.
@@ -1805,6 +1807,62 @@ which had no tests, its evidence (§4).
 - **No route adds endpoints yet,** so the defect and the fix are latent
   for the shipped app. The tests pin the behaviour for when one does.
 
+### 7.22 Staged restore and profile deletion, D-14 (authorized and landed 2026-10-02)
+
+The first of §7.17's two D-14 recommendations, by the same method.
+
+- **Promise:** deleting a profile takes a restore staged for it with it.
+  - Nothing is installed in the deleted profile's place at the next start.
+  - The staged copy of the backup, a whole backup re-encrypted under the
+    restore's new password, is erased with the rest of the profile.
+  - A restore staged for another profile is untouched.
+- **Mechanism:** `profiles.delete()` first calls
+  `restore.cancel_pending_restore_for` with the profile's own `pip.db`. That
+  cancels the staged restore, marker and staged files, only when it would
+  replace that database. What the marker looks like stays known to
+  `restore.py` alone.
+  - **First,** before anything else in the delete can fail. A delete
+    Windows refuses is only recorded for the next start, and the restore
+    must not outlive the request while that waits.
+  - **In `delete()`, not the route,** so the recorded delete finished at
+    startup goes through it too.
+- **Why not the other recommendation, refusing at the drain (reasoned, not
+  tested):** a profile deleted and created again under the same name before
+  a restart reuses the same folder. A drain checking the target by path
+  would find a registered profile there and install the old backup over
+  the new one's database, under a password its new owner never chose.
+  Cancelling at the delete leaves nothing to install.
+- **Tests:** four, in `test_profile_management.py`, through the real
+  routes. The next start is a real lifespan.
+  - **Named profile.** On the old code, after the next start the deleted
+    profile's folder held a freshly installed `pip.db` and `salt.bin`.
+  - **Default profile.** On the old code it was listed again after the next
+    start.
+  - **A delete that has to wait** (the erase refused, as Windows does). On
+    the old code the restore stayed staged.
+  - **Control:** a restore staged for another profile stays staged, its
+    files intact, when a different profile is deleted.
+
+  The first three failed on the old code for those reasons. The control
+  passed before and after.
+- **Break-it:** three mutations, each caught:
+  - no cancel at all (3 tests);
+  - any staged restore cancelled, whichever profile it was for (the
+    control);
+  - the cancel moved after the erase, which can fail first (the
+    deferred-delete test).
+- **Commit:** the one that adds this section.
+- **Full suite:** 1267 passed, 4 failed. The 4 are the known ones
+  (§7.17): Ollama was not running for this run.
+
+**Not covered (still open):**
+- **`profiles.remove()` does not cancel a staged restore.** It unregisters
+  without erasing, and a restore staged for the removed profile would
+  still be installed into its kept folder. Nothing in the app or the
+  scripts calls `remove()`; only tests do.
+- **A folder deleted by hand** takes the staged files with it. The drain
+  already clears a marker whose files are gone.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1858,6 +1916,7 @@ findings.
 | Sign-out cache race (D-15) | Found 2026-10-02 (§7.19) | A: an answer written to the cache after sign-out cleared it is served to the next profile; deterministic with the write delayed (5/5); the §7.9 guard failed 7-8 of 20 runs alone. Fixed in §7.20 |
 | D-15 sign-out cache fix | Landed 2026-10-02 (§7.20) | Every cache key carries the session generation sign-out moves, taken per chat connection; also closes an open socket being served the next session's answers. 3 tests seen failing first, 4 break-it mutations caught; the §7.9 guard 159/160 after the fix (one early failure, output not kept) |
 | D-04 consent locality fix | Landed 2026-10-02 (§7.21) | Stage 8 counts a provider as local only when its own claim and its consent record agree; `add_endpoint` refuses built-in ids. 11 outcome tests (5 seen failing first), 3 gate unit tests, 6 break-it mutations caught. Promise 6 now has evidence. Open: locality attested not verified, D-08, §7.2 finding 2 |
+| D-14 staged restore and deletion fix | Landed 2026-10-02 (§7.22) | `profiles.delete()` first cancels a restore staged for that profile's database, so nothing is installed in a deleted profile's place and the staged copy is erased. 4 route tests (3 seen failing first), 3 break-it mutations caught. Open: `profiles.remove()`, which nothing calls |
 
 ---
 

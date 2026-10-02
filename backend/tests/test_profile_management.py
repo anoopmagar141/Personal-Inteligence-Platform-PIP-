@@ -35,7 +35,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import server
-from backend.core import auth, db_key, profiles, session_key
+from backend.core import auth, db_key, profiles, restore, session_key
 from backend.memory import profile_store
 
 PASSWORD = "correct-horse-battery"
@@ -1010,3 +1010,139 @@ def test_an_unreadable_mark_file_does_not_stop_anything(app):
 
     assert profiles.pending_deletions() == []
     assert profiles.drain_pending_deletions() == []
+
+
+# ---------------------------------------------------------------------------
+# A restore staged for a profile goes with it
+# ---------------------------------------------------------------------------
+#
+# D-14 (docs/FREEZE_LIST.md §7.17). A restore is staged in the running app and
+# installed at the next start, before anything opens a database. Deleting the
+# profile in between left the marker and the staged copy of the backup behind,
+# and the next start installed it anyway: a deleted Default came back, and a
+# named profile's folder got an unregistered database. The staged copy is also
+# the deleted profile's data - a whole backup, re-encrypted - left on disk.
+
+BACKUP_PASSWORD = "the-backup-password"
+
+
+def _backup(tmp_path):
+    """A .pipbak is a SQLCipher database keyed by a passphrase."""
+    import sqlcipher3
+
+    path = tmp_path / "backup.pipbak"
+    conn = sqlcipher3.connect(str(path))
+    conn.execute(f"PRAGMA key = '{BACKUP_PASSWORD}'")
+    conn.execute("CREATE TABLE identity (id INTEGER PRIMARY KEY, name TEXT)")
+    conn.execute("INSERT INTO identity (id, name) VALUES (1, 'restored')")
+    conn.commit()
+    conn.close()
+    return path
+
+
+def _stage_restore(client, headers, tmp_path):
+    staged = client.post(
+        "/api/v1/backup/restore",
+        json={"path": str(_backup(tmp_path)), "backup_password": BACKUP_PASSWORD,
+              "new_password": "the-restored-password"},
+        headers=headers,
+    )
+    assert staged.status_code == 200, staged.text
+    return restore.pending_restore()
+
+
+def _next_start():
+    """What a relaunch does before anything opens a database: finish recorded
+    deletes, then install a staged restore."""
+    with TestClient(server.app):
+        pass
+
+
+def _left_in(directory):
+    if not directory.exists():
+        return []
+    return sorted(p.name for p in directory.iterdir()
+                  if p.name in ("pip.db", "salt.bin") or ".tmp." in p.name)
+
+
+def test_a_restore_staged_for_a_deleted_profile_is_not_installed_in_its_place(app):
+    client, headers, tmp_path = app
+    slug = make_second_profile(client, headers)
+    directory = tmp_path / "profiles" / slug
+    _stage_restore(client, headers, tmp_path)
+
+    deleted = client.request(
+        "DELETE", f"/api/v1/auth/profiles/{slug}",
+        json={"password": "priyas-own-password"}, headers=headers,
+    )
+    assert deleted.status_code == 200, deleted.text
+    _next_start()
+
+    assert restore.pending_restore() is None, "the restore outlived the profile it was for"
+    assert _left_in(directory) == [], "the deleted profile's folder was given a database or kept the staged copy"
+    assert slug not in [p.slug for p in profiles.list_profiles()]
+
+
+def test_a_deleted_default_profile_does_not_come_back_through_its_staged_restore(app):
+    """Default is listed whenever data/pip.db exists, so installing the staged
+    restore there brought a deleted Default back."""
+    client, headers, tmp_path = app
+    sign_in(client, headers)
+    _stage_restore(client, headers, tmp_path)
+
+    deleted = client.request(
+        "DELETE", f"/api/v1/auth/profiles/{profiles.DEFAULT_SLUG}",
+        json={"password": PASSWORD}, headers=headers,
+    )
+    assert deleted.status_code == 200, deleted.text
+    _next_start()
+
+    assert profiles.DEFAULT_SLUG not in [p.slug for p in profiles.list_profiles()]
+    assert not (tmp_path / "pip.db").exists()
+    assert not list(tmp_path.glob("restore-*.tmp.*")), "the staged copy of the backup was left behind"
+
+
+def test_a_delete_that_has_to_wait_still_cancels_the_restore_first(app, monkeypatch):
+    """
+    A delete Windows refuses now is recorded and finished at the next start -
+    before the restore drain, but the restore must not depend on that order or
+    on the erase succeeding. It is cancelled before anything else is tried.
+    """
+    client, headers, tmp_path = app
+    slug = make_second_profile(client, headers)
+    _stage_restore(client, headers, tmp_path)
+    real_remove = profiles._remove_path
+
+    def database_held_open(path):
+        if path.name == "pip.db":
+            raise PermissionError("[WinError 32] in use")
+        return real_remove(path)
+
+    monkeypatch.setattr(profiles, "_remove_path", database_held_open)
+    deleted = client.request(
+        "DELETE", f"/api/v1/auth/profiles/{slug}",
+        json={"password": "priyas-own-password"}, headers=headers,
+    )
+
+    assert deleted.json()["deferred"] is True
+    assert restore.pending_restore() is None, "a delete that could not finish left the restore staged"
+
+
+def test_a_restore_staged_for_another_profile_survives_a_delete(app):
+    """Only the deleted profile's restore goes. Somebody else's stays staged,
+    its files intact, for the next start to install."""
+    client, headers, tmp_path = app
+    sign_in(client, headers)
+    staged = _stage_restore(client, headers, tmp_path)
+    client.post("/api/v1/auth/lock", headers=headers)
+    slug = make_second_profile(client, headers)
+
+    deleted = client.request(
+        "DELETE", f"/api/v1/auth/profiles/{slug}",
+        json={"password": "priyas-own-password"}, headers=headers,
+    )
+    assert deleted.status_code == 200, deleted.text
+
+    assert restore.pending_restore() == staged
+    from pathlib import Path
+    assert Path(staged["db"]).exists() and Path(staged["salt"]).exists()

@@ -520,6 +520,15 @@ def delete(slug: str) -> Profile:
     """
     profile = get(slug)
 
+    # A restore staged for this profile goes first, before anything here can
+    # fail. Left behind, it was installed into the deleted profile's place at
+    # the next start, and its staged copy is a whole backup of this profile's
+    # data (FREEZE_LIST §7.17, D-14). First, because a delete Windows refuses
+    # now is only recorded, and the restore must not outlive the request
+    # waiting for that. Imported here because restore imports this module.
+    from backend.core import restore
+    restore.cancel_pending_restore_for(profile.paths()["db"])
+
     for path in erasable_paths(slug):
         _remove_path(path)
         # SQLite leaves -wal and -shm beside a database it did not close

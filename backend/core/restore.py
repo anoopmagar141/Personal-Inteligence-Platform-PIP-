@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -314,3 +315,24 @@ def cancel_pending_restore() -> bool:
     pending_restore_path().unlink(missing_ok=True)
     logger.info("Staged restore cancelled.")
     return True
+
+
+def cancel_pending_restore_for(db_path: str | Path) -> bool:
+    """
+    Discard a staged restore if it would replace *db_path*, and nothing else.
+    Returns whether it did.
+
+    For profiles.delete(). A restore staged for a profile that is then deleted
+    was installed into its place at the next start anyway - a deleted Default
+    listed again, a named profile's folder given a database nobody is
+    registered for - and its staged copy is a whole backup of that profile's
+    data, left on disk by a delete (FREEZE_LIST §7.17, D-14). A restore staged
+    for another profile stays staged.
+    """
+    staged = pending_restore()
+    if not staged:
+        return False
+    same = os.path.normcase(os.path.abspath(staged.get("target_db", ""))) == os.path.normcase(
+        os.path.abspath(db_path)
+    )
+    return cancel_pending_restore() if same else False

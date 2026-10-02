@@ -246,7 +246,10 @@ so there is one write path, not two.
   `data/pending-deletion.json`; the lifespan drains that **before anything
   opens a database**. `erasable_paths()` puts `pip.db` first so a partial erase
   fails in the harmless direction - a surviving salt is 16 useless bytes, a
-  surviving database with no salt is unopenable forever.
+  surviving database with no salt is unopenable forever. Before any of that,
+  `delete()` cancels a restore staged for the profile
+  (`restore.cancel_pending_restore_for`): left staged, it was installed into
+  the deleted profile's place at the next start (FREEZE_LIST §7.22).
 - **A password change must re-key ChromaDB too.** Chunk ids are
   `HMAC(db_key, file_path)`, chunk text and stored paths are `Fernet(db_key)`.
   Rekeying only SQLite leaves the whole index unreadable and *nothing fails
