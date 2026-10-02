@@ -226,11 +226,25 @@ def _install(staged: dict[str, Any]) -> str | None:
     target_salt = Path(staged["target_salt"])
     stamp = now_utc().replace(":", "").replace("-", "")
 
+    # The database goes aside with its sidecars, under the kept copy's name.
+    # SQLite pairs a -wal or -journal with a database by name alone: left
+    # behind, a crash's uncheckpointed pages are replayed onto the restored
+    # file, which then no longer opens with the new password, or opens carrying
+    # pages written under the old key (FREEZE_LIST §7.16, D-01); renamed any
+    # other way, the kept copy silently loses them. Each is checked on its own,
+    # because a sidecar can outlive the database it belonged to.
+    kept_db = target_db.with_name(f"{target_db.name}.superseded-{stamp}")
+    aside = [(target_db, kept_db, "database")]
+    aside += [
+        (Path(f"{target_db}{suffix}"), Path(f"{kept_db}{suffix}"), f"{suffix} file")
+        for suffix in profiles.SQLITE_SIDECAR_SUFFIXES
+    ]
+    aside.append((target_salt, target_salt.with_name(f"{target_salt.name}.superseded-{stamp}"), "salt"))
+
     undo: list[tuple[Path, Path]] = []
     try:
-        for existing, label in ((target_db, "database"), (target_salt, "salt")):
+        for existing, kept, label in aside:
             if existing.exists():
-                kept = existing.with_name(f"{existing.name}.superseded-{stamp}")
                 shutil.move(str(existing), str(kept))
                 undo.append((kept, existing))
                 logger.info(f"Previous {label} kept as {kept.name}")

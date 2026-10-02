@@ -23,6 +23,7 @@ what is tested here is the split, and the properties that make it safe:
 """
 
 import json
+import shutil
 
 import pytest
 import sqlcipher3
@@ -65,6 +66,44 @@ def make_backup(tmp_path, name="backup.pipbak", password=BACKUP_PASSWORD, rows=2
     conn.commit()
     conn.close()
     return path
+
+
+OLD_PASSWORD = "the-old-live-password"
+SIDECARS = ("-wal", "-shm", "-journal")
+
+
+def crash_leaving_a_wal(db_path, key):
+    """
+    Leave *db_path* the way an unclean exit does: its newest pages in
+    pip.db-wal, not yet in pip.db.
+
+    machine_one's trick from test_phase9_roundtrip.py, plus the step Windows
+    adds. Closing the last connection checkpoints the WAL into pip.db and
+    deletes it, and nothing may rename a file SQLite holds open - so the pair
+    is copied out while the connection is still open, and copied back once it
+    has closed.
+    """
+    conn = profile_store.get_connection(str(db_path), key)
+    conn.execute("PRAGMA wal_autocheckpoint = 0")
+    # A schema change, because it always rewrites page 1 - the page every open
+    # reads first. An UPDATE alone lands in the WAL too, but only on pages the
+    # restored database may never ask for; measured that way, the restore
+    # survived it and this test would pass for the wrong reason.
+    conn.execute("CREATE TABLE written_just_before_the_crash (note TEXT)")
+    conn.execute("INSERT INTO written_just_before_the_crash VALUES ('never checkpointed')")
+    conn.commit()
+
+    wal = db_path.with_name(db_path.name + "-wal")
+    assert wal.exists() and wal.stat().st_size > 0, "nothing is in the WAL to leave behind"
+
+    frozen = db_path.parent / "frozen-at-the-crash"
+    frozen.mkdir()
+    for path in (db_path, wal):
+        shutil.copyfile(path, frozen / path.name)
+    conn.close()
+    for path in (db_path, wal):
+        shutil.copyfile(frozen / path.name, path)
+    shutil.rmtree(frozen)
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +260,144 @@ def test_what_was_replaced_is_kept_not_deleted(live):
 
     assert list(live.glob("pip.db.superseded-*")), "the previous database was destroyed"
     assert list(live.glob("salt.bin.superseded-*")), "the previous salt was destroyed"
+
+
+def _stage_over_a_crashed_profile(live, rows=2):
+    backup = make_backup(live, rows=rows)
+    restore.stage_restore(
+        backup, BACKUP_PASSWORD, NEW_PASSWORD,
+        db_path=live / "pip.db", salt_path=live / "salt.bin",
+    )
+    # Staged while running, and then the process ended without a checkpoint -
+    # the usual way the next start is reached (FREEZE_LIST §7.16, D-09).
+    old = db_key.derive_key(OLD_PASSWORD, db_key.load_salt(live / "salt.bin"))
+    crash_leaving_a_wal(live / "pip.db", old)
+
+
+def test_a_wal_left_by_the_replaced_database_does_not_reach_the_restored_one(live):
+    """
+    D-01. pip.db-wal is named after pip.db rather than kept inside it, so
+    moving pip.db aside left the old database's uncheckpointed pages beside the
+    new one. SQLite replays a -wal it finds at open, the new key cannot read
+    pages written under the old one, and a restore that reported success left a
+    profile no password opened.
+    """
+    _stage_over_a_crashed_profile(live, rows=3)
+
+    assert restore.drain_pending_restore() is not None
+
+    # Checked before anything opens the file: any open, even a failed one,
+    # replays a stale WAL and deletes it, which would hide the evidence.
+    assert not [s for s in SIDECARS if (live / f"pip.db{s}").exists()], (
+        "the replaced database's sidecar is still beside the restored one"
+    )
+    key = db_key.derive_key(NEW_PASSWORD, db_key.load_salt(live / "salt.bin"))
+    conn = profile_store.get_connection(str(live / "pip.db"), key)
+    try:
+        # Rows, not verify_key: that reads only sqlite_master, which a database
+        # with foreign pages folded into it can still answer.
+        assert conn.execute("SELECT COUNT(*) FROM identity").fetchone()[0] == 3
+    finally:
+        conn.close()
+
+
+def test_the_replaced_database_keeps_its_wal(live):
+    """
+    ADR-024's posture, one file further: the pages a crash left in the -wal
+    belong to the database being replaced, so they go aside with it - under the
+    kept copy's own name, the only one SQLite looks for when it is opened.
+    """
+    _stage_over_a_crashed_profile(live)
+
+    restore.drain_pending_restore()
+
+    kept = next(
+        p for p in live.glob("pip.db.superseded-*") if not p.name.endswith(SIDECARS)
+    )
+    assert (live / f"{kept.name}-wal").exists(), "the replaced database's WAL was not kept with it"
+    old_salt = next(live.glob("salt.bin.superseded-*")).read_bytes()
+    conn = profile_store.get_connection(str(kept), db_key.derive_key(OLD_PASSWORD, old_salt))
+    try:
+        note = conn.execute("SELECT note FROM written_just_before_the_crash").fetchone()[0]
+    finally:
+        conn.close()
+    assert note == "never checkpointed"
+
+
+def test_every_kind_of_sidecar_goes_aside_with_the_database(live):
+    """
+    -wal is the one a crash usually leaves, but a hot -journal is the same
+    hazard: the restored file starts in rollback mode until its first open, and
+    a journal beside it is rolled back onto it. -shm is only an index, kept
+    with the rest so the set stays whole.
+    """
+    backup = make_backup(live)
+    restore.stage_restore(
+        backup, BACKUP_PASSWORD, NEW_PASSWORD,
+        db_path=live / "pip.db", salt_path=live / "salt.bin",
+    )
+    for suffix in SIDECARS:
+        (live / f"pip.db{suffix}").write_bytes(f"left behind{suffix}".encode())
+
+    assert restore.drain_pending_restore() is not None
+
+    kept = next(
+        p for p in live.glob("pip.db.superseded-*") if not p.name.endswith(SIDECARS)
+    )
+    for suffix in SIDECARS:
+        assert not (live / f"pip.db{suffix}").exists(), f"pip.db{suffix} stayed beside the restored database"
+        assert (live / f"{kept.name}{suffix}").read_bytes() == f"left behind{suffix}".encode()
+
+
+def test_a_wal_whose_database_is_gone_does_not_reach_the_restored_one(live):
+    """
+    SQLite pairs a WAL with a database by name alone, so a pip.db-wal with no
+    pip.db beside it is still replayed onto whatever arrives under that name.
+    The sidecars are moved aside on their own account, not only when the
+    database they belonged to is there to move.
+    """
+    _stage_over_a_crashed_profile(live, rows=3)
+    (live / "pip.db").unlink()
+
+    assert restore.drain_pending_restore() is not None
+
+    assert not (live / "pip.db-wal").exists(), "the orphaned WAL stayed in place"
+    key = db_key.derive_key(NEW_PASSWORD, db_key.load_salt(live / "salt.bin"))
+    conn = profile_store.get_connection(str(live / "pip.db"), key)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM identity").fetchone()[0] == 3
+    finally:
+        conn.close()
+
+
+def test_a_refused_move_leaves_the_old_database_with_its_wal(live, monkeypatch):
+    """
+    The rollback has to put the sidecars back too. Undo pip.db without its WAL
+    and the old database is whole on disk but missing its newest pages, which
+    is the half-swapped state the rollback exists to prevent.
+    """
+    _stage_over_a_crashed_profile(live)
+    real_move = restore.shutil.move
+
+    def refuse_the_salt(src, dst):
+        if str(src).endswith("salt.bin"):
+            raise OSError(32, "The process cannot access the file")
+        return real_move(src, dst)
+
+    monkeypatch.setattr(restore.shutil, "move", refuse_the_salt)
+
+    assert restore.drain_pending_restore() is None
+    assert restore.pending_restore() is not None, "a failed swap forgot the restore"
+
+    assert (live / "pip.db-wal").exists(), "the WAL was not put back beside its database"
+    assert not list(live.glob("pip.db.superseded-*")), "a moved-aside file was not put back"
+    old = db_key.derive_key(OLD_PASSWORD, db_key.load_salt(live / "salt.bin"))
+    conn = profile_store.get_connection(str(live / "pip.db"), old)
+    try:
+        note = conn.execute("SELECT note FROM written_just_before_the_crash").fetchone()[0]
+    finally:
+        conn.close()
+    assert note == "never checkpointed"
 
 
 def test_draining_with_nothing_staged_does_nothing(live):

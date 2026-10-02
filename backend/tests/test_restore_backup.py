@@ -14,6 +14,7 @@ are what turn "the file contains the data" into "the data comes back".
 
 import importlib.util
 import pathlib
+import shutil
 import sys
 
 import pytest
@@ -191,6 +192,156 @@ def test_the_old_salt_is_kept_too(restore_script, monkeypatch, backup, tmp_path)
     assert len(superseded) == 1
     assert superseded[0].read_bytes() == b"0123456789abcdef"
     assert salt_path.read_bytes() != b"0123456789abcdef", "a new salt must have been written"
+
+
+SIDECARS = ("-wal", "-shm", "-journal")
+
+
+def _crash_leaving_a_wal(db_path, key):
+    """
+    Leave *db_path* the way a crashed or force-killed backend does: its newest
+    pages in pip.db-wal, not yet in pip.db. Copied out while the connection is
+    open and back once it has closed, because the close is what checkpoints
+    and deletes the WAL (test_restore_in_app.py's crash_leaving_a_wal).
+    """
+    conn = profile_store.get_connection(str(db_path), db_key=key)
+    conn.execute("PRAGMA wal_autocheckpoint = 0")
+    # A schema change rewrites page 1, which every open reads first.
+    conn.execute("CREATE TABLE written_just_before_the_crash (note TEXT)")
+    conn.execute("INSERT INTO written_just_before_the_crash VALUES ('never checkpointed')")
+    conn.commit()
+
+    wal = db_path.with_name(db_path.name + "-wal")
+    assert wal.exists() and wal.stat().st_size > 0, "nothing is in the WAL to leave behind"
+
+    frozen = db_path.parent / "frozen-at-the-crash"
+    frozen.mkdir()
+    for path in (db_path, wal):
+        shutil.copyfile(path, frozen / path.name)
+    conn.close()
+    for path in (db_path, wal):
+        shutil.copyfile(frozen / path.name, path)
+    shutil.rmtree(frozen)
+
+
+def test_a_wal_left_by_the_replaced_database_does_not_reach_the_restored_one(
+    restore_script, monkeypatch, backup, live_db
+):
+    """
+    D-01, through the script. A crashed backend leaves a stale lock, which the
+    script accepts, and pip.db-wal, which moving pip.db aside did not move -
+    so the first open of the restored file replayed pages written under the
+    old key, and the database the script reported restoring would not open.
+    """
+    _crash_leaving_a_wal(live_db, LIVE_KEY)
+
+    assert _restore(restore_script, monkeypatch, backup, live_db) == 0
+
+    # Before anything opens it: an open, even a failed one, consumes the WAL.
+    assert not [s for s in SIDECARS if live_db.with_name(live_db.name + s).exists()], (
+        "the replaced database's sidecar is still beside the restored one"
+    )
+    new_key = db_key_module.derive_key_from_stored_salt(NEW_LIVE_PASSWORD)
+    restored = _rows(live_db, new_key, is_password=False)
+    assert restored["name"] == "Anup"
+    assert restored["decisions"] == 1
+
+
+def _kept(directory):
+    return next(
+        p for p in directory.glob("pip.db.superseded-*") if not p.name.endswith(SIDECARS)
+    )
+
+
+def test_the_replaced_database_keeps_its_wal(restore_script, monkeypatch, backup, live_db):
+    """
+    The script builds the kept names with its own code, so the in-app test of
+    the same property does not cover it. Renamed after anything but the kept
+    copy, the WAL is a file SQLite never pairs, and the kept database opens
+    without its newest pages.
+    """
+    _crash_leaving_a_wal(live_db, LIVE_KEY)
+
+    assert _restore(restore_script, monkeypatch, backup, live_db) == 0
+
+    kept = _kept(live_db.parent)
+    assert (live_db.parent / f"{kept.name}-wal").exists(), "the replaced database's WAL was not kept with it"
+    conn = profile_store.get_connection(str(kept), db_key=LIVE_KEY)
+    try:
+        note = conn.execute("SELECT note FROM written_just_before_the_crash").fetchone()[0]
+    finally:
+        conn.close()
+    assert note == "never checkpointed"
+
+
+def test_every_kind_of_sidecar_goes_aside_with_the_database(
+    restore_script, monkeypatch, backup, live_db
+):
+    """A crash usually leaves a -wal, but a hot -journal is the same hazard,
+    and -shm belongs with the set."""
+    for suffix in SIDECARS:
+        live_db.with_name(live_db.name + suffix).write_bytes(f"left behind{suffix}".encode())
+
+    assert _restore(restore_script, monkeypatch, backup, live_db) == 0
+
+    kept = _kept(live_db.parent)
+    for suffix in SIDECARS:
+        assert not live_db.with_name(live_db.name + suffix).exists(), f"pip.db{suffix} stayed beside the restored database"
+        assert (live_db.parent / f"{kept.name}{suffix}").read_bytes() == f"left behind{suffix}".encode()
+
+
+def test_a_wal_whose_database_is_gone_does_not_reach_the_restored_one(
+    restore_script, monkeypatch, backup, live_db
+):
+    """
+    The script is the path for a machine whose database is gone - and deleting
+    pip.db by hand leaves pip.db-wal behind. SQLite pairs a WAL with a database
+    by name alone, so the orphan is replayed onto whatever arrives under that
+    name unless it is moved aside even when there is no pip.db to move.
+    """
+    _crash_leaving_a_wal(live_db, LIVE_KEY)
+    live_db.unlink()
+
+    assert _restore(restore_script, monkeypatch, backup, live_db) == 0
+
+    assert not live_db.with_name(live_db.name + "-wal").exists(), "the orphaned WAL stayed in place"
+    new_key = db_key_module.derive_key_from_stored_salt(NEW_LIVE_PASSWORD)
+    restored = _rows(live_db, new_key, is_password=False)
+    assert restored["name"] == "Anup"
+    assert restored["decisions"] == 1
+
+
+def test_a_refused_rename_puts_the_wal_back_with_its_database(
+    restore_script, monkeypatch, backup, live_db
+):
+    """
+    The rollback has to cover the sidecars too. Putting pip.db back without its
+    WAL leaves the old database whole on disk but missing its newest pages -
+    the half-swapped state test_a_refused_rename_puts_everything_back guards,
+    one file over.
+    """
+    _crash_leaving_a_wal(live_db, LIVE_KEY)
+    salt_path = db_key_module.salt_path()
+    salt_path.write_bytes(b"the salt beside it")
+    real_move = restore_script.shutil.move
+
+    def _refuse_the_salt(src, dst):
+        if str(src) == str(salt_path):
+            raise OSError(32, "The process cannot access the file")
+        return real_move(src, dst)
+
+    monkeypatch.setattr(restore_script.shutil, "move", _refuse_the_salt)
+
+    assert _restore(restore_script, monkeypatch, backup, live_db) != 0
+
+    assert live_db.with_name(live_db.name + "-wal").exists(), "the WAL was not put back beside its database"
+    assert not list(live_db.parent.glob("pip.db.superseded-*")), "a moved-aside file was not put back"
+    conn = profile_store.get_connection(str(live_db), db_key=LIVE_KEY)
+    try:
+        note = conn.execute("SELECT note FROM written_just_before_the_crash").fetchone()[0]
+    finally:
+        conn.close()
+    assert note == "never checkpointed"
 
 
 def test_it_refuses_to_run_while_pip_holds_the_lock(

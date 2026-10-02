@@ -386,11 +386,28 @@ def install(out_path: pathlib.Path, salt_path: pathlib.Path,
     Returns None on success, or the failure message once everything it had
     already moved has been moved back.
     """
+    _ensure_repo_on_path()
+    from backend.core.profiles import SQLITE_SIDECAR_SUFFIXES
+
+    # The database goes aside with its sidecars, under the kept copy's name.
+    # SQLite pairs a -wal or -journal with a database by name alone, and a
+    # crashed backend - a stale lock, which this script accepts - leaves
+    # pip.db-wal behind: replayed onto the restored file, it no longer opens
+    # with the new password, or opens carrying pages written under the old key
+    # (FREEZE_LIST section 7.16, D-01). Each is checked on its own, because a
+    # sidecar outlives a database deleted by hand.
+    kept_db = out_path.with_name(f"{out_path.name}.superseded-{stamp}")
+    aside = [(out_path, kept_db, "database")]
+    aside += [
+        (pathlib.Path(f"{out_path}{suffix}"), pathlib.Path(f"{kept_db}{suffix}"), f"{suffix} file")
+        for suffix in SQLITE_SIDECAR_SUFFIXES
+    ]
+    aside.append((salt_path, salt_path.with_name(f"{salt_path.name}.superseded-{stamp}"), "salt"))
+
     undo: list[tuple[pathlib.Path, pathlib.Path]] = []
     try:
-        for existing, label in ((out_path, "database"), (salt_path, "salt")):
+        for existing, kept, label in aside:
             if existing.exists():
-                kept = existing.with_name(f"{existing.name}.superseded-{stamp}")
                 shutil.move(str(existing), str(kept))
                 undo.append((kept, existing))
                 print(f"  previous {label} kept as {kept.name}")

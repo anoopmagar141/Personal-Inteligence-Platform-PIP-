@@ -480,6 +480,14 @@ def erasable_paths(slug: str, data_root: Path | None = None) -> list[Path]:
     ]
 
 
+# The files SQLite keeps beside a database, named after it rather than living
+# inside it: pages a crash left in the write-ahead log, that log's index, and a
+# rollback journal. Anything that moves or erases a database has to take these
+# with it. One list for the erase and both restore paths;
+# scripts/migrate_encrypt_db.py still keeps its own.
+SQLITE_SIDECAR_SUFFIXES = ("-wal", "-shm", "-journal")
+
+
 def _remove_path(path: Path) -> bool:
     """Delete a file or a directory tree. Returns whether anything was there."""
     if path.is_dir():
@@ -521,8 +529,8 @@ def delete(slug: str) -> Profile:
         # leave fragments of the erased profile's content in a directory it
         # was just deleted from.
         if path.suffix == ".db":
-            for sidecar in (f"{path}-wal", f"{path}-shm", f"{path}-journal"):
-                _remove_path(Path(sidecar))
+            for suffix in SQLITE_SIDECAR_SUFFIXES:
+                _remove_path(Path(f"{path}{suffix}"))
 
     if slug != DEFAULT_SLUG:
         # The directory itself, now that everything PIP put in it is gone.

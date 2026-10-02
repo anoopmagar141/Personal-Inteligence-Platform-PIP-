@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-10-02] claude · Made both restore installers (restore._install and scripts/restore_backup.py install) move the replaced database's -wal/-shm/-journal aside under the kept copy's name, each checked on its own and undone on a refused rename, from one profiles.SQLITE_SIDECAR_SUFFIXES that delete() now also erases by; 10 tests (8 fail on the old code, the 2 rollback guards cannot), 10 break-it mutations each caught; recorded in FREEZE_LIST §7.17 with D-14 (a restore staged before its profile is deleted is still installed) left open · why: a WAL a crash left beside pip.db was replayed onto the restored database, which then opened with neither password (D-01) · files: backend/core/restore.py, backend/core/profiles.py, scripts/restore_backup.py, backend/tests/test_restore_in_app.py, backend/tests/test_restore_backup.py, docs/ARCHITECTURE.md, docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-10-01] claude · Ran a product-wide validation pass, report only, no production code changed: route-auth census, WebSocket, traversal, profile isolation, ordinary consent cases and force-kill recovery held; found D-01 (in-app restore over a leftover pip.db-wal leaves the profile unopenable), D-02 (Smart App Control blocks torch so the backend cannot import, payload included), D-03 (Backup screen export fails with one profile), D-04 (consent fails open when an endpoint is re-saved local to remote or named ollama), plus 5 medium and 4 low; recorded in FREEZE_LIST §7.16 with the full report and probes in docs/eval/ · why: the owner asked for every workflow to be validated from outside · files: docs/eval/reliability_validation_2026-10-01.md, docs/eval/reliability_2026-10-01/, docs/FREEZE_LIST.md, docs/LOG.md
 
 - [2026-10-01] claude · Gave scripts/eval_observer_end_to_end.py the _venv.require("sqlcipher3") guard and replaced the section sign in its docstring with "section" · why: test_venv_guard failed on both since the script was added in 1256b51 · files: scripts/eval_observer_end_to_end.py, docs/LOG.md
@@ -54,8 +56,6 @@ Format:
 
 - [2026-09-27] claude · Made uploads and the ingestion sandbox follow the active profile's documents folder, and had the sign-in catch-up copy a profile's documents out of the old shared folder into its own and re-index them · why: every profile's uploads landed in one shared plaintext folder that any profile's ingest accepted (FREEZE_LIST §7.8) · files: backend/memory/vector_store.py, backend/api/server.py, backend/tests/test_profile_boundary.py, backend/tests/test_api_server.py, backend/tests/test_pipeline.py, backend/tests/test_set_db_password.py, backend/tests/test_stage_05_rag_retrieval.py, backend/tests/test_vector_store.py, docs/ARCHITECTURE.md, docs/LOG.md
 
-- [2026-09-27] claude · Made vector_store refuse to read or write the index when the active profile has a password but no key is held, instead of falling back to plaintext · why: an ingest in flight at sign-out stored its chunk text and path in plaintext, and it survived the next sign-in's rebuild (FREEZE_LIST §7.8) · files: backend/memory/vector_store.py, backend/tests/test_profile_boundary.py, docs/LOG.md
-
 ## Archive
 
 - 2026-09-08 (claude, 4 entries): built the agent-context layer (AGENTS.md, CLAUDE.md, GEMINI.md, ARCHITECTURE/CONVENTIONS/LOG docs, Copilot and Cursor pointers), added a pre-commit check for the AGENTS.md 80-line cap, and added the evidence gate between Observer extraction and Stage 12 after a genuine quote ("comparing FastAPI and Flask") wrote preferred_tools=Flask.
@@ -92,3 +92,4 @@ Format:
 - 2026-09-27 (claude): wrote the cross-track synthesis in FREEZE_LIST §7.7 - five patterns confirmed by two or more reports (sign-out boundary missing in-memory work, duplicated rules, optional parts failing open, tests concealing defects, under-identifying keys).
 - 2026-09-27 (claude): ran the end-to-end profile boundary test and recorded it in FREEZE_LIST §7.8 - profile B was served A's document answer, an ingest in flight at sign-out stored plaintext, and uploads shared one plaintext folder.
 - 2026-09-27 (claude): made sign-out empty the response cache, so a second profile is no longer served the first profile's answers, with an end-to-end test through the real auth and chat routes.
+- 2026-09-27 (claude): made vector_store refuse to read or write the index when a password-protected profile's key is not held, instead of writing chunk text and paths in plaintext.

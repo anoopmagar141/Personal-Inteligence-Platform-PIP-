@@ -13,8 +13,9 @@ complete: the promise wording was decided 2026-09-28 (§4 now holds nine
 promises). On 2026-10-01 the owner authorized four UI fixes from a
 launch-checklist audit (§7.15), all landed. A product-wide validation pass
 the same day (§7.16, report only) found four high-or-critical defects in
-backup/restore, deployment and consent; none is fixed. Anything further
-needs a new authorization.
+backup/restore, deployment and consent. The owner authorized the D-01
+fix that day; it landed 2026-10-02 (§7.17). D-02 to D-04 are open.
+Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1391,7 +1392,7 @@ failing probe is its defect's regression test once a fix is authorized.
 
 | ID | Sev. | Cat. | Finding | Evidence |
 |---|---|---|---|---|
-| D-01 | Critical | B | A restore swaps `pip.db` and `salt.bin` but leaves the old `pip.db-wal`. SQLite replays it, so the restored profile opens with neither the new password nor the old one (its salt was moved aside). Same shape in `restore_backup.py`. `profiles.delete()` already handles sidecars | Deterministic probe plus 2 of 3 real-process restores |
+| D-01 | Critical | B | A restore swaps `pip.db` and `salt.bin` but leaves the old `pip.db-wal`. SQLite replays it, so the restored profile opens with neither the new password nor the old one (its salt was moved aside). Same shape in `restore_backup.py`. `profiles.delete()` already handles sidecars. **Fixed 2026-10-02 (§7.17).** | Deterministic probe plus 2 of 3 real-process restores |
 | D-02 | High | env | The backend cannot import under Smart App Control: torch is unsigned and imported eagerly via `vector_store.py:41`. Confirmed on the staged payload `D:\pip-build\PIP` | Import fails in the payload's own Python |
 | D-03 | High | A | Export from the Backup screen fails with exactly one profile: `export_pip.ps1:62` passes `--db-path` only for `Count -gt 1` and falls back to `data/pip.db` | Launcher's own condition on an isolated copy, plus a control |
 | D-04 | High (latent) | A/B | Stage 8 trusts `provider_consent.is_cloud` alone, and `add_endpoint` never updates it. A local→remote re-save, or an endpoint registered as `ollama`, was sent the full prompt with no consent. The reverse of §7.2 finding 2. No route adds endpoints yet | Counting stub through the real pipeline |
@@ -1410,7 +1411,99 @@ failing probe is its defect's regression test once a fix is authorized.
 - retrieval quality (the torch block).
 
 **Exit criteria not met:** D-01 to D-04 are open, and the supported
-migration workflow failed.
+migration workflow failed. *(2026-10-02: D-01 fixed, §7.17. The
+migration workflow still fails at export through D-03.)*
+
+### 7.17 Restore sidecars fix, D-01 (authorized 2026-10-01, landed 2026-10-02)
+
+The §7.16 D-01 recommendation, by the same method as §7.9–§7.12.
+
+- **Promise:** a restore installs only the backup's database. Nothing
+  the replaced database left beside it (`-wal`, `-shm`, `-journal`) is
+  ever applied to the restored one. The replaced database keeps those
+  files, under names SQLite pairs with the kept copy.
+- **Mechanism:** both installers move each existing sidecar to
+  `pip.db.superseded-<stamp><suffix>`, beside the kept database:
+  - `restore._install()`, the in-app restore, run at startup;
+  - `install()` in `scripts/restore_backup.py`.
+
+  Each sidecar is checked on its own, because a WAL outlives a database
+  deleted by hand. Every move goes on the existing undo list. The
+  suffixes are one constant, `profiles.SQLITE_SIDECAR_SUFFIXES`, which
+  `profiles.delete()` now also erases by (§2.3).
+- **Tests:** ten, five per path, in `test_restore_in_app.py` and
+  `test_restore_backup.py`.
+  - **The crash is real.** A schema change under
+    `wal_autocheckpoint = 0` always rewrites page 1; an UPDATE alone
+    may not, and the restore survived one. The database and its WAL are
+    copied out while the connection is open and copied back after it
+    closes.
+  - **The evidence is not consumed.** Sidecars are checked before
+    anything opens the restored file, since any open replays a stale
+    WAL.
+  - **Outcomes, not proxies.** The restored file is checked by its rows,
+    not by `verify_key`, which reads only `sqlite_master`.
+  - **Against the unfixed code, 8 of the 10 fail for the stated
+    reason.** The two that pass are the rollback guards (a refused
+    rename puts the WAL back with its database): the old code never
+    moved a sidecar to put back.
+- **Break-it:** ten mutations of the fix, each applied alone and the
+  file restored byte for byte. Every one is caught by at least one test:
+  - sidecars not moved (each path);
+  - sidecars renamed after themselves rather than the kept copy (each
+    path);
+  - sidecar moves left out of the undo list (each path);
+  - sidecars moved only when the database exists (each path);
+  - only `-wal` moved (script);
+  - `-journal` dropped from the shared list.
+- **Review:** an adversarial review (five lenses, three skeptics per
+  finding) upheld four findings and refuted ten.
+  - **Two test gaps on the script path.** Nothing checked that its kept
+    copy keeps the WAL, or that `-shm` and `-journal` move, so a
+    wrong-name mutation passed every script test. Both tests were added
+    (the last two script mutations above). The first break-it had
+    reported "wrong name" caught on both paths, but it had only been
+    applied to the in-app path.
+  - **Comments.** Three new comments claimed more than the evidence: a
+    single outcome where the WAL's pages decide it, and that the script
+    "exists for" crashes. Reworded.
+  - **Out of scope:** D-14, below.
+- **Commit:** the one that adds this section.
+- **Full suite:** 1240 passed, 4 failed, run with the stand-in embedder
+  because Smart App Control blocks torch here (§7.16 D-02).
+  - The 4 failures are the 3 `test_llm_endpoint_store` tests that need a
+    running Ollama, and the cached-answer test that needs real
+    embeddings.
+  - One earlier run of the same code stopped at the 300 s ceiling in
+    `test_ws_chat_accumulates_conversation_history_across_turns`: the
+    intermittent hang §7.3 records. That test runs none of this change
+    (the startup drain returns early with nothing staged), and it passed
+    in the runs before and after.
+
+**Not covered (still open):**
+- **Profiles already damaged by D-01 are not repaired.** The first open
+  after the old swap replayed and deleted the stale WAL, so the damage is
+  in the file. Restoring again from the `.pipbak` is the repair. The
+  superseded copy from that earlier restore lacks its WAL-only rows.
+- **D-14 (medium, A, predates this fix): a restore staged before its
+  profile is deleted is still installed at the next start.**
+  - `delete()` leaves `pending-restore.json` and the staged temp files,
+    and `drain_pending_restore` checks only that the temp files exist.
+  - The Default profile comes back. A named profile leaves an
+    unregistered encrypted database in its folder, whose `rmdir` the temp
+    files also block.
+  - Reproduced by three independent skeptics.
+  - **Recommendation only:** `delete()` cancels a pending restore whose
+    target is under the profile, or the drain refuses a target whose
+    profile is no longer registered.
+- `scripts/migrate_encrypt_db.py` keeps its own sidecar list (`-wal`,
+  `-shm`, no `-journal`) and deletes them after a checkpoint and close.
+  Low risk; not changed.
+- `delete()` still erases neither the `*.superseded-*` copies a restore
+  keeps nor, now, their sidecars. The copies were left before this fix
+  too.
+- D-09 is unchanged: the swap still waits for the backend process to
+  end, so "close PIP and open it again" does not finish a restore.
 
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
@@ -1459,7 +1552,8 @@ findings.
 | Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
 | Lock identity fix | Landed 2026-09-28 (§7.12) | Reused PIDs no longer block PIP; atomic-create race and Linux branch untested |
 | Launch-checklist UI fixes | Landed 2026-10-01 (§7.15) | All four landed: contrast, control names, minimum window, password minimum. Open: hover-only delete control, sidebar does not scroll |
-| Product-wide validation pass | Run 2026-10-01 (§7.16), report only | Boundaries, consent (ordinary cases), crash recovery and isolation held. Open: D-01 restore over stale WAL (critical), D-02 Smart App Control blocks the backend, D-03 one-profile export, D-04 consent fail-open on id reuse, plus 5 medium and 4 low |
+| Product-wide validation pass | Run 2026-10-01 (§7.16), report only | Boundaries, consent (ordinary cases), crash recovery and isolation held. D-01 restore over stale WAL (critical) fixed in §7.17. Open: D-02 Smart App Control blocks the backend, D-03 one-profile export, D-04 consent fail-open on id reuse, plus 5 medium and 4 low |
+| D-01 restore sidecars fix | Landed 2026-10-02 (§7.17) | Both installers move the replaced database's `-wal`/`-shm`/`-journal` aside under the kept copy's name; 10 tests, 10 break-it mutations caught. Open: D-14 (a restore staged before its profile is deleted is still installed), profiles already damaged before the fix |
 
 ---
 

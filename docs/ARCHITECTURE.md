@@ -221,7 +221,12 @@ so there is one write path, not two.
   backup opens, `integrity_check` passes, and the new file opens under the new
   key with matching row counts. `backup_view.dart` used to state that a restore
   button could not exist; that was correct about the swap and wrong about the
-  operation.
+  operation. The swap, here and in `scripts/restore_backup.py`, moves the
+  replaced database's `-wal`, `-shm` and `-journal` aside with it, named after
+  the kept copy (`profiles.SQLITE_SIDECAR_SUFFIXES`, the list `delete()` also
+  erases by). SQLite pairs those files with a database by name alone, so a
+  crash's WAL left beside the restored file was replayed onto it
+  (FREEZE_LIST §7.17).
 - **A profile delete can be recorded rather than performed.** A chat session's
   connection is closed by a submission to its own pinned worker, and
   `server.py`'s disconnect handler documents that such a submission can never
