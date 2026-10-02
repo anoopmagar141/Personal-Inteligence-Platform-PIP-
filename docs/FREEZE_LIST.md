@@ -14,8 +14,8 @@ promises). On 2026-10-01 the owner authorized four UI fixes from a
 launch-checklist audit (§7.15), all landed. A product-wide validation pass
 the same day (§7.16, report only) found four high-or-critical defects in
 backup/restore, deployment and consent. The owner authorized the D-01
-fix that day; it landed 2026-10-02 (§7.17). D-02 to D-04 are open.
-Anything further needs a new authorization.
+and D-03 fixes; both landed 2026-10-02 (§7.17, §7.18). D-02 and D-04 are
+open. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1394,7 +1394,7 @@ failing probe is its defect's regression test once a fix is authorized.
 |---|---|---|---|---|
 | D-01 | Critical | B | A restore swaps `pip.db` and `salt.bin` but leaves the old `pip.db-wal`. SQLite replays it, so the restored profile opens with neither the new password nor the old one (its salt was moved aside). Same shape in `restore_backup.py`. `profiles.delete()` already handles sidecars. **Fixed 2026-10-02 (§7.17).** | Deterministic probe plus 2 of 3 real-process restores |
 | D-02 | High | env | The backend cannot import under Smart App Control: torch is unsigned and imported eagerly via `vector_store.py:41`. Confirmed on the staged payload `D:\pip-build\PIP` | Import fails in the payload's own Python |
-| D-03 | High | A | Export from the Backup screen fails with exactly one profile: `export_pip.ps1:62` passes `--db-path` only for `Count -gt 1` and falls back to `data/pip.db` | Launcher's own condition on an isolated copy, plus a control |
+| D-03 | High | A | Export from the Backup screen fails with exactly one profile: `export_pip.ps1:62` passes `--db-path` only for `Count -gt 1` and falls back to `data/pip.db`. **Fixed 2026-10-02 (§7.18).** | Launcher's own condition on an isolated copy, plus a control |
 | D-04 | High (latent) | A/B | Stage 8 trusts `provider_consent.is_cloud` alone, and `add_endpoint` never updates it. A local→remote re-save, or an endpoint registered as `ollama`, was sent the full prompt with no consent. The reverse of §7.2 finding 2. No route adds endpoints yet | Counting stub through the real pipeline |
 | D-05 | Medium | A | After a restart the backend serves the unencrypted `default` slot until a profile is chosen. `GET /status` created a plaintext `data/pip.db`, and a chat sent then was stored in plaintext; a phantom "Default" profile appeared and the next launch said `needs_migration`. The Flutter client avoids the window; the CLI does not | Real-process journey, canary on disk |
 | D-06 | Medium | D/A | Deleting a document leaves its plaintext file and its `document_blobs` content, so it also travels in later backups | Through `DELETE /rag/documents` |
@@ -1411,8 +1411,9 @@ failing probe is its defect's regression test once a fix is authorized.
 - retrieval quality (the torch block).
 
 **Exit criteria not met:** D-01 to D-04 are open, and the supported
-migration workflow failed. *(2026-10-02: D-01 fixed, §7.17. The
-migration workflow still fails at export through D-03.)*
+migration workflow failed. *(2026-10-02: D-01 and D-03 fixed, §7.17 and
+§7.18. The migration workflow has not been re-run end to end from the
+Backup screen since; §7.18 says what stands in for that.)*
 
 ### 7.17 Restore sidecars fix, D-01 (authorized 2026-10-01, landed 2026-10-02)
 
@@ -1505,6 +1506,81 @@ The §7.16 D-01 recommendation, by the same method as §7.9–§7.12.
 - D-09 is unchanged: the swap still waits for the backend process to
   end, so "close PIP and open it again" does not finish a restore.
 
+### 7.18 One-profile export fix, D-03 (authorized and landed 2026-10-02)
+
+The §7.16 D-03 recommendation, by the same method.
+
+- **Promise:** the Backup screen's Export backs up the profile that was
+  last opened, with that profile's own salt, however many profiles there
+  are.
+- **Mechanism:** `scripts/export_pip.ps1` takes its answer from
+  `Resolve-PipLastProfile` in `_profiles.ps1`, the rule `launch_pip.ps1`
+  starts the backend by. The wrapper used to keep its own copy, which
+  chose only when more than one profile was registered (§2.3).
+  - The salt is set with the database every time. When the resolver
+    answers "the original layout", an inherited `PIP_SALT_PATH` is
+    cleared rather than kept.
+  - The export console inherits `launch_pip.ps1`'s profile variables
+    through the app, so a salt left to the environment names whichever
+    profile was open at launch.
+- **Tests:** `backend/tests/test_export_launcher.py` runs the real
+  wrapper and its two helpers, copied into a temporary installation with
+  a throwaway venv. It uses Windows PowerShell 5.1, as the app does. Only
+  `export_backup.py` is a stand-in, recording the database and salt it
+  would have opened.
+  - Six cases. Against the unfixed wrapper the four D-03 cases fail:
+    - a sole profile, with `last_used` recorded or stale;
+    - the original layout under an inherited salt, with and without a
+      registry.
+  - The two controls pass: several profiles, and a caller's own
+    `--db-path`.
+- **Break-it:** six mutations, each caught by at least one test:
+  - the old more-than-one gate;
+  - the salt left to the environment;
+  - an inherited salt kept for the original layout;
+  - a caller's `--db-path` overridden;
+  - the shared resolver answering "the original layout" for everyone;
+  - the resolver's fallback removed.
+
+  The inherited-salt mutation first went uncaught: under 5.1 the
+  registered-Default case reaches the resolver's profile branch, not the
+  one the mutation removed. The no-registry case (an installation from
+  before profiles) was added, which does run it.
+- **Found on the way (observation, not changed):** under Windows
+  PowerShell 5.1, a single object returned from a function has no
+  `.Count`. That is the PowerShell the app, the desktop shortcuts and
+  the installer all launch.
+  - So `Resolve-PipLastProfile`'s zero- and one-profile branches never
+    run for a lone profile. It falls through to the `last_used` lookup
+    and its fallback, which reach the same files: a lone modern
+    profile's own, and `data/`'s own for a lone legacy one.
+  - Under PowerShell 7 those branches do run.
+  - Measured: with the one-profile branch mutated, all six tests still
+    pass under 5.1.
+  - Making them run under 5.1 would change the shared rule for no
+    change in outcome, so it is left as it is.
+- **Commit:** the one that adds this section.
+- **Full suite:** 1245 passed, 5 failed.
+  - Four are the known ones (§7.17).
+  - The fifth, `test_an_answer_cached_before_sign_out_is_not_served_to_the_next_profile`,
+    is a race this change does not touch. Run alone and interleaved, it
+    failed 8 of 20 here and 7 of 20 at `f66a309`, before D-01 and D-03.
+  - Recorded as D-15 (§7.19).
+
+**Not covered (still open):**
+- **The export itself was not re-run end to end from the Backup
+  screen.** `export_backup.py` asks for both passwords through
+  `getpass`, which reads the console, not a pipe. What stands in:
+  - the launcher's choice, tested through the real wrapper;
+  - the export given that choice, covered by `test_export_backup.py`
+    and run in the control of the §7.16 reproduction.
+- **The export follows the registry's `last_used`, not the app's active
+  profile.** They are the same while signed in, which the Backup screen
+  requires, because `last_used` is recorded only by a password that
+  worked.
+- The desktop-shortcut restore (`restore_pip.ps1`) still writes the
+  legacy Default slot (§7.16 report, section 11), unchanged.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1552,8 +1628,9 @@ findings.
 | Lost-learning fix | Landed 2026-09-28 (§7.11) | Locality-refused sessions stay queued; Track 1 findings 2-3 still open |
 | Lock identity fix | Landed 2026-09-28 (§7.12) | Reused PIDs no longer block PIP; atomic-create race and Linux branch untested |
 | Launch-checklist UI fixes | Landed 2026-10-01 (§7.15) | All four landed: contrast, control names, minimum window, password minimum. Open: hover-only delete control, sidebar does not scroll |
-| Product-wide validation pass | Run 2026-10-01 (§7.16), report only | Boundaries, consent (ordinary cases), crash recovery and isolation held. D-01 restore over stale WAL (critical) fixed in §7.17. Open: D-02 Smart App Control blocks the backend, D-03 one-profile export, D-04 consent fail-open on id reuse, plus 5 medium and 4 low |
+| Product-wide validation pass | Run 2026-10-01 (§7.16), report only | Boundaries, consent (ordinary cases), crash recovery and isolation held. D-01 restore over stale WAL (critical) fixed in §7.17, D-03 one-profile export fixed in §7.18. Open: D-02 Smart App Control blocks the backend, D-04 consent fail-open on id reuse, plus 5 medium and 4 low |
 | D-01 restore sidecars fix | Landed 2026-10-02 (§7.17) | Both installers move the replaced database's `-wal`/`-shm`/`-journal` aside under the kept copy's name; 10 tests, 10 break-it mutations caught. Open: D-14 (a restore staged before its profile is deleted is still installed), profiles already damaged before the fix |
+| D-03 one-profile export fix | Landed 2026-10-02 (§7.18) | `export_pip.ps1` takes its profile from the shared `Resolve-PipLastProfile` and always sets the salt with the database; 6 tests through the real wrapper under PowerShell 5.1, 6 break-it mutations caught. Noted: the resolver's one-profile branch never runs under 5.1 (same answer by its fallback) |
 
 ---
 

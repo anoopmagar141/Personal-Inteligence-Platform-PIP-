@@ -53,22 +53,31 @@ Write-Host "  between them gives up exactly that."
 Write-Host ""
 
 # Export the profile that was last opened, not whatever happens to be at
-# data/pip.db. On a single-profile installation those are the same file and
-# this changes nothing; on a multi-profile one, backing up the wrong person
-# would be a quiet and expensive mistake to discover later.
+# data/pip.db - backing up the wrong person would be a quiet and expensive
+# mistake to discover later. Which profile that is, is Resolve-PipLastProfile's
+# answer, the rule launch_pip.ps1 starts the backend by. This used to be a
+# second copy of it that chose only when more than one profile was registered,
+# on the reasoning that a single profile lives in data/ anyway. A new
+# installation's sole profile lives in data/profiles/<slug>/, so the export
+# read a data/pip.db that was not there (FREEZE_LIST section 7.16, D-03).
+#
+# The salt is chosen with the database, never left to the environment: this
+# console inherits PIP_SALT_PATH from whatever launched the app, which names
+# the profile open at that launch, and a database read under another profile's
+# salt is refused for the right password.
 . (Join-Path $PSScriptRoot "_profiles.ps1")
-$profiles = Get-PipProfiles -Root $root
 $scriptArgs = @($args)
-if ($profiles.Count -gt 1 -and -not ($scriptArgs -contains "--db-path")) {
-    $registry = Join-Path $root "data\profiles.json"
-    $lastUsed = try { (Get-Content $registry -Raw -Encoding utf8 | ConvertFrom-Json).last_used } catch { "default" }
-    $chosen = $profiles | Where-Object { $_.slug -eq $lastUsed } | Select-Object -First 1
-    if ($chosen) {
-        $paths = Resolve-PipProfilePaths -Root $root -Profile $chosen
+if (-not ($scriptArgs -contains "--db-path")) {
+    $paths = Resolve-PipLastProfile -Root $root
+    if ($paths) {
         $env:PIP_SALT_PATH = $paths.Salt
         $scriptArgs = @("--db-path", $paths.Db) + $scriptArgs
         Write-Host ("  Profile: {0}" -f $paths.Name) -ForegroundColor Cyan
         Write-Host ""
+    } else {
+        # The original layout: data/pip.db, and export_backup.py's own default
+        # salt beside it.
+        Remove-Item Env:PIP_SALT_PATH -ErrorAction SilentlyContinue
     }
 }
 
