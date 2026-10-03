@@ -456,7 +456,7 @@ README there). Every number above came from those files, run at `f66a309`.
 | Critical security/integrity checks have evidence | Yes |
 | Critical/high defects fixed or accepted | **No**: D-01–D-04 open, awaiting owner decision |
 | Regression tests for found defects | Written as failing probes, not yet in the suite |
-| Supported migration verified | **Failed** (D-01, D-03) |
+| Supported migration verified | **Failed** (D-01, D-03). *2026-10-03, after the fixes: re-run end to end (`migration_rerun_2026-10-03.md`, FREEZE_LIST §7.24). The data round trip holds; not met as worded, because of D-09 and the new D-18 and D-20.* |
 | Backend and Flutter suites pass | Flutter yes; backend blocked by D-02, green with the stand-in |
 | Analysis and build pass | Yes |
 

@@ -19,7 +19,10 @@ D-03 and D-04 fixes; D-15, a sign-out/cache race found while verifying D-03
 while reviewing D-01). All five landed 2026-10-02 (§7.17, §7.18, §7.20,
 §7.21, §7.22). On 2026-10-03 the owner authorized D-16, a chat turn left
 with no terminal event when no provider may answer; landed the same day
-(§7.23). D-02 is open. Anything further needs a new authorization.
+(§7.23). The same day the migration journey was re-run end to end (§7.24,
+report only): the data round trip holds, D-01/D-03/D-14 included, and five
+new defects were found on the backup and restore path (D-17 to D-21). D-02
+is open. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1440,7 +1443,11 @@ failing probe is its defect's regression test once a fix is authorized.
 **Exit criteria not met:** D-01 to D-04 are open, and the supported
 migration workflow failed. *(2026-10-02: D-01 and D-03 fixed, §7.17 and
 §7.18. The migration workflow has not been re-run end to end from the
-Backup screen since; §7.18 says what stands in for that.)*
+Backup screen since; §7.18 says what stands in for that.)* *(2026-10-03:
+re-run end to end through the script the Backup screen launches (the
+button itself not driven), §7.24. Met with exceptions for the data round
+trip; not
+met as worded, because of D-09 and the new D-18 and D-20.)*
 
 ### 7.17 Restore sidecars fix, D-01 (authorized 2026-10-01, landed 2026-10-02)
 
@@ -1935,6 +1942,139 @@ any track. The owner authorized the fix test-first the same day.
 - **The message is the gate's summary, not its reason.** It does not say
   that Ollama was down or which endpoint lacked consent; the trace does.
 
+### 7.24 Migration journey re-run (2026-10-03, report only)
+
+§7.16 failed the exit criterion "supported migration verified" on D-01 and
+D-03. Both are fixed (§7.17, §7.18), as is D-14 (§7.22), and §7.18 noted
+that the export had not been re-run from the Backup screen end to end. This
+re-runs the whole journey. **Report only: no production code changed.** Full
+record: `docs/eval/migration_rerun_2026-10-03.md`; harness:
+`docs/eval/reliability_2026-10-01/migration/`.
+
+- **How.** Each computer is a throwaway installation built from one pinned
+  commit (`git archive`), with its own interpreter and `data/`, and its
+  backend started the way `launch_pip.ps1` starts it. Export runs through the
+  real `export_pip.ps1` (what the Backup screen launches, run directly). The
+  in-app restore goes through `POST /backup/restore` and a backend restart
+  done by the harness. The desktop-shortcut restore runs the real
+  `restore_pip.ps1`, with and without arguments. Chat uses `qwen2.5:7b`.
+  Only `getpass` prompts are answered by a test hook, and the embedding
+  stand-in is used (D-02). The real `data/` was fingerprinted before and
+  after every run: untouched.
+- **Results at `9968e8c`:** 10 variants, 307 checks, 23 failed, every
+  failure attributed:
+  - main-killed 43/0, main-graceful 42/0;
+  - main-killed under a path with spaces, parentheses and `é ü`: 43/0;
+  - multi-profile export 22/0;
+  - shortcut 37/1 (D-17);
+  - shortcut as installed 11/2 (D-21);
+  - same-machine 14/1 (D-07);
+  - restore over a used profile 22/3 (D-20);
+  - bad inputs and D-14: 50/5 (D-18, D-11);
+  - staging 23/11 (D-18, D-19).
+
+  Six of the variants also ran at `5cc54df` (shortcut without its
+  original-layout leg) with the same verdicts apart from D-17's timing;
+  multi-profile-export, shortcut-shipped, restore-over-used and the path
+  run are `9968e8c` only. **Negative controls:** at `405b10b` the harness
+  fails the
+  one-profile export (D-03); at `044fafc` it fails the two D-14 checks the
+  fix covers (the staged
+  restore went with Zed; nothing was installed where Zed was).
+- **What holds, in real processes:**
+  - **D-01 on every in-app restore that had a WAL to swap (10 of 13).**
+    Each of those WALs held committed frames including page 1: 272 KB after
+    a force-kill with a chat open,
+    964 KB after a clean stop, which does not checkpoint. The new password
+    opens the restored profile, and the old and the backup's do not.
+  - **D-03.** One-profile exports chose that profile. An export from a
+    two-profile installation, signed into the second while the console
+    inherited the first's `PIP_*`, exported the second.
+  - **D-14,** for the restore its fix covers.
+  - **The round trip.** Across two hops, conversations, decisions,
+    projects, the active model, profile fields and documents compare equal.
+    Documents are written back under the new machine's folder byte for byte
+    and found by retrieval. The restored profile keeps working and carries
+    on. The shortcut's original layout exports and restores onward.
+  - **Bad input.** Seven of eleven bad inputs are refused with a 422.
+- **New defects** (each put to a reviewer told to refute it; the
+  reviewers' corrections to these findings are applied, no code changed):
+  - **D-18 (medium, A): an empty file is accepted as a backup.** "0 rows
+    across 0 tables, checked and ready". At the next backend start the
+    profile is replaced by an empty database, the person's password is
+    refused, and the original survives only as `pip.db.superseded-<stamp>`.
+    The shortcut's
+    `restore_backup.py` accepts an empty file too. A backup is checked only
+    against itself, so (in the reviewer's synthetic probe, through
+    `stage_restore`) a part-written export passes too.
+  - **D-20 (medium, upper end; A/B): a restore over a profile with a same-named
+    document takes that file.** `_install` does not swap `documents/`, and
+    `materialise_documents` repoints a record to a same-named file rather
+    than writing the backup's bytes ("may be newer than the backup's"). The
+    backup's text is not retrieved and the replaced profile's
+    same-named document is. The
+    first sign-in's re-ingest then overwrites the restored blob, so the
+    backup's copy is gone from the restored database. The restore dialog
+    promises the documents are replaced. Same root as D-07.
+  - **D-21 (medium, low end; A): the shortcut restores the first backup of
+    the day.** `newest_backup()` sorts by name (`-2` sorts before `.`),
+    while `restore_pip.ps1` lists by time and says "the newest will be
+    used". The name used is printed, and `--from` recovers.
+  - **D-17 (low, upper end; A): an export while the app commits rows fails
+    and says nothing was written.** Counts are taken before two password
+    prompts and must equal the export's. `export_pip.ps1` prints "Nothing
+    was written" for any failure while a valid backup is left, unmarked, at
+    the top of the Backups list. Measured routes: exporting soon after a
+    chat closes, and exporting just after signing in to a restored profile,
+    while the catch-up observes the conversations that came with it.
+  - **D-19 (low, A): staged-restore state is one per installation but
+    treated as the signed-in profile's.** Yara is shown Zed's staged
+    restore as hers, and her Cancel erases it without a word to Zed. Over
+    the API, a second staging orphans the first. An orphaned staged copy
+    (a full re-encrypted copy of the backup) survives its profile's
+    deletion, the residue §7.22 set out to prevent.
+  - **D-11, two more 500s:** a folder as the path, and an empty backup
+    password. Both are API-only.
+- **Still open, reproduced:** D-07; D-11 (bit flip).
+- **Harness provenance.** Another session changed `pipeline.py` (D-16,
+  §7.23) during the first runs. One variant copied it mid-edit and another
+  copied the finished but
+  uncommitted fix; the change is in a branch no variant reaches. The harness
+  now builds from a pinned
+  commit, and every number above comes from such runs. Test-design errors
+  found along the way are listed in the record (§8) and were corrected
+  before the numbers above.
+
+**Not covered:** the UI legs (the Export button's `cmd /c start`, the
+picker, the banner, sign-in after a restore); the app's own restart, which
+is D-09; a real second machine or Windows user, the installer's embedded
+Python, the real embedding model; version skew between builds; large
+profiles and power loss; documents other than small ASCII `.txt`; tables
+beyond the compared views.
+
+**Exit criterion: not met as worded.** Met with exceptions for the data
+round trip at `9968e8c`. Not met for the workflow as a person performs it:
+"Close PIP and open it again" does not apply a restore (D-09), and D-18 and
+D-20 can silently replace a profile's data or a document with the wrong
+thing. Those three are the owner's to decide.
+
+**Recommendations (none implemented; each needs authorization):**
+- **D-18:** refuse a backup that is not a completed PIP export, in both
+  installers. At least refuse no tables, no rows or missing core tables.
+  Properly, have a verified export write a completion mark that restore
+  requires. Open the chosen file read-only.
+- **D-20 (and likely D-07):** move the profile's `documents/` and `chroma/`
+  aside with the database in `_install`, under the same stamp and undo
+  list.
+- **D-21:** one rule for the listing and the pick: newest by modification
+  time.
+- **D-17:** take the counts and the export from one read snapshot, and make
+  the failure message true.
+- **D-19:** scope the status, stage and cancel routes to the signed-in
+  profile's `target_db`. Cancel a profile's own earlier staging when it
+  stages again. Erase `restore-*.tmp.*` on profile deletion.
+- **D-11:** answer a folder and an empty backup password with a 422.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1990,6 +2130,7 @@ findings.
 | D-04 consent locality fix | Landed 2026-10-02 (§7.21) | Stage 8 counts a provider as local only when its own claim and its consent record agree; `add_endpoint` refuses built-in ids. 11 outcome tests (5 seen failing first), 3 gate unit tests, 6 break-it mutations caught. Promise 6 now has evidence. Open: locality attested not verified, D-08, §7.2 finding 2 |
 | D-14 staged restore and deletion fix | Landed 2026-10-02 (§7.22) | `profiles.delete()` first cancels a restore staged for that profile's database, so nothing is installed in a deleted profile's place and the staged copy is erased. 4 route tests (3 seen failing first), 3 break-it mutations caught. Open: `profiles.remove()`, which nothing calls |
 | D-16 chat turn with no terminal event | Found and landed 2026-10-03 (§7.23) | A, latent: with no provider left after Stage 8 the socket got stage lines and no done/error, so the chat stayed "writing". The pipeline now sends its error. 3 socket tests through the real pipeline (1 seen failing first), 2 Flutter tests, 4 break-it mutations caught. Open: a pipeline that raises still ends with no terminal event |
+| Migration journey re-run | Run 2026-10-03 (§7.24), report only | 10 variants, exports and shortcut restores through the real `export_pip.ps1` and `restore_pip.ps1`, 307 checks at `9968e8c`, every failure attributed; negative controls catch D-03 and D-14. Round trip holds (D-01 on every in-app restore that had a WAL to swap, D-03 with two profiles). New: D-18 empty or partial backup accepted (medium), D-20 same-named document taken over the backup's (medium, upper end), D-21 shortcut restores the first backup of the day (medium, low end), D-17 export race with a false "Nothing was written" (low, upper end), D-19 staged-restore state not scoped to the profile (low). Exit criterion not met as worded: D-09, D-18, D-20 |
 
 ---
 
