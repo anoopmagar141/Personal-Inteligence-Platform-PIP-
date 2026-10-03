@@ -17,7 +17,9 @@ backup/restore, deployment and consent. The owner authorized the D-01,
 D-03 and D-04 fixes; D-15, a sign-out/cache race found while verifying D-03
 (§7.19); and D-14, a staged restore surviving its profile's deletion (found
 while reviewing D-01). All five landed 2026-10-02 (§7.17, §7.18, §7.20,
-§7.21, §7.22). D-02 is open. Anything further needs a new authorization.
+§7.21, §7.22). On 2026-10-03 the owner authorized D-16, a chat turn left
+with no terminal event when no provider may answer; landed the same day
+(§7.23). D-02 is open. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1863,6 +1865,76 @@ The first of §7.17's two D-14 recommendations, by the same method.
 - **A folder deleted by hand** takes the staged files with it. The drain
   already clears a marker whose files are gone.
 
+### 7.23 A chat turn with no provider to answer it never ended, D-16 (found and fixed 2026-10-03)
+
+Found while walking through how the pipeline behaves in each case, not by
+any track. The owner authorized the fix test-first the same day.
+
+- **Defect (A, latent):** when Stage 8 leaves no provider to ask, the
+  pipeline returned its error result in `pipeline_complete`. That event
+  never leaves the server: `stream_pipeline_to_websocket` keeps it for
+  bookkeeping and forwards everything else. So the socket got
+  `session_info` and four `stage` lines, then nothing. No `done`, `error`
+  or `stopped` arrived. The client keeps the composer locked until one does
+  (`chat_view.dart`, `_isStreaming`). The chat stayed "writing" and the
+  next message was refused until the user left the conversation.
+  - **Latent in the shipped app.** An empty list needs a configured
+    endpoint (Ollama down and the only endpoint unconsented, or every
+    endpoint refused). Ollama alone is always kept and always passes the
+    gate, and no route or script adds endpoints yet. It is the same state
+    D-04 was in (§7.21).
+  - **Why the tests missed it:** every test in `test_ws_chat.py` replaces
+    `pipeline.run` with a fake that always ends in `done`. The real path
+    was only tested through `run_sync`, which reads `pipeline_complete`
+    and so saw the error (§7.7 pattern 4).
+- **Promise:** every chat turn ends on the socket with exactly one `done`,
+  `error` or `stopped`. Not added to §4; whether it becomes a tenth promise
+  is an owner decision.
+- **Mechanism:** the pipeline yields `error` ("No consented provider
+  available") before `pipeline_complete`, the text the result already
+  carried. One line in `pipeline.py`. Provider selection, the gate and the
+  server are unchanged.
+- **Tests:** `backend/tests/test_chat_turn_ends.py`, 3 tests through the
+  real `/ws/chat` and the real pipeline. Events are read on a thread,
+  because the defect is an event that never comes and `receive_json()` has
+  no timeout.
+  - **Seen failing first:** Ollama down, one remote endpoint with no
+    consent. On the old code the turn got no terminal event within 20 s.
+    After the fix: one `error` per turn, no tokens, the endpoint sent
+    nothing, and a second message on the same socket gets its own single
+    `error`. Its first event is its own `stage` line, not a late one from
+    the first turn.
+  - **Controls (pass before and after):** Ollama down with nothing else
+    configured ends in Stage 9's single "All providers failed" error. A
+    consented endpoint still streams its answer and ends in one `done`.
+  - **Client half:** `frontend/flutter/test/chat_turn_end_test.dart`, 2
+    tests. An `error` shows the message, turns Stop back into Send, and the
+    next message goes out. The control: stage lines with no ending event
+    leave the composer locked, which is what the old server produced. Both
+    pass on the unchanged client; it was already right.
+- **Break-it:** four mutations, each caught:
+  - the error sent twice (the second turn began with a stray `error`);
+  - `done` sent instead of `error`;
+  - the error sent after `pipeline_complete`, where the server has already
+    stopped reading (no terminal event, as before the fix);
+  - the client's `error` handler no longer unlocking the composer (the
+    Flutter test).
+- **Commit:** the one that adds this section.
+- **Suites:** Flutter 313 passed (the 2 new ones included), `flutter
+  analyze` clean. Backend 1273 passed, 1 failed, run with
+  Ollama up. The one failure is the cached-answer test that needs real
+  embeddings (§7.17).
+
+**Not covered (still open):**
+- **A pipeline that raises** instead of returning still ends the turn with
+  no terminal event. The exception leaves `ws_chat`'s loop and the socket
+  closes. Every stage is wrapped to fail open, and trace writes swallow
+  their own errors, but the database reads in `_default_providers` and
+  `get_active_model_name` are not wrapped. Whether the client unlocks on
+  that disconnect was not checked.
+- **The message is the gate's summary, not its reason.** It does not say
+  that Ollama was down or which endpoint lacked consent; the trace does.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -1917,6 +1989,7 @@ findings.
 | D-15 sign-out cache fix | Landed 2026-10-02 (§7.20) | Every cache key carries the session generation sign-out moves, taken per chat connection; also closes an open socket being served the next session's answers. 3 tests seen failing first, 4 break-it mutations caught; the §7.9 guard 159/160 after the fix (one early failure, output not kept) |
 | D-04 consent locality fix | Landed 2026-10-02 (§7.21) | Stage 8 counts a provider as local only when its own claim and its consent record agree; `add_endpoint` refuses built-in ids. 11 outcome tests (5 seen failing first), 3 gate unit tests, 6 break-it mutations caught. Promise 6 now has evidence. Open: locality attested not verified, D-08, §7.2 finding 2 |
 | D-14 staged restore and deletion fix | Landed 2026-10-02 (§7.22) | `profiles.delete()` first cancels a restore staged for that profile's database, so nothing is installed in a deleted profile's place and the staged copy is erased. 4 route tests (3 seen failing first), 3 break-it mutations caught. Open: `profiles.remove()`, which nothing calls |
+| D-16 chat turn with no terminal event | Found and landed 2026-10-03 (§7.23) | A, latent: with no provider left after Stage 8 the socket got stage lines and no done/error, so the chat stayed "writing". The pipeline now sends its error. 3 socket tests through the real pipeline (1 seen failing first), 2 Flutter tests, 4 break-it mutations caught. Open: a pipeline that raises still ends with no terminal event |
 
 ---
 

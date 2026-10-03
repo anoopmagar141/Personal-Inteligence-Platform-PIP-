@@ -471,9 +471,15 @@ def run(
     gated_providers = _gate_providers(conn, trace_id, providers or _default_providers(conn))
     if not gated_providers:
         trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", "no consented providers available")
+        no_provider = "No consented provider available"
+        # Sent, not only recorded. pipeline_complete never leaves the server,
+        # so without this event the turn had no done/error/stopped at all and
+        # the client stayed "writing" until the user left the conversation
+        # (FREEZE_LIST §7.23, D-16).
+        yield {"type": "error", "data": no_provider}
         result = stage_10.run(
             trace_id,
-            {"response_text": "", "status": "error", "error": "No consented provider available", "stage_hints": {}},
+            {"response_text": "", "status": "error", "error": no_provider, "stage_hints": {}},
             conn,
         )
         yield {"type": "pipeline_complete", "data": result}
