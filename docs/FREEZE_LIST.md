@@ -21,8 +21,10 @@ while reviewing D-01). All five landed 2026-10-02 (§7.17, §7.18, §7.20,
 with no terminal event when no provider may answer; landed the same day
 (§7.23). The same day the migration journey was re-run end to end (§7.24,
 report only): the data round trip holds, D-01/D-03/D-14 included, and five
-new defects were found on the backup and restore path (D-17 to D-21). D-02
-is open. Anything further needs a new authorization.
+new defects were found on the backup and restore path (D-17 to D-21). The
+owner then authorized D-22, the turn a raising pipeline left unended, the
+open item §7.23 named; landed the same day (§7.25), which also found D-23.
+D-02 is open. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1934,7 +1936,7 @@ any track. The owner authorized the fix test-first the same day.
 
 **Not covered (still open):**
 - **A pipeline that raises** instead of returning still ends the turn with
-  no terminal event. The exception leaves `ws_chat`'s loop and the socket
+  no terminal event. *(Fixed 2026-10-03 as D-22, §7.25.)* The exception leaves `ws_chat`'s loop and the socket
   closes. Every stage is wrapped to fail open, and trace writes swallow
   their own errors, but the database reads in `_default_providers` and
   `get_active_model_name` are not wrapped. Whether the client unlocks on
@@ -2075,6 +2077,95 @@ thing. Those three are the owner's to decide.
   stages again. Erase `restore-*.tmp.*` on profile deletion.
 - **D-11:** answer a folder and an empty backup password with a 422.
 
+### 7.25 A chat turn a raising pipeline left unended, D-22 (authorized and landed 2026-10-03)
+
+The open item §7.23 named, by the same method. The owner authorized it the
+same day.
+
+- **Defect (A):** an exception from `pipeline.run()` propagated out of
+  `stream_pipeline_to_websocket` and `ws_chat`'s loop. The socket closed
+  mid-turn with no `done`, `error` or `stopped`, and the client's composer
+  stayed locked (D-23 below).
+  - **Not latent, unlike D-16.** Stage 9 falls back only on the two
+    provider errors. Any other exception from a provider ends the pipeline
+    with it: a model server answering in a shape the provider did not
+    expect, for example. So do the database reads in `_default_providers`
+    and `get_active_model_name`, which nothing wraps.
+  - **After `done`** (a failure while caching the answer), the reply had
+    been shown, but the connection still dropped and the reply was not
+    saved.
+- **Promise:** §7.23's, unchanged. Every chat turn ends on the socket with
+  exactly one `done`, `error` or `stopped`, and a failed turn does not cost
+  the connection.
+- **Mechanism:** `stream_pipeline_to_websocket` guards the one call that
+  runs the pipeline, `next(gen)`.
+  - **On an exception** it logs the traceback. If no terminal event has
+    gone out, it sends one `error`. It then returns what the client was
+    shown, folded by `stage_09.accumulate`, the fold `pipeline.run()`
+    already uses.
+  - **The turn is saved as shown.** A finished answer is saved, as any
+    finished answer is. A partial one is dropped, as the client drops it on
+    `error`. The user's message is kept.
+  - **A generator that ends without `pipeline_complete`** takes the same
+    path; it used to raise.
+  - **Only `next()` is guarded.** A send that fails because the client has
+    gone still reaches `ws_chat` as a disconnect.
+  - **Generic message.** The exception's text stays in the log, because an
+    exception can carry model output or message text. The client is told
+    the reply was abandoned and the details are in the backend log.
+  - **Why the transport, not the pipeline:** this is the code that owns
+    the wire contract and sees every exception, wherever in the pipeline it
+    started. The pipeline cannot report its own crash.
+- **Tests:** 3 more in `backend/tests/test_chat_turn_ends.py`, through the
+  real `/ws/chat` and the real pipeline. Ollama is scripted to raise a
+  `ValueError`; the cache is patched to fail after `done`.
+  - **Raises before answering:** one `error`, no tokens, no exception text.
+    The next message on the same socket is answered.
+  - **Raises mid-reply:** the token, then one `error`. The partial reply is
+    not saved; the user's message is.
+  - **Raises after `done`:** nothing more is sent. The next turn begins
+    with its own `stage` line, not a stray `error`, and the shown answer is
+    saved.
+  - **Seen failing first:** all three fail on the old `server.py`. The
+    first two got no terminal event within 20 s. The third got `done`,
+    then nothing for the second message, because the connection was gone.
+    §7.23's three tests pass before and after.
+  - **One test corrected before landing:** the mid-reply test first read
+    the second turn's rows. The server saves a turn after sending its
+    terminal event, so those rows race the socket closing. It now asserts
+    only the first turn's rows, which are certain. It still fails on the
+    old code.
+- **Break-it:** six mutations, each caught:
+  - no `error` sent (2 tests);
+  - an `error` sent even after the turn had ended (1);
+  - a partial reply saved as finished (1);
+  - forwarded events not folded, so a finished answer was not saved (1);
+  - the exception's text sent to the client (1);
+  - the original code (all 3).
+- **Commit:** the one that adds this section.
+- **Suites:** Backend 1276 passed, 1 failed, run with the embedding shim
+  (D-02) and Ollama up. The one failure is the cached-answer test that
+  needs real embeddings (§7.17). No client code changed, so the
+  Flutter suite was not re-run.
+
+**Not covered (still open):**
+- **D-23 (A, found by code reading, not run): the client never ends a turn
+  on a dropped connection.** Only the sidebar's connection pill listens to
+  `WsChatClient.status`, and `chat_view.dart` does not. The client
+  reconnects; the new connection's `session_info` does not end the turn
+  either, so the composer stays locked. For a chat started fresh, the
+  reconnect also resets the screen's conversation id to none. The id is
+  held only by `switchConversation`, and the server sends none for a
+  connection that has not sent a message. Reached when the backend process
+  dies or restarts mid-reply. Server-side fixes cannot reach it.
+- **Stage 9 still does not fall back on an unexpected provider
+  exception.** The turn now ends cleanly, but the next provider in the
+  chain is not tried. Whether it should be is a Stage 9 decision, left
+  alone here.
+- **The failed turn is not in `trace_log` as one.** The pipeline's
+  trace_id never reaches the server, so the trace stops at the last stage
+  that logged. The traceback is in the backend log.
+
 **Expected outcomes are not results.** "`vector_store` read is probably
 redundant" and "the lock probably stores only a PID" are predictions, not
 findings.
@@ -2129,8 +2220,9 @@ findings.
 | D-15 sign-out cache fix | Landed 2026-10-02 (§7.20) | Every cache key carries the session generation sign-out moves, taken per chat connection; also closes an open socket being served the next session's answers. 3 tests seen failing first, 4 break-it mutations caught; the §7.9 guard 159/160 after the fix (one early failure, output not kept) |
 | D-04 consent locality fix | Landed 2026-10-02 (§7.21) | Stage 8 counts a provider as local only when its own claim and its consent record agree; `add_endpoint` refuses built-in ids. 11 outcome tests (5 seen failing first), 3 gate unit tests, 6 break-it mutations caught. Promise 6 now has evidence. Open: locality attested not verified, D-08, §7.2 finding 2 |
 | D-14 staged restore and deletion fix | Landed 2026-10-02 (§7.22) | `profiles.delete()` first cancels a restore staged for that profile's database, so nothing is installed in a deleted profile's place and the staged copy is erased. 4 route tests (3 seen failing first), 3 break-it mutations caught. Open: `profiles.remove()`, which nothing calls |
-| D-16 chat turn with no terminal event | Found and landed 2026-10-03 (§7.23) | A, latent: with no provider left after Stage 8 the socket got stage lines and no done/error, so the chat stayed "writing". The pipeline now sends its error. 3 socket tests through the real pipeline (1 seen failing first), 2 Flutter tests, 4 break-it mutations caught. Open: a pipeline that raises still ends with no terminal event |
+| D-16 chat turn with no terminal event | Found and landed 2026-10-03 (§7.23) | A, latent: with no provider left after Stage 8 the socket got stage lines and no done/error, so the chat stayed "writing". The pipeline now sends its error. 3 socket tests through the real pipeline (1 seen failing first), 2 Flutter tests, 4 break-it mutations caught. Open item, a pipeline that raises, fixed as D-22 (§7.25) |
 | Migration journey re-run | Run 2026-10-03 (§7.24), report only | 10 variants, exports and shortcut restores through the real `export_pip.ps1` and `restore_pip.ps1`, 307 checks at `9968e8c`, every failure attributed; negative controls catch D-03 and D-14. Round trip holds (D-01 on every in-app restore that had a WAL to swap, D-03 with two profiles). New: D-18 empty or partial backup accepted (medium), D-20 same-named document taken over the backup's (medium, upper end), D-21 shortcut restores the first backup of the day (medium, low end), D-17 export race with a false "Nothing was written" (low, upper end), D-19 staged-restore state not scoped to the profile (low). Exit criterion not met as worded: D-09, D-18, D-20 |
+| D-22 raising pipeline ends the turn | Landed 2026-10-03 (§7.25) | A: an exception from the pipeline closed the socket mid-turn with no done/error. The transport now ends the turn with one error, keeps the connection, and saves the turn as the client was shown it. 3 socket tests (all seen failing first), 6 break-it mutations caught. Found: D-23, the client never ends a turn on a dropped connection (code reading) |
 
 ---
 

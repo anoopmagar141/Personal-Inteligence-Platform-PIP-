@@ -36,6 +36,7 @@ from backend.memory import (
 )
 from backend.providers.ollama_provider import OllamaProvider
 from backend.providers.openai_compatible_provider import OpenAICompatibleProvider
+from backend.stages import stage_09_llm_streaming as stage_09
 from backend.stages import stage_13_profile_update as stage_13
 from shared.ws_spec import ChatRequest, PipelineCompleteEvent, WSChatEvent
 
@@ -897,6 +898,10 @@ async def stream_pipeline_to_websocket(
         project_id=project_id, should_stop=stop_event.is_set,
         cache_generation=cache_generation,
     )
+    # Everything forwarded so far, folded the way pipeline.run() folds it -
+    # what this turn returns if the pipeline raises before pipeline_complete.
+    aggregate = stage_09.new_aggregate()
+    ended = False
 
     while True:
         if incoming is not None:
@@ -912,8 +917,31 @@ async def stream_pipeline_to_websocket(
 
         try:
             event: Union[WSChatEvent, PipelineCompleteEvent] = await loop.run_in_executor(executor, next, gen)
-        except StopIteration:
-            raise RuntimeError("pipeline.run() ended without yielding pipeline_complete")
+        except Exception:
+            # The pipeline raised, or ended without pipeline_complete (a
+            # StopIteration reaches here as RuntimeError: asyncio futures
+            # refuse to carry one). Either way the turn still has to end on
+            # the socket. This used to propagate out of ws_chat's loop and
+            # close the connection mid-turn, so the client got no terminal
+            # event and kept its composer locked (FREEZE_LIST §7.25, D-22).
+            #
+            # Only next() is guarded. A send that fails because the client
+            # has gone is a disconnect, and still has to reach ws_chat as one.
+            logger.exception("Chat turn failed inside the pipeline")
+            if not ended:
+                # The exception's own text stays in the log: it can carry
+                # whatever it was handed, model output or message text included.
+                error_event: WSChatEvent = {
+                    "type": "error",
+                    "data": "Something went wrong while answering, so this reply was abandoned. "
+                            "The details are in the backend log.",
+                }
+                await websocket.send_json(error_event)
+                stage_09.accumulate(aggregate, error_event)
+            # What the client was shown, so the caller saves the same thing: a
+            # finished answer is kept, a partial one dropped as the client
+            # drops it.
+            return aggregate
 
         if event["type"] == "pipeline_complete":
             return event["data"]
@@ -921,6 +949,10 @@ async def stream_pipeline_to_websocket(
         # event is a WSChatEvent here (the pipeline_complete branch above is the
         # only other member of the union) - forwarded verbatim, Part 14.3.
         await websocket.send_json(event)
+        stage_09.accumulate(aggregate, event)
+        # Once a turn has ended, nothing may end it again: a second terminal
+        # event would arrive at the start of the next turn and end that one.
+        ended = ended or event["type"] in ("done", "error", "stopped")
 
 
 def _default_observer_provider(model_name: str):
