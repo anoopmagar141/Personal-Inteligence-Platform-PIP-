@@ -101,6 +101,7 @@ import getpass
 import hmac
 import os
 import pathlib
+import re
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -138,11 +139,36 @@ def _stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+_DATED_NAME = re.compile(r"^pip_backup_(\d{8})(?:-(\d+))?\.pipbak$")
+
+
+def _recency(path: pathlib.Path) -> tuple:
+    """
+    Newest first means: modified last, and only then by what the name says.
+
+    This used to be the last name in sorted(), which is not "newest" for any
+    name the exporter itself writes: a second export on the same day is
+    pip_backup_20261003-2.pipbak, and "-" sorts before ".", so the first export
+    of the day beat the retry - while restore_pip.ps1 listed them newest first
+    by modification time and said "the newest will be used". -9 beat -10 for
+    the same reason, and a file named for nothing in particular beat every
+    dated one whatever its age (FREEZE_LIST D-21).
+
+    The listing and the Backup screen order by modification time, so that is
+    the rule here. The name is only a tiebreak, for a copy that reset every
+    timestamp: the date, then the number as a number (the bare name is the
+    first export of its day, so it counts as 1).
+    """
+    match = _DATED_NAME.match(path.name)
+    date, number = (match.group(1), int(match.group(2) or 1)) if match else ("", 0)
+    return (path.stat().st_mtime_ns, date, number, path.name)
+
+
 def newest_backup() -> pathlib.Path:
-    backups = sorted(DATA_DIR.glob("*.pipbak"))
+    backups = list(DATA_DIR.glob("*.pipbak"))
     if not backups:
         sys.exit(f"ERROR: no .pipbak files in {DATA_DIR}")
-    return backups[-1]
+    return max(backups, key=_recency)
 
 
 def refuse_if_pip_is_running() -> None:
