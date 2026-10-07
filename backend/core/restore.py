@@ -110,17 +110,71 @@ def stage_restore(
     done here. What this leaves behind is two temporary files and a marker; if
     the user never restarts, or deletes the marker, the installation is exactly
     as it was.
+
+    A refusal leaves nothing behind at all, and says why in a sentence
+    (FREEZE_LIST D-11). Two things used to break that. A driver error out of a
+    damaged backup - "SQL logic error" - was not a RestoreError, so the route
+    answered 500 with the driver's own words, to the one person whose backup was
+    damaged in a copy and who most needs a plain answer. And a failure AFTER the
+    temporary database had been written (a damaged page, a mismatch in the row
+    counts) raised with "Nothing was replaced" while the temporary files, a full
+    re-encrypted copy of the person's data, stayed in their profile folder.
     """
     import sqlcipher3
 
     source = Path(backup_path)
+    work = Path(db_path).parent
+    before = set(work.glob("restore-*.tmp.*")) if work.exists() else set()
+    try:
+        return _stage_restore(source, backup_password, new_password, db_path, salt_path)
+    except Exception as exc:
+        # Whatever went wrong, what this call wrote goes with it. Only the
+        # files this call made: a staging that is already pending has its own.
+        for leftover in (set(work.glob("restore-*.tmp.*")) - before) if work.exists() else ():
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
+        if isinstance(exc, sqlcipher3.Error):
+            logger.warning(f"{source.name} could not be read all the way through: {exc}")
+            raise RestoreError(
+                f"{source.name} could not be read all the way through. It looks damaged - "
+                "a copy that was cut short or altered will do this. Try another copy of the "
+                "backup. Nothing was written."
+            )
+        raise
+
+
+def _stage_restore(
+    source: Path,
+    backup_password: str,
+    new_password: str,
+    db_path: str | Path,
+    salt_path: str | Path,
+) -> dict[str, Any]:
+    import sqlcipher3
+
     db_path = Path(db_path)
     salt_path = Path(salt_path)
 
+    if source.is_dir():
+        raise RestoreError(
+            f"{source.name} is a folder, not a backup file. Choose the .pipbak file itself."
+        )
     if not source.exists():
         raise RestoreError(f"There is no file at {source}.")
+    if not backup_password:
+        raise RestoreError("Enter the backup password.")
     if not new_password or len(new_password) < 8:
         raise RestoreError("The new password must be at least 8 characters.")
+    # restore_backup.py has always refused this and stage_restore did not, so
+    # the two ways of restoring disagreed about what a valid pair is. The reason
+    # is the same here: one secret for both means losing either loses both.
+    if new_password == backup_password:
+        raise RestoreError(
+            "The new password has to be different from the backup password, or "
+            "losing either one loses both."
+        )
 
     backup = sqlcipher3.connect(str(source))
     try:
