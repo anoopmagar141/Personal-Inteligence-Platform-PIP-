@@ -465,7 +465,21 @@ def main(argv: list[str] | None = None) -> int:
         if integrity != "ok":
             return _fail(f"integrity_check on the backup returned: {integrity}")
 
-        names = table_names(backup)
+        # Everything above is true of a file with nothing in it, and everything
+        # below compares the copy with the backup itself: SQLCipher opens a
+        # zero-length file as an empty database under any key. Something
+        # outside the file's own contents has to say it is a whole export
+        # (FREEZE_LIST D-18). The same rule as the in-app restore, from the
+        # same module, so the two cannot disagree about what a backup is.
+        _ensure_repo_on_path()
+        from backend.core import backup_mark
+
+        try:
+            backup_mark.check(backup)
+        except backup_mark.IncompleteBackup as exc:
+            return _fail(str(exc))
+
+        names = backup_mark.data_tables(table_names(backup))
         comparable = [n for n in names if not n.endswith(_FTS_SHADOW_SUFFIXES)]
         expected = row_counts(backup, comparable)
         print(f"  opened, integrity ok, {len(comparable)} tables, {sum(expected.values()):,} rows")
@@ -487,6 +501,10 @@ def main(argv: list[str] | None = None) -> int:
             f"ATTACH DATABASE {_sql_quote(str(tmp_db))} AS restored KEY {_hex_key_pragma(new_key)}"
         )
         backup.execute("SELECT sqlcipher_export('restored')")
+        # The mark describes the file, not the profile; left in, the next
+        # export would copy a stale 'complete' into its own backup.
+        backup.execute(f"DROP TABLE IF EXISTS restored.{backup_mark.MARK_TABLE}")
+        backup.commit()
         backup.execute("DETACH DATABASE restored")
     finally:
         backup.close()

@@ -51,6 +51,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from backend.core import backup_mark
 from backend.core import db_key as db_key_module
 from backend.core import profiles
 from backend.core.types import now_utc
@@ -139,12 +140,17 @@ def stage_restore(
         if integrity != "ok":
             raise RestoreError(f"The backup is damaged: integrity_check said {integrity!r}.")
 
-        names = [
-            r[0]
-            for r in backup.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-            )
-        ]
+        # Everything above is true of a file with nothing in it - SQLCipher
+        # opens a zero-length file as an empty database under any key - and
+        # everything below compares the copy with the backup itself. Something
+        # outside the file's own contents has to say it is a whole export
+        # (FREEZE_LIST D-18).
+        try:
+            backup_mark.check(backup)
+        except backup_mark.IncompleteBackup as exc:
+            raise RestoreError(str(exc))
+
+        names = backup_mark.data_tables(backup_mark.table_names(backup))
         comparable = [n for n in names if not n.endswith(_FTS_SHADOW_SUFFIXES)]
         expected = {n: backup.execute(f'SELECT COUNT(*) FROM "{n}"').fetchone()[0] for n in comparable}
 
@@ -164,6 +170,10 @@ def stage_restore(
             f"ATTACH DATABASE {_sql_quote(str(tmp_db))} AS restored KEY {_hex_key_pragma(new_key)}"
         )
         backup.execute("SELECT sqlcipher_export('restored')")
+        # The mark describes the file, not the profile; left in, the next
+        # export would copy a stale 'complete' into its own backup.
+        backup.execute(f"DROP TABLE IF EXISTS restored.{backup_mark.MARK_TABLE}")
+        backup.commit()
         backup.execute("DETACH DATABASE restored")
     finally:
         backup.close()

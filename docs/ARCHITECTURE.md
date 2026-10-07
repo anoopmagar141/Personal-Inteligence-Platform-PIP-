@@ -235,6 +235,18 @@ so there is one write path, not two.
   erases by). SQLite pairs those files with a database by name alone, so a
   crash's WAL left beside the restored file was replayed onto it
   (FREEZE_LIST §7.17).
+- **A backup is accepted only if something outside its own contents says it
+  is a whole export.** Both restores used to check a `.pipbak` against itself,
+  and SQLCipher opens a zero-length file as an empty database under any key, so
+  an empty or part-written file passed and replaced a real profile.
+  `backend/core/backup_mark.py` is the one rule for both restores and the
+  export: before copying anything the export writes a one-row `pip_backup_mark`
+  table into the backup saying `writing`, and only after `verify()` flips it to
+  `complete` with the table counts. A backup with no mark predates marks and is
+  accepted if it holds PIP's `identity` table; one marked `writing`, or whose
+  counts disagree with its mark, is refused with a sentence. The mark describes
+  the file, not the profile, so both restores drop it from the database they
+  build and leave it out of the counts they compare.
 - **A profile delete can be recorded rather than performed.** A chat session's
   connection is closed by a submission to its own pinned worker, and
   `server.py`'s disconnect handler documents that such a submission can never

@@ -135,6 +135,12 @@ DATA_DIR = REPO_ROOT / "data"
 DB_PATH = DATA_DIR / "pip.db"
 KEY_PATH = DATA_DIR / "db_key.txt"
 
+# backend/ lives above this script, and the completeness mark has to be one
+# definition shared with both restores rather than a copy here that can drift.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from backend.core import backup_mark  # noqa: E402
+
 # FTS5 keeps shadow tables whose row counts are an implementation detail of the
 # index, not user data - comparing them across an export proves nothing.
 _FTS_SHADOW_SUFFIXES = ("_data", "_idx", "_docsize", "_content", "_config")
@@ -655,6 +661,11 @@ def main(argv: list[str] | None = None) -> pathlib.Path:
             f"ATTACH DATABASE {_sql_quote(str(out_path))} AS backup KEY {_sql_quote(backup_password)}"
         )
         try:
+            # Before one row is copied, the file says it is unfinished. A copy
+            # killed half-way, or one that fails verify() below, is then a file
+            # that admits it - not a file with no mark, which has to mean "made
+            # before marks existed" (backend/core/backup_mark.py, D-18).
+            backup_mark.begin(src, "backup")
             src.execute("SELECT sqlcipher_export('backup')")
         finally:
             src.execute("DETACH DATABASE backup")
@@ -663,6 +674,8 @@ def main(argv: list[str] | None = None) -> pathlib.Path:
 
     print("  export complete, verifying ...")
     verify(out_path, backup_password, expected)
+    # Only a verified file is vouched for, and the mark is read back.
+    backup_mark.finish(out_path, backup_password, expected, sqlcipher3.connect)
 
     size_mb = out_path.stat().st_size / (1024 * 1024)
     print("  verified: integrity ok, row counts match")
