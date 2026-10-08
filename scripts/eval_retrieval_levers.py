@@ -46,6 +46,11 @@ import time
 import urllib.request
 from pathlib import Path
 
+# Fail with the interpreter you used, not a wrong install instruction.
+import _venv
+
+_venv.require("sqlcipher3")
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))

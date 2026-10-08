@@ -54,6 +54,11 @@ import tempfile
 import time
 from pathlib import Path
 
+# Fail with the interpreter you used, not a wrong install instruction.
+import _venv
+
+_venv.require("sqlcipher3")
+
 REPO = Path(__file__).resolve().parent.parent
 TOP_K = 10
 HINT_WORDS = 12  # stage_01_intent_classifier._extract_retrieval_hint

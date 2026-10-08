@@ -49,6 +49,11 @@ import time
 import urllib.request
 from pathlib import Path
 
+# Fail with the interpreter you used, not a wrong install instruction.
+import _venv
+
+_venv.require("sqlcipher3")
+
 REPO = Path(__file__).resolve().parent.parent
 PROTOCOL = REPO / "docs" / "eval" / "retrieval_e2e_protocol_2026-10-08.json"
 LABELS = REPO / "docs" / "eval" / "retrieval_labels_2026-10-08.json"
