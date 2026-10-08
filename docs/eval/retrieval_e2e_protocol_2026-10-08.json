@@ -1,0 +1,45 @@
+{
+ "about": "Pre-registered protocol and extra questions for the end-to-end check that follows docs/eval/retrieval_quality_2026-10-08.md. Written and committed BEFORE the first run, so the questions, the grading rules and the decision rule cannot be tuned to the results.",
+ "question": "If the similarity cut-off is lowered so that document search returns passages more often, does the model answer more questions correctly, and does it invent more answers to questions the documents do not answer?",
+ "answerable": "The 54 questions in retrieval_labels_2026-10-08.json (`answerable`), same corpus, same snapshot_commit. The reference for each is the line of the source document that contains its `key`.",
+ "unanswerable": [
+  {"id": "una-01", "question": "How many people work on the PIP project?"},
+  {"id": "una-02", "question": "How much memory does the PIP backend use while it is idle?"},
+  {"id": "una-03", "question": "Which cloud storage service does PIP back up to automatically?"},
+  {"id": "una-04", "question": "What is the maximum number of documents a person can upload to PIP?"},
+  {"id": "una-05", "question": "Which languages does the PIP interface support besides English?"},
+  {"id": "una-06", "question": "Does PIP support voice input?"},
+  {"id": "una-07", "question": "How many people use PIP today?"},
+  {"id": "una-08", "question": "On what date will PIP be released to the public?"},
+  {"id": "una-09", "question": "What email address do I contact for PIP support?"},
+  {"id": "una-10", "question": "Which open-source licence is PIP released under?"},
+  {"id": "una-11", "question": "Is there an Android version of PIP?"},
+  {"id": "una-12", "question": "Which graphics card does PIP require?"}
+ ],
+ "unanswerable_note": "Each was checked against the seven corpus documents at snapshot_commit with a search for its subject words (scratchpad absent_check.py, output read by hand): the corpus does not answer any of them. una-12 is a deliberate trap: the validation report names the GPU the validation ran on, which is not a requirement, so a returned passage about it is on-topic and does not answer. una-05 is similar (the profile field `language` appears in the documents).",
+ "conditions": {
+  "A_as_shipped": {"similarity_threshold": 0.6},
+  "B": {"similarity_threshold": 0.45},
+  "C": {"similarity_threshold": 0.3}
+ },
+ "held_fixed": {
+  "path": "backend.core.pipeline.run_sync, i.e. Stages 0-10 as the app runs them, with the real Stage 5 retrieval (12-word hint, top_k 3, 500-word chunks) and the real Stage 7 prompt",
+  "model": "qwen2.5:7b via the pipeline's own OllamaProvider options, plus temperature 0 and seed 1 so a rerun of the same prompt gives the same answer and the only thing that differs between conditions is the context",
+  "max_tokens": 400,
+  "profile": "a fresh in-memory profile: no identity, projects, decisions or history, so documents are the only thing that varies",
+  "documents": "the seven corpus documents ingested once, at the current 500/50 chunking",
+  "cache": "the response cache is cleared before every call so no answer is replayed",
+  "one_call_per_distinct_prompt": "when two conditions retrieve the same passages for a question the prompt is identical and the answer is reused, not regenerated"
+ },
+ "grading": {
+  "who": "the assistant that ran the check, reading each distinct answer once, in an order shuffled with a fixed seed, with the condition and the retrieved passages hidden; the reference line is shown for answerable questions. Same hand that wrote the questions, so this is not independent grading.",
+  "CORRECT": "the answer states the fact in the reference line (any wording).",
+  "DECLINES": "the answer says it does not have the information, or that the documents do not say, and states no fact as true that the reference contradicts or that is invented.",
+  "WRONG": "the answer states a specific fact that contradicts the reference or, for an unanswerable question, states a specific answer as true (a number, name, date, yes/no, service).",
+  "VAGUE": "none of the above: generic, hedged or off the point, with no specific claim."
+ },
+ "decision_rule": {
+  "text": "Fixed before the run. A lower cut-off is SUPPORTED for this corpus and model only if all three hold relative to condition A: (1) CORRECT on the 54 rises by at least 8 questions and a two-sided sign test on the paired questions gives p < 0.05; (2) WRONG on the 12 unanswerable questions rises by no more than 2; (3) WRONG on the 54 answerable questions does not rise. If (1) holds but (2) or (3) fails, the lower cut-off trades correct answers for invented ones and is NOT supported. If (1) fails, there is no case for lowering it on this evidence. Either way the result is for one corpus of technical Markdown and one 7B model, and does not authorise a change on its own."
+ },
+ "also_recorded": "Ollama's prompt_eval_count for every call, to detect a prompt longer than the model's context window (which Ollama truncates without error), and which condition each retrieved passage set belongs to."
+}
