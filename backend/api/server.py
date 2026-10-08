@@ -2845,17 +2845,27 @@ try:
         except Exception as exc:
             logger.error(f"Checking a backup for import failed: {exc}")
             raise HTTPException(status_code=500, detail=f"The backup could not be read: {exc}")
-        name = (name or "Imported profile")[:64]
+        name = (name or "").strip()[:64] or "Imported profile"
+
+        # The folder name comes from the person's name, and a backup must import
+        # whatever its owner is called. A name with no letter or digit in any script
+        # ("...", "!!!") makes no folder name, and used to be refused as "a profile
+        # with that name already exists" - false, and no way round it (FREEZE_LIST
+        # 7.29). It keeps its name on screen and takes a plain folder name.
+        try:
+            slug = profiles.slugify(name)
+        except ValueError:
+            slug = profiles.slugify("Imported profile")
 
         # An empty profile of that name may already be waiting (created, never given
         # a password); it has nothing in it, so it is the one to import into.
         registered_here = False
         try:
-            profile = profiles.register(name)
+            profile = profiles.register(name, slug=slug)
             registered_here = True
         except ValueError:
             try:
-                profile = profiles.get(profiles.slugify(name))
+                profile = profiles.get(slug)
             except Exception:
                 raise HTTPException(status_code=409, detail="A profile with that name already exists.")
         profiles.activate(profile.slug)

@@ -50,11 +50,13 @@ rather than by a second rule that could disagree with the first.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import re
 import shutil
+import unicodedata
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
@@ -118,10 +120,23 @@ def slugify(name: str) -> str:
     Not decorative: this string becomes a path segment, so it is restricted to
     characters that cannot climb out of the profiles directory or collide with a
     Windows reserved name. A caller that passes "../../etc" gets "etc".
+
+    A name written wholly in another script (Devanagari, Chinese, Arabic, an
+    emoji) has no a-z or 0-9 to keep, and used to be refused with "must contain
+    at least one letter or digit" - a false sentence, since it did - and, on the
+    first-run import, with "A profile with that name already exists", which was
+    worse (FREEZE_LIST 7.29). Such a name gets "profile-" and eight hex digits of
+    a hash of the name instead: stable (the same name is always the same folder,
+    so "already exists" still means what it says), distinct for distinct names,
+    and nothing a path can do anything with. Only a name with no letter or digit
+    in ANY script ("...", "!!!") is still refused.
     """
     slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
     if not slug:
-        raise ValueError("a profile name must contain at least one letter or digit")
+        if not any(ch.isalnum() for ch in name):
+            raise ValueError("a profile name must contain at least one letter or digit")
+        folded = unicodedata.normalize("NFC", name.strip()).casefold()
+        slug = "profile-" + hashlib.sha256(folded.encode("utf-8")).hexdigest()[:8]
     reserved = {"con", "prn", "aux", "nul", "default"} | {
         f"{p}{i}" for p in ("com", "lpt") for i in range(1, 10)
     }
