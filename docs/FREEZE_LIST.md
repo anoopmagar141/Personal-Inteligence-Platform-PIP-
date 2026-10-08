@@ -1444,7 +1444,7 @@ failing probe is its defect's regression test once a fix is authorized.
 - a real remote provider;
 - long-running use (resource leaks);
 - driving the UI (one screenshot only);
-- retrieval quality (the torch block).
+- retrieval quality (the torch block; measured 2026-10-08, §7.27).
 
 **Exit criteria not met:** D-01 to D-04 are open, and the supported
 migration workflow failed. *(2026-10-02: D-01 and D-03 fixed, §7.17 and
@@ -2258,7 +2258,7 @@ which confirms the diagnosis in `f144840`: it had failed only because of the sta
 scores, not because of the cache. This makes D-02 an environment fact rather than a code
 defect - on a machine with Smart App Control on, the backend still cannot import torch and
 `pip_embed_shim.py` is still the workaround. It also makes retrieval-quality results valid
-here, which they were not under the stand-in; none has been re-measured yet.
+here, which they were not under the stand-in; the first measurement is §7.27.
 
 **A real window (2026-10-08).** The Flutter client was driven by hand through
 a throwaway installation with the real `launch_pip.ps1`, `restore_pip.ps1` and
@@ -2310,6 +2310,46 @@ with two tests that fail while the file is opened read-write.
 - `restore_backup.py`'s own install has the same rename order the in-app swap had
   before `f7a85b9`. It is one pass and not resumable, but re-running the shortcut
   from the same backup replaces whatever is there.
+
+### 7.27 Retrieval quality, first measurement with the real embedding model (run 2026-10-08, report only)
+
+Report `docs/eval/retrieval_quality_2026-10-08.md`; tool `scripts/eval_retrieval.py`;
+results for the real model and for the stand-in, and the 72 questions, in `docs/eval/`.
+The questions were committed (`6c1720e`) before the first run. Real all-MiniLM-L6-v2 through
+the pipeline's own `ingest_document` and `query`, on a temporary index; corpus seven project
+documents as of `1577473`; 54 questions with a known answer, 14 plainly off-topic, 4 about PIP
+and answered nowhere; searched with the first 12 words, as the pipeline does. A question counts
+as answered when a returned passage contains a key phrase from the stated source.
+
+**What it found.**
+- As shipped (500-word chunks, cut-off 0.6, top 3) the right passage comes back for **2 of 54**
+  questions. Ranking alone has it in the top 3 for 25 and in the top 10 for 34; the cut-off removes
+  the rest, because the passage that answers scores a median 0.38.
+- The score separates "about PIP" from "not about PIP" (best off-topic score 0.19; nothing came
+  back from a cut-off of 0.20 up) but not the right passage from other passages on the same subject
+  (median 0.38 for both). From 0.20 to 0.30 the answered count stays at 25, and only 18% to 23% of
+  the passages handed to the model hold the answer.
+- The 256-token tradeoff in `vector_store.py` is larger than its comment says: a median 500-word
+  chunk is 855 tokens and 71% of chunk text lies outside what is embedded. The right passage is in
+  the top 3 for 75% (12 of 16) when the answer starts inside the readable part and 34% (13 of 38)
+  when it starts beyond it.
+- 300-word chunks did best, 57% against 46% in the top 3, but 12 better against 6 worse on the same
+  questions (p = 0.24) is not established; 200, 150 and 100 words were no better than 500.
+- Stage 1's `skip_rag` gates nothing: Stage 5 runs on every turn (ADR-002) and `stage_02` ignores
+  the flag. An early draft of the tool counted it as a gate; that was wrong and was removed before
+  any result was recorded.
+- With the stand-in the right passage is in the top 3 for 26% and the best off-topic score reaches
+  0.58, so what it reports cannot be carried over either way.
+
+**Limits.** One corpus of dense technical Markdown, probably unlike the owner's own documents; an
+easy off-topic set (the hard case, a general question near a document's vocabulary, was not
+tested); questions written by the same hand that read the documents; retrieval only, not whether
+the model answers better or worse with extra passages; three runs agree to within one question.
+
+**Nothing was changed.** The cut-off and the chunking are as they were, and the "~256 tokens"
+comment is uncorrected. What the report supports, and what must come first (a second corpus and an
+end-to-end check that extra passages do not make the model fabricate), is in its last section.
+Either change alters what the model is told and needs the owner's authorisation.
 
 ---
 
@@ -2365,6 +2405,7 @@ with two tests that fail while the file is opened read-write.
 | Migration journey re-run | Run 2026-10-03 (§7.24), report only | 10 variants, exports and shortcut restores through the real `export_pip.ps1` and `restore_pip.ps1`, 307 checks at `9968e8c`, every failure attributed; negative controls catch D-03 and D-14. Round trip holds (D-01 on every in-app restore that had a WAL to swap, D-03 with two profiles). New: D-18 empty or partial backup accepted (medium), D-20 same-named document taken over the backup's (medium, upper end), D-21 shortcut restores the first backup of the day (medium, low end), D-17 export race with a false "Nothing was written" (low, upper end), D-19 staged-restore state not scoped to the profile (low). Exit criterion not met as worded: D-09, D-18, D-20 |
 | D-22 raising pipeline ends the turn | Landed 2026-10-03 (§7.25) | A: an exception from the pipeline closed the socket mid-turn with no done/error. The transport now ends the turn with one error, keeps the connection, and saves the turn as the client was shown it. 3 socket tests (all seen failing first), 6 break-it mutations caught. Found: D-23, the client never ends a turn on a dropped connection (code reading) |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
+| Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 
 ---
 
