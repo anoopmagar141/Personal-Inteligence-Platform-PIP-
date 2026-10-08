@@ -246,7 +246,9 @@ so there is one write path, not two.
   accepted if it holds PIP's `identity` table; one marked `writing`, or whose
   counts disagree with its mark, is refused with a sentence. The mark describes
   the file, not the profile, so both restores drop it from the database they
-  build and leave it out of the counts they compare.
+  build and leave it out of the counts they compare. The chosen file is opened
+  read-only (`backup_mark.open_read_only`), so a leftover rollback journal beside
+  it is refused rather than played back into the person's own backup.
 - **Closing the window does not stop the backend, so anything that says "close
   PIP" has to.** `launch_pip.ps1` starts uvicorn hidden; the Flutter app has no
   exit hook and the backend no shutdown route. `scripts/_backend.ps1` finds PIP's

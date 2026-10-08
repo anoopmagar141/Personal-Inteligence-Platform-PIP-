@@ -2184,7 +2184,7 @@ mutation of the guard seen failing it again, one commit each. Branch
 
 | ID | Fix | Commit |
 |---|---|---|
-| D-18 | A backup is accepted only if something outside its own contents says it is a whole export. `backend/core/backup_mark.py` is the one rule for the export and both restores: the export writes a one-row `pip_backup_mark` table into the backup *before* copying a row (`writing`) and turns it to `complete`, with the table counts, only after `verify()`, reading it back. A file with no mark predates marks and is accepted if it holds PIP's `identity` table; an empty file, a file with none of PIP's tables, a `writing` mark and counts that no longer match the mark are each refused with a sentence. Both restores drop the mark from the database they build. | `60f3f3e` |
+| D-18 | A backup is accepted only if something outside its own contents says it is a whole export. `backend/core/backup_mark.py` is the one rule for the export and both restores: the export writes a one-row `pip_backup_mark` table into the backup *before* copying a row (`writing`) and turns it to `complete`, with the table counts, only after `verify()`, reading it back. A file with no mark predates marks and is accepted if it holds PIP's `identity` table; an empty file, a file with none of PIP's tables, a `writing` mark and counts that no longer match the mark are each refused with a sentence. Both restores drop the mark from the database they build, and open the chosen file read-only (`backup_mark.open_read_only`), so a hot journal beside it is refused with a sentence instead of being played back into the person's own file. | `60f3f3e`, `bcef2bd` |
 | D-21 | `newest_backup()` picks by modification time, then the date and number in the name read as numbers, as the listing and the Backup screen already order them. | `b6ea022` |
 | D-11 | `stage_restore` answers a folder, an empty backup password, a new password equal to the backup password and a damaged backup with a `RestoreError` sentence (422), and removes whatever temporary files a failed call wrote. The last was found while testing: a failure after the converted database existed left a full re-encrypted copy of the data in the profile folder. | `adedaff` |
 | D-20, D-07 | The swap (`restore._install`) and the shortcut's `rebuild_vector_index` move the profile's `documents/` and `chroma/` aside with the database, so the write-back starts from an empty folder. `materialise_documents` leaves a document alone only if its file is inside *this* profile's folder, so a restore into a second profile on the same machine writes its own copies. | `2458c9e` |
@@ -2197,21 +2197,24 @@ Evidence: 7 new test files (`test_backup_completeness.py`,
 `test_restore_documents.py`, `test_export_race.py`, `test_restore_scoping.py`,
 `test_backend_launcher.py`) and one changed (`test_restore_in_app.py` names the
 marker's two new keys). Hand-made mutations: 9, 4, 5, 6, 5, 8 and 5 caught for the seven commits
-in order. Three tests passed vacuously and were rewritten after the break-it run
+in order, and 4 for the read-only open. Three tests passed vacuously and were rewritten after the break-it run
 showed it (a folder named for the word asserted, an export test that failed
 before the file existed, a missing mtime-versus-name case); one guard, the wait
 for the port to free in `Stop-PipBackend`, is a timing guard no deterministic
 test pins.
+
+**A correction.** The first version of this section, and the message of commit
+`60f3f3e`, said opening the chosen backup read-only was skipped because an
+`ATTACH` from a read-only connection inherits its flags. That was an assumption
+that had not been checked, and it is wrong: attaching a new database and running
+`sqlcipher_export` from a read-only connection works. It was done in `bcef2bd`,
+with two tests that fail while the file is opened read-write.
 
 **Not done, stated rather than hidden.**
 - The three agents sent to hunt for *unrecorded* import and export defects
   (first-run import, export side, restore core) did not complete: the session
   limit stopped them. What was found beyond §7.24 came from writing the tests,
   above. The first-run import journey was read, not driven.
-- Opening the chosen `.pipbak` read-only (the D-18 report's second point) was
-  not done: an `ATTACH` of the new database from a read-only connection inherits
-  its flags, so it needs per-attach URIs, and the mark already covers the
-  part-written case it was for.
 - The Flutter dialogs were not changed. The welcome screen's "Import existing PIP"
   still describes the shortcut without saying it may ask to close PIP, which is
   true now and harmless; changing it needs a client rebuild. The first-run
