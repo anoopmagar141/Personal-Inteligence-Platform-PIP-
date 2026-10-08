@@ -280,6 +280,20 @@ class ApiClient {
         'new_password': newPassword,
       }) as Map<String, dynamic>;
 
+  /// Import a .pipbak from the first-run screen, as a NEW profile named after the
+  /// person in it. The backend allows this only while no profile has a database;
+  /// it answers {slug, name, state} for the profile to sign in to next.
+  Future<Map<String, dynamic>> importBackup({
+    required String path,
+    required String backupPassword,
+    required String newPassword,
+  }) async =>
+      await post('/backup/import', {
+        'path': path,
+        'backup_password': backupPassword,
+        'new_password': newPassword,
+      }) as Map<String, dynamic>;
+
   /// Discard a staged restore and the temporary files it wrote.
   Future<void> cancelRestore() async {
     await delete('/backup/restore');

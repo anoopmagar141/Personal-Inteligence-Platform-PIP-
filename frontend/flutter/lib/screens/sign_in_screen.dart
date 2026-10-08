@@ -106,11 +106,18 @@ class SignInScreen extends StatefulWidget {
   final AuthState state;
   final VoidCallback onUnlocked;
 
+  /// Replaces the native file chooser. The real one is a platform call a widget test
+  /// cannot answer, and everything after it - the dialog, the import, the move on to
+  /// sign-in - is what is worth testing.
+  @visibleForTesting
+  final Future<PlatformFile?> Function()? pickBackup;
+
   const SignInScreen({
     super.key,
     required this.api,
     required this.state,
     required this.onUnlocked,
+    this.pickBackup,
   });
 
   @override
@@ -155,6 +162,10 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _busy = false;
   bool _obscured = true;
   String? _error;
+
+  /// Good news worth saying once: what an import just brought, so the person is not
+  /// left to guess which profile to sign in to or which password to type.
+  String? _notice;
 
   /// Which situation the SELECTED profile is in.
   ///
@@ -306,20 +317,48 @@ class _SignInScreenState extends State<SignInScreen> {
   Future<void> _chooseImportBackup() async {
     // Match BackupView's picker API. This project resolves the desktop
     // file_picker implementation exposing the singular static call.
-    final picked = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['pipbak'],
-    );
+    final picked = await (widget.pickBackup ??
+        () => FilePicker.pickFile(
+              type: FileType.custom,
+              allowedExtensions: const ['pipbak'],
+            ))();
     if (picked == null || !mounted) return;
     final path = picked.path;
     if (path == null || path.isEmpty) {
       setState(() => _error = 'That backup has no file path PIP can use.');
       return;
     }
-    await showDialog<void>(
+    // At first run there is nothing to replace, so the import is done here: the
+    // dialog collects both passwords, the backend creates the profile and installs
+    // the backup into it, and the person is taken on to sign in to it.
+    final imported = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => ImportBackupDialog(fileName: picked.name, path: path),
+      builder: (context) => ImportBackupDialog(
+        fileName: picked.name,
+        path: path,
+        onImport: (backupPassword, newPassword) => widget.api.importBackup(
+          path: path,
+          backupPassword: backupPassword,
+          newPassword: newPassword,
+        ),
+      ),
     );
+    if (imported == null || !mounted) return;
+
+    await _loadProfiles();
+    if (!mounted) return;
+    setState(() {
+      _activeSlug = imported['slug'] as String?;
+      _state = authStateFrom(imported['state'] as String? ?? 'locked');
+      // Caused by an explicit Import, like _addProfile's Create: do not let a stale
+      // registry response put the welcome screen back.
+      _isFirstRun = false;
+      _error = null;
+      _notice = 'Imported \u201c${imported['name']}\u201d. Sign in with the new password you just chose.';
+      _password.clear();
+      _confirm.clear();
+    });
+    _passwordFocus.requestFocus();
   }
 
   /// Point the backend at another profile and redress the screen for it.
@@ -344,6 +383,7 @@ class _SignInScreenState extends State<SignInScreen> {
         _busy = false;
         _activeSlug = profile.slug;
         _state = authStateFrom(state);
+        _notice = null;
         _password.clear();
         _confirm.clear();
       });
@@ -631,6 +671,14 @@ class _SignInScreenState extends State<SignInScreen> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 13.5, height: 1.5, color: kGatewayTextMuted),
                 ),
+                if (_notice != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    _notice!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13.5, height: 1.5, color: kGatewayAccent),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.xl),
 
                 TextField(
@@ -800,48 +848,111 @@ class _FirstRunWelcome extends StatelessWidget {
       );
 }
 
-/// First-run restore deliberately does not call the in-app restore route.
-/// That route replaces an *unlocked active* profile, while this screen has no
-/// such ownership proof and its database is not open. The established restore
-/// shortcut runs only after PIP has closed and keeps both passwords out of the
-/// HTTP surface. A `.pipbak` contains data and its backup password, never the
-/// source machine's live password, so the shortcut asks for a new local one.
+/// The first-run import dialog.
 ///
-/// So the most this dialog can do is say, accurately, what happens next, and
-/// three things it used to leave out are the ones people trip on
-/// (FREEZE_LIST D-09): closing PIP's window does not stop its background
-/// process, so the shortcut may say PIP is still running and ask to close it;
-/// the shortcut asks for a PATH on a machine whose data folder is empty, so the
-/// file's full path is shown here, selectable, with a Copy button, rather than
-/// only its name; and the restored profile arrives called "Default", not by the
-/// name it had on the machine it came from.
+/// It used to be a signpost - close PIP, run a shortcut, sign in to a profile called
+/// "Default" - because the in-app restore replaces the profile you are signed in to and
+/// this screen has nobody signed in. At first run there is nothing to replace, so it
+/// now does the import: it asks for the backup's password and a NEW one for this
+/// computer, and [onImport] (POST /backup/import) creates a profile named after the
+/// person in the backup and installs it. The backend refuses, with a sentence, if any
+/// profile already has data; the dialog stays open on a refusal so a typo can be fixed.
 ///
-/// Public, and visible for testing only, because the file picker that opens it
-/// is a platform call a widget test cannot answer.
+/// The shortcut is still described, for anybody who would rather use it, with the two
+/// things people tripped on (FREEZE_LIST D-09): closing PIP's window does not stop its
+/// background process, so the shortcut may say PIP is still running and ask for a typed
+/// yes; and it restores into a profile called "Default".
+///
+/// The file's full path is shown, selectable, with a Copy button, because the shortcut
+/// asks for a PATH on a machine whose data folder is empty and a name alone made the
+/// person find the file again.
+///
+/// Public, and visible for testing only, because the file picker that opens it is a
+/// platform call a widget test cannot answer.
 @visibleForTesting
 class ImportBackupDialog extends StatefulWidget {
   final String fileName;
   final String path;
 
-  const ImportBackupDialog({super.key, required this.fileName, required this.path});
+  /// Runs the import. Returns {slug, name, state}; a refusal is thrown and shown.
+  final Future<Map<String, dynamic>> Function(String backupPassword, String newPassword) onImport;
+
+  const ImportBackupDialog({
+    super.key,
+    required this.fileName,
+    required this.path,
+    required this.onImport,
+  });
 
   @override
   State<ImportBackupDialog> createState() => _ImportBackupDialogState();
 }
 
 class _ImportBackupDialogState extends State<ImportBackupDialog> {
+  final _backup = TextEditingController();
+  final _fresh = TextEditingController();
+  final _again = TextEditingController();
   bool _copied = false;
+  bool _busy = false;
+  String? _error;
 
-  static const _steps = <String>[
-    'Close the PIP window.',
-    'Run “Restore PIP from backup” (Start menu or Desktop). If it says PIP is '
-        'still running in the background, that is normal: closing the window does '
-        'not stop it. Type yes to close it.',
-    'Give it the file above, the backup password, and a new password for this '
-        'computer.',
-    'Open PIP and sign in to the profile named “Default” with the new password. '
-        'Your name and conversations are inside it.',
-  ];
+  @override
+  void dispose() {
+    _backup.dispose();
+    _fresh.dispose();
+    _again.dispose();
+    super.dispose();
+  }
+
+  Future<void> _import() async {
+    if (_busy) return;
+    // The refusals the client can make without a round trip, in the order a person
+    // would hit them. The backend makes every one of them again.
+    final String? refusal;
+    if (_backup.text.isEmpty) {
+      refusal = 'Enter the backup password.';
+    } else if (!isLongEnoughPassword(_fresh.text)) {
+      refusal = 'Use at least $kMinPasswordLength characters for the new password.';
+    } else if (_fresh.text != _again.text) {
+      refusal = 'Those two passwords are different.';
+    } else if (_fresh.text == _backup.text) {
+      refusal = 'The new password has to be different from the backup password.';
+    } else {
+      refusal = null;
+    }
+    if (refusal != null) {
+      setState(() => _error = refusal);
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.onImport(_backup.text, _fresh.text);
+      if (!mounted) return;
+      Navigator.of(context).pop(result);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = e is ApiException ? e.detail : 'The backup could not be imported: $e';
+      });
+    }
+  }
+
+  Widget _field(TextEditingController controller, String label, {bool last = false}) => Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: TextField(
+          controller: controller,
+          obscureText: true,
+          enabled: !_busy,
+          textInputAction: last ? TextInputAction.done : TextInputAction.next,
+          onSubmitted: last ? (_) => _import() : null,
+          decoration: InputDecoration(labelText: label),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -876,21 +987,39 @@ class _ImportBackupDialogState extends State<ImportBackupDialog> {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 const Text(
-                  'To protect your data, PIP does not replace a database while it is '
-                  'running, so the import is done by a shortcut installed with PIP:',
+                  'PIP will create a profile from this backup. Enter the password it was '
+                  'exported with, and choose a new password for this computer.',
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                for (var i = 0; i < _steps.length; i++)
+                const SizedBox(height: AppSpacing.md),
+                _field(_backup, 'The backup’s password'),
+                _field(_fresh, 'New password for this computer'),
+                _field(_again, 'New password again', last: true),
+                if (_error != null)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                    child: Text('${i + 1}. ${_steps[i]}'),
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: Text(_error!, style: const TextStyle(color: Color(0xFFFF8A8A))),
                   ),
+                const SizedBox(height: AppSpacing.xs),
+                const Text(
+                  'Or use the “Restore PIP from backup” shortcut (Start menu or Desktop): '
+                  'close this window, run it, and give it the file above. If it says PIP is '
+                  'still running in the background, type yes to close it. The profile then '
+                  'arrives as “Default”.',
+                  style: TextStyle(fontSize: 12.5, height: 1.4),
+                ),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _busy ? null : _import,
+            child: Text(_busy ? 'Importing...' : 'Import'),
+          ),
         ],
       );
 }

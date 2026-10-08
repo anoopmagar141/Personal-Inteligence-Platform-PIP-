@@ -134,6 +134,45 @@ def _discard_staged_files(staged: dict[str, Any]) -> None:
             pass
 
 
+def _unreadable(source: Path, exc: BaseException) -> "RestoreError":
+    """The sentence for a driver error out of a backup, instead of the driver's own words."""
+    if backup_mark.is_leftover_journal_error(exc):
+        return RestoreError(f"{source.name} could not be read. {backup_mark.LEFTOVER_JOURNAL_SENTENCE}")
+    logger.warning(f"{source.name} could not be read all the way through: {exc}")
+    return RestoreError(
+        f"{source.name} could not be read all the way through. It looks damaged - "
+        "a copy that was cut short or altered will do this. Try another copy of the "
+        "backup. Nothing was written."
+    )
+
+
+def preflight(backup_path: str | Path, backup_password: str, new_password: str) -> str | None:
+    """
+    Whether this backup can be restored AT ALL, before anything is created for it,
+    and the name of the person in it (or None if it does not say).
+
+    For the first-run import, which registers a profile to restore into: a refused
+    import must leave the installation as empty as it found it, so everything that
+    can be refused is refused here, first, by the same checks staging makes
+    (_open_checked_backup). Writes nothing.
+    """
+    import sqlcipher3
+
+    source = Path(backup_path)
+    try:
+        backup = _open_checked_backup(source, backup_password, new_password)
+    except sqlcipher3.Error as exc:
+        raise _unreadable(source, exc)
+    try:
+        row = backup.execute("SELECT name FROM identity WHERE id = 1").fetchone()
+        name = (row[0] or "").strip() if row else ""
+        return name or None
+    except Exception:
+        return None
+    finally:
+        backup.close()
+
+
 def stage_restore(
     backup_path: str | Path,
     backup_password: str,
@@ -194,31 +233,23 @@ def stage_restore(
                 leftover.unlink()
             except OSError:
                 pass
-        if isinstance(exc, sqlcipher3.Error) and backup_mark.is_leftover_journal_error(exc):
-            raise RestoreError(f"{source.name} could not be read. {backup_mark.LEFTOVER_JOURNAL_SENTENCE}")
         if isinstance(exc, sqlcipher3.Error):
-            logger.warning(f"{source.name} could not be read all the way through: {exc}")
-            raise RestoreError(
-                f"{source.name} could not be read all the way through. It looks damaged - "
-                "a copy that was cut short or altered will do this. Try another copy of the "
-                "backup. Nothing was written."
-            )
+            raise _unreadable(source, exc)
         raise
 
 
-def _stage_restore(
-    source: Path,
-    backup_password: str,
-    new_password: str,
-    db_path: str | Path,
-    salt_path: str | Path,
-    documents_dir: str | Path | None = None,
-    chroma_dir: str | Path | None = None,
-) -> dict[str, Any]:
-    import sqlcipher3
+def _open_checked_backup(source: Path, backup_password: str, new_password: str) -> Any:
+    """
+    Every refusal that does not depend on where the backup is going, in one place:
+    the inputs, the password, integrity, and that the file is a COMPLETE export.
+    Returns the backup open read-only and verified; the caller closes it. Raises
+    RestoreError, with the connection already closed.
 
-    db_path = Path(db_path)
-    salt_path = Path(salt_path)
+    One function, called by staging and by the first-run import's preflight, so the
+    two cannot disagree about what a usable backup is - the same reason
+    backup_mark.check() is one rule for both restores.
+    """
+    import sqlcipher3
 
     if source.is_dir():
         raise RestoreError(
@@ -268,7 +299,28 @@ def _stage_restore(
             backup_mark.check(backup)
         except backup_mark.IncompleteBackup as exc:
             raise RestoreError(str(exc))
+    except BaseException:
+        backup.close()
+        raise
+    return backup
 
+
+def _stage_restore(
+    source: Path,
+    backup_password: str,
+    new_password: str,
+    db_path: str | Path,
+    salt_path: str | Path,
+    documents_dir: str | Path | None = None,
+    chroma_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    import sqlcipher3
+
+    db_path = Path(db_path)
+    salt_path = Path(salt_path)
+
+    backup = _open_checked_backup(source, backup_password, new_password)
+    try:
         names = backup_mark.data_tables(backup_mark.table_names(backup))
         comparable = [n for n in names if not n.endswith(_FTS_SHADOW_SUFFIXES)]
         expected = {n: backup.execute(f'SELECT COUNT(*) FROM "{n}"').fetchone()[0] for n in comparable}

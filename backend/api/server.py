@@ -2792,6 +2792,107 @@ try:
             "tables": staged["tables"],
         }
 
+    @app.post(f"{BASE_PREFIX}/backup/import")
+    async def import_backup_first_run(payload: dict[str, Any]):
+        """
+        Import a .pipbak from the welcome screen, as a NEW profile named after the
+        person in it. Allowed only while no profile has a database.
+
+        Why this exists. "Import existing PIP" was a signpost - close PIP, run a
+        shortcut, sign in to a profile called "Default" - because the in-app restore
+        replaces the profile you are signed in to, and a welcome screen has nobody
+        signed in and no proof of ownership of anything. At first run that objection
+        has nothing to protect: no profile has a database, so nothing can be
+        replaced, and the swap that the in-app restore defers to the next start can
+        be done at once because nothing holds a database open.
+
+        Why ONLY then. The moment any profile has a database this is a way to put
+        data into an installation without proving who you are, so it is refused
+        (409) and the signed-in restore under Backup is the way to replace one.
+        Nothing that can be refused is refused late: restore.preflight() makes every
+        check staging makes, BEFORE a profile is registered, so a refusal leaves the
+        installation exactly as empty as it found it.
+
+        Both passwords arrive over the same token-gated loopback connection the
+        in-app restore already uses; neither is written anywhere.
+        """
+        from fastapi import HTTPException
+
+        if session_key.is_unlocked():
+            raise HTTPException(
+                status_code=409,
+                detail="Sign out before importing a backup.",
+            )
+        if any(p.exists for p in profiles.list_profiles()):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "PIP already has a profile on this computer. To replace one, sign in "
+                    "to it and use Backup, then Choose a .pipbak."
+                ),
+            )
+
+        source = (payload.get("path") or "").strip()
+        if not source:
+            raise HTTPException(status_code=422, detail="Choose a .pipbak file first.")
+        backup_password = payload.get("backup_password") or ""
+        new_password = payload.get("new_password") or ""
+
+        try:
+            name = await asyncio.to_thread(restore.preflight, source, backup_password, new_password)
+        except restore.RestoreError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        except Exception as exc:
+            logger.error(f"Checking a backup for import failed: {exc}")
+            raise HTTPException(status_code=500, detail=f"The backup could not be read: {exc}")
+        name = (name or "Imported profile")[:64]
+
+        # An empty profile of that name may already be waiting (created, never given
+        # a password); it has nothing in it, so it is the one to import into.
+        registered_here = False
+        try:
+            profile = profiles.register(name)
+            registered_here = True
+        except ValueError:
+            try:
+                profile = profiles.get(profiles.slugify(name))
+            except Exception:
+                raise HTTPException(status_code=409, detail="A profile with that name already exists.")
+        profiles.activate(profile.slug)
+
+        try:
+            await asyncio.to_thread(
+                restore.stage_restore,
+                source,
+                backup_password,
+                new_password,
+                db_path=_db_path_or_default(),
+                salt_path=str(db_key.salt_path()),
+            )
+            # Nothing holds a database open, so unlike the in-app restore this can be
+            # finished now rather than at the next start.
+            if not restore.drain_pending_restore():
+                raise RuntimeError("the staged restore was not installed")
+        except BaseException as exc:
+            logger.error(f"First-run import failed after the profile was registered: {exc}")
+            restore.cancel_pending_restore_for(_db_path_or_default())
+            if registered_here:
+                try:
+                    profiles.delete(profile.slug)
+                except Exception as cleanup:
+                    logger.error(f"Could not remove the profile a failed import registered: {cleanup}")
+            if isinstance(exc, restore.RestoreError):
+                raise HTTPException(status_code=422, detail=str(exc))
+            if isinstance(exc, Exception):
+                raise HTTPException(status_code=500, detail=f"The backup could not be imported: {exc}")
+            raise
+
+        return {
+            "slug": profile.slug,
+            "name": profile.name,
+            "state": session_key.state(_db_path_or_default()),
+        }
+
     @app.delete(f"{BASE_PREFIX}/backup/restore")
     def cancel_restore_route():
         """Discard this profile's staged restore and the temporary files it wrote.

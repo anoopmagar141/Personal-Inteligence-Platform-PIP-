@@ -1,35 +1,39 @@
-// What the first-run "Import existing PIP" dialog tells somebody to do.
+// The first-run "Import existing PIP" dialog.
 //
-// The button deliberately does not restore anything itself - a restore replaces
-// the database file the running backend has open, and this screen has no proof
-// of ownership of anything - so everything it can do for the person is to say,
-// accurately, what happens next. It was not accurate. It told them to "close
-// PIP" and run the shortcut, and closing the window does not stop PIP's
-// background process (FREEZE_LIST D-09), so on the one machine this screen is
-// shown on the shortcut refused to run. The shortcut now offers to close PIP;
-// this dialog has to say so, or the person meets a question the screen that sent
-// them there never mentioned.
+// It used to be a signpost: it said close PIP, run a shortcut and sign in to a profile
+// called "Default", because the in-app restore replaces the profile you are signed in
+// to and a welcome screen has nobody signed in. At first run there is nothing to
+// replace, so the dialog now does the import itself: it asks for the backup's password
+// and a NEW one for this computer, hands both to the backend (POST /backup/import) and
+// closes with the result, and the screen carries on to sign-in for the imported profile.
 //
-// It also never said where the file was. The shortcut asks for a path on a
-// machine whose data folder is empty, and the dialog showed only the file's
-// NAME - so the person had to find the file again in a second window. The full
-// path is shown, selectable, with a Copy button.
-//
-// And it did not say that the restored profile arrives called "Default" - the
-// name the shortcut's layout gives it - so somebody who restored "BatMan" went
-// looking for BatMan on the sign-in screen.
+// What is held here is what a person meets: the file and where it is (a name alone made
+// them find it again), the three fields and the refusals the client can make without a
+// round trip, the backend's own sentence when it refuses, a dialog that stays open on a
+// refusal so the person can correct a typo, and the shortcut still described for anybody
+// who would rather use it - including that it may ask to close PIP (D-09) and that it
+// restores into a profile called "Default".
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:pip_flutter_client/api_client.dart';
 import 'package:pip_flutter_client/screens/sign_in_screen.dart';
 import 'package:pip_flutter_client/theme.dart';
 
 const _path = r'D:\Backups\BatMan_PIP_story.pipbak';
 const _name = 'BatMan_PIP_story.pipbak';
 
-Future<void> _pump(WidgetTester tester) async {
+typedef _Import = Future<Map<String, dynamic>> Function(String backupPassword, String newPassword);
+
+class _Opened {
+  Map<String, dynamic>? result;
+  bool closed = false;
+}
+
+Future<_Opened> _pump(WidgetTester tester, {_Import? onImport}) async {
+  final opened = _Opened();
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.light,
@@ -37,10 +41,17 @@ Future<void> _pump(WidgetTester tester) async {
         builder: (context) => Scaffold(
           body: Center(
             child: TextButton(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => const ImportBackupDialog(fileName: _name, path: _path),
-              ),
+              onPressed: () async {
+                opened.result = await showDialog<Map<String, dynamic>>(
+                  context: context,
+                  builder: (_) => ImportBackupDialog(
+                    fileName: _name,
+                    path: _path,
+                    onImport: onImport ?? (b, n) async => {'slug': 'batman', 'name': 'BatMan', 'state': 'locked'},
+                  ),
+                );
+                opened.closed = true;
+              },
               child: const Text('open'),
             ),
           ),
@@ -50,6 +61,14 @@ Future<void> _pump(WidgetTester tester) async {
   );
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
+  return opened;
+}
+
+Future<void> _fill(WidgetTester tester, {String backup = '77777777', String fresh = 'batman-local-1', String again = 'batman-local-1'}) async {
+  final fields = find.byType(TextField);
+  await tester.enterText(fields.at(0), backup);
+  await tester.enterText(fields.at(1), fresh);
+  await tester.enterText(fields.at(2), again);
 }
 
 void main() {
@@ -58,26 +77,6 @@ void main() {
 
     expect(find.textContaining(_name), findsWidgets);
     expect(find.widgetWithText(SelectableText, _path), findsOneWidget);
-  });
-
-  testWidgets('says the shortcut may ask to close PIP, and that this is normal', (tester) async {
-    await _pump(tester);
-
-    expect(find.textContaining('still running in the background'), findsOneWidget);
-    expect(find.textContaining('Type yes to close it'), findsOneWidget);
-  });
-
-  testWidgets('says which passwords are asked for', (tester) async {
-    await _pump(tester);
-
-    expect(find.textContaining('the backup password'), findsOneWidget);
-    expect(find.textContaining('a new password for this computer'), findsOneWidget);
-  });
-
-  testWidgets('says the restored profile is called Default', (tester) async {
-    await _pump(tester);
-
-    expect(find.textContaining('“Default”'), findsOneWidget);
   });
 
   testWidgets('Copy path puts the full path on the clipboard and says so', (tester) async {
@@ -98,12 +97,90 @@ void main() {
     expect(find.byTooltip('Copied'), findsOneWidget);
   });
 
-  testWidgets('Close dismisses it and nothing else happens', (tester) async {
+  testWidgets('asks for the backup password and a new one, twice', (tester) async {
     await _pump(tester);
 
-    await tester.tap(find.text('Close'));
+    expect(find.byType(TextField), findsNWidgets(3));
+    expect(find.text('The backup\u2019s password'), findsOneWidget);
+    expect(find.text('New password for this computer'), findsOneWidget);
+    expect(find.text('New password again'), findsOneWidget);
+    expect(find.text('Import'), findsOneWidget);
+  });
+
+  testWidgets('still describes the shortcut, including the close-PIP question and "Default"', (tester) async {
+    await _pump(tester);
+
+    expect(find.textContaining('Restore PIP from backup'), findsOneWidget);
+    expect(find.textContaining('still running in the background'), findsOneWidget);
+    expect(find.textContaining('\u201cDefault\u201d'), findsOneWidget);
+  });
+
+  testWidgets('hands both passwords to the import and closes with its result', (tester) async {
+    String? gotBackup;
+    String? gotNew;
+    final opened = await _pump(tester, onImport: (b, n) async {
+      gotBackup = b;
+      gotNew = n;
+      return {'slug': 'batman', 'name': 'BatMan', 'state': 'locked'};
+    });
+
+    await _fill(tester);
+    await tester.tap(find.text('Import'));
+    await tester.pumpAndSettle();
+
+    expect(gotBackup, '77777777');
+    expect(gotNew, 'batman-local-1');
+    expect(opened.closed, isTrue);
+    expect(opened.result?['name'], 'BatMan');
+  });
+
+  group('refusals the client makes without a round trip', () {
+    for (final c in [
+      ('an empty backup password', '', 'batman-local-1', 'batman-local-1', 'Enter the backup password'),
+      ('a new password under 8 characters', '77777777', 'short', 'short', 'at least 8'),
+      ('two new passwords that differ', '77777777', 'batman-local-1', 'batman-local-2', 'different'),
+      ('a new password equal to the backup password', '77777777', '77777777', '77777777', 'different from the backup'),
+    ]) {
+      testWidgets(c.$1, (tester) async {
+        var called = false;
+        await _pump(tester, onImport: (b, n) async {
+          called = true;
+          return {};
+        });
+
+        await _fill(tester, backup: c.$2, fresh: c.$3, again: c.$4);
+        await tester.tap(find.text('Import'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining(c.$5), findsOneWidget);
+        expect(called, isFalse, reason: 'a refusal the client can make was sent to the backend');
+        expect(find.byType(ImportBackupDialog), findsOneWidget);
+      });
+    }
+  });
+
+  testWidgets("shows the backend's own sentence and stays open so a typo can be corrected", (tester) async {
+    final opened = await _pump(tester, onImport: (b, n) async {
+      throw ApiException(422, '{"detail":"carried.pipbak did not open with that password. Nothing was written."}');
+    });
+
+    await _fill(tester);
+    await tester.tap(find.text('Import'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('did not open with that password'), findsOneWidget);
+    expect(find.byType(ImportBackupDialog), findsOneWidget);
+    expect(opened.closed, isFalse);
+  });
+
+  testWidgets('Cancel closes it with nothing imported', (tester) async {
+    final opened = await _pump(tester);
+
+    await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
     expect(find.byType(ImportBackupDialog), findsNothing);
+    expect(opened.closed, isTrue);
+    expect(opened.result, isNull);
   });
 }

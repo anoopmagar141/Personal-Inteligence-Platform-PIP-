@@ -10,13 +10,34 @@
 // profile redresses the screen for the profile switched TO rather than leaving
 // one profile's words under another profile's name.
 
+// ignore: depend_on_referenced_packages
+import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pip_flutter_client/api_client.dart';
 import 'package:pip_flutter_client/screens/sign_in_screen.dart';
 import 'package:pip_flutter_client/theme.dart';
+
+/// A picked file, for a test: the real picker is a platform call nothing here can answer.
+base class _FakePicked extends PlatformFile {
+  _FakePicked(this.name, String path) : uri = Uri.file(path);
+
+  @override
+  final String name;
+  @override
+  final Uri uri;
+  @override
+  XFile get xFile => throw UnimplementedError();
+  @override
+  Future<int> length() async => 1;
+  @override
+  Future<Uint8List> readAsBytes() async => Uint8List(0);
+  @override
+  Stream<Uint8List> readAsByteStream() => const Stream.empty();
+}
 
 class FakeApi extends ApiClient {
   final List<String> unlocked = [];
@@ -63,6 +84,26 @@ class FakeApi extends ApiClient {
     return stateAfterSwitch[slug] ?? 'locked';
   }
 
+  /// What the first-run import was asked to do, and what the backend answers.
+  final List<Map<String, String>> imported = [];
+  Map<String, dynamic> importResult = {'slug': 'batman', 'name': 'BatMan', 'state': 'locked'};
+
+  @override
+  Future<Map<String, dynamic>> importBackup({
+    required String path,
+    required String backupPassword,
+    required String newPassword,
+  }) async {
+    if (throwThis != null) throw throwThis!;
+    imported.add({'path': path, 'backup': backupPassword, 'new': newPassword});
+    // The installation now has the imported profile, as the backend would say.
+    profiles = [
+      {'slug': importResult['slug'], 'name': importResult['name'], 'exists': true},
+    ];
+    activeProfile = importResult['slug'] as String;
+    return importResult;
+  }
+
   @override
   Future<Map<String, dynamic>> createProfile(String name) async {
     if (throwThis != null) throw throwThis!;
@@ -87,6 +128,7 @@ Future<FakeApi> pumpSignIn(
   VoidCallback? onUnlocked,
   Object? throwThis,
   FakeApi? api_,
+  Future<PlatformFile?> Function()? pickBackup,
 }) async {
   final api = (api_ ?? FakeApi())..throwThis = throwThis;
   // disableAnimations, so pumpAndSettle below has something to settle to. This
@@ -103,6 +145,7 @@ Future<FakeApi> pumpSignIn(
             api: api,
             state: state,
             onUnlocked: onUnlocked ?? () {},
+            pickBackup: pickBackup,
           ),
         ),
       ),
@@ -115,6 +158,77 @@ Future<FakeApi> pumpSignIn(
 void main() {
   _legibilityTests();
   _migrationTests();
+  group('first-run import', () {
+    PlatformFile backupFile() => _FakePicked('BatMan_PIP_story.pipbak', r'D:\Backups\BatMan_PIP_story.pipbak');
+
+    Future<void> fillAndImport(WidgetTester tester) async {
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), '77777777');
+      await tester.enterText(fields.at(1), 'batman-local-1');
+      await tester.enterText(fields.at(2), 'batman-local-1');
+      await tester.tap(find.text('Import'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('imports from the welcome screen and carries on to sign-in for the imported profile', (tester) async {
+      final api = FakeApi()..profiles = const [];
+      await pumpSignIn(tester, AuthState.setup, api_: api, pickBackup: () async => backupFile());
+
+      await tester.tap(find.text('Import existing PIP'));
+      await tester.pumpAndSettle();
+      await fillAndImport(tester);
+
+      expect(api.imported, [
+        {'path': r'D:\Backups\BatMan_PIP_story.pipbak', 'backup': '77777777', 'new': 'batman-local-1'},
+      ]);
+      expect(find.text('Welcome to PIP'), findsNothing, reason: 'still on the welcome screen after importing');
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.textContaining('“BatMan”'), findsOneWidget, reason: 'the person is not told what arrived');
+      expect(find.text('Choose a password'), findsNothing);
+    });
+
+    testWidgets('the imported profile is signed in to with the password just chosen', (tester) async {
+      final api = FakeApi()..profiles = const [];
+      await pumpSignIn(tester, AuthState.setup, api_: api, pickBackup: () async => backupFile());
+      await tester.tap(find.text('Import existing PIP'));
+      await tester.pumpAndSettle();
+      await fillAndImport(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'batman-local-1');
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+
+      expect(api.unlocked, ['batman-local-1']);
+      expect(api.unlockedProfiles, ['batman']);
+    });
+
+    testWidgets('a refusal leaves the welcome screen where it was', (tester) async {
+      final api = FakeApi()..profiles = const [];
+      await pumpSignIn(tester, AuthState.setup, api_: api, pickBackup: () async => backupFile());
+      await tester.tap(find.text('Import existing PIP'));
+      await tester.pumpAndSettle();
+      api.throwThis = ApiException(422, '{"detail":"That file is not a PIP backup."}');
+
+      await fillAndImport(tester);
+
+      expect(find.textContaining('not a PIP backup'), findsOneWidget);
+      expect(find.byType(ImportBackupDialog), findsOneWidget);
+      api.throwThis = null;
+    });
+
+    testWidgets('choosing no file does nothing', (tester) async {
+      final api = FakeApi()..profiles = const [];
+      await pumpSignIn(tester, AuthState.setup, api_: api, pickBackup: () async => null);
+
+      await tester.tap(find.text('Import existing PIP'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ImportBackupDialog), findsNothing);
+      expect(find.text('Welcome to PIP'), findsOneWidget);
+      expect(api.imported, isEmpty);
+    });
+  });
+
   group('first run', () {
     testWidgets('offers distinct create and import paths', (tester) async {
       final api = FakeApi()..profiles = const [];
