@@ -2223,6 +2223,13 @@ Tested, no defect found:
   2026-07-03, which lacks six columns on `decision_candidates_pending` and
   `memory_candidates_pending` (added in mid-August). No real backup can exist from then,
   so it is recorded, not fixed. The test data was thin (an identity row, one conversation).
+- **The Backup screen's Export button.** Its command line (`cmd /c start "PIP Export"
+  powershell.exe ... -File <path>`, `backup_view.dart`) was run for real against a
+  stand-in `export_pip.ps1` under paths with spaces, parentheses (`Program Files
+  (x86)`), `&`, `^`, `!`, an apostrophe, and accented and Chinese characters: every
+  one ran. It fails only for a path containing a matched pair of percent signs
+  (`100%PATH% off`), which `cmd` expands as an environment variable. Left as a known
+  limit: no real install lives under such a name.
 - **A large backup.** A 322 MB database of incompressible document blobs plus 2000
   conversations exported in 5 s, staged in 6 s and swapped in under a second; the app's
   restore request has no client timeout. What a large restore costs is the re-index after
