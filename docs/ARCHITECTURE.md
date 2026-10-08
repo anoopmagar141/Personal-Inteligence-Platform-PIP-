@@ -267,10 +267,20 @@ so there is one write path, not two.
   immediately. `restore.preflight()` makes every check staging makes *before* a profile
   is registered (both call `_open_checked_backup`, so they cannot disagree), which is
   what lets a refusal leave the installation empty. The profile is named from the
-  backup's `identity` row, or "Imported profile". A swap whose process died between
+  backup's `identity` row, or "Imported profile"; its folder name comes from
+  `profiles.slugify`, which gives a name in another script `profile-` plus eight hex
+  digits of a hash (a name with no letter or digit at all takes `imported-profile`), so
+  no backup is refused for its owner's name. Imports run one at a time: activating a
+  profile points the whole process at it, so a second one gets a 409. A swap whose process died between
   its last two renames is finished by the next start (`drain_pending_restore` recognises
   "temporary database gone, temporary salt present, a database in place, no salt in
   place"); `restore_backup.py` removes its temporary copy however it ends.
+- **Secrets are compared as bytes.** `hmac.compare_digest` and `secrets.compare_digest`
+  raise `TypeError` for a `str` with any non-ASCII character, so a password or bearer
+  token in an accented language, Devanagari, Chinese or with an emoji used to kill the
+  export prompt, the shortcut restore's prompt and the token check (a request with a
+  non-ASCII token was a server error, not a 401). All three encode to UTF-8 first
+  (FREEZE_LIST §7.29); a new comparison of user-typed text must do the same.
 - **A profile delete can be recorded rather than performed.** A chat session's
   connection is closed by a submission to its own pinned worker, and
   `server.py`'s disconnect handler documents that such a submission can never

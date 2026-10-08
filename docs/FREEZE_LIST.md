@@ -2385,6 +2385,58 @@ for documents and the 800-word budget - were not tested; each can be run through
 as a new condition with a rule written first. Limits: one hand, one 7B model, one corpus of
 technical Markdown, temperature 0 (a user's model samples), small numbers.
 
+### 7.29 The hunt for unrecorded import and export defects (run 2026-10-08, five found and fixed)
+
+The first item of the second priority list: three agents sent to look for defects nobody had
+recorded in the first-run import, the export side and the restore core had been stopped by the
+usage limit. This round was done inline. Method: read the code for the places user-typed text meets
+SQL, a path, a comparison or a process-wide switch, then probe those places with inputs no earlier
+test used. The earlier rounds had used one ASCII password, one ASCII name and one import at a time;
+every defect found is a case of that.
+
+**Found and fixed, each with a test seen failing first and hand-made mutations caught.**
+- **A password or token in any script crashed three comparisons** (`6146381`).
+  `hmac.compare_digest` and `secrets.compare_digest` raise `TypeError` for a `str` with a non-ASCII
+  character. The export prompt (`_is_live_secret`) died with a traceback after the backup password
+  had been typed twice; the shortcut restore's prompt did the same for a new password; and a
+  request with a non-ASCII bearer token was a server error instead of a 401 (not a bypass - the
+  exception ended the request). Compared as UTF-8 bytes now. 17 tests failed before; 3 of 3
+  mutations caught.
+- **A backup could not be imported if its owner's name had no a-z or 0-9** (`59bc820`). The folder name
+  comes from `slugify`, which kept only those; a name in Devanagari or Chinese left nothing, and the
+  import answered "A profile with that name already exists", which was false and had no way round.
+  `slugify` now gives such a name `profile-` and eight hex digits of a hash; a name with no letter or
+  digit in any script is still refused when creating a profile, and the import takes `imported-profile`
+  for it. 8 tests failed before; 3 of 3 mutations caught.
+- **Two imports at once raced** (`cc6ff87`). Activating a profile points the whole process at it, so a
+  second import moved the first one's target: one run gave a 500 ("the staged restore was not
+  installed"), another gave both a 200 with one reporting the other profile's state. A lock now answers
+  the second with a 409. The dialog already disables its button, so this was reachable only from
+  outside the screen. 1 test failed before; the mutation is caught.
+- **The provider-consent seed raced** (`f1cf5b9`). It counted the rows and, if none, inserted the defaults; the
+  sign-in and the catch-up thread each open their own connection to a new profile and both can read "empty", so the
+  second insert hit `UNIQUE(provider_id)`. Seen once, out of the lifespan's shutdown, in a full backend run
+  (an upload test that passes alone, 3 of 3), then found by reading. The insert is now `ON CONFLICT DO NOTHING`;
+  1 test failed before; the mutation is caught.
+
+**Probed, no defect.** Twelve passwords with quotes, semicolons, a backslash, `%s`, spaces at both ends,
+300 characters, a tab and an SQL injection string, through the real export and the import (the only
+failures were the non-ASCII ones above; `a;b--c` plus `!` was seven characters, a test mistake). Names
+`Zoë`, `O'Brien`, `CON` and sixty-four letters import. The document write-back
+(`materialise_documents`) uses only the file's base name inside the profile's folder, so a crafted backup
+cannot write elsewhere; an empty or `..` name is repointed to a directory, not written. Every
+`PRAGMA key` and `ATTACH` quotes its text (`_sql_quote`). `backup_mark.check` builds one query from a table
+name in the backup's own record; the connection is read-only, so this is reasoned, not demonstrated, and
+not changed.
+
+**Not done, stated rather than hidden.**
+- A real console's `getpass` with non-ASCII input was not exercised (a pipe stands in); Windows reads
+  it as Unicode.
+- A password typed in different Unicode normal forms on two machines would derive different keys; no
+  evidence it happens, and nothing normalises. A lone surrogate in a JSON password would fail the key
+  derivation with an encode error; no keyboard produces one.
+- The real second computer, and the real-window run of the first-run import, are still outstanding.
+
 ---
 
 ## 8. Status
@@ -2441,6 +2493,7 @@ technical Markdown, temperature 0 (a user's model samples), small numbers.
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
+| Hunt for unrecorded import/export defects | Run 2026-10-08 (§7.29), five fixed | A password or bearer token in any script crashed the export prompt, the shortcut restore's prompt and the token check (`compare_digest` on `str`): fixed. A backup whose owner's name has no a-z or 0-9 could not be imported ("already exists"): fixed. Two imports at once raced: fixed. The provider-consent seed raced between two connections: fixed. Probed with no defect: odd ASCII passwords, document write-back paths, SQL quoting. Not done: a real console's non-ASCII `getpass`, a real second computer, the real-window first-run import |
 
 ---
 
