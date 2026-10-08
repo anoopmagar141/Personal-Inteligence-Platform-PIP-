@@ -116,6 +116,7 @@ class ChatViewState extends State<ChatView> {
   final _inputFocus = FocusNode();
   final List<ChatMessage> _transcript = [];
   StreamSubscription? _subscription;
+  StreamSubscription? _statusSubscription;
 
   String _streamingText = '';
   bool _isStreaming = false;
@@ -158,6 +159,7 @@ class ChatViewState extends State<ChatView> {
   void initState() {
     super.initState();
     _subscription = widget.chatClient.events.listen(_handleEvent);
+    _statusSubscription = widget.chatClient.status.listen(_handleStatus);
     // The composer's border colour tracks focus. Without this the field would
     // take focus and keep the resting border until some unrelated setState
     // happened to repaint it.
@@ -183,6 +185,30 @@ class ChatViewState extends State<ChatView> {
     // shows, or the scoping silently describes whichever project happened to
     // be active when the view was first built.
     if (oldWidget.activeProjectId != widget.activeProjectId) _loadConversations();
+  }
+
+  /// A connection that drops mid-reply ends the turn (FREEZE_LIST D-23).
+  ///
+  /// Nothing the server does can reach this: when the backend dies or restarts in the
+  /// middle of a reply the socket simply closes, with no done, error or stopped. Only
+  /// the sidebar's connection pill used to listen to this status, so the reply stayed
+  /// "writing", the composer stayed locked on Stop, and the reconnect that followed
+  /// did not end the turn either. Treated like an error event: what streamed in so
+  /// far is not kept (the server drops a partial reply too), the person is told, and
+  /// the next message can go. A drop while nothing is being answered says nothing.
+  void _handleStatus(String status) {
+    if (!mounted || status != 'disconnected' || !_isStreaming) return;
+    setState(() {
+      _transcript.add(ChatMessage(
+        'system',
+        'The connection to PIP was lost before this reply finished. Send your message again.',
+      ));
+      _streamingText = '';
+      _isStreaming = false;
+      _lastStageHint = _pendingStageHint;
+      _pendingStageHint = null;
+    });
+    _scrollToBottom();
   }
 
   void _handleEvent(ChatEvent event) {
@@ -378,6 +404,7 @@ class ChatViewState extends State<ChatView> {
   @override
   void dispose() {
     _subscription?.cancel();
+    _statusSubscription?.cancel();
     _inputFocus.removeListener(_onFocusChanged);
     _controller.dispose();
     _scrollController.dispose();

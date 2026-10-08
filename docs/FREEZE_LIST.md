@@ -2160,6 +2160,13 @@ same day.
   held only by `switchConversation`, and the server sends none for a
   connection that has not sent a message. Reached when the backend process
   dies or restarts mid-reply. Server-side fixes cannot reach it.
+  **Fixed 2026-10-08, client side, test-first.** `ChatView` now listens to the
+  status stream and ends the turn on a drop (a system line, the composer back to
+  Send); a drop while idle or after a finished reply says nothing. `WsChatClient`
+  now remembers the conversation id from a `session_info`, so the reconnect resumes
+  it instead of starting a second conversation under the same transcript. 8 tests in
+  `chat_connection_drop_test.dart` (the two that describe the defect failed on the
+  unfixed screen), 5 mutations caught. Not driven in a window.
 - **Stage 9 still does not fall back on an unexpected provider
   exception.** The turn now ends cleanly, but the next provider in the
   chain is not tried. Whether it should be is a Stage 9 decision, left

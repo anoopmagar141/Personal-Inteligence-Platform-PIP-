@@ -12,6 +12,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class ChatEvent {
@@ -47,21 +48,40 @@ class WsChatClient {
   WsChatClient(this.wsUrl, {this.apiToken = '', this.reconnectDelay = const Duration(seconds: 2), String? conversationId})
       : _conversationId = conversationId; // ignore: prefer_initializing_formals
 
+  /// What the next connection will ask for. Visible for tests, which cannot open a socket.
+  @visibleForTesting
+  Uri get connectUri => Uri.parse(wsUrl).replace(queryParameters: {
+        'token': apiToken,
+        if (_conversationId != null) 'conversation_id': _conversationId,
+      });
+
+  /// One frame from the server. Visible for tests.
+  ///
+  /// A session_info that names a conversation is REMEMBERED here, not only passed on
+  /// (FREEZE_LIST D-23). The id used to be held only by switchConversation, and the
+  /// server names none for a connection that has not sent a message, so after a drop
+  /// the reconnect asked for "a fresh conversation": the screen went on showing one
+  /// transcript while the next message started a second conversation on the server.
+  /// A session_info with no id never forgets one we have.
+  @visibleForTesting
+  void handleRaw(String raw) {
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    final type = decoded['type'] as String;
+    if (type == 'session_info') {
+      final id = (decoded['data'] as Map<String, dynamic>?)?['conversation_id'];
+      if (id is String && id.isNotEmpty) _conversationId = id;
+    }
+    _eventController.add(ChatEvent(type, decoded['data']));
+  }
+
   void connect() {
     if (_disposed) return;
     _statusController.add('connecting');
     try {
-      final uri = Uri.parse(wsUrl).replace(queryParameters: {
-        'token': apiToken,
-        if (_conversationId != null) 'conversation_id': _conversationId,
-      });
-      final channel = WebSocketChannel.connect(uri);
+      final channel = WebSocketChannel.connect(connectUri);
       _channel = channel;
       _subscription = channel.stream.listen(
-        (raw) {
-          final decoded = jsonDecode(raw as String) as Map<String, dynamic>;
-          _eventController.add(ChatEvent(decoded['type'] as String, decoded['data']));
-        },
+        (raw) => handleRaw(raw as String),
         onDone: () {
           _statusController.add('disconnected');
           _scheduleReconnect();
