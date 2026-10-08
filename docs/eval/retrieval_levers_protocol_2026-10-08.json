@@ -1,0 +1,44 @@
+{
+ "about": "Pre-registered protocol for testing the two levers that docs/eval/retrieval_e2e_results_2026-10-08.md pointed at. Written and committed BEFORE any lever was run, together with retrieval_heldout_labels_2026-10-08.json, so the wording of the lever, the held-out questions, the grading rules and the decision rule cannot be tuned to the results.",
+ "question": "At the 0.30 cut-off, which got 25 more correct answers but 5 more wrong ones, does (D) telling the model in the prompt how to treat documents, or (E) letting all three retrieved passages reach the model, or both (F), keep the correct answers and remove the wrong ones?",
+ "why_a_held_out_set": "The six wrong answers at 0.30 were seen before lever D was written, and D was written to address them. Judged on those same 66 questions it could only confirm itself. So the verdict is drawn ONLY from the 40 held-out questions in retrieval_heldout_labels_2026-10-08.json (30 answerable, 10 unanswerable), drawn from the same seven documents by a seeded sampler. The 66 development questions are also run under D and E and reported, but cannot support or reject a lever.",
+ "levers": {
+  "D_document_rule": {
+   "what": "One rule appended to the Stage 7 system instructions, as rule 7, after the existing six, wrapping stage_07.run in the harness so the pipeline is not edited.",
+   "text": "7. Under RELEVANT DOCUMENTS are passages from the user's own files. When a question is about something those files could state, answer it only from what a passage actually states. If the passages are about the same subject but do not state what was asked, say that the documents you were shown do not say, and stop - do not fill the gap from the surrounding text or from general knowledge."
+  },
+  "E_document_budget": {
+   "what": "settings pipeline.rag_chunks_tokens raised from 800 to 1800 words (three 500-word passages plus their file paths fit), by wrapping stage_07.get_settings in the harness. context_token_budget (6000) and response_reserved_tokens (2000) are unchanged; if the assembled context would not fit, Stage 7's own drop order applies as in production."
+  }
+ },
+ "conditions": {
+  "A": {"similarity_threshold": 0.6, "note": "as shipped"},
+  "C": {"similarity_threshold": 0.3, "note": "the previous run's best cut-off, no lever; the baseline for the levers"},
+  "D": {"similarity_threshold": 0.3, "document_rule": true},
+  "E": {"similarity_threshold": 0.3, "rag_chunks_tokens": 1800},
+  "F": {"similarity_threshold": 0.3, "document_rule": true, "rag_chunks_tokens": 1800}
+ },
+ "which_conditions_run_on": {
+  "held_out": ["A", "C", "D", "E", "F"],
+  "development": ["D", "E"],
+  "development_replication": "A and C on the 12 development questions whose answer was WRONG for the first time at 0.30 (6) plus the first 6, in id order, that were CORRECT at 0.30; to check that setting num_ctx (below) and re-running does not change the earlier answers. The rest of the development baseline is the earlier run's answers."
+ },
+ "held_fixed": {
+  "path": "backend.core.pipeline.run_sync, as in the previous run",
+  "model": "qwen2.5:7b, temperature 0, seed 1, max_tokens 400",
+  "num_ctx": "8192 on every call in this run (the previous run left Ollama's default). Added because E can build prompts near a 4096-token window, which Ollama cuts without error; raising it removes that confound for every condition alike.",
+  "profile": "a fresh in-memory profile; cache cleared before every call",
+  "documents": "the seven documents at snapshot_commit, ingested once at the current 500/50 chunking",
+  "one_call_per_distinct_prompt": "conditions that build the same prompt for a question share one answer"
+ },
+ "grading": {
+  "labels": "CORRECT, DECLINES, WRONG, VAGUE, defined as in retrieval_e2e_protocol_2026-10-08.json. For a lever condition a DECLINES that says the documents do not state the answer counts as DECLINES, as does 'I don't have that in front of me'.",
+  "who_and_how": "the assistant that ran the check, one answer at a time on a sheet shuffled with a fixed seed that shows the question, the reference line (or 'no document answers this') and the answer, with condition and passages hidden and the key file not opened until every label is recorded. Same hand that wrote the questions: not independent.",
+  "dedupe": "an answer whose text is identical to an already graded answer for the same question is not graded again and takes that grade. The earlier run's grades are reused only for development answers whose text is identical to the earlier answer.",
+  "borderline": "any answer I hesitate over is listed with a strict and a lenient reading, as before; the verdict must not depend on the choice."
+ },
+ "decision_rule": {
+  "text": "Fixed before the run, applied to each of D, E and F on the HELD-OUT set only, relative to condition A. A lever is SUPPORTED only if all four hold: (1) CORRECT on the 30 answerable questions rises by at least 6 and a two-sided sign test on the paired questions gives p < 0.05; (2) WRONG on the 30 answerable questions does not rise (count under the lever at most the count under A); (3) WRONG on the 10 unanswerable questions rises by at most 1; (4) CORRECT on the 30 is at least the count under condition C minus 3 (the lever must not throw away the gain it is meant to keep). If any fails the lever is NOT SUPPORTED. VALIDITY GUARD: if WRONG on the 30 under condition C is no more than the count under A plus 1, the held-out set did not reproduce the problem the levers are meant to fix, so it cannot show that a lever fixes it, and every verdict is INCONCLUSIVE whatever (1) to (4) say."
+ },
+ "also_recorded": "prompt_eval_count per call (against num_ctx), the words of documents text that reached each prompt (to see how often E changes what the model is shown), and for every lever condition the held-out answers that changed grade relative to C."
+}
