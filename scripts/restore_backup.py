@@ -252,7 +252,10 @@ def prompt_new_live_password(backup_password: str) -> str:
     first = getpass.getpass("NEW password for the restored database: ")
     if not first:
         sys.exit("ERROR: an empty password would leave the database unencrypted in practice.")
-    if hmac.compare_digest(first, backup_password):
+    # As UTF-8 bytes: compare_digest raises TypeError for a str with any non-ASCII
+    # character, which ended the shortcut restore with a traceback for a new
+    # password containing an accent, Devanagari, Chinese or an emoji (FREEZE_LIST 7.29).
+    if hmac.compare_digest(first.encode("utf-8"), backup_password.encode("utf-8")):
         sys.exit(
             "ERROR: that is the backup password. The restored database needs a "
             "different one, or losing either secret loses both."

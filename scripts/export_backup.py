@@ -280,8 +280,14 @@ def _is_live_secret(candidate: str, live_key: str) -> bool:
 
     That derivation costs a full PBKDF2 pass, which is deliberately slow (see
     KDF_ITERATIONS). Paid once, at a prompt the user is already sitting at.
+
+    Compared as UTF-8 bytes, not str. hmac.compare_digest raises TypeError for
+    any str with a non-ASCII character, so a backup password with an accent, a
+    Devanagari or Chinese letter or an emoji killed the export with a traceback
+    AFTER it had been typed twice (FREEZE_LIST 7.29). Every password test before
+    that one was ASCII.
     """
-    if hmac.compare_digest(candidate.strip(), live_key):
+    if hmac.compare_digest(candidate.strip().encode("utf-8"), live_key.encode("utf-8")):
         return True
 
     _ensure_repo_on_path()

@@ -63,4 +63,13 @@ def get_or_create_token(token_path: Path | None = None) -> str:
 def verify_token(provided: str | None, token_path: Path | None = None) -> bool:
     if not provided:
         return False
-    return secrets.compare_digest(provided, get_or_create_token(token_path))
+    # Compared as bytes. secrets.compare_digest raises TypeError for a str with a
+    # non-ASCII character, and `provided` is whatever arrived in the header or the
+    # WebSocket query: a bearer token of "é" was a server error, not a 401
+    # (FREEZE_LIST 7.29). Not a bypass - the exception ended the request - but an
+    # unauthenticated caller should never be able to cause one. surrogatepass so
+    # that even a lone surrogate from a decoded query string is just "no match".
+    expected = get_or_create_token(token_path)
+    return secrets.compare_digest(
+        provided.encode("utf-8", "surrogatepass"), expected.encode("utf-8", "surrogatepass")
+    )
