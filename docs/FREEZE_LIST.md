@@ -24,7 +24,9 @@ report only): the data round trip holds, D-01/D-03/D-14 included, and five
 new defects were found on the backup and restore path (D-17 to D-21). The
 owner then authorized D-22, the turn a raising pipeline left unended, the
 open item §7.23 named; landed the same day (§7.25), which also found D-23.
-D-02 is open. Anything further needs a new authorization.
+On 2026-10-07 the owner asked for the import and export logic to be tested
+and its errors fixed: D-18, D-21, D-11, D-20, D-07, D-17, D-19 and D-09 landed
+(§7.26). D-02 is open. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -2172,6 +2174,56 @@ findings.
 
 ---
 
+### 7.26 Import and export fixes (authorized 2026-10-07, landed 2026-10-07 to 2026-10-08)
+
+The owner asked for the import and export logic to be tested and any error in
+it fixed, before building a test profile to import. The open defects of §7.24
+were taken one at a time, test first, the test seen failing, then a hand-made
+mutation of the guard seen failing it again, one commit each. Branch
+`fix-import-and-export-features`, from `32d41e4`.
+
+| ID | Fix | Commit |
+|---|---|---|
+| D-18 | A backup is accepted only if something outside its own contents says it is a whole export. `backend/core/backup_mark.py` is the one rule for the export and both restores: the export writes a one-row `pip_backup_mark` table into the backup *before* copying a row (`writing`) and turns it to `complete`, with the table counts, only after `verify()`, reading it back. A file with no mark predates marks and is accepted if it holds PIP's `identity` table; an empty file, a file with none of PIP's tables, a `writing` mark and counts that no longer match the mark are each refused with a sentence. Both restores drop the mark from the database they build. | `60f3f3e` |
+| D-21 | `newest_backup()` picks by modification time, then the date and number in the name read as numbers, as the listing and the Backup screen already order them. | `b6ea022` |
+| D-11 | `stage_restore` answers a folder, an empty backup password, a new password equal to the backup password and a damaged backup with a `RestoreError` sentence (422), and removes whatever temporary files a failed call wrote. The last was found while testing: a failure after the converted database existed left a full re-encrypted copy of the data in the profile folder. | `adedaff` |
+| D-20, D-07 | The swap (`restore._install`) and the shortcut's `rebuild_vector_index` move the profile's `documents/` and `chroma/` aside with the database, so the write-back starts from an empty folder. `materialise_documents` leaves a document alone only if its file is inside *this* profile's folder, so a restore into a second profile on the same machine writes its own copies. | `2458c9e` |
+| D-17 | The counts and the copy come from one read transaction (`BEGIN`, count, `sqlcipher_export`, `COMMIT`), and an export that fails after its file exists removes the file, so "Nothing was written" is true. | `c4959e8` |
+| D-19 | The status, cancel and replace routes act only on a restore staged for the signed-in profile; staging refuses while another profile's is waiting (unless its files are gone), replaces the profile's own earlier staging, and a profile's leftover `restore-*.tmp.*` are in `erasable_paths`. Found on the way: staged files were named by the second, and a second staging inside one second failed with "file is not a database"; they now carry a random suffix. | `f0cf397` |
+| D-09 | Nothing stops the backend when the window closes. `scripts/_backend.ps1` finds PIP's backend by the owner of the port *and* a command line naming `backend.api.server`; `launch_pip.ps1` stops a running one only when `pending-restore.json` exists, so the restore is installed by a new backend; `restore_pip.ps1` offers to close it before restoring. Wider than §7.24 said: restore_backup.py refuses while the backend holds the lock, so the first-run "Import existing PIP", which sends the person to that shortcut, could not start on the machine it is shown on. | `5acf162` |
+
+Evidence: 7 new test files (`test_backup_completeness.py`,
+`test_restore_newest_backup.py`, `test_restore_bad_inputs.py`,
+`test_restore_documents.py`, `test_export_race.py`, `test_restore_scoping.py`,
+`test_backend_launcher.py`) and one changed (`test_restore_in_app.py` names the
+marker's two new keys). Hand-made mutations: 9, 4, 5, 6, 5, 8 and 5 caught for the seven commits
+in order. Three tests passed vacuously and were rewritten after the break-it run
+showed it (a folder named for the word asserted, an export test that failed
+before the file existed, a missing mtime-versus-name case); one guard, the wait
+for the port to free in `Stop-PipBackend`, is a timing guard no deterministic
+test pins.
+
+**Not done, stated rather than hidden.**
+- The three agents sent to hunt for *unrecorded* import and export defects
+  (first-run import, export side, restore core) did not complete: the session
+  limit stopped them. What was found beyond §7.24 came from writing the tests,
+  above. The first-run import journey was read, not driven.
+- Opening the chosen `.pipbak` read-only (the D-18 report's second point) was
+  not done: an `ATTACH` of the new database from a read-only connection inherits
+  its flags, so it needs per-attach URIs, and the mark already covers the
+  part-written case it was for.
+- The Flutter dialogs were not changed. The welcome screen's "Import existing PIP"
+  still describes the shortcut without saying it may ask to close PIP, which is
+  true now and harmless; changing it needs a client rebuild. The first-run
+  import still only points at the shortcut and restores nothing itself, and the
+  shortcut always restores into a profile named "Default".
+- An older backup (no mark) that was cut short and still has an `identity`
+  table cannot be told from a whole one.
+- D-02 (Smart App Control blocks torch here) is untouched; every test ran under
+  the embedding stand-in.
+
+---
+
 ## 8. Status
 
 ### 8.1 Decisions made (choices; need no evidence)
@@ -2223,6 +2275,7 @@ findings.
 | D-16 chat turn with no terminal event | Found and landed 2026-10-03 (§7.23) | A, latent: with no provider left after Stage 8 the socket got stage lines and no done/error, so the chat stayed "writing". The pipeline now sends its error. 3 socket tests through the real pipeline (1 seen failing first), 2 Flutter tests, 4 break-it mutations caught. Open item, a pipeline that raises, fixed as D-22 (§7.25) |
 | Migration journey re-run | Run 2026-10-03 (§7.24), report only | 10 variants, exports and shortcut restores through the real `export_pip.ps1` and `restore_pip.ps1`, 307 checks at `9968e8c`, every failure attributed; negative controls catch D-03 and D-14. Round trip holds (D-01 on every in-app restore that had a WAL to swap, D-03 with two profiles). New: D-18 empty or partial backup accepted (medium), D-20 same-named document taken over the backup's (medium, upper end), D-21 shortcut restores the first backup of the day (medium, low end), D-17 export race with a false "Nothing was written" (low, upper end), D-19 staged-restore state not scoped to the profile (low). Exit criterion not met as worded: D-09, D-18, D-20 |
 | D-22 raising pipeline ends the turn | Landed 2026-10-03 (§7.25) | A: an exception from the pipeline closed the socket mid-turn with no done/error. The transport now ends the turn with one error, keeps the connection, and saves the turn as the client was shown it. 3 socket tests (all seen failing first), 6 break-it mutations caught. Found: D-23, the client never ends a turn on a dropped connection (code reading) |
+| Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. Not done: the three defect-hunting agents (session limit), a read-only open of the backup, the Flutter dialogs |
 
 ---
 
