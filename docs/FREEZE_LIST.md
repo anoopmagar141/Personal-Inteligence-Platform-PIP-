@@ -2437,6 +2437,38 @@ not changed.
   derivation with an encode error; no keyboard produces one.
 - The real second computer, and the real-window run of the first-run import, are still outstanding.
 
+### 7.30 The two levers on the cut-off, and the check on the owner's own document (run 2026-10-08, report only)
+
+Reports `docs/eval/retrieval_levers_results_2026-10-08.md` and `docs/eval/own_docs_results_2026-10-08.md`; tool
+`scripts/eval_retrieval_levers.py`. The untested levers §7.28 pointed at (a prompt rule for documents, D; a documents
+budget of 1800 words in place of 800, E; both, F) were run on 40 **held-out** questions (30 answerable drawn by a seeded
+sampler, 10 no document answers), against the shipped setting (A) and plain 0.30 (C), with the wording, questions and
+decision rule committed before any run (`a1e5f97`). Rule D had been written to address the six wrong answers of §7.28, so
+judged on those 66 questions it could only confirm itself.
+
+**Verdict by the rule fixed in advance: neither lever, nor both, is supported.** Wrong answers among the 30 must not rise
+above the shipped setting's 4; they were 6 (D), 8 (E) and 7 (F), while correct answers rose by 12 or 13 with none worse
+and no invented answer to the 10 unanswerable questions. The validity guard held (plain 0.30 gave 8 wrong, so the set could
+have shown a fix). The same under the strict and lenient readings of 30 borderline calls.
+
+**What happened.** The prompt rule left the 15 misleading-passage questions exactly where they were (8 declined, 6 wrong);
+the larger budget had nothing to rescue on the held-out questions (the answer was never retrieved-but-cut) and swapped two
+gains for two losses. On the development questions both looked better (D: wrong 9 to 5; E: correct 26 to 32), which is what
+tuning to a test set looks like and why they decided nothing. Re-running 12 development questions under `num_ctx` 8192
+reproduced the earlier answers' text for 9 of 24 runs: grades matched, text did not.
+
+**The owner's own document** (their synopsis, 2,993 words, kept out of git; hashes in `own_docs_manifest_2026-10-08.json`,
+committed `90d2607` first). PIP does not accept `.docx` (`.pdf .md .txt .py .json .html` only). Search: found at 0.60 for
+**0 of 26** questions, at 0.30 for 7, at 0.20 for 13, at 0.15 for 15; the passage that answers scores a median 0.26
+(0.38 on the technical notes), so prose is harder, not easier. Answers: 1 correct as shipped, **8 at 0.30** (p = 0.039),
+wrong 3 to 1, no invention; the levers changed nothing. Verdict **inconclusive**: the guard was not met (plain 0.30 did not
+reproduce the wrong-answer problem here). 11 of the 26 got no passage even at 0.30, which the search step predicts.
+
+**Not done.** Nothing in the pipeline is changed. A cut-off below 0.30 (0.15 to 0.20 finds 13 to 15 of the 26 on the owner's
+document) was not run end to end, because the protocol fixed 0.30 in advance; it needs its own. Retrieval that returns fewer
+passages with no answer in them (a better embedder, token-aware chunks, a check of passage against question) was not tested.
+Limits: one hand, one 7B model, temperature 0, one 7-chunk document.
+
 ---
 
 ## 8. Status
@@ -2494,6 +2526,7 @@ not changed.
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
 | Hunt for unrecorded import/export defects | Run 2026-10-08 (§7.29), five fixed | A password or bearer token in any script crashed the export prompt, the shortcut restore's prompt and the token check (`compare_digest` on `str`): fixed. A backup whose owner's name has no a-z or 0-9 could not be imported ("already exists"): fixed. Two imports at once raced: fixed. The provider-consent seed raced between two connections: fixed. Probed with no defect: odd ASCII passwords, document write-back paths, SQL quoting. Not done: a real console's non-ASCII `getpass`, a real second computer, the real-window first-run import |
+| Levers on the cut-off, and the owner's own document | Run 2026-10-08 (§7.30), report only | Held-out set of 40: neither the document prompt rule (D), the 1800-word budget (E) nor both (F) is supported - wrong answers 6 / 8 / 7 against the shipped setting's 4, though correct answers rose by 12-13 and nothing invented; D and E only looked better on the development questions they were shaped on. Owner's own document (a 2,993-word synopsis, kept out of git): found at the shipped 0.60 for 0 of 26 questions, 7 at 0.30, 15 at 0.15; answers 1 correct shipped, 8 at 0.30 with no extra wrong; inconclusive by the validity guard. Nothing changed; a cut-off below 0.30 and retrieval that returns fewer no-answer passages are untested |
 
 ---
 
