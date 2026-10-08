@@ -220,12 +220,19 @@ def open_backup(path: pathlib.Path, password: str):
     alone never fails - the read below is what turns a wrong password into a
     clear message here instead of a confusing failure several steps later.
     """
-    conn = sqlcipher3.connect(str(path))
+    # Read-only: a journal left beside the file was otherwise played back into
+    # the person's own backup (FREEZE_LIST D-18). Same call as the in-app restore.
+    _ensure_repo_on_path()
+    from backend.core import backup_mark
+
+    conn = backup_mark.open_read_only(path, sqlcipher3.connect)
     conn.execute(f"PRAGMA key = {_sql_quote(password)}")
     try:
         conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
-    except sqlcipher3.DatabaseError:
+    except sqlcipher3.Error as exc:
         conn.close()
+        if backup_mark.is_leftover_journal_error(exc):
+            sys.exit(f"ERROR: {path.name} could not be read. {backup_mark.LEFTOVER_JOURNAL_SENTENCE}")
         sys.exit(
             f"ERROR: {path.name} did not open with that password. Nothing was "
             "written. If you have more than one backup, try --from with the other."

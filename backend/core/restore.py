@@ -194,6 +194,8 @@ def stage_restore(
                 leftover.unlink()
             except OSError:
                 pass
+        if isinstance(exc, sqlcipher3.Error) and backup_mark.is_leftover_journal_error(exc):
+            raise RestoreError(f"{source.name} could not be read. {backup_mark.LEFTOVER_JOURNAL_SENTENCE}")
         if isinstance(exc, sqlcipher3.Error):
             logger.warning(f"{source.name} could not be read all the way through: {exc}")
             raise RestoreError(
@@ -237,7 +239,7 @@ def _stage_restore(
             "losing either one loses both."
         )
 
-    backup = sqlcipher3.connect(str(source))
+    backup = backup_mark.open_read_only(source, sqlcipher3.connect)
     try:
         backup.execute(f"PRAGMA key = {_sql_quote(backup_password)}")
         try:
@@ -246,7 +248,9 @@ def _stage_restore(
             # password into a clear answer here rather than a confusing one
             # several steps later.
             backup.execute("SELECT count(*) FROM sqlite_master").fetchone()
-        except Exception:
+        except Exception as exc:
+            if backup_mark.is_leftover_journal_error(exc):
+                raise RestoreError(f"{source.name} could not be read. {backup_mark.LEFTOVER_JOURNAL_SENTENCE}")
             raise RestoreError(
                 f"{source.name} did not open with that password. Nothing was written."
             )

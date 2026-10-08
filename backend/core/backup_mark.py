@@ -124,6 +124,43 @@ def finish(path: Any, password: str, counts: dict[str, int], connect: Any) -> No
         conn.close()
 
 
+def open_read_only(path: Any, connect: Any) -> Any:
+    """
+    Open the backup a person chose WITHOUT the ability to write to it.
+
+    Both restores opened it read-write, so a rollback journal left beside it - a
+    copy taken while something was writing - was played back INTO the person's
+    own .pipbak by the step whose only job is to read it, and the journal was
+    consumed (FREEZE_LIST D-18, the first report's second point). Read-only, SQLite
+    cannot play the journal back: the open then fails and the person is told the
+    file could not be read, which is the honest answer about a file in that state.
+    The file is left exactly as it was found.
+
+    An ATTACH of the new database from this connection still works - checked,
+    because the first reading of this was that the attached file would inherit the
+    read-only flags, and it does not.
+
+    *connect* is sqlcipher3.connect, passed in as finish() does.
+    """
+    from pathlib import Path
+
+    return connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
+
+
+LEFTOVER_JOURNAL_SENTENCE = (
+    "A leftover journal file sits beside it, left by a copy made while the backup was "
+    "still being written, and PIP will not play it back into your file. Copy the "
+    ".pipbak again, on its own, from where it was exported. Nothing was written."
+)
+
+
+def is_leftover_journal_error(exc: BaseException) -> bool:
+    """A read-only open refuses a hot rollback journal with 'attempt to write a
+    readonly database'. That is a statement about the file's state, not about the
+    password, and the person should be told which."""
+    return "readonly" in str(exc).lower()
+
+
 def table_names(conn: Any) -> list[str]:
     return [
         r[0]

@@ -325,3 +325,73 @@ def test_the_shortcut_restores_a_complete_export(
 
     assert code == 0
     assert out.exists()
+
+
+# ---------------------------------------------------------------------------
+# The file the person chose is read, never written
+# ---------------------------------------------------------------------------
+
+
+def _backup_with_a_hot_journal(tmp_path):
+    """
+    A backup somebody copied while a writer was mid-transaction: the .pipbak and
+    a rollback journal beside it that SQLite would play back into it. Built the
+    way test_restore_in_app does for a WAL - the pair is copied out while the
+    writing connection is still open.
+    """
+    import shutil
+
+    path = tmp_path / "carried.pipbak"
+    conn = sqlcipher3.connect(str(path))
+    conn.execute(f"PRAGMA key = '{BACKUP_PASSWORD}'")
+    conn.execute("CREATE TABLE identity (id INTEGER PRIMARY KEY, name TEXT)")
+    conn.executemany("INSERT INTO identity VALUES (?, ?)", [(i, "x" * 200) for i in range(300)])
+    conn.commit()
+    # A journal only counts as hot once SQLite has synced it, which it does when
+    # the page cache spills into the database file. A small cache and an update
+    # across every page forces that; without it the journal is a stub that plays
+    # back nothing and the test would pass whatever the file is opened with.
+    conn.execute("PRAGMA cache_size = 2")
+    conn.execute("BEGIN")
+    conn.execute("UPDATE identity SET name = 'changed mid-transaction ' || id")
+    journal = path.with_name(path.name + "-journal")
+    assert journal.exists() and journal.stat().st_size > 0, "no journal to leave behind"
+    frozen = tmp_path / "frozen"
+    frozen.mkdir()
+    for p in (path, journal):
+        shutil.copyfile(p, frozen / p.name)
+    conn.rollback()
+    conn.close()
+    for p in (path, journal):
+        shutil.copyfile(frozen / p.name, p)
+    shutil.rmtree(frozen)
+    return path, journal
+
+
+def test_choosing_a_backup_never_writes_to_it(tmp_path):
+    """
+    Staging opened the chosen file read-write, so a hot journal beside it was
+    rolled back INTO the person's own .pipbak - their copy modified, and the
+    journal consumed, by a step whose job is to read it (FREEZE_LIST D-18).
+    """
+    path, journal = _backup_with_a_hot_journal(tmp_path)
+    before = (path.read_bytes(), path.stat().st_mtime_ns, journal.read_bytes())
+
+    with pytest.raises(restore.RestoreError, match="leftover journal"):
+        _stage(path, tmp_path)
+
+    assert journal.exists(), "the journal beside the chosen file was played back into it"
+    assert (path.read_bytes(), path.stat().st_mtime_ns, journal.read_bytes()) == before
+
+
+def test_the_shortcut_never_writes_to_the_chosen_backup_either(restore_script, monkeypatch, tmp_path):
+    path, journal = _backup_with_a_hot_journal(tmp_path)
+    before = (path.read_bytes(), path.stat().st_mtime_ns, journal.read_bytes())
+    out = tmp_path / "restored" / "pip.db"
+
+    with pytest.raises(SystemExit) as refused:
+        _drive_restore(restore_script, monkeypatch, path, out)
+
+    assert "leftover journal" in str(refused.value)
+    assert journal.exists(), "the journal beside the chosen file was played back into it"
+    assert (path.read_bytes(), path.stat().st_mtime_ns, journal.read_bytes()) == before
