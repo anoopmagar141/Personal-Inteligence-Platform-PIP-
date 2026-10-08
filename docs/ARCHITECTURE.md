@@ -247,6 +247,17 @@ so there is one write path, not two.
   counts disagree with its mark, is refused with a sentence. The mark describes
   the file, not the profile, so both restores drop it from the database they
   build and leave it out of the counts they compare.
+- **Closing the window does not stop the backend, so anything that says "close
+  PIP" has to.** `launch_pip.ps1` starts uvicorn hidden; the Flutter app has no
+  exit hook and the backend no shutdown route. `scripts/_backend.ps1` finds PIP's
+  backend by the owner of the port *and* a command line naming
+  `backend.api.server` (a bare port number is somebody else's program until
+  proved otherwise) and stops it. `launch_pip.ps1` uses it only when
+  `pending-restore.json` exists, so a staged restore is installed by a new
+  backend's lifespan instead of waiting for a reboot; `restore_pip.ps1` offers it
+  before a restore, because `restore_backup.py` refuses while the backend holds
+  the lock (FREEZE_LIST D-09). The stop is a hard one by design - nothing can ask
+  for a graceful one - and what it costs is already recovered at the next start.
 - **A profile delete can be recorded rather than performed.** A chat session's
   connection is closed by a submission to its own pinned worker, and
   `server.py`'s disconnect handler documents that such a submission can never
