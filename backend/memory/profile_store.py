@@ -615,12 +615,21 @@ def seed_provider_consent(conn, seed_path: Path | None = None) -> None:
     if row_count > 0:
         return  # already seeded — no-op
 
+    # ON CONFLICT DO NOTHING, because "count is zero, then insert" is two steps and
+    # another connection can seed between them: the sign-in's and the catch-up
+    # thread's both initialise a brand-new database (open_app_connection calls
+    # initialize_schema), both read "empty", and the second insert hit
+    # UNIQUE(provider_id) - an IntegrityError seen once out of the lifespan's
+    # shutdown in a full-suite run (FREEZE_LIST 7.29). The row that is already
+    # there is the one to keep, whether the other connection wrote it or the user
+    # has since changed it, which is the same rule the count check enforces.
     for provider in seed["providers"]:
         conn.execute(
             """
             INSERT INTO provider_consent
                 (provider_id, is_cloud, user_consented, consent_scope, revoked)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(provider_id) DO NOTHING
             """,
             (
                 provider["provider_id"],

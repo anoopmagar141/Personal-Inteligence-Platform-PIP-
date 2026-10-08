@@ -99,6 +99,60 @@ def test_seed_is_idempotent_when_table_has_rows():
         os.unlink(seed_path)
 
 
+class _SawItEmpty:
+    """A connection whose first look at provider_consent is from before another connection seeded it."""
+
+    def __init__(self, conn):
+        self._conn = conn
+        self._stale = True
+
+    def execute(self, sql, *args):
+        if self._stale and "COUNT(*) FROM provider_consent" in sql:
+            self._stale = False
+
+            class _Zero:
+                @staticmethod
+                def fetchone():
+                    return (0,)
+
+            return _Zero()
+        return self._conn.execute(sql, *args)
+
+    def commit(self):
+        return self._conn.commit()
+
+
+def test_seed_survives_another_connection_seeding_first():
+    """
+    Two connections to a brand-new database both initialise it: the sign-in's, and the
+    catch-up thread's (open_app_connection calls initialize_schema, which seeds). Both read
+    'empty', both insert, and the second hit the UNIQUE(provider_id) constraint - seen once in
+    a full-suite run as an IntegrityError out of the lifespan's shutdown, and by reading it is
+    reachable at the first sign-in of any new profile (FREEZE_LIST 7.29). The loser of that race
+    must find the rows already there and leave them exactly as the winner (or the user) set them.
+    """
+    from pathlib import Path
+
+    conn = _make_conn()
+    seed_path = _make_seed_file([
+        {"provider_id": "ollama", "is_cloud": False,
+         "user_consented": 1, "consent_scope": "full_inference", "revoked": 0},
+    ])
+    try:
+        p = Path(seed_path)
+        profile_store.seed_provider_consent(conn, seed_path=p)  # the connection that got there first
+        conn.execute("UPDATE provider_consent SET user_consented = 0 WHERE provider_id = 'ollama'")
+        conn.commit()
+
+        profile_store.seed_provider_consent(_SawItEmpty(conn), seed_path=p)  # the one that read too early
+
+        row = conn.execute("SELECT user_consented FROM provider_consent WHERE provider_id = 'ollama'").fetchone()
+        assert row["user_consented"] == 0, "the loser of the race overwrote what was already there"
+        assert conn.execute("SELECT COUNT(*) FROM provider_consent").fetchone()[0] == 1
+    finally:
+        os.unlink(seed_path)
+
+
 def test_seed_converts_is_cloud_bool_to_int():
     conn = _make_conn()
     seed_path = _make_seed_file([
