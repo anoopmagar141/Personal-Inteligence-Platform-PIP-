@@ -2203,6 +2203,33 @@ before the file existed, a missing mtime-versus-name case); one guard, the wait
 for the port to free in `Stop-PipBackend`, is a timing guard no deterministic
 test pins.
 
+**Second round (2026-10-08), from the "still left" list.** Done test-first on the
+branch `fix-restore-crash-safety`, which continues `fix-import-and-export-features`:
+
+| What | Result | Commit |
+|---|---|---|
+| Power loss between "staged" and "restart" | A swap whose process died after the new database moved in and before the new salt did was read as "staged files gone"; the marker was cleared and the profile was left with a database no password opens. The next start now recognises that exact state and installs the salt; the other four crash points already recovered. 6 tests inject a `BaseException` from the Nth rename; 2 mutations caught. | `f7a85b9` |
+| `restore_backup.py` interrupted | Ctrl+C or an error at "Type yes to proceed" left a full re-encrypted copy of the data in `data/`. `main()` is now a wrapper that removes what the inner run created and had not moved. 4 tests, 2 mutations. | `83ed303` |
+| First-run import from the welcome screen | `POST /backup/import`, allowed only while no profile has a database; profile named after the person in the backup; validation shared with staging (`_open_checked_backup`) and run before anything is registered. Flutter dialog asks for both passwords. 13 backend tests, 16 Flutter tests, 6 + 6 mutations. Checked against a real backend process on a free port (19 of 19). | `d486974` |
+
+Tested, no defect found:
+
+- **A backup from an older PIP into the current one.** Databases were built from the real
+  `schema.sql` of six earlier commits (2026-07-03, 08-19, 08-31, 09-02, 09-04, 09-28),
+  exported with today's exporter, restored through the real shortcut script and signed in
+  to with today's backend: every restore and sign-in succeeded, every screen's route
+  answered 200, the backend log held no errors, and each restored database then had all 30
+  tables and every column of a fresh current database - except the Phase-0 database of
+  2026-07-03, which lacks six columns on `decision_candidates_pending` and
+  `memory_candidates_pending` (added in mid-August). No real backup can exist from then,
+  so it is recorded, not fixed. The test data was thin (an identity row, one conversation).
+- **A large backup.** A 322 MB database of incompressible document blobs plus 2000
+  conversations exported in 5 s, staged in 6 s and swapped in under a second; the app's
+  restore request has no client timeout. What a large restore costs is the re-index after
+  sign-in, which runs as a background task, so sign-in does not wait, but retrieval is
+  empty or partial until it finishes - minutes with the real embedding model on a big
+  profile, not measured here (D-02). Peak memory was not measured (the reading failed).
+
 **A real window (2026-10-08).** The Flutter client was driven by hand through
 a throwaway installation with the real `launch_pip.ps1`, `restore_pip.ps1` and
 the real native file chooser. Smart App Control blocks the unsigned *Release*
@@ -2239,16 +2266,20 @@ with two tests that fail while the file is opened read-write.
   limit stopped them. What was found beyond §7.24 came from writing the tests,
   above. The first-run import journey was then driven in a real window (below),
   but the export side and the restore core were not hunted again.
-- The first-run "Import existing PIP" still only points at the shortcut and
-  restores nothing itself, and the shortcut always restores into a profile named
-  "Default". Its dialog was rewritten on 2026-10-08 to say what happens next
-  (full path with a Copy button, the "close PIP?" question, which passwords, the
-  name "Default"; 6 widget tests, 4 mutations caught), but doing the import
-  from that screen, or naming the profile, is not done.
+- The shortcut (`restore_pip.ps1` / `restore_backup.py`) still always restores
+  into a profile named "Default"; only the first-run screen's import names the
+  profile after the person in the backup. The first-run import itself was checked
+  against a real backend process, not in a real window (the author's own PIP was
+  running, and the desktop tool matches applications by executable name).
 - An older backup (no mark) that was cut short and still has an `identity`
   table cannot be told from a whole one.
 - D-02 (Smart App Control blocks torch here) is untouched; every test ran under
   the embedding stand-in.
+- A real second computer, or a second Windows user, was not available: every "other
+  machine" is a throwaway installation on this one.
+- `restore_backup.py`'s own install has the same rename order the in-app swap had
+  before `f7a85b9`. It is one pass and not resumable, but re-running the shortcut
+  from the same backup replaces whatever is there.
 
 ---
 
@@ -2303,7 +2334,7 @@ with two tests that fail while the file is opened read-write.
 | D-16 chat turn with no terminal event | Found and landed 2026-10-03 (§7.23) | A, latent: with no provider left after Stage 8 the socket got stage lines and no done/error, so the chat stayed "writing". The pipeline now sends its error. 3 socket tests through the real pipeline (1 seen failing first), 2 Flutter tests, 4 break-it mutations caught. Open item, a pipeline that raises, fixed as D-22 (§7.25) |
 | Migration journey re-run | Run 2026-10-03 (§7.24), report only | 10 variants, exports and shortcut restores through the real `export_pip.ps1` and `restore_pip.ps1`, 307 checks at `9968e8c`, every failure attributed; negative controls catch D-03 and D-14. Round trip holds (D-01 on every in-app restore that had a WAL to swap, D-03 with two profiles). New: D-18 empty or partial backup accepted (medium), D-20 same-named document taken over the backup's (medium, upper end), D-21 shortcut restores the first backup of the day (medium, low end), D-17 export race with a false "Nothing was written" (low, upper end), D-19 staged-restore state not scoped to the profile (low). Exit criterion not met as worded: D-09, D-18, D-20 |
 | D-22 raising pipeline ends the turn | Landed 2026-10-03 (§7.25) | A: an exception from the pipeline closed the socket mid-turn with no done/error. The transport now ends the turn with one error, keeps the connection, and saves the turn as the client was shown it. 3 socket tests (all seen failing first), 6 break-it mutations caught. Found: D-23, the client never ends a turn on a dropped connection (code reading) |
-| Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. Not done: the three defect-hunting agents (session limit), a read-only open of the backup, the Flutter dialogs |
+| Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 
 ---
 

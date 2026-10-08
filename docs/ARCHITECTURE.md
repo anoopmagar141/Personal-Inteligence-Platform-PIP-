@@ -260,6 +260,17 @@ so there is one write path, not two.
   before a restore, because `restore_backup.py` refuses while the backend holds
   the lock (FREEZE_LIST D-09). The stop is a hard one by design - nothing can ask
   for a graceful one - and what it costs is already recovered at the next start.
+- **The first-run import is the one restore that is done at once.**
+  `POST /backup/import` (welcome screen) is allowed only while no profile has a
+  database and nobody is signed in: there is nothing to replace, and nothing holds a
+  database open, so the swap that the in-app restore defers to the next start is done
+  immediately. `restore.preflight()` makes every check staging makes *before* a profile
+  is registered (both call `_open_checked_backup`, so they cannot disagree), which is
+  what lets a refusal leave the installation empty. The profile is named from the
+  backup's `identity` row, or "Imported profile". A swap whose process died between
+  its last two renames is finished by the next start (`drain_pending_restore` recognises
+  "temporary database gone, temporary salt present, a database in place, no salt in
+  place"); `restore_backup.py` removes its temporary copy however it ends.
 - **A profile delete can be recorded rather than performed.** A chat session's
   connection is closed by a submission to its own pinned worker, and
   `server.py`'s disconnect handler documents that such a submission can never
