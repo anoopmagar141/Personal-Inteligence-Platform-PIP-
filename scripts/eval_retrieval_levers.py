@@ -63,8 +63,14 @@ NUM_CTX = 8192
 norm = e2e.norm
 
 
-def load_sets():
-    """{'held_out': {...}, 'development': {...}} each with answerable, unanswerable, corpus, snapshot."""
+def load_sets(own=None):
+    """{'held_out': {...}, 'development': {...}} each with answerable, unanswerable, corpus, snapshot.
+
+    With `own` (a folder holding labels.json and the documents, kept out of git because they are
+    somebody's own) the only set is 'own' and the corpus is read from that folder."""
+    if own:
+        lab = json.load(open(Path(own) / "labels.json", encoding="utf-8"))
+        return {"own": {"answerable": lab["answerable"], "unanswerable": lab["unanswerable"]}}, "local", lab["documents"]
     held = json.load(open(HELD, encoding="utf-8"))
     dev = json.load(open(DEV, encoding="utf-8"))
     dev_una = json.load(open(DEV_PROTOCOL, encoding="utf-8"))["unanswerable"]
@@ -72,6 +78,12 @@ def load_sets():
         "held_out": {"answerable": held["answerable"], "unanswerable": held["unanswerable"]},
         "development": {"answerable": dev["answerable"], "unanswerable": dev_una},
     }, held["snapshot_commit"], held["corpus"]
+
+
+def read_corpus(snapshot, files, own=None):
+    if own:
+        return {name: (Path(own) / name).read_text(encoding="utf-8") for name in files}
+    return e2e.read_corpus(snapshot, files)
 
 
 def previous_labels():
@@ -92,29 +104,37 @@ def previous_labels():
 
 def generate(args) -> None:
     proto = json.load(open(PROTOCOL, encoding="utf-8"))
-    sets, snapshot, corpus_files = load_sets()
+    own = args.own
+    sets, snapshot, corpus_files = load_sets(own)
     conds = proto["conditions"]
     rule_text = proto["levers"]["D_document_rule"]["text"]
 
-    prev_answers, prev_labels = previous_labels()
-    prev_by = {(r["condition"], r["qid"]): r for r in prev_answers["records"]}
-    dev_ids = [q["id"] for q in sets["development"]["answerable"]]
-    main = prev_labels["main"]
-    newly_wrong = [q for q in dev_ids
-                   if main[prev_by[("C", q)]["answer_id"]] == "WRONG" and main[prev_by[("A_as_shipped", q)]["answer_id"]] != "WRONG"]
-    correct_at_c = [q for q in sorted(dev_ids) if main[prev_by[("C", q)]["answer_id"]] == "CORRECT"][:6]
-    replication = set(newly_wrong + correct_at_c)
-
+    replication = set()
     work = []  # (set, group, qid, question, [conditions])
-    for q in sets["held_out"]["answerable"]:
-        work.append(("held_out", "answerable", q["id"], q["question"], ["A", "C", "D", "E", "F"]))
-    for q in sets["held_out"]["unanswerable"]:
-        work.append(("held_out", "unanswerable", q["id"], q["question"], ["A", "C", "D", "E", "F"]))
-    for q in sets["development"]["answerable"]:
-        work.append(("development", "answerable", q["id"], q["question"],
-                     ["D", "E"] + (["A", "C"] if q["id"] in replication else [])))
-    for q in sets["development"]["unanswerable"]:
-        work.append(("development", "unanswerable", q["id"], q["question"], ["D", "E"]))
+    if own:
+        # The owner's own document: all five conditions on every question, no development set.
+        for group in ("answerable", "unanswerable"):
+            for q in sets["own"][group]:
+                work.append(("own", group, q["id"], q["question"], ["A", "C", "D", "E", "F"]))
+    else:
+        prev_answers, prev_labels = previous_labels()
+        prev_by = {(r["condition"], r["qid"]): r for r in prev_answers["records"]}
+        dev_ids = [q["id"] for q in sets["development"]["answerable"]]
+        main = prev_labels["main"]
+        newly_wrong = [q for q in dev_ids
+                       if main[prev_by[("C", q)]["answer_id"]] == "WRONG" and main[prev_by[("A_as_shipped", q)]["answer_id"]] != "WRONG"]
+        correct_at_c = [q for q in sorted(dev_ids) if main[prev_by[("C", q)]["answer_id"]] == "CORRECT"][:6]
+        replication = set(newly_wrong + correct_at_c)
+
+        for q in sets["held_out"]["answerable"]:
+            work.append(("held_out", "answerable", q["id"], q["question"], ["A", "C", "D", "E", "F"]))
+        for q in sets["held_out"]["unanswerable"]:
+            work.append(("held_out", "unanswerable", q["id"], q["question"], ["A", "C", "D", "E", "F"]))
+        for q in sets["development"]["answerable"]:
+            work.append(("development", "answerable", q["id"], q["question"],
+                         ["D", "E"] + (["A", "C"] if q["id"] in replication else [])))
+        for q in sets["development"]["unanswerable"]:
+            work.append(("development", "unanswerable", q["id"], q["question"], ["D", "E"]))
     if args.only:
         wanted = set(args.only.split(","))
         work = [w for w in work if w[2] in wanted]
@@ -191,7 +211,7 @@ def generate(args) -> None:
             except Exception as e:
                 raise ProviderExecutionError(f"Ollama: {e}")
 
-    corpus = e2e.read_corpus(snapshot, corpus_files)
+    corpus = read_corpus(snapshot, corpus_files, own)
     docs_root = tmp / "documents"
     docs_root.mkdir(parents=True)
     for name, text in corpus.items():
@@ -302,12 +322,14 @@ def reference_for(qid, sets, corpus):
 
 def sheet(args) -> None:
     state = json.load(open(args.answers, encoding="utf-8"))
-    sets, snapshot, corpus_files = load_sets()
-    corpus = e2e.read_corpus(snapshot, corpus_files)
-    prev_answers, prev_labels = previous_labels()
+    sets, snapshot, corpus_files = load_sets(args.own)
+    corpus = read_corpus(snapshot, corpus_files, args.own)
     prev_text = {}  # (qid, normalised text) -> previous answer id
-    for aid, a in prev_answers["answers"].items():
-        prev_text[(a["qid"], norm(a["text"]))] = aid
+    prev_labels = {}
+    if not args.own:  # only the development set can inherit an earlier run's grades
+        prev_answers, prev_labels = previous_labels()
+        for aid, a in prev_answers["answers"].items():
+            prev_text[(a["qid"], norm(a["text"]))] = aid
 
     inherited = {}
     groups = {}  # (qid, normalised text) -> [answer ids]
@@ -351,7 +373,7 @@ def score(args) -> None:
     state = json.load(open(args.answers, encoding="utf-8"))
     key = json.load(open(args.key))
     inherited = json.load(open(Path(args.key).parent / "inherited.json"))
-    proto = json.load(open(PROTOCOL, encoding="utf-8"))
+    vset = "own" if args.own else "held_out"  # the set the verdict is drawn from
     variants = {}
     for variant, gfile in (("main", args.grades), ("strict", args.grades_strict or args.grades), ("lenient", args.grades_lenient or args.grades)):
         g = json.load(open(gfile))
@@ -386,7 +408,7 @@ def score(args) -> None:
         return up, down
 
     def verdict(label, cond):
-        s = "held_out"
+        s = vset
         ca, cc = counts(label, s, "answerable", "A"), counts(label, s, "answerable", "C")
         cx = counts(label, s, "answerable", cond)
         up, down = paired(label, s, "answerable", cond, "A", "CORRECT")
@@ -407,7 +429,11 @@ def score(args) -> None:
     p(f"Model {state['model']}, num_ctx {state['num_ctx']}, temperature 0, snapshot `{state['snapshot_commit']}`. "
       "Conditions: " + "; ".join(f"{k} = {v}" for k, v in state["conditions"].items()) + ".\n")
     main = variants["main"]
-    for set_name, title in (("held_out", "Held-out set (the verdict is drawn from this)"), ("development", "Development set (reported only)")):
+    for set_name, title in (("held_out", "Held-out set (the verdict is drawn from this)"),
+                            ("development", "Development set (reported only)"),
+                            ("own", "The owner's own document (the verdict is drawn from this)")):
+        if not any(k[0] == set_name for k in by):
+            continue
         p(f"## {title}\n")
         for group, gtitle in (("answerable", "answerable"), ("unanswerable", "no document answers it")):
             conds_here = [c for c in state["conditions"] if (set_name, group, c) in by]
@@ -424,16 +450,16 @@ def score(args) -> None:
             p("")
 
     p("## Decision rule (held-out set, relative to A)\n")
-    ca = counts(main, "held_out", "answerable", "A")
-    cc = counts(main, "held_out", "answerable", "C")
+    ca = counts(main, vset, "answerable", "A")
+    cc = counts(main, vset, "answerable", "C")
     p(f"Validity guard: WRONG under C = {cc['WRONG']}, under A = {ca['WRONG']}; the problem is reproduced when C exceeds A by 2 or more: "
       f"**{'yes' if cc['WRONG'] > ca['WRONG'] + 1 else 'NO - every verdict is INCONCLUSIVE'}**.\n")
     for cond in ("D", "E", "F"):
         w, (c1, c2, c3, c4), (up, down), valid = verdict(main, cond)
         ws = {v: verdict(variants[v], cond)[0] for v in ("strict", "lenient")}
-        cx = counts(main, "held_out", "answerable", cond)
-        ux = counts(main, "held_out", "unanswerable", cond)
-        ua = counts(main, "held_out", "unanswerable", "A")
+        cx = counts(main, vset, "answerable", cond)
+        ux = counts(main, vset, "unanswerable", cond)
+        ua = counts(main, vset, "unanswerable", "A")
         p(f"- **{cond}**: (1) CORRECT {ca['CORRECT']} -> {cx['CORRECT']}, {up} up / {down} down, p = {e2e.sign_test(up, down):.3f}, needs net 6+ and p < 0.05: {'met' if c1 else 'NOT met'}; "
           f"(2) WRONG {ca['WRONG']} -> {cx['WRONG']} (must not rise): {'met' if c2 else 'NOT met'}; "
           f"(3) invented on the unanswerable {ua['WRONG']} -> {ux['WRONG']} (rise of at most 1): {'met' if c3 else 'NOT met'}; "
@@ -443,9 +469,9 @@ def score(args) -> None:
     p("\n## Held-out answers that changed grade relative to C\n")
     for cond in ("D", "E", "F"):
         rows = []
-        for qid, r in by[("held_out", "answerable", cond)].items():
+        for qid, r in by[(vset, "answerable", cond)].items():
             b = main[r["answer_id"]]
-            a = main[by[("held_out", "answerable", "C")][qid]["answer_id"]]
+            a = main[by[(vset, "answerable", "C")][qid]["answer_id"]]
             if a != b:
                 rows.append(f"{qid}: {a} -> {b}")
         p(f"- {cond}: " + ("; ".join(rows) if rows else "none"))
@@ -453,12 +479,12 @@ def score(args) -> None:
     p("\n## What the model was shown (held-out, answerable)\n")
     p("| condition | answer in the prompt: CORRECT of | answer retrieved but cut: CORRECT of | passages without the answer: CORRECT / DECLINES / WRONG / VAGUE | no passages: CORRECT / DECLINES / WRONG / VAGUE |")
     p("|---|---|---|---|---|")
-    keys = {q["id"]: norm(q["key"]) for q in load_sets()[0]["held_out"]["answerable"]}
+    keys = {q["id"]: norm(q["key"]) for q in load_sets(args.own)[0][vset]["answerable"]}
     for c in state["conditions"]:
         shown, cut = [0, 0], [0, 0]
         without = {"CORRECT": 0, "DECLINES": 0, "WRONG": 0, "VAGUE": 0}
         none_ = dict(without)
-        for qid, r in by[("held_out", "answerable", c)].items():
+        for qid, r in by[(vset, "answerable", c)].items():
             g = main[r["answer_id"]]
             retrieved = any(keys[qid] in norm(x["text"]) for x in r["passages"])
             if r["prompt_has_key"]:
@@ -479,9 +505,10 @@ def score(args) -> None:
     p(f"- distinct prompts run: {len(state['answers'])}; every status success: {all(a['status'] == 'success' for a in ans)}")
     p(f"- largest prompt Ollama counted: {max((a.get('prompt_eval_count') or 0) for a in ans)} tokens (num_ctx {state['num_ctx']})")
     p(f"- answers that hit the 400-token limit: {sum(1 for a in ans if a.get('done_reason') == 'length')}")
-    p(f"- development replication (A and C re-run under the new options on {len(state['replication_ids'])} questions): "
-      f"answers identical to the earlier run's for {sum(1 for a in state['answers'].values() if a['set'] == 'development' and a['qid'] in state['replication_ids'] and (a['qid'], norm(a['text'])) in {(x['qid'], norm(x['text'])) for x in json.load(open(PREV_ANSWERS, encoding='utf-8'))['answers'].values()})} "
-      f"of {sum(1 for r in state['records'] if r['set'] == 'development' and r['condition'] in ('A', 'C'))} A/C runs")
+    if state["replication_ids"]:
+        p(f"- development replication (A and C re-run under the new options on {len(state['replication_ids'])} questions): "
+          f"answers identical to the earlier run's for {sum(1 for a in state['answers'].values() if a['set'] == 'development' and a['qid'] in state['replication_ids'] and (a['qid'], norm(a['text'])) in {(x['qid'], norm(x['text'])) for x in json.load(open(PREV_ANSWERS, encoding='utf-8'))['answers'].values()})} "
+          f"of {sum(1 for r in state['records'] if r['set'] == 'development' and r['condition'] in ('A', 'C'))} A/C runs")
     text = "\n".join(out)
     if args.out:
         Path(args.out).write_text(text + "\n", encoding="utf-8")
@@ -495,10 +522,13 @@ def main() -> None:
     g.add_argument("--out", required=True)
     g.add_argument("--limit", type=int, default=0)
     g.add_argument("--only", default="")
+    g.add_argument("--own", default=None, help="folder with labels.json and the owner's documents (kept out of git)")
     s = sub.add_parser("sheet")
     s.add_argument("--answers", required=True)
     s.add_argument("--out-dir", required=True)
+    s.add_argument("--own", default=None)
     c = sub.add_parser("score")
+    c.add_argument("--own", default=None)
     c.add_argument("--answers", required=True)
     c.add_argument("--grades", required=True)
     c.add_argument("--grades-strict", default=None)

@@ -70,8 +70,14 @@ def hint(question: str) -> str:
     return " ".join(question.split()[:HINT_WORDS])
 
 
-def read_corpus(commit: str, files: list[str]) -> dict[str, str]:
+def read_corpus(commit: str, files: list[str], local_dir: str | None = None) -> dict[str, str]:
+    """The documents at a pinned commit; or, when a labels file names a `local_dir` (documents kept
+    outside git because they are somebody's own), the files in that folder."""
     out = {}
+    if local_dir:
+        for name in files:
+            out[name] = (Path(local_dir) / name).read_text(encoding="utf-8")
+        return out
     for name in files:
         shown = subprocess.run(
             ["git", "-C", str(REPO), "show", f"{commit}:{name}"],
@@ -108,7 +114,7 @@ def run(args) -> None:
     embedder = "shim (hashed bag-of-words)" if getattr(sentence_transformers, "__pip_shim__", False) else "all-MiniLM-L6-v2"
     print(f"embedder: {embedder}", flush=True)
 
-    corpus = read_corpus(labels["snapshot_commit"], labels["corpus"])
+    corpus = read_corpus(labels["snapshot_commit"], labels["corpus"], labels.get("local_dir"))
     docs_root = work / "documents"
     docs_root.mkdir(parents=True)
     on_disk = {}
