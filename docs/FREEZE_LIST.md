@@ -26,7 +26,9 @@ owner then authorized D-22, the turn a raising pipeline left unended, the
 open item §7.23 named; landed the same day (§7.25), which also found D-23.
 On 2026-10-07 the owner asked for the import and export logic to be tested
 and its errors fixed: D-18, D-21, D-11, D-20, D-07, D-17, D-19 and D-09 landed
-(§7.26). D-02 is open. Anything further needs a new authorization.
+(§7.26). D-02 is an environment condition: it stopped reproducing on the owner's
+machine on 2026-10-08 when they turned Smart App Control off themselves (§7.26), and is
+still true wherever it is on. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -2243,6 +2245,20 @@ Tested, no defect found:
   sign-in, which runs as a background task, so sign-in does not wait, but retrieval is
   empty or partial until it finishes - minutes with the real embedding model on a big
   profile, not measured here (D-02). Peak memory was not measured (the reading failed).
+
+**Smart App Control turned off by the owner (2026-10-08), and what that showed.**
+The owner turned it off themselves (it is a one-way setting, so it was explained to them
+and never changed here). Afterwards `VerifiedAndReputablePolicyState` read 0; torch
+2.13.0+cpu imported; the real all-MiniLM-L6-v2 loaded from the local cache (the matching
+passage scored 0.73 against the 0.6 threshold, an unrelated sentence 0.04, a reworded
+question 0.46); the unsigned Release `pip_flutter_client.exe` started; and the full
+backend suite passed **natively, with no embedding stand-in: 1361 passed, 0 failed**. The
+original cache test as it stood at `32d41e4` also passes 21 of 21 under the real model,
+which confirms the diagnosis in `f144840`: it had failed only because of the stand-in's
+scores, not because of the cache. This makes D-02 an environment fact rather than a code
+defect - on a machine with Smart App Control on, the backend still cannot import torch and
+`pip_embed_shim.py` is still the workaround. It also makes retrieval-quality results valid
+here, which they were not under the stand-in; none has been re-measured yet.
 
 **A real window (2026-10-08).** The Flutter client was driven by hand through
 a throwaway installation with the real `launch_pip.ps1`, `restore_pip.ps1` and
