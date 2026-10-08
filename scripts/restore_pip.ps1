@@ -24,6 +24,7 @@ $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "_python.ps1")
+. (Join-Path $PSScriptRoot "_backend.ps1")
 $pipPython = Get-PipPython -Root $root
 $dataDir = Join-Path $root "data"
 
@@ -36,6 +37,36 @@ if (-not $pipPython) {
     Show-PipPythonMissing -Root $root
     Read-Host "  Press Enter to close"
     exit 1
+}
+
+# Closing PIP's window does not stop its backend (see _backend.ps1), and
+# restore_backup.py refuses while the backend holds the lock - so on the machine
+# the welcome screen sent somebody from, the instruction "close PIP, then use
+# this shortcut" ended in a refusal they had no way past (FREEZE_LIST D-09).
+# Ask, and stop it. Only PIP's own backend is ever stopped.
+if (Get-PipBackendProcess) {
+    Write-Host "  PIP is still running in the background (closing its window does not stop it)."
+    Write-Host "  A restore replaces the database it has open, so it has to be closed first."
+    Write-Host "  Anything you were doing in PIP is saved; an open conversation is read for"
+    Write-Host "  memory the next time PIP starts."
+    Write-Host ""
+    $answer = Read-Host '  Type "yes" to close PIP now'
+    if ($answer.Trim().ToLower() -ne "yes") {
+        Write-Host ""
+        Write-Host "  Left running. Nothing was changed." -ForegroundColor Yellow
+        Read-Host "  Press Enter to close"
+        exit 1
+    }
+    $stopped = Stop-PipBackend
+    if ($stopped -ne "stopped") {
+        Write-Host ""
+        Write-Host "  PIP could not be closed ($stopped). Nothing was changed." -ForegroundColor Red
+        Write-Host "  Sign out of Windows, or restart the computer, and run this again."
+        Read-Host "  Press Enter to close"
+        exit 1
+    }
+    Write-Host "  PIP closed."
+    Write-Host ""
 }
 
 Write-Host "  Close PIP first if it is open - this replaces the database it has open,"

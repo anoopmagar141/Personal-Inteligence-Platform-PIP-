@@ -39,6 +39,8 @@ $dataDir = Join-Path $root "data"
 # tree. _python.ps1 explains why the interpreter cannot simply be
 # ".venv\Scripts\python.exe" on a machine that is not the one it was made on.
 . (Join-Path $PSScriptRoot "_python.ps1")
+. (Join-Path $PSScriptRoot "_backend.ps1")
+$backendPort = Get-PipPort
 $pipPython = Get-PipPython -Root $root
 if (-not $pipPython) { Show-PipPythonMissing -Root $root; exit 1 }
 
@@ -144,7 +146,23 @@ if (Test-PortOpen 11434) {
     Write-Phase "ollama" "not installed"
 }
 
-if (-not (Test-PortOpen 8765)) {
+# "Close PIP and open it again" is what an in-app restore tells the person to
+# do, and closing the window does not stop the backend (nothing does; see
+# _backend.ps1). A staged restore is installed by the lifespan of a NEW backend,
+# before anything opens a database, so a running one has to go before this
+# decides it can be reused - otherwise the restore waits for a reboot or a crash
+# (FREEZE_LIST D-09). Only when a restore is actually waiting: an ordinary
+# second launch still reuses the backend that is already up.
+$restartOutcome = Restart-PipBackendIfRestorePending -DataDir $dataDir -Port $backendPort
+if ($restartOutcome -eq "stopped") {
+    Write-Phase "backend" "restarting to apply a restore"
+} elseif ($restartOutcome -eq "stuck" -or $restartOutcome -eq "not-pip") {
+    # Left as it is and said so: the restore stays staged and the backend that
+    # holds the port is not this script's to guess about.
+    Write-Phase "backend" "a restore is waiting but the running backend could not be stopped"
+}
+
+if (-not (Test-PortOpen $backendPort)) {
     New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 
     # THE PASSWORD IS NO LONGER ASKED FOR HERE
@@ -201,7 +219,7 @@ if (-not (Test-PortOpen 8765)) {
     $stdoutLog = Join-Path $dataDir "backend.log"
     $stderrLog = Join-Path $dataDir "backend.err.log"
     Start-Process $pipPython `
-        -ArgumentList "-m", "uvicorn", "backend.api.server:app", "--host", "127.0.0.1", "--port", "8765" `
+        -ArgumentList "-m", "uvicorn", "backend.api.server:app", "--host", "127.0.0.1", "--port", "$backendPort" `
         -WorkingDirectory $root `
         -WindowStyle Hidden `
         -RedirectStandardOutput $stdoutLog `
