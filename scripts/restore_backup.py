@@ -482,6 +482,30 @@ def _fail(message: str, *cleanup: pathlib.Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """
+    Run the restore, and leave no temporary copy behind however it ends.
+
+    The converted database is written beside the destination BEFORE the person is
+    asked to confirm, so for the length of that prompt a complete re-encrypted copy
+    of their data sits in data/. Declining removed it; anything else that ended the
+    run - Ctrl+C at the prompt, a closed console, an unexpected error - did not,
+    and it stayed there (found in the real-window check of 2026-10-08). Whatever the
+    inner run created and had not yet moved into place is removed on the way out;
+    after a successful install those paths no longer exist, so this does nothing.
+    """
+    created: list[pathlib.Path] = []
+    try:
+        return _main(argv, created)
+    except BaseException:
+        for path in created:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+
+
+def _main(argv: list[str] | None, created: list[pathlib.Path]) -> int:
     parser = argparse.ArgumentParser(description="Rebuild the live database from a .pipbak backup.")
     parser.add_argument("--from", dest="source", default=None,
                         help="backup to restore (default: the newest in data/)")
@@ -538,6 +562,7 @@ def main(argv: list[str] | None = None) -> int:
         stamp = _stamp()
         tmp_db = work_dir / f"restore-{stamp}.tmp.db"
         tmp_salt = work_dir / f"restore-{stamp}.tmp.salt"
+        created.extend([tmp_db, tmp_salt])
 
         salt = db_key_module.create_salt(tmp_salt)
         new_key = db_key_module.derive_key(new_password, salt)
