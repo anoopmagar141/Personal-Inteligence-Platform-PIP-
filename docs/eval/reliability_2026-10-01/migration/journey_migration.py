@@ -111,7 +111,10 @@ def make_installation(root: Path) -> Path:
     for d in ("backend", "shared", "config"):
         shutil.copytree(SOURCE / d, root / d, ignore=shutil.ignore_patterns("__pycache__", "tests"))
     (root / "scripts").mkdir()
-    for f in ("export_pip.ps1", "restore_pip.ps1", "_python.ps1", "_profiles.ps1",
+    # _backend.ps1 is dot-sourced by restore_pip.ps1 (and launch_pip.ps1); a copy that
+    # leaves it out fails at the first line of the shortcut, which is how this list
+    # was found to be one file short once D-09 added it.
+    for f in ("export_pip.ps1", "restore_pip.ps1", "_python.ps1", "_profiles.ps1", "_backend.ps1",
               "export_backup.py", "restore_backup.py", "_venv.py"):
         shutil.copyfile(SOURCE / "scripts" / f, root / "scripts" / f)
     subprocess.run([str(PY), "-m", "venv", "--without-pip", str(root / ".venv")], check=True)
