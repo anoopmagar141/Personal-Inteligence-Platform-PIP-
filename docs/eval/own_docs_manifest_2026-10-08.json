@@ -1,0 +1,13 @@
+{
+ "about": "Fixes, before any run, which questions and which protocol the check on the owner's own document will use, without publishing the owner's text. Each hash is the SHA-256 of a file kept in the git-ignored local folder own-docs-eval/. After the run the files are not changed; anyone holding them can recompute these hashes. The results committed afterwards contain counts and identifiers, not text from the document.",
+ "files": {
+  "own-docs-eval/documents/synopsis_pip.txt": "9b10230f7f1bff764cbaa432d8f96e5d14ee675e213970816ef129f1a6e28b7f",
+  "own-docs-eval/labels.json": "a77beae1a7862b66de51c973ab52cfa6f5b295e3799eda24f48e3c3e4f06be12",
+  "own-docs-eval/protocol.json": "93ff6458b7ee123e0a6d9e26275885b71f068562217a36c79d67610327de2d98"
+ },
+ "counts": {
+  "document_words": 2993,
+  "answerable": 26,
+  "unanswerable": 6
+ }
+}
