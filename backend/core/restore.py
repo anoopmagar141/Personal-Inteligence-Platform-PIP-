@@ -440,6 +440,34 @@ def drain_pending_restore() -> dict[str, Any] | None:
 
     tmp_db = Path(staged.get("db", ""))
     tmp_salt = Path(staged.get("salt", ""))
+    target_db = Path(staged.get("target_db", ""))
+    target_salt = Path(staged.get("target_salt", ""))
+
+    # A swap that DIED between its last two renames: the new database is already
+    # in place and its salt is still the temporary file. That is not "the staged
+    # files are gone" - read that way, the marker was cleared and the profile was
+    # left with a database no password opens, the replaced salt kept aside and the
+    # new one never installed (found by test_restore_crash_safety.py; power loss
+    # between "staged" and "restart" was on the 2026-10-03 re-run's not-covered
+    # list). The telling fact is the one the swap itself leaves: the database
+    # renames in BEFORE the salt, and the replaced salt went aside before either,
+    # so "temporary database gone, temporary salt present, a database in place and
+    # NO salt in place" can only be this. If the salt IS in place the database was
+    # removed by somebody else and the old pair is intact, so that stays the "files
+    # are gone" case below rather than putting a new salt beside an old database.
+    if not tmp_db.exists() and tmp_salt.exists() and target_db.exists() and not target_salt.exists():
+        try:
+            shutil.move(str(tmp_salt), str(target_salt))
+        except OSError as e:
+            logger.error(f"Finishing an interrupted restore failed ({e}) - it stays pending.")
+            return None
+        pending_restore_path().unlink(missing_ok=True)
+        logger.warning(
+            "A restore was interrupted between its last two renames; its salt has now been "
+            f"installed and {Path(staged.get('source', '')).name} is in place."
+        )
+        return staged
+
     if not tmp_db.exists() or not tmp_salt.exists():
         logger.warning(
             "A restore was staged but its files are gone - clearing the marker."
