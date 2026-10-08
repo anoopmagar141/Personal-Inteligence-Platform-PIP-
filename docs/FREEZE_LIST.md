@@ -2348,8 +2348,42 @@ the model answers better or worse with extra passages; three runs agree to withi
 
 **Nothing was changed.** The cut-off and the chunking are as they were, and the "~256 tokens"
 comment is uncorrected. What the report supports, and what must come first (a second corpus and an
-end-to-end check that extra passages do not make the model fabricate), is in its last section.
+end-to-end check that extra passages do not make the model fabricate), is in its last section; the
+end-to-end check is §7.28.
 Either change alters what the model is told and needs the owner's authorisation.
+
+### 7.28 Does a lower similarity cut-off help the answers? End-to-end check (run 2026-10-08, report only)
+
+Report `docs/eval/retrieval_e2e_results_2026-10-08.md`; tool `scripts/eval_retrieval_e2e.py`;
+protocol `docs/eval/retrieval_e2e_protocol_2026-10-08.json`, committed (`6e5140a`) before any run
+along with 12 extra questions no document answers and a decision rule. The real pipeline
+(`pipeline.run_sync`, Stages 0-10) on `qwen2.5:7b` at temperature 0, on the §7.27 corpus, with
+the cut-off set to 0.60 (shipped), 0.45 and 0.30; 66 questions, 140 distinct prompts, graded
+blind to condition by the same hand that wrote them.
+
+**Verdict by the rule fixed in advance: a lower cut-off is not supported, at 0.45 or 0.30.**
+Correct answers rose from 1 to 11 to 26 of 54 (sign test p < 0.01 each), and not one of the 12
+unanswerable questions was answered with an invention in any condition, even when handed
+on-topic passages. But wrong answers among the 54 rose from 4 to 7 to 9, and the rule said they
+must not rise. The verdict is the same under a strict and a lenient reading of nine borderline
+calls.
+
+**What produced the wrong answers.** When the answer was in the prompt the model was right
+20 of 20 times at 0.30. All six new wrong answers came from questions where passages came back
+and none held the answer: 27 questions are in that position at 0.30, 8 of them answered wrongly
+(30%) against 3 of the same 27 with no passages (11%). That is the failure recorded in §10
+(misleading context, not a missing fact), reproduced at small scale. A higher cut-off does not
+remove it: those six had top scores of 0.38 to 0.59.
+
+**Also found.** Stage 7 caps the documents section at 800 words (`rag_chunks_tokens`), so of
+three 500-word passages the model sees about 1.6; at 0.30 the answer was retrieved but cut for
+5 questions. The prompt's grounding rules cover facts about the user only, and say nothing
+about how to treat a document that does not state the answer.
+
+**Not done.** Nothing in the pipeline was changed. The two levers this points at - a prompt rule
+for documents and the 800-word budget - were not tested; each can be run through the same harness
+as a new condition with a rule written first. Limits: one hand, one 7B model, one corpus of
+technical Markdown, temperature 0 (a user's model samples), small numbers.
 
 ---
 
@@ -2406,6 +2440,7 @@ Either change alters what the model is told and needs the owner's authorisation.
 | D-22 raising pipeline ends the turn | Landed 2026-10-03 (§7.25) | A: an exception from the pipeline closed the socket mid-turn with no done/error. The transport now ends the turn with one error, keeps the connection, and saves the turn as the client was shown it. 3 socket tests (all seen failing first), 6 break-it mutations caught. Found: D-23, the client never ends a turn on a dropped connection (code reading) |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
+| Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
 
 ---
 
