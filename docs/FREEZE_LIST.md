@@ -2469,6 +2469,28 @@ document) was not run end to end, because the protocol fixed 0.30 in advance; it
 passages with no answer in them (a better embedder, token-aware chunks, a check of passage against question) was not tested.
 Limits: one hand, one 7B model, temperature 0, one 7-chunk document.
 
+### 7.31 A graceful stop of the backend: measured, not built (run 2026-10-08)
+
+The launcher stops a running backend with a hard stop (`_backend.ps1`, `taskkill`), by design (ARCHITECTURE: nothing can
+ask for a graceful one). The open question on the priority list was whether that costs anything real enough to justify a
+shutdown route - a new endpoint that can end the process, which needs its own locking down. No defect had been shown, so
+it was measured first (`docs/eval/reliability_2026-10-01/journey_kill_midstream.py`: a real backend process and a live
+`qwen2.5:7b`, the process hard-stopped eight tokens into an answer, restarted, signed in).
+
+**Result: nothing durable is lost.** The transcript after the restart was identical to the one before the kill (the finished
+turn intact); the restart took 1.8 s and took over the lock; the same conversation resumed over the socket and the model
+answered from its history ("you decided to use Postgres ... because you need JSON columns"); and the next start's catch-up
+logged the decision from the cut-off session without being asked. This agrees with the 2026-10-01 validation (§7.16: a
+force-kill with the socket open, transcript identical, catch-up processed the session).
+
+**What it does cost.** The turn that was being answered: neither the question nor the partial reply is in the transcript
+afterwards, because a turn is saved when it finishes. Nothing a graceful stop could save without also changing when turns
+are written, which is a different decision and not one this measurement supports.
+
+**Decision.** No shutdown route is built; the open item is closed on this evidence. Priority 3 is otherwise done: the
+chat-connection drop (D-23) and the four failing tests were fixed earlier, and old unmarked backups cannot be detected in
+code (export again).
+
 ---
 
 ## 8. Status
@@ -2527,6 +2549,7 @@ Limits: one hand, one 7B model, temperature 0, one 7-chunk document.
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
 | Hunt for unrecorded import/export defects | Run 2026-10-08 (§7.29), five fixed | A password or bearer token in any script crashed the export prompt, the shortcut restore's prompt and the token check (`compare_digest` on `str`): fixed. A backup whose owner's name has no a-z or 0-9 could not be imported ("already exists"): fixed. Two imports at once raced: fixed. The provider-consent seed raced between two connections: fixed. Probed with no defect: odd ASCII passwords, document write-back paths, SQL quoting. Not done: a real console's non-ASCII `getpass`, a real second computer, the real-window first-run import |
 | Levers on the cut-off, and the owner's own document | Run 2026-10-08 (§7.30), report only | Held-out set of 40: neither the document prompt rule (D), the 1800-word budget (E) nor both (F) is supported - wrong answers 6 / 8 / 7 against the shipped setting's 4, though correct answers rose by 12-13 and nothing invented; D and E only looked better on the development questions they were shaped on. Owner's own document (a 2,993-word synopsis, kept out of git): found at the shipped 0.60 for 0 of 26 questions, 7 at 0.30, 15 at 0.15; answers 1 correct shipped, 8 at 0.30 with no extra wrong; inconclusive by the validity guard. Nothing changed; a cut-off below 0.30 and retrieval that returns fewer no-answer passages are untested |
+| Graceful stop of the backend | Measured 2026-10-08 (§7.31), not built | A hard stop mid-answer lost nothing durable: transcript identical, 1.8 s restart, conversation resumed, the catch-up logged the decision. Only the turn being answered is gone (saved when finished). No shutdown route built |
 
 ---
 
