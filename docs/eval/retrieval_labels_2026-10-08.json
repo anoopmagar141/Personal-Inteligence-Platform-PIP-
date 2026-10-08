@@ -1,0 +1,469 @@
+{
+ "snapshot_commit": "1577473",
+ "note": "Corpus = these files as of snapshot_commit. A question is answered by a passage containing `key` (lower-case, whitespace normalised). Labels written before the first run.",
+ "corpus": [
+  "docs/ARCHITECTURE.md",
+  "docs/CONVENTIONS.md",
+  "AGENTS.md",
+  "docs/FREEZE_LIST.md",
+  "docs/eval/migration_rerun_2026-10-03.md",
+  "docs/eval/observer_end_to_end_2026-09-28.md",
+  "docs/eval/reliability_validation_2026-10-01.md"
+ ],
+ "answerable": [
+  {
+   "id": "arch-hook-scope",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "Which folders does the pre-commit import guard actually check?",
+   "key": "the hook guards only those two directories",
+   "kind": "fact"
+  },
+  {
+   "id": "arch-ollama-http",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "How does the backend talk to Ollama if the ollama package is never imported?",
+   "key": "speaks ollama's http api",
+   "kind": "why"
+  },
+  {
+   "id": "arch-stale-lock",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "When is the pip.lock file treated as stale by the launcher?",
+   "key": "a bare pid is reused",
+   "kind": "why"
+  },
+  {
+   "id": "arch-lock-gate-order",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "Why is the lock-gate middleware registered before the token middleware?",
+   "key": "only ever sees authenticated requests",
+   "kind": "why"
+  },
+  {
+   "id": "arch-session-end",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "What happens to a conversation whose process was killed before the memory step ran?",
+   "key": "observed_at is null",
+   "kind": "procedure"
+  },
+  {
+   "id": "arch-gate-before-reinforce",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "Why does the evidence check run before reinforcement instead of after validation?",
+   "key": "vote itself in",
+   "kind": "why"
+  },
+  {
+   "id": "arch-one-thread",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "Why can't a websocket's database work be spread over several threads?",
+   "key": "sqlcipher connections can only be used on the thread that created them",
+   "kind": "why"
+  },
+  {
+   "id": "arch-cache-ttl",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "What time-to-live does the cache give to general knowledge answers?",
+   "key": "is 86400",
+   "kind": "number"
+  },
+  {
+   "id": "arch-cloud-behind-local",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "Why does a newly added cloud endpoint sit behind the local model?",
+   "key": "cannot silently start sending conversations off the machine",
+   "kind": "why"
+  },
+  {
+   "id": "arch-gate-cost",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "How many false rejects did the evidence gate have on the held-out set?",
+   "key": "1 false reject in 15 supported statements",
+   "kind": "number"
+  },
+  {
+   "id": "arch-role-headers",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "Why does format_transcript indent lines that start with a role name?",
+   "key": "parses back as a genuine user turn",
+   "kind": "why"
+  },
+  {
+   "id": "arch-401-423",
+   "source": "docs/ARCHITECTURE.md",
+   "question": "What is the difference between a 401 and a 423 response from the backend?",
+   "key": "423 means the token is fine",
+   "kind": "fact"
+  },
+  {
+   "id": "conv-conn-first",
+   "source": "docs/CONVENTIONS.md",
+   "question": "In backend functions, which parameter comes first?",
+   "key": "is the first positional parameter",
+   "kind": "fact"
+  },
+  {
+   "id": "conv-no-pydantic",
+   "source": "docs/CONVENTIONS.md",
+   "question": "Does the backend use an ORM or Pydantic models for its rows?",
+   "key": "there is no orm and no pydantic model anywhere in the backend",
+   "kind": "fact"
+  },
+  {
+   "id": "conv-null-loading",
+   "source": "docs/CONVENTIONS.md",
+   "question": "In the Flutter screens how can you tell data has not been fetched yet?",
+   "key": "not loaded yet",
+   "kind": "fact"
+  },
+  {
+   "id": "conv-agents-cap",
+   "source": "docs/CONVENTIONS.md",
+   "question": "How long may the AGENTS.md file be, and is that rule enforced?",
+   "key": "capped at 80 lines",
+   "kind": "number"
+  },
+  {
+   "id": "conv-hooks-clone",
+   "source": "docs/CONVENTIONS.md",
+   "question": "Why does cloning the repository not install the git hooks automatically?",
+   "key": "that is what stops a repository you cloned executing code on checkout",
+   "kind": "why"
+  },
+  {
+   "id": "conv-dead-config",
+   "source": "docs/CONVENTIONS.md",
+   "question": "Which entries in settings.json are never read by any code?",
+   "key": "contains keys nothing reads",
+   "kind": "fact"
+  },
+  {
+   "id": "conv-kdf",
+   "source": "docs/CONVENTIONS.md",
+   "question": "What number of key derivation iterations is actually used in the code?",
+   "key": "256_000",
+   "kind": "number"
+  },
+  {
+   "id": "conv-conn-fixture",
+   "source": "docs/CONVENTIONS.md",
+   "question": "How many backend test files have their own local conn fixture?",
+   "key": "16 of 67 backend test files",
+   "kind": "number"
+  },
+  {
+   "id": "conv-comments",
+   "source": "docs/CONVENTIONS.md",
+   "question": "What is the expected style for code comments in this project?",
+   "key": "terse code reads as out of place here",
+   "kind": "why"
+  },
+  {
+   "id": "agents-db",
+   "source": "AGENTS.md",
+   "question": "What database technology stores the structured data?",
+   "key": "sqlite via sqlcipher",
+   "kind": "fact"
+  },
+  {
+   "id": "agents-grpc",
+   "source": "AGENTS.md",
+   "question": "Which exact version of the grpc package must be installed?",
+   "key": "grpcio==1.83.1",
+   "kind": "number"
+  },
+  {
+   "id": "agents-focus",
+   "source": "AGENTS.md",
+   "question": "What is the project's current focus according to the agent rules?",
+   "key": "reliability freeze: no feature work or speculative cleanup",
+   "kind": "fact"
+  },
+  {
+   "id": "agents-log-order",
+   "source": "AGENTS.md",
+   "question": "In which order should entries be placed in the LOG file?",
+   "key": "newest first",
+   "kind": "procedure"
+  },
+  {
+   "id": "migr-empty-file",
+   "source": "docs/eval/migration_rerun_2026-10-03.md",
+   "question": "What did the Backup screen say about an empty zero byte backup file?",
+   "key": "checked and ready",
+   "kind": "fact"
+  },
+  {
+   "id": "migr-newest",
+   "source": "docs/eval/migration_rerun_2026-10-03.md",
+   "question": "Why did the shortcut choose the first backup of the day over the second?",
+   "key": "sorts before",
+   "kind": "why"
+  },
+  {
+   "id": "migr-total-checks",
+   "source": "docs/eval/migration_rerun_2026-10-03.md",
+   "question": "How many checks did the migration re-run make and how many failed?",
+   "key": "307 checks, 23 failed",
+   "kind": "number"
+  },
+  {
+   "id": "migr-catchup",
+   "source": "docs/eval/migration_rerun_2026-10-03.md",
+   "question": "What produced the one export failure on a machine with no chat on it?",
+   "key": "the sign-in catch-up was observing the restored conversation",
+   "kind": "why"
+  },
+  {
+   "id": "migr-d19",
+   "source": "docs/eval/migration_rerun_2026-10-03.md",
+   "question": "What is wrong with staged restore state being shared across profiles?",
+   "key": "staged-restore state is one per installation",
+   "kind": "fact"
+  },
+  {
+   "id": "migr-oem",
+   "source": "docs/eval/migration_rerun_2026-10-03.md",
+   "question": "Why did the harness fail to read paths with accented characters?",
+   "key": "oem code page",
+   "kind": "why"
+  },
+  {
+   "id": "migr-exit",
+   "source": "docs/eval/migration_rerun_2026-10-03.md",
+   "question": "Was the exit criterion for the migration met?",
+   "key": "not met as worded",
+   "kind": "fact"
+  },
+  {
+   "id": "migr-model",
+   "source": "docs/eval/migration_rerun_2026-10-03.md",
+   "question": "Which local model answered the chat turns during the journey?",
+   "key": "qwen2.5:7b",
+   "kind": "fact"
+  },
+  {
+   "id": "obsv-precision",
+   "source": "docs/eval/observer_end_to_end_2026-09-28.md",
+   "question": "What precision did the observer reach in its first run?",
+   "key": "8/9 (89%)",
+   "kind": "number"
+  },
+  {
+   "id": "obsv-model",
+   "source": "docs/eval/observer_end_to_end_2026-09-28.md",
+   "question": "Why was qwen used for the observer measurement and not the default model?",
+   "key": "the only model pulled on the machine",
+   "kind": "why"
+  },
+  {
+   "id": "obsv-cases",
+   "source": "docs/eval/observer_end_to_end_2026-09-28.md",
+   "question": "How many cases were in the end-to-end observer test set?",
+   "key": "cases: 37",
+   "kind": "number"
+  },
+  {
+   "id": "obsv-recall",
+   "source": "docs/eval/observer_end_to_end_2026-09-28.md",
+   "question": "What share of stated facts did the observer learn in run one?",
+   "key": "8/23 (35%)",
+   "kind": "number"
+  },
+  {
+   "id": "obsv-sarcasm",
+   "source": "docs/eval/observer_end_to_end_2026-09-28.md",
+   "question": "Which test case got a sarcastic remark stored as a real preference?",
+   "key": "trap_sarcasm_ie",
+   "kind": "fact"
+  },
+  {
+   "id": "vald-rest",
+   "source": "docs/eval/reliability_validation_2026-10-01.md",
+   "question": "How many REST method and path pairs refused bad credentials?",
+   "key": "all 64 rest method+path pairs refuse bad credentials",
+   "kind": "number"
+  },
+  {
+   "id": "vald-gpu",
+   "source": "docs/eval/reliability_validation_2026-10-01.md",
+   "question": "Which graphics card was in the machine used for the validation?",
+   "key": "rtx 4060 laptop gpu",
+   "kind": "fact"
+  },
+  {
+   "id": "vald-critical",
+   "source": "docs/eval/reliability_validation_2026-10-01.md",
+   "question": "What is the critical defect found in restoring over a leftover wal file?",
+   "key": "opens with neither the new nor the old password",
+   "kind": "fact"
+  },
+  {
+   "id": "vald-retrieval-invalid",
+   "source": "docs/eval/reliability_validation_2026-10-01.md",
+   "question": "Why were no retrieval quality results claimed in the validation pass?",
+   "key": "any result about retrieval quality is invalid under it",
+   "kind": "why"
+  },
+  {
+   "id": "vald-tracked",
+   "source": "docs/eval/reliability_validation_2026-10-01.md",
+   "question": "Were there uncommitted changes in the repository when the validation ran?",
+   "key": "no tracked changes",
+   "kind": "fact"
+  },
+  {
+   "id": "vald-d06",
+   "source": "docs/eval/reliability_validation_2026-10-01.md",
+   "question": "What happens to the file on disk when a document is deleted?",
+   "key": "leaves its plaintext file on disk",
+   "kind": "fact"
+  },
+  {
+   "id": "fl-principle",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "What is the governing principle of the reliability plan?",
+   "key": "constrain the mechanism; do not merely restate the intent",
+   "kind": "fact"
+  },
+  {
+   "id": "fl-break-it",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "After a new test passes, what must you do to be sure it proves anything?",
+   "key": "weaken the guard, confirm the test fails, restore the guard",
+   "kind": "procedure"
+  },
+  {
+   "id": "fl-two-revisions",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "How many revisions of a plan are allowed before building a small version?",
+   "key": "cap planning at two revisions",
+   "kind": "number"
+  },
+  {
+   "id": "fl-finetune",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "Why was fine tuning rejected as a way to stop the model fabricating?",
+   "key": "the bug was deterministic (misleading context)",
+   "kind": "why"
+  },
+  {
+   "id": "fl-audit-spec",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "What did all the revisions of the audit specification produce?",
+   "key": "ten revisions of the audit spec produced zero evidence",
+   "kind": "fact"
+  },
+  {
+   "id": "fl-freeze-rule",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "What three things are forbidden until all the evidence tracks return?",
+   "key": "no feature work. no speculative cleanup. no fix without evidence.",
+   "kind": "fact"
+  },
+  {
+   "id": "fl-salt",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "What could an unisolated salt path in the tests have done to the real database?",
+   "key": "permanently unopenable",
+   "kind": "why"
+  },
+  {
+   "id": "fl-ollama-down",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "What should the system do when Ollama is down?",
+   "key": "refuse and queue",
+   "kind": "fact"
+  },
+  {
+   "id": "fl-stage12",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "Which pipeline threshold has never been measured?",
+   "key": "stage 12 threshold quality unmeasured",
+   "kind": "fact"
+  },
+  {
+   "id": "fl-promise1",
+   "source": "docs/FREEZE_LIST.md",
+   "question": "What is the first of the nine promises about?",
+   "key": "observer writes only through governance",
+   "kind": "fact"
+  }
+ ],
+ "off_topic": [
+  {
+   "id": "off-01",
+   "question": "What is a good recipe for chocolate chip cookies?"
+  },
+  {
+   "id": "off-02",
+   "question": "Who won the football world cup in 2018?"
+  },
+  {
+   "id": "off-03",
+   "question": "How tall is Mount Everest in metres?"
+  },
+  {
+   "id": "off-04",
+   "question": "What is the capital city of Australia?"
+  },
+  {
+   "id": "off-05",
+   "question": "Explain how photosynthesis works in plants."
+  },
+  {
+   "id": "off-06",
+   "question": "What is the best way to learn the guitar as an adult?"
+  },
+  {
+   "id": "off-07",
+   "question": "What are the common symptoms of the flu?"
+  },
+  {
+   "id": "off-08",
+   "question": "Translate good morning into Spanish for me."
+  },
+  {
+   "id": "off-09",
+   "question": "How many calories are in a banana?"
+  },
+  {
+   "id": "off-10",
+   "question": "Summarise the plot of Romeo and Juliet."
+  },
+  {
+   "id": "off-11",
+   "question": "What is the speed of light in a vacuum?"
+  },
+  {
+   "id": "off-12",
+   "question": "How do I fix a flat bicycle tyre?"
+  },
+  {
+   "id": "off-13",
+   "question": "Who painted the Mona Lisa?"
+  },
+  {
+   "id": "off-14",
+   "question": "What is the boiling point of water at sea level?"
+  }
+ ],
+ "near_topic": [
+  {
+   "id": "near-01",
+   "question": "How much does a PIP subscription cost per month?"
+  },
+  {
+   "id": "near-02",
+   "question": "What colour is the PIP logo?"
+  },
+  {
+   "id": "near-03",
+   "question": "Which cloud provider hosts the PIP servers?"
+  },
+  {
+   "id": "near-04",
+   "question": "When will PIP be released on the Apple app store?"
+  }
+ ]
+}
