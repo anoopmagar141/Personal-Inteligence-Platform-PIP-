@@ -336,6 +336,18 @@ def rebuild_vector_index(out_path: pathlib.Path, new_key: str) -> None:
         shutil.move(str(chroma_dir), str(kept))
         print(f"  previous vector index kept as {kept.name}")
 
+    # The documents folder goes aside with it (FREEZE_LIST D-20), for the same
+    # reason the in-app restore moves it with the database: the write-back
+    # below puts the BACKUP's files there, and a same-named file of the profile
+    # being replaced, found first, is what the restored record used to be
+    # pointed at - wrong content indexed, and the backup's own copy overwritten
+    # in the restored database. Kept under the same stamp, never deleted.
+    documents_dir = pathlib.Path(profile_store.documents_root())
+    if documents_dir.exists():
+        kept = documents_dir.with_name(f"{documents_dir.name}.superseded-{_stamp()}")
+        shutil.move(str(documents_dir), str(kept))
+        print(f"  previous documents folder kept as {kept.name}")
+
     # vector_store reads the live key from the environment, and the live key is
     # now the one just derived - the process that ran the restore has never had
     # it set, and the chunk encryption would silently fall back to plaintext.

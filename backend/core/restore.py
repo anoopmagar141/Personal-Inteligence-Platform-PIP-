@@ -101,10 +101,17 @@ def stage_restore(
     *,
     db_path: str | Path,
     salt_path: str | Path,
+    documents_dir: str | Path | None = None,
+    chroma_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """
     Convert *backup_path* into a live database under *new_password*, and record
     that it should replace *db_path* at the next start.
+
+    *documents_dir* and *chroma_dir* are the profile's own folders. They are
+    recorded so the swap can move them aside with the database (D-20, see
+    _install); left out, the swap touches only the database and its salt, which
+    is all a caller that predates them ever asked for.
 
     Everything irreversible about a restore is in the swap, and the swap is not
     done here. What this leaves behind is two temporary files and a marker; if
@@ -126,7 +133,9 @@ def stage_restore(
     work = Path(db_path).parent
     before = set(work.glob("restore-*.tmp.*")) if work.exists() else set()
     try:
-        return _stage_restore(source, backup_password, new_password, db_path, salt_path)
+        return _stage_restore(
+            source, backup_password, new_password, db_path, salt_path, documents_dir, chroma_dir
+        )
     except Exception as exc:
         # Whatever went wrong, what this call wrote goes with it. Only the
         # files this call made: a staging that is already pending has its own.
@@ -151,6 +160,8 @@ def _stage_restore(
     new_password: str,
     db_path: str | Path,
     salt_path: str | Path,
+    documents_dir: str | Path | None = None,
+    chroma_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     import sqlcipher3
 
@@ -253,6 +264,8 @@ def _stage_restore(
         "salt": str(tmp_salt),
         "target_db": str(db_path),
         "target_salt": str(salt_path),
+        "target_documents": str(documents_dir) if documents_dir else None,
+        "target_chroma": str(chroma_dir) if chroma_dir else None,
         "source": str(source),
         "rows": sum(expected.values()),
         "tables": len(expected),
@@ -305,6 +318,21 @@ def _install(staged: dict[str, Any]) -> str | None:
         for suffix in profiles.SQLITE_SIDECAR_SUFFIXES
     ]
     aside.append((target_salt, target_salt.with_name(f"{target_salt.name}.superseded-{stamp}"), "salt"))
+    # The profile's documents and vector index go aside with its database
+    # (FREEZE_LIST D-20). They belong to the database being replaced: the index
+    # is keyed to its old key, so nothing in it can be addressed under the new
+    # one, and the documents folder is where the write-back after the swap
+    # puts the BACKUP's files. Left in place, a same-named file of the old
+    # profile's was found there at the first sign-in and the restored record was
+    # pointed at it instead - wrong content indexed, and the backup's own copy
+    # overwritten in the restored database - against a dialog promising that
+    # everything, documents included, is replaced. Kept, never deleted, under
+    # the same stamp and in the same undo list as the database.
+    for key, label in (("target_documents", "documents folder"), ("target_chroma", "vector index")):
+        folder = staged.get(key)
+        if folder:
+            folder = Path(folder)
+            aside.append((folder, folder.with_name(f"{folder.name}.superseded-{stamp}"), label))
 
     undo: list[tuple[Path, Path]] = []
     try:

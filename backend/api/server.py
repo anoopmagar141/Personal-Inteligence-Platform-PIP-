@@ -2767,6 +2767,10 @@ try:
                 payload.get("new_password") or "",
                 db_path=_db_path_or_default(),
                 salt_path=str(db_key.salt_path()),
+                # This profile's own folders, so the swap at the next start
+                # moves them aside with the database (D-20).
+                documents_dir=str(vector_store.documents_root()),
+                chroma_dir=str(vector_store.resolved_chroma_path()),
             )
         except restore.RestoreError as exc:
             # The sentence raised IS the answer - "that password did not open

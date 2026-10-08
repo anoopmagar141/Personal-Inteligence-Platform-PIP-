@@ -521,14 +521,37 @@ def materialise_documents(conn, *, into: Path | None = None) -> dict[str, list[s
     writing to an arbitrary absolute path out of a restored database would be
     a fine way to turn a backup file into an arbitrary-write primitive.
 
-    A document whose recorded file is already on disk is left completely alone -
-    not rewritten, and its registry row not repointed. That restraint is the
-    whole correctness condition here: this runs inside every index rebuild,
-    including rebuilds on the machine that ingested the files in the first
-    place, where every path is already valid and there is nothing to restore.
-    Acting on those would rewrite working paths to point somewhere else.
+    A document whose recorded file is already in THIS profile's documents
+    directory is left completely alone - not rewritten, and its registry row not
+    repointed. That restraint is the whole correctness condition here: this runs
+    inside every index rebuild, including rebuilds on the machine that ingested
+    the files in the first place, where every path is already valid and there is
+    nothing to restore. Acting on those would rewrite working paths to point
+    somewhere else.
+
+    "On disk" used to be the whole test, and it was one condition short
+    (FREEZE_LIST D-07). A backup restored into a SECOND profile on the same
+    machine records paths into the first profile's folder, which exist, so the
+    document counted as present, nothing was written into the new profile's
+    folder, and the next rebuild - whose ingestion sandbox is the profile's own
+    folder - rejected the foreign path and dropped the document out of search.
+    A file that exists somewhere else belongs to somebody else, and the bytes in
+    the database are the ones this profile owns.
     """
     target = Path(into) if into else documents_root()
+    try:
+        home = target.resolve()
+    except OSError:
+        home = target
+
+    def _is_home(recorded: str) -> bool:
+        path = Path(recorded)
+        if not path.exists():
+            return False
+        try:
+            return path.resolve().is_relative_to(home)
+        except (OSError, ValueError):
+            return False
 
     written: list[str] = []
     skipped: list[str] = []
@@ -537,7 +560,7 @@ def materialise_documents(conn, *, into: Path | None = None) -> dict[str, list[s
         "JOIN document_blobs b ON b.document_id = d.id "
         "WHERE d.status = 'active'"
     ):
-        if Path(row["file_path"]).exists():
+        if _is_home(row["file_path"]):
             continue  # nothing to put back
 
         # Under its own name in this machine's documents directory, never the

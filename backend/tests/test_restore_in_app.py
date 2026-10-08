@@ -161,6 +161,9 @@ def test_no_password_is_written_to_the_marker(live):
     marker = json.loads(raw)
     assert set(marker) == {
         "db", "salt", "target_db", "target_salt", "source", "rows", "tables", "staged_at",
+        # The profile's own folders, for the swap to move aside (D-20): paths,
+        # or null for a caller that did not name them.
+        "target_documents", "target_chroma",
     }
     # Every value is a path, a count or a timestamp - nothing derived from a
     # secret, so the marker cannot be used to open anything.

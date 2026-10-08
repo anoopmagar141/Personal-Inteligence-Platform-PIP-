@@ -177,3 +177,20 @@ def test_a_failure_after_the_temporary_copy_is_written_leaves_none_of_it(app, mo
         )
 
     assert _nothing_staged(tmp_path)
+
+
+def test_staging_records_the_profiles_own_folders_for_the_swap(app):
+    """
+    The swap at the next start moves the folders it is told about aside with
+    the database (D-20); the route is what tells it. Without them a restore
+    over a profile that already holds a same-named document silently indexes
+    the old profile's file.
+    """
+    client, headers, tmp_path = app
+
+    response = _post(client, headers, path=str(_backup(tmp_path)))
+
+    assert response.status_code == 200, response.text
+    staged = restore.pending_restore()
+    assert staged["target_documents"] == str(tmp_path / "documents")
+    assert staged["target_chroma"] == str(tmp_path / "chroma")
