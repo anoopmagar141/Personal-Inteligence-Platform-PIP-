@@ -2792,8 +2792,30 @@ try:
             "tables": staged["tables"],
         }
 
+    # One first-run import at a time. profiles.activate() points the whole process
+    # at a profile (paths and environment), so a second import that activated its
+    # own profile while the first was between "register" and "install" moved the
+    # first one's target out from under it: one of two simultaneous imports failed
+    # with a 500 and the other reported the other profile's state (FREEZE_LIST 7.29).
+    # Nothing is gained by letting two run, and a person only ever has one backup
+    # to import first, so the second is simply asked to wait.
+    _first_run_import_running = threading.Lock()
+
     @app.post(f"{BASE_PREFIX}/backup/import")
     async def import_backup_first_run(payload: dict[str, Any]):
+        from fastapi import HTTPException
+
+        if not _first_run_import_running.acquire(blocking=False):
+            raise HTTPException(
+                status_code=409,
+                detail="An import is already running. Wait for it to finish.",
+            )
+        try:
+            return await _import_backup_first_run(payload)
+        finally:
+            _first_run_import_running.release()
+
+    async def _import_backup_first_run(payload: dict[str, Any]):
         """
         Import a .pipbak from the welcome screen, as a NEW profile named after the
         person in it. Allowed only while no profile has a database.
