@@ -318,7 +318,7 @@ class _SignInScreenState extends State<SignInScreen> {
     }
     await showDialog<void>(
       context: context,
-      builder: (context) => _ImportBackupDialog(fileName: picked.name),
+      builder: (context) => ImportBackupDialog(fileName: picked.name, path: path),
     );
   }
 
@@ -806,20 +806,88 @@ class _FirstRunWelcome extends StatelessWidget {
 /// shortcut runs only after PIP has closed and keeps both passwords out of the
 /// HTTP surface. A `.pipbak` contains data and its backup password, never the
 /// source machine's live password, so the shortcut asks for a new local one.
-class _ImportBackupDialog extends StatelessWidget {
+///
+/// So the most this dialog can do is say, accurately, what happens next, and
+/// three things it used to leave out are the ones people trip on
+/// (FREEZE_LIST D-09): closing PIP's window does not stop its background
+/// process, so the shortcut may say PIP is still running and ask to close it;
+/// the shortcut asks for a PATH on a machine whose data folder is empty, so the
+/// file's full path is shown here, selectable, with a Copy button, rather than
+/// only its name; and the restored profile arrives called "Default", not by the
+/// name it had on the machine it came from.
+///
+/// Public, and visible for testing only, because the file picker that opens it
+/// is a platform call a widget test cannot answer.
+@visibleForTesting
+class ImportBackupDialog extends StatefulWidget {
   final String fileName;
+  final String path;
 
-  const _ImportBackupDialog({required this.fileName});
+  const ImportBackupDialog({super.key, required this.fileName, required this.path});
+
+  @override
+  State<ImportBackupDialog> createState() => _ImportBackupDialogState();
+}
+
+class _ImportBackupDialogState extends State<ImportBackupDialog> {
+  bool _copied = false;
+
+  static const _steps = <String>[
+    'Close the PIP window.',
+    'Run “Restore PIP from backup” (Start menu or Desktop). If it says PIP is '
+        'still running in the background, that is normal: closing the window does '
+        'not stop it. Type yes to close it.',
+    'Give it the file above, the backup password, and a new password for this '
+        'computer.',
+    'Open PIP and sign in to the profile named “Default” with the new password. '
+        'Your name and conversations are inside it.',
+  ];
 
   @override
   Widget build(BuildContext context) => AlertDialog(
         title: const Text('Import existing PIP'),
-        content: Text(
-          '“$fileName” was selected. To protect your data, PIP does not replace '
-          'a database while it is running. Close PIP, then use the “Restore PIP '
-          'from backup” shortcut installed with PIP and select this file. It will '
-          'ask for the backup password and a new password for this computer. '
-          'After the restore, open PIP and unlock it with that new password.',
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('“${widget.fileName}” was selected.'),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        widget.path,
+                        style: TextStyle(fontFamily: AppTheme.mono, fontSize: 12.5, height: 1.4),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(_copied ? Icons.check : Icons.copy_outlined, size: 17),
+                      tooltip: _copied ? 'Copied' : 'Copy path',
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: widget.path));
+                        if (!mounted) return;
+                        setState(() => _copied = true);
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                const Text(
+                  'To protect your data, PIP does not replace a database while it is '
+                  'running, so the import is done by a shortcut installed with PIP:',
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                for (var i = 0; i < _steps.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                    child: Text('${i + 1}. ${_steps[i]}'),
+                  ),
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),

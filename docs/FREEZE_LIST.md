@@ -2215,11 +2215,12 @@ with two tests that fail while the file is opened read-write.
   (first-run import, export side, restore core) did not complete: the session
   limit stopped them. What was found beyond §7.24 came from writing the tests,
   above. The first-run import journey was read, not driven.
-- The Flutter dialogs were not changed. The welcome screen's "Import existing PIP"
-  still describes the shortcut without saying it may ask to close PIP, which is
-  true now and harmless; changing it needs a client rebuild. The first-run
-  import still only points at the shortcut and restores nothing itself, and the
-  shortcut always restores into a profile named "Default".
+- The first-run "Import existing PIP" still only points at the shortcut and
+  restores nothing itself, and the shortcut always restores into a profile named
+  "Default". Its dialog was rewritten on 2026-10-08 to say what happens next
+  (full path with a Copy button, the "close PIP?" question, which passwords, the
+  name "Default"; 6 widget tests, 4 mutations caught), but doing the import
+  from that screen, or naming the profile, is not done.
 - An older backup (no mark) that was cut short and still has an `identity`
   table cannot be told from a whole one.
 - D-02 (Smart App Control blocks torch here) is untouched; every test ran under
