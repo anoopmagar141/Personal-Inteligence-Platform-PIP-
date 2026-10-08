@@ -20,6 +20,22 @@ from backend.providers.ollama_provider import OllamaProvider
 from backend.providers.openai_compatible_provider import OpenAICompatibleProvider
 
 
+@pytest.fixture(autouse=True)
+def ollama_is_reachable(monkeypatch):
+    """
+    The chain is built from what is reachable RIGHT NOW: pipeline._default_providers
+    asks Ollama whether it is up (a real request to localhost:11434, two seconds
+    to fail) and leaves it out of the chain when it is down and other endpoints
+    exist. Three tests below assume it is in the chain, so they passed on a machine
+    with Ollama running and failed on one without - the same code, a different
+    result, and a "known failure" that hid whether anything had really broken.
+
+    Pinned reachable by default, the project's own idiom (test_chat_turn_ends.py,
+    test_consent_before_sending.py); the tests about the unreachable case say so.
+    """
+    monkeypatch.setattr(OllamaProvider, "is_available", lambda self: True)
+
+
 @pytest.fixture
 def conn():
     connection = sqlite3.connect(":memory:")
@@ -212,6 +228,29 @@ def test_an_endpoint_sits_behind_the_local_model_by_default(conn):
     """
     add_cloud(conn)
     assert pipeline._default_providers(conn)[0].get_model_info()["provider_id"] == "ollama"
+
+
+def test_an_unreachable_local_model_is_left_out_when_other_endpoints_exist(monkeypatch, conn):
+    """
+    So a down Ollama does not cost every message a two-second timeout. The docstring
+    on _default_providers says so and nothing held it.
+    """
+    monkeypatch.setattr(OllamaProvider, "is_available", lambda self: False)
+    add_local(conn)
+
+    providers = pipeline._default_providers(conn)
+
+    assert [p.get_model_info()["provider_id"] for p in providers] == ["lm-studio"]
+
+
+def test_an_unreachable_local_model_is_still_the_chain_when_nothing_else_is_configured(monkeypatch, conn):
+    """With no alternative the error should be "Ollama is unreachable", not an empty
+    list that fails somewhere less explicable."""
+    monkeypatch.setattr(OllamaProvider, "is_available", lambda self: False)
+
+    providers = pipeline._default_providers(conn)
+
+    assert [p.get_model_info()["provider_id"] for p in providers] == ["ollama"]
 
 
 def test_a_lower_priority_puts_an_endpoint_first(conn):

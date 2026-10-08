@@ -189,11 +189,23 @@ def test_an_unchanged_record_is_still_answered_from_the_cache(seeded):
     assert second.prompts == []
 
 
-def test_a_cached_answer_is_not_served_after_a_document_is_added(seeded):
+def test_a_cached_answer_is_not_served_after_a_document_is_added(seeded, monkeypatch):
     """§7.6: replayed with the model never called, after a document that
     answers the question had been indexed."""
     from pathlib import Path
     import os
+
+    # What this test is about is the CACHE: after a document is indexed, the same
+    # words must reach the model again, with the document in the prompt. It is not
+    # about how well an embedder scores a question against a passage, and it used
+    # to depend on that: the 0.6 similarity threshold is calibrated for the real
+    # all-MiniLM model, and a stand-in encoder (the one used where torch cannot
+    # load) scores this question and document under it, so the document never
+    # reached the prompt and the test failed for a reason that had nothing to do
+    # with the cache - labelled "needs real embeddings" and left failing. One
+    # document is indexed, so a threshold of zero retrieves it under any embedder
+    # and leaves the cache as the only thing that can make this fail.
+    monkeypatch.setattr(vector_store, "DEFAULT_SIMILARITY_THRESHOLD", 0.0)
 
     def add_document():
         root = Path(os.environ["PIP_DOCUMENTS_ROOT"])
