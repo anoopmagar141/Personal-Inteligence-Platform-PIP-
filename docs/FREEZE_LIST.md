@@ -2203,6 +2203,29 @@ before the file existed, a missing mtime-versus-name case); one guard, the wait
 for the port to free in `Stop-PipBackend`, is a timing guard no deterministic
 test pins.
 
+**A real window (2026-10-08).** The Flutter client was driven by hand through
+a throwaway installation with the real `launch_pip.ps1`, `restore_pip.ps1` and
+the real native file chooser. Smart App Control blocks the unsigned *Release*
+executable on this machine (the same policy as D-02; it was not touched), but
+the *Debug* build runs, so that is what was used. Seen: the welcome screen; the
+rewritten import dialog (file name, full path, Copy button - the clipboard held
+the full path); closing the window left the backend running; the shortcut
+said PIP was still running, closed it on a typed yes, and restored 370 rows;
+reopening showed "Welcome back", the profile unlocked with the new password and
+the sidebar listed Session 14 down to Session 1, with the Profile screen showing
+BatMan, 10 decisions and the project. Then the Backup screen: a new password
+equal to the backup password was refused in red with the D-11 sentence; a real
+restore staged ("Ready to restore on the next start", 370 rows, 31 tables);
+closing and reopening through the launcher replaced the old backend (pid
+changed, log line "restarting to apply a restore", `pending-restore.json`
+consumed); the OLD password was refused and the NEW one opened all 14 sessions;
+the replaced `pip.db`, salt and `documents/` were kept as `.superseded-<stamp>`.
+Two things were answered by test hooks and are not the real console: the
+password prompts of the shortcut (a script cannot type into a console) and its
+final "yes" (PowerShell swallows piped input before a child Python process can
+read its own prompt). Found on the way, not fixed: if `restore_backup.py` dies
+at its confirmation prompt, its temporary restored copy is left in `data/`.
+
 **A correction.** The first version of this section, and the message of commit
 `60f3f3e`, said opening the chosen backup read-only was skipped because an
 `ATTACH` from a read-only connection inherits its flags. That was an assumption
@@ -2214,7 +2237,8 @@ with two tests that fail while the file is opened read-write.
 - The three agents sent to hunt for *unrecorded* import and export defects
   (first-run import, export side, restore core) did not complete: the session
   limit stopped them. What was found beyond §7.24 came from writing the tests,
-  above. The first-run import journey was read, not driven.
+  above. The first-run import journey was then driven in a real window (below),
+  but the export side and the restore core were not hunted again.
 - The first-run "Import existing PIP" still only points at the shortcut and
   restores nothing itself, and the shortcut always restores into a profile named
   "Default". Its dialog was rewritten on 2026-10-08 to say what happens next
