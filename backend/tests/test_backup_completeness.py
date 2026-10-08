@@ -189,22 +189,51 @@ def test_a_complete_export_carries_a_mark_and_restores(backup, tmp_path):
     assert "identity" in names
 
 
-def test_an_export_that_failed_verification_is_not_restorable(
+def _killed_after_verifying(export_script, monkeypatch, live_db, out):
+    """
+    An export that was killed between verify() and the mark: the file is whole,
+    opens, has every table and every row - and nothing ever vouched for it.
+    (A run that FAILS removes its file; only a kill can leave one behind.)
+    """
+    monkeypatch.setattr(export_script.backup_mark, "finish", lambda *args, **kwargs: None)
+    _export(export_script, monkeypatch, live_db, out)
+    assert out.exists()
+    return out
+
+
+def _killed_while_copying(live_db, out):
+    """An export killed during the copy: the unfinished mark and nothing else."""
+    from backend.core import backup_mark
+
+    src = sqlcipher3.connect(str(live_db))
+    try:
+        src.execute(f"PRAGMA key = \"x'{LIVE_KEY}'\"")
+        src.execute(f"ATTACH DATABASE '{out}' AS backup KEY '{BACKUP_PASSWORD}'")
+        backup_mark.begin(src, "backup")
+        src.execute("DETACH DATABASE backup")
+    finally:
+        src.close()
+    return out
+
+
+def test_an_export_killed_after_verifying_is_not_restorable(
     export_script, monkeypatch, live_db, tmp_path
 ):
     """
-    The export killed, or failing its own check, after the file exists. That
-    file is real, opens, and has every table - and must still be refused,
-    because nothing ever vouched for it. (It is also what D-17 leaves behind.)
+    A file nothing ever vouched for must be refused even though it is real,
+    opens, and holds every table - which is exactly why a mark, and not a look
+    at the contents, is the evidence.
     """
-    def verify_fails(*args, **kwargs):
-        raise SystemExit("ERROR: row counts differ between source and backup: {}")
+    out = _killed_after_verifying(export_script, monkeypatch, live_db, tmp_path / "partial.pipbak")
 
-    monkeypatch.setattr(export_script, "verify", verify_fails)
-    out = tmp_path / "partial.pipbak"
-    with pytest.raises(SystemExit):
-        _export(export_script, monkeypatch, live_db, out)
-    assert out.exists()
+    with pytest.raises(restore.RestoreError, match="did not finish|incomplete"):
+        _stage(out, tmp_path)
+
+    assert _nothing_staged(tmp_path)
+
+
+def test_an_export_killed_while_copying_is_not_restorable(live_db, tmp_path):
+    out = _killed_while_copying(live_db, tmp_path / "partial.pipbak")
 
     with pytest.raises(restore.RestoreError, match="did not finish|incomplete"):
         _stage(out, tmp_path)
@@ -277,13 +306,7 @@ def test_the_shortcut_refuses_an_empty_file_and_replaces_nothing(
 def test_the_shortcut_refuses_an_unfinished_export(
     export_script, restore_script, monkeypatch, live_db, tmp_path
 ):
-    def verify_fails(*args, **kwargs):
-        raise SystemExit("ERROR: row counts differ")
-
-    monkeypatch.setattr(export_script, "verify", verify_fails)
-    partial = tmp_path / "partial.pipbak"
-    with pytest.raises(SystemExit):
-        _export(export_script, monkeypatch, live_db, partial)
+    partial = _killed_after_verifying(export_script, monkeypatch, live_db, tmp_path / "partial.pipbak")
     before = live_db.read_bytes()
 
     code = _drive_restore(restore_script, monkeypatch, partial, live_db)

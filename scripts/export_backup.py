@@ -430,6 +430,33 @@ def checkpoint(conn) -> None:
         print(f"  note: WAL checkpoint skipped ({e}) - the export reads through the SQL layer anyway")
 
 
+def _discard_unverified(out_path: pathlib.Path, *, in_the_open: bool = True) -> None:
+    """
+    Remove the file an export wrote and could not vouch for.
+
+    The launcher says "The export did not complete. Nothing was written." for
+    every non-zero exit, and for a failure after the file existed that was false:
+    a file was left, unmarked, at the top of the Backups list and in the
+    shortcut's own pick (FREEZE_LIST D-17, D-21). It also cannot be restored -
+    its mark says it never finished (D-18) - so keeping it only made the screen
+    list a backup that is not one. Only called for a path this run created: an
+    existing --out is refused before anything is written, and never reaches here.
+
+    Never raises: this runs while another error is already on its way out, and
+    failing to tidy up must not replace it.
+    """
+    for path in (out_path, out_path.with_name(out_path.name + "-journal")):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            print(f"  note: could not remove the unfinished file {path}: {e}")
+            return
+    if in_the_open:
+        print(f"  The unfinished file {out_path.name} was removed - nothing was written.")
+
+
 def default_backup_path() -> pathlib.Path:
     """
     data/pip_backup_YYYYMMDD.pipbak, the name the spec fixes.
@@ -636,8 +663,11 @@ def main(argv: list[str] | None = None) -> pathlib.Path:
             )
 
         compared = comparable_tables(names)
-        expected = row_counts(src, compared)
-        print(f"  {len(names)} tables, {sum(expected.values())} rows across {len(compared)} compared tables")
+        seen = row_counts(src, compared)
+        # Evidence for the person, not the figure the backup is checked against:
+        # the app keeps writing while a password is typed, so these counts are
+        # taken again inside the snapshot the copy is made from (D-17).
+        print(f"  {len(names)} tables, {sum(seen.values())} rows across {len(compared)} compared tables")
 
         warn_about_missing_documents(src)
 
@@ -660,22 +690,61 @@ def main(argv: list[str] | None = None) -> pathlib.Path:
         src.execute(
             f"ATTACH DATABASE {_sql_quote(str(out_path))} AS backup KEY {_sql_quote(backup_password)}"
         )
+        # DETACH first, discard second: Windows will not delete a file SQLite
+        # still has attached, so tidying up inside the attached window would
+        # fail with WinError 32 and leave the very file this exists to remove.
         try:
-            # Before one row is copied, the file says it is unfinished. A copy
-            # killed half-way, or one that fails verify() below, is then a file
-            # that admits it - not a file with no mark, which has to mean "made
-            # before marks existed" (backend/core/backup_mark.py, D-18).
-            backup_mark.begin(src, "backup")
-            src.execute("SELECT sqlcipher_export('backup')")
-        finally:
-            src.execute("DETACH DATABASE backup")
+            try:
+                # Before one row is copied, the file says it is unfinished. A
+                # copy killed half-way, or one that fails verify() below, is
+                # then a file that admits it - not a file with no mark, which
+                # has to mean "made before marks existed"
+                # (backend/core/backup_mark.py, D-18).
+                backup_mark.begin(src, "backup")
+
+                # ONE read snapshot for the counts and the copy (FREEZE_LIST
+                # D-17). They used to be taken either side of a password
+                # prompt, and the export starts while the app is running: any
+                # commit that changed a table's row count in that window - the
+                # Observer's session-end pass is exactly that - made the backup
+                # differ from the counts and failed verification, with a valid
+                # file already written. In WAL mode a read transaction sees the
+                # database as it was when the first statement ran, whatever
+                # other connections commit meanwhile, so the figure and the copy
+                # cannot disagree; and the app, which is the writer, is not
+                # blocked by it. COMMIT rather than ROLLBACK because
+                # sqlcipher_export writes the backup inside this same
+                # transaction.
+                src.execute("BEGIN")
+                try:
+                    names = table_names(src)
+                    compared = comparable_tables(names)
+                    expected = row_counts(src, compared)
+                    src.execute("SELECT sqlcipher_export('backup')")
+                    src.execute("COMMIT")
+                except BaseException:
+                    if src.in_transaction:
+                        src.execute("ROLLBACK")
+                    raise
+            finally:
+                try:
+                    src.execute("DETACH DATABASE backup")
+                except Exception:
+                    pass
+        except BaseException:
+            _discard_unverified(out_path)
+            raise
     finally:
         src.close()
 
-    print("  export complete, verifying ...")
-    verify(out_path, backup_password, expected)
-    # Only a verified file is vouched for, and the mark is read back.
-    backup_mark.finish(out_path, backup_password, expected, sqlcipher3.connect)
+    try:
+        print("  export complete, verifying ...")
+        verify(out_path, backup_password, expected)
+        # Only a verified file is vouched for, and the mark is read back.
+        backup_mark.finish(out_path, backup_password, expected, sqlcipher3.connect)
+    except BaseException:
+        _discard_unverified(out_path)
+        raise
 
     size_mb = out_path.stat().st_size / (1024 * 1024)
     print("  verified: integrity ok, row counts match")
