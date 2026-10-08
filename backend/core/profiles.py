@@ -477,6 +477,13 @@ def erasable_paths(slug: str, data_root: Path | None = None) -> list[Path]:
         # of the account holder in the directory it had just emptied would be
         # the most visible possible way to get this wrong.
         signin_picture_path(slug, data_root),
+        # Staged restore copies in this profile's folder: a full copy of the
+        # data under a password chosen while staging. delete() cancels the one
+        # the marker names; these are what staging left that nothing names - a
+        # second staging, a failed one, an older build's - and which, being
+        # listed nowhere, kept the profile's folder from being removed
+        # (FREEZE_LIST D-19). Last, after the database, for the order above.
+        *sorted(paths["db"].parent.glob("restore-*.tmp.*")),
     ]
 
 

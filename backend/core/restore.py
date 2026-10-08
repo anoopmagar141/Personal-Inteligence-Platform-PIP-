@@ -47,6 +47,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 import shutil
 from pathlib import Path
 from typing import Any
@@ -94,6 +95,45 @@ def pending_restore() -> dict[str, Any] | None:
         return None
 
 
+def _same_file(a: str | Path, b: str | Path) -> bool:
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def pending_restore_for(db_path: str | Path) -> dict[str, Any] | None:
+    """
+    The staged restore, only if it is staged for *db_path*'s profile.
+
+    There is ONE pending-restore.json for the installation, because the swap at
+    the next start is one operation. What a profile may see of it, cancel or
+    replace is a different question, and the routes used to answer it as if the
+    marker were the signed-in profile's own (FREEZE_LIST D-19): one profile was
+    shown another's staged restore with its file name, and could cancel it
+    without the other ever being told.
+    """
+    staged = pending_restore()
+    if staged and _same_file(staged.get("target_db", ""), db_path):
+        return staged
+    return None
+
+
+def _another_profiles_restore_is_waiting(db_path: str | Path) -> bool:
+    """A marker for somebody else whose staged files are still there. A marker
+    whose files have gone is stale - drain_pending_restore clears it at the next
+    start - and must not block a restore for the length of the session."""
+    staged = pending_restore()
+    if not staged or _same_file(staged.get("target_db", ""), db_path):
+        return False
+    return Path(staged.get("db", "")).exists() and Path(staged.get("salt", "")).exists()
+
+
+def _discard_staged_files(staged: dict[str, Any]) -> None:
+    for key in ("db", "salt"):
+        try:
+            Path(staged.get(key, "")).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def stage_restore(
     backup_path: str | Path,
     backup_password: str,
@@ -131,6 +171,16 @@ def stage_restore(
 
     source = Path(backup_path)
     work = Path(db_path).parent
+    # One marker serves the installation, so a second restore cannot be staged
+    # over somebody else's: it used to be accepted, and the other profile's was
+    # then never installed - its old password still opened it and the one it had
+    # chosen did not - with its staged files left in its folder (D-19).
+    if _another_profiles_restore_is_waiting(db_path):
+        raise RestoreError(
+            "Another profile has a restore waiting for the next start. Restart PIP "
+            "so that one is applied, or sign in as that profile and cancel it, then "
+            "try again. Nothing was written."
+        )
     before = set(work.glob("restore-*.tmp.*")) if work.exists() else set()
     try:
         return _stage_restore(
@@ -224,7 +274,14 @@ def _stage_restore(
         # copy that can fail halfway.
         work = db_path.parent
         work.mkdir(parents=True, exist_ok=True)
-        stamp = now_utc().replace(":", "").replace("-", "")
+        # Unique per staging, not per second. They were named by the second, and
+        # a second staging inside the same second therefore reused the first's
+        # temporary database - encrypted under the FIRST salt - and failed
+        # opening it under its own new key with "file is not a database". Found
+        # by the test for D-19's replace-the-earlier-staging rule, and invisible
+        # to the migration harness only because it sleeps over a second between
+        # stagings, which a person always does.
+        stamp = f"{now_utc().replace(':', '').replace('-', '')}-{secrets.token_hex(3)}"
         tmp_db = work / f"restore-{stamp}.tmp.db"
         tmp_salt = work / f"restore-{stamp}.tmp.salt"
 
@@ -271,6 +328,12 @@ def _stage_restore(
         "tables": len(expected),
         "staged_at": now_utc(),
     }
+    # This profile's own earlier staging is replaced, not added to: its files
+    # were left behind and the app's cancel removed only the newest (D-19).
+    earlier = pending_restore_for(db_path)
+    if earlier:
+        _discard_staged_files(earlier)
+
     path = pending_restore_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".json.tmp")

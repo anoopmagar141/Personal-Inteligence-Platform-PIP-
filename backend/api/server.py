@@ -2723,8 +2723,13 @@ try:
 
     @app.get(f"{BASE_PREFIX}/backup/restore")
     def restore_status():
-        """Whether a restore is staged and waiting for a restart."""
-        staged = restore.pending_restore()
+        """Whether a restore is staged FOR THIS PROFILE and waiting for a restart.
+
+        Another profile's staged restore is not reported: the marker is one per
+        installation, and showing its file name to whoever signed in next told
+        them about a restore that was not theirs and offered them its Cancel
+        (FREEZE_LIST D-19)."""
+        staged = restore.pending_restore_for(_db_path_or_default())
         if not staged:
             return {"pending": False}
         return {
@@ -2789,8 +2794,9 @@ try:
 
     @app.delete(f"{BASE_PREFIX}/backup/restore")
     def cancel_restore_route():
-        """Discard a staged restore and the temporary files it wrote."""
-        return {"cancelled": restore.cancel_pending_restore()}
+        """Discard this profile's staged restore and the temporary files it wrote.
+        Another profile's is left alone: cancelling it was silent to its owner."""
+        return {"cancelled": restore.cancel_pending_restore_for(_db_path_or_default())}
 
     @app.post(f"{BASE_PREFIX}/rag/ingest")
     def ingest_document(payload: dict[str, Any]):
