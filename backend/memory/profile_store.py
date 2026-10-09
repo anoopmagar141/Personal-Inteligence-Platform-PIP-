@@ -146,6 +146,8 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # every existing profile is, and copying name into it would invent a
     # preference nobody stated while making the two indistinguishable.
     ("identity", "preferred_name", "TEXT"),
+    # See schema.sql: per-stage duration in trace_log.
+    ("trace_log", "duration_ms", "INTEGER"),
 )
 
 # Run once, immediately after the named column is first added, to give existing
