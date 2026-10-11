@@ -111,9 +111,8 @@ _EXCLUDED = {
     # ── provider and model config ──────────────────────────────────────────
     "llm_settings": (
         "Stores the user's chosen Ollama model name. Changing the model "
-        "would invalidate cached responses (a different model produces "
-        "different text), but this is caught by get_active_model_name() "
-        "being part of the Writing status, not the cache key."
+        "changes the cache identity through the selected-model component of "
+        "the response-cache key; record_version covers profile context tables."
     ),
     "llm_endpoints": (
         "Provider endpoint configuration; affects routing, not profile context."
@@ -152,15 +151,15 @@ def _triggers_for_table(conn, table: str) -> set[str]:
     return {row[0] for row in rows}
 
 
-def test_every_table_is_listed_or_excluded(fresh_conn):
+def _assert_schema_tables_accounted(conn, record_tables=None):
     """
     Every table in a freshly initialised profile database is either in
     RECORD_TABLES (with the three required triggers) or in _EXCLUDED with a
     stated reason. A table missing from both is a test failure - it must be
     consciously assigned to one side.
     """
-    real = _real_tables(fresh_conn)
-    listed = set(RECORD_TABLES)
+    real = _real_tables(conn)
+    listed = set(RECORD_TABLES if record_tables is None else record_tables)
 
     # Tables that are in RECORD_TABLES but do not actually exist in this
     # fresh schema. That would be a bug in RECORD_TABLES (phantom entries).
@@ -179,14 +178,18 @@ def test_every_table_is_listed_or_excluded(fresh_conn):
     )
 
 
-def test_record_tables_have_all_three_triggers(fresh_conn):
+def test_every_table_is_listed_or_excluded(fresh_conn):
+    _assert_schema_tables_accounted(fresh_conn)
+
+
+def _assert_record_tables_have_all_three_triggers(conn):
     """
     Every table in RECORD_TABLES must have INSERT, UPDATE, and DELETE triggers
     after initialize_schema(). A missing trigger is a silent cache-staleness bug.
     """
     missing = {}
     for table in RECORD_TABLES:
-        triggers = _triggers_for_table(fresh_conn, table)
+        triggers = _triggers_for_table(conn, table)
         required = {
             f"record_version_{table}_insert",
             f"record_version_{table}_update",
@@ -202,6 +205,10 @@ def test_record_tables_have_all_three_triggers(fresh_conn):
     )
 
 
+def test_record_tables_have_all_three_triggers(fresh_conn):
+    _assert_record_tables_have_all_three_triggers(fresh_conn)
+
+
 def test_exclusion_list_has_reasons():
     """
     Sanity-check: every entry in _EXCLUDED has a non-empty reason string.
@@ -211,15 +218,10 @@ def test_exclusion_list_has_reasons():
     assert not empty, f"_EXCLUDED entries with no reason: {empty}"
 
 
-def test_break_it_missing_table_caught(fresh_conn, monkeypatch):
+def test_break_it_missing_table_caught(fresh_conn):
     """
-    Break-it: if 'documents' is removed from RECORD_TABLES and added to
-    _EXCLUDED, the trigger test must still PASS (triggers already exist from
-    initialize_schema). But if a new table is added to the schema without
-    being listed anywhere, the coverage test must FAIL and name the table.
-
-    Here we simulate a phantom new table by directly creating one and
-    checking that _real_tables picks it up and that it would be flagged.
+    Break-it: remove 'documents' from RECORD_TABLES and add a new schema table.
+    The actual coverage assertion must fail and name both omissions.
     """
     # Create a dummy table that feeds context but is not in either list.
     fresh_conn.execute(
@@ -227,13 +229,13 @@ def test_break_it_missing_table_caught(fresh_conn, monkeypatch):
     )
     fresh_conn.commit()
 
-    real = _real_tables(fresh_conn)
-    listed = set(RECORD_TABLES)
-    unlisted = real - listed - set(_EXCLUDED)
-
-    assert "_test_unlisted" in unlisted, (
-        "Break-it failed: a new unlisted table was not caught by the coverage check."
-    )
+    with pytest.raises(AssertionError) as error:
+        _assert_schema_tables_accounted(
+            fresh_conn,
+            record_tables=tuple(table for table in RECORD_TABLES if table != "documents"),
+        )
+    assert "documents" in str(error.value)
+    assert "_test_unlisted" in str(error.value)
 
 
 def test_break_it_missing_trigger_caught(fresh_conn):
@@ -244,14 +246,7 @@ def test_break_it_missing_trigger_caught(fresh_conn):
     fresh_conn.execute("DROP TRIGGER IF EXISTS record_version_documents_delete")
     fresh_conn.commit()
 
-    triggers = _triggers_for_table(fresh_conn, "documents")
-    required = {
-        "record_version_documents_insert",
-        "record_version_documents_update",
-        "record_version_documents_delete",
-    }
-    absent = required - triggers
-    assert absent, (
-        "Break-it failed: dropping a trigger was not detected. "
-        "The trigger-presence assertion would have passed incorrectly."
-    )
+    with pytest.raises(AssertionError) as error:
+        _assert_record_tables_have_all_three_triggers(fresh_conn)
+    assert "documents" in str(error.value)
+    assert "record_version_documents_delete" in str(error.value)
