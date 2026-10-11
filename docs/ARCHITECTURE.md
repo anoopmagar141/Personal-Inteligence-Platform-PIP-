@@ -153,7 +153,9 @@ so there is one write path, not two.
   generation (`response_cache.generation()`), which every sign-out moves:
   each chat connection reads and writes under the one it took when it opened,
   so nothing a session stores or asks for crosses into a later one
-  (FREEZE_LIST §7.20).
+  (FREEZE_LIST §7.20). The selected model name is also part of the key, so a
+  cached answer from the previous model is not reused after a model switch
+  (FREEZE_LIST §7.38).
 - **Provider order is policy.** `pipeline.OLLAMA_PRIORITY = 50` and
   `llm_endpoints.priority` defaults to 100, so a newly configured cloud endpoint
   sits *behind* the local model and cannot silently start sending conversations

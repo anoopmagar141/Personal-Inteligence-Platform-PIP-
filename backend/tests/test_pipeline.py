@@ -248,6 +248,28 @@ def test_cache_hit_skips_stages_3_through_9(db_conn, monkeypatch):
     assert second["stage_hints"]["cache_hit"] is True
 
 
+def test_switching_active_model_does_not_reuse_previous_models_cached_answer(db_conn):
+    first = pipeline.run_sync(
+        db_conn, "Explain how caching works",
+        providers=[FakeProvider(tokens=["answer from model one"])],
+    )
+    assert first["response_text"] == "answer from model one"
+
+    db_conn.execute(
+        "INSERT INTO llm_settings (id, model_name) VALUES (1, 'model-two') "
+        "ON CONFLICT(id) DO UPDATE SET model_name = excluded.model_name"
+    )
+    db_conn.commit()
+
+    second = pipeline.run_sync(
+        db_conn, "Explain how caching works",
+        providers=[FakeProvider(tokens=["answer from model two"])],
+    )
+
+    assert second["response_text"] == "answer from model two"
+    assert second["stage_hints"].get("cache_hit") is not True
+
+
 def test_stage_0_context_depth_modifier_is_passed_to_stage_7(db_conn, monkeypatch):
     # Stage 0's context_depth_modifier used to be computed and discarded - this
     # confirms the orchestrator actually forwards it to Stage 7, not just that

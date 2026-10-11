@@ -2,7 +2,8 @@
 #
 # Position: between Stage 2 Router and Stage 7 Context Assembly - a cache HIT is
 # meant to short-circuit Stages 3-9 entirely (no RAG, no web search, no LLM call
-# needed). Key: hash(normalized_message + project_id). Authority: lowest in the
+# needed). Key: hash(normalized_message + project_id + record_version +
+# session_generation + selected_model). Authority: lowest in the
 # pipeline - Part 7.1's own "Authority" line says a Decision Log hit always
 # overrides a cache hit, so a response influenced by a decision-log match is
 # never cached and never served from cache, regardless of category.
@@ -74,6 +75,7 @@ def cache_key(
     project_id: Optional[str],
     record_version: Optional[int] = None,
     generation: Optional[int] = None,
+    model_name: Optional[str] = None,
 ) -> str:
     # record_version is profile_store.record_version(): it moves whenever
     # anything the answer could have been built from changes, so an answer
@@ -84,9 +86,11 @@ def cache_key(
     #
     # generation is the session the caller captured; None means the current
     # one, for callers with no session of their own to name.
+    # model_name is the selected local model. A cached answer from a previous
+    # model must not be returned after the user changes that selection.
     raw = _normalize(user_message) + "|" + (project_id or "") + "|" + (
         "" if record_version is None else str(record_version)
-    ) + "|" + str(_generation if generation is None else generation)
+    ) + "|" + str(_generation if generation is None else generation) + "|" + (model_name or "")
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -103,6 +107,7 @@ def get(
     project_id: Optional[str] = None,
     record_version: Optional[int] = None,
     generation: Optional[int] = None,
+    model_name: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """
     Returns {"response_text": str, "stage_hints": dict} for a live cache entry,
@@ -111,7 +116,7 @@ def get(
     correctness, so a broken cache must never block a response).
     """
     try:
-        key = cache_key(user_message, project_id, record_version, generation)
+        key = cache_key(user_message, project_id, record_version, generation, model_name)
         entry = _cache.get(key)
         if entry is None:
             return None
@@ -134,6 +139,7 @@ def set(
     decision_log_hit: bool = False,
     record_version: Optional[int] = None,
     generation: Optional[int] = None,
+    model_name: Optional[str] = None,
 ) -> None:
     """
     Writes a response at the category's TTL, unless the response involved a
@@ -148,7 +154,7 @@ def set(
     ttl = ttl_for_category(category)
     if ttl <= 0:
         return
-    key = cache_key(user_message, project_id, record_version, generation)
+    key = cache_key(user_message, project_id, record_version, generation, model_name)
     _cache[key] = (time.monotonic() + ttl, response_text, stage_hints)
 
 

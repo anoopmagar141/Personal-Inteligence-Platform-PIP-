@@ -330,9 +330,17 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: could not read the record version, bypassing the cache: {e}")
         record_version = None
+    try:
+        active_model_name = get_active_model_name(conn)
+    except Exception as e:
+        logger.error(f"Pipeline: could not read the active model, bypassing the cache: {e}")
+        active_model_name = None
     cached = (
-        response_cache.get(user_message, project_id, record_version, generation=cache_generation)
-        if record_version is not None
+        response_cache.get(
+            user_message, project_id, record_version,
+            generation=cache_generation, model_name=active_model_name,
+        )
+        if record_version is not None and active_model_name is not None
         else None
     )
     if cached is not None:
@@ -516,13 +524,14 @@ def run(
     status = aggregate["status"]
     trace.stage_log(conn, trace_id, "stage_09_llm_streaming", "error" if status == "error" else "ok", f"status={status}", error_detail=aggregate["error"] or "")
 
-    if status == "success" and record_version is not None:
+    if status == "success" and record_version is not None and active_model_name is not None:
         response_cache.set(
             user_message, project_id, intent_result["category"],
             aggregate["response_text"], aggregate["stage_hints"],
             decision_log_hit=bool(decision_entries),
             record_version=record_version,
             generation=cache_generation,
+            model_name=active_model_name,
         )
 
     # Stage 10
