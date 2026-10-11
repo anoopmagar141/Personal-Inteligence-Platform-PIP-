@@ -2513,6 +2513,17 @@ code (export again).
 
 ---
 
+### 7.34 B-1 provider, search, and consent honesty fixes (integrated 2026-10-11)
+
+- **Promise 1 — provider status:** the initial Writing event names the provider and model about to answer. If a provider fails and Stage 9 tries another, it emits a new Writing event naming that provider and model before the attempt. The two outcome tests failed on the old behavior and when either status rule was removed.
+- **Promise 2 — web search:** trigger words match whole words; personal and project categories skip web search; a status event shows the exact query sent even when there are no results; the consent choice explains that a short query (normally the first 12 words) may leave the machine. Tests failed on the old substring, category, empty-result, and consent-copy behavior. Break-it mutations caught substring matching, removing the category guard, and hiding a sent query with no results.
+- **Promise 3 — revocation:** `api_revoke_consent()` commits the revocation and clears the response cache, so an answer cached under the prior permission state is unavailable. The regression failed before the fix and when the cache-clear call was removed.
+- **Promise 4 — provider fallback docs:** `docs/ARCHITECTURE.md` now states that an enabled, previously consented endpoint may be used automatically when Ollama is unreachable; provider priority does not grant consent.
+- **Verification:** the B-1 backend module passed (8 tests); the Flutter provider screen tests passed (17). The merged full backend suite passed with the project virtual environment: **1411 passed in 959.02 s**. A preliminary system-Python run had one failure in the existing sign-out cache race test; it passed alone and did not recur in the configured-environment full run.
+- **History:** separate promise commits `a245253`, `19a9015`, `bcc5f2b`, and `4ae00fb`; integrated in merge `cbc4aca`.
+
+---
+
 ## 8. Status
 
 ### 8.1 Decisions made (choices; need no evidence)
