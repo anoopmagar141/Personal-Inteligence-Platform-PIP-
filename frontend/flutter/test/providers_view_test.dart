@@ -117,6 +117,18 @@ void main() {
     expect(find.text('none'), findsNothing);
   });
 
+  testWidgets('explains the query sent by web search consent', (tester) async {
+    await pumpProviders(tester, [provider('anthropic')]);
+
+    await tester.tap(find.text('Grant consent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('web_search_only'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('first 12 words'), findsOneWidget);
+    expect(find.textContaining('full conversation is not'), findsOneWidget);
+  });
+
   testWidgets('will not grant until a scope is chosen', (tester) async {
     // No preselection: a default here would be this screen making the
     // least-privilege decision the gate exists to leave to the user.

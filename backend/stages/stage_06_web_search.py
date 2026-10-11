@@ -19,6 +19,7 @@
 # reuses these results.
 
 import logging
+import re
 import threading
 import time
 from typing import Any, Callable, Optional
@@ -29,6 +30,10 @@ from backend.stages.stage_01_intent_classifier import EXTERNAL_INFO_KEYWORDS
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 3600
+_KEYWORD_PATTERN = re.compile(
+    r"\b(?:" + "|".join(re.escape(keyword) for keyword in EXTERNAL_INFO_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
 
 
 def _total_timeout_seconds() -> int:
@@ -52,8 +57,7 @@ _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
 
 def matches_trigger(message: str) -> bool:
-    lowered = message.lower()
-    return any(kw in lowered for kw in EXTERNAL_INFO_KEYWORDS)
+    return bool(_KEYWORD_PATTERN.search(message))
 
 
 def _cache_get(query: str) -> Optional[list[dict[str, Any]]]:
