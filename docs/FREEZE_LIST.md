@@ -2493,6 +2493,26 @@ code (export again).
 
 ---
 
+### 7.32 Response cache respects the selected model (fixed 2026-10-10)
+
+- **Promise:** after the selected Ollama model changes, an identical question cannot receive the prior model's cached answer.
+- **Mechanism:** `response_cache.cache_key()` includes the selected model name from `llm_settings`; the pipeline uses it for lookup and storage. If the setting cannot be read, that turn bypasses caching.
+- **Test-first evidence:** the outcome test failed on the old code because it returned model one's answer after switching to model two. Removing the model component from the key made the test fail again.
+- **Verification:** focused pipeline/cache tests passed (42); the full backend suite on the fix alone passed (1399). The combined integration suite below also covers this commit.
+
+---
+
+### 7.33 A-2 schema-table and trigger coverage guard (integrated 2026-10-11)
+
+- **Promise:** every table in a freshly initialized profile database is listed in `RECORD_TABLES` or explicitly excluded with a reason; every listed table has INSERT, UPDATE, and DELETE version triggers.
+- **Mechanism:** `backend/tests/test_record_version_coverage.py` compares `sqlite_master` against both lists and checks trigger names. `llm_settings` is excluded from `record_version` because the selected model has its own response-cache key component.
+- **Break-it evidence:** removing `documents` from the list while adding `_test_unlisted` makes the real coverage assertion fail and name both. Dropping the `documents` DELETE trigger makes the trigger assertion fail and name it. Weakening each assertion by hand made its break-it test fail with DID NOT RAISE.
+- **Limitation:** a fresh-schema test cannot see tables created lazily by application code or only by migrations; review the exclusion list whenever the schema changes.
+- **Verification:** 5 focused tests passed; combined pipeline/cache/coverage tests passed (47); full backend suite on `integration/memory-first` passed: **1403 passed in 986.34 s**.
+- **History:** initial A-2 test `90cfbb7`; strengthened break-it checks `a076c5a`; integrated with cache fix `4ea3376` in merge `1ac8bb8`.
+
+---
+
 ## 8. Status
 
 ### 8.1 Decisions made (choices; need no evidence)
