@@ -496,7 +496,12 @@ def run(
     # Before the call, not after: everything above is milliseconds of local
     # lookups and this is the part somebody actually waits through, so it has
     # to be on screen while it happens rather than announced once it is over.
-    yield _stage_event("writing", "Writing", get_active_model_name(conn))
+    provider_info = gated_providers[0].get_model_info()
+    writing_detail = (
+        f"{provider_info.get('provider_id', 'unknown')} / "
+        f"{provider_info.get('model_name', 'unknown')}"
+    )
+    yield _stage_event("writing", "Writing", writing_detail)
 
     # Stage 9 - streamed live to the caller.
     events = stage_09.run(
