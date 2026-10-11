@@ -151,3 +151,23 @@ def test_web_search_status_shows_exact_query_even_when_no_results(conn, monkeypa
     web_events = _stage_events(events, "web")
     assert len(web_events) == 1
     assert query in web_events[0]["data"]["detail"]
+
+
+def test_revoking_provider_consent_clears_cached_answers(conn):
+    response_cache.clear()
+    try:
+        response_cache.set(
+            "cache probe",
+            None,
+            "general_knowledge",
+            "cached answer",
+            {},
+            model_name="model-one",
+        )
+        assert response_cache.get("cache probe", model_name="model-one") is not None
+
+        server.api_revoke_consent(conn, "web_search")
+
+        assert response_cache.get("cache probe", model_name="model-one") is None
+    finally:
+        response_cache.clear()

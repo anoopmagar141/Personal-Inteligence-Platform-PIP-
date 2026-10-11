@@ -382,6 +382,10 @@ def api_revoke_consent(conn, provider_id: str) -> dict[str, Any]:
         (provider_id,),
     )
     conn.commit()
+    # A cached answer may contain context sent under this provider's consent.
+    # Once the user revokes that consent, no earlier answer should remain
+    # available under the old permission state.
+    response_cache.clear()
     return {"status": "revoked", "provider_id": provider_id}
 
 
