@@ -156,17 +156,20 @@ so there is one write path, not two.
   (FREEZE_LIST §7.20). The selected model name is also part of the key, so a
   cached answer from the previous model is not reused after a model switch
   (FREEZE_LIST §7.38).
-- **Provider order is policy.** `pipeline.OLLAMA_PRIORITY = 50` and
-  `llm_endpoints.priority` defaults to 100, so a newly configured cloud endpoint
-  sits *behind* the local model and cannot silently start sending conversations
-  off the machine. Ollama is dynamically skipped if it is unreachable and alternative
-  endpoints exist, avoiding an unnecessary timeout penalty for every message, while
-  maintaining the fallback chain if it's the only configured provider. Stage 8 then
-  filters the list and fails closed. It counts a provider as local - needing no
-  consent - only when both the provider's own report and its consent record say
-  so, the rule Stage 11 already applies to the Observer; a disagreement is a
-  refusal. An endpoint cannot be saved under the id of a built-in provider
-  (`ollama`, `web_search`), since consent is recorded per id (FREEZE_LIST §7.21).
+- **Provider order is policy, but order is not consent.** `pipeline.OLLAMA_PRIORITY = 50`
+  and `llm_endpoints.priority` defaults to 100, so an enabled cloud endpoint
+  normally follows local Ollama. If Ollama is unreachable and another endpoint
+  exists, the pipeline skips Ollama and may automatically use the first enabled
+  endpoint in priority order. Stage 8 allows that endpoint only when its saved
+  consent permits `full_inference`; otherwise it blocks the endpoint and tries
+  another gated provider. This fallback can send prompts and assembled context
+  off the machine under consent granted earlier. Ollama is kept in the chain
+  when it is the only configured provider, even if unreachable, so the failure
+  remains visible. Stage 8 counts a provider as local - needing no consent -
+  only when both the provider's own report and its consent record say so, the
+  rule Stage 11 already applies to the Observer; a disagreement is a refusal.
+  An endpoint cannot be saved under the id of a built-in provider (`ollama`,
+  `web_search`), since consent is recorded per id (FREEZE_LIST §7.21).
 - **The evidence gate is an allowlist, and fails toward rejection.** Entailment
   is decided by requiring the user's own words to carry a recognised support
   construction for the kind of claim being made — the three the constitution
