@@ -430,8 +430,17 @@ def run(
     # _gate_providers: a blocked/missing consent record means no search fires,
     # not a degraded one.
     web_results: list[dict[str, Any]] = []
+    search_query: str | None = None
     try:
-        if stage_06.matches_trigger(user_message):
+        no_search_categories = {
+            "personal_question",
+            "project_question",
+            "project_continuation",
+        }
+        if (
+            stage_06.matches_trigger(user_message)
+            and intent_result["category"] not in no_search_categories
+        ):
             try:
                 # A search engine on the internet is never local, whatever its
                 # consent record says.
@@ -442,18 +451,19 @@ def run(
                 trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", "web_search blocked", error_detail=str(e))
                 logger.warning(f"Pipeline: web_search blocked by Stage 8: {e}")
             else:
-                web_results = stage_06.run(intent_result["retrieval_hint"] or user_message)
+                search_query = intent_result["retrieval_hint"] or user_message
+                web_results = stage_06.run(search_query)
     except Exception as e:
         logger.error(f"Pipeline: Stage 6 raised unexpectedly, returning empty: {e}")
     trace.stage_log(conn, trace_id, "stage_06_web_search", "ok", f"{len(web_results)} results")
-    # Only when it actually ran. A "Searched the web: 0 results" line on every
-    # ordinary question would report the absence of something nobody asked
-    # for, and would be indistinguishable from a search that failed.
-    if web_results:
+    # Report the exact query whenever it was sent, including when the search
+    # returned no results, so the user can see what left the machine.
+    if search_query is not None:
         yield _stage_event(
             "web",
             "Searching the web",
-            f"{len(web_results)} result{'s' if len(web_results) != 1 else ''}",
+            f"query sent: {search_query!r}",
+            "ok" if web_results else "empty",
         )
 
     # Stage 7

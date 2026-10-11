@@ -5,10 +5,12 @@ from typing import Iterator
 import pytest
 
 from backend.api import server
-from backend.core import pipeline
+from backend.core import pipeline, response_cache
 from backend.memory import llm_endpoint_store
 from backend.providers.base_provider import BaseLLMProvider, ProviderExecutionError
 from backend.providers.ollama_provider import OllamaProvider
+from backend.stages import stage_01_intent_classifier as stage_01
+from backend.stages import stage_06_web_search as stage_06
 from backend.tests.test_consent_before_sending import _Stub
 
 
@@ -95,3 +97,57 @@ def test_writing_status_names_the_provider_that_fallback_reaches(conn, monkeypat
     ]
     assert events[-1]["type"] == "pipeline_complete"
     assert events[-1]["data"]["response_text"] == "fallback answer"
+
+
+def test_web_search_trigger_requires_a_whole_keyword():
+    assert stage_06.matches_trigger("What is the current price?")
+    assert not stage_06.matches_trigger("What is the concurrent process limit?")
+    assert not stage_06.matches_trigger("Check the currency rate")
+
+
+@pytest.mark.parametrize(
+    "category",
+    ["personal_question", "project_question", "project_continuation"],
+)
+def test_personal_and_project_questions_do_not_trigger_web_search(conn, monkeypatch, category):
+    searches = []
+    monkeypatch.setattr(
+        pipeline.stage_01,
+        "run",
+        lambda *args, **kwargs: {
+            "category": category,
+            "skip_rag": False,
+            "retrieval_hint": "What is current?",
+        },
+    )
+    monkeypatch.setattr(stage_06, "run", lambda query, **kwargs: searches.append(query) or [])
+    monkeypatch.setattr(pipeline, "_gate_providers", lambda *args: [_FailingProvider("local", "m", False)])
+    server.api_grant_consent(conn, "web_search", "web_search_only")
+
+    list(pipeline.run(conn, "What is current?"))
+
+    assert searches == []
+
+
+def test_web_search_status_shows_exact_query_even_when_no_results(conn, monkeypatch):
+    query = "exact query from the intent hint"
+    searches = []
+    monkeypatch.setattr(
+        pipeline.stage_01,
+        "run",
+        lambda *args, **kwargs: {
+            "category": "external_information",
+            "skip_rag": False,
+            "retrieval_hint": query,
+        },
+    )
+    monkeypatch.setattr(stage_06, "run", lambda sent, **kwargs: searches.append(sent) or [])
+    monkeypatch.setattr(pipeline, "_gate_providers", lambda *args: [_FailingProvider("local", "m", False)])
+    server.api_grant_consent(conn, "web_search", "web_search_only")
+
+    events = list(pipeline.run(conn, "What is the current news?"))
+
+    assert searches == [query]
+    web_events = _stage_events(events, "web")
+    assert len(web_events) == 1
+    assert query in web_events[0]["data"]["detail"]
