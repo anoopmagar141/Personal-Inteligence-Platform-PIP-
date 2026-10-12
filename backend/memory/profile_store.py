@@ -269,6 +269,7 @@ def rebuild_trace_log_if_stale(conn) -> bool:
     logger.info("Rebuilding trace_log with an id primary key (was keyed by trace_id+stage).")
     conn.execute("BEGIN")
     try:
+        has_duration_ms = "duration_ms" in columns
         conn.execute("""
             CREATE TABLE trace_log_rebuilt (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -277,13 +278,23 @@ def rebuild_trace_log_if_stale(conn) -> bool:
                 stage TEXT NOT NULL,
                 status TEXT NOT NULL,
                 message TEXT,
-                error_detail TEXT
+                error_detail TEXT,
+                duration_ms INTEGER
             )
         """)
-        conn.execute("""
-            INSERT INTO trace_log_rebuilt (trace_id, timestamp, stage, status, message, error_detail)
-            SELECT trace_id, timestamp, stage, status, message, error_detail FROM trace_log
-        """)
+        if has_duration_ms:
+            conn.execute("""
+                INSERT INTO trace_log_rebuilt (
+                    trace_id, timestamp, stage, status, message, error_detail, duration_ms
+                )
+                SELECT trace_id, timestamp, stage, status, message, error_detail, duration_ms
+                FROM trace_log
+            """)
+        else:
+            conn.execute("""
+                INSERT INTO trace_log_rebuilt (trace_id, timestamp, stage, status, message, error_detail)
+                SELECT trace_id, timestamp, stage, status, message, error_detail FROM trace_log
+            """)
         conn.execute("DROP TABLE trace_log")
         conn.execute("ALTER TABLE trace_log_rebuilt RENAME TO trace_log")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_trace_log_trace_id ON trace_log(trace_id)")

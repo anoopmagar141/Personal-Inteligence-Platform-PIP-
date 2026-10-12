@@ -221,6 +221,7 @@ def _gate_providers(conn, trace_id: str, providers: list[BaseLLMProvider]) -> li
     for provider in providers:
         model_info = provider.get_model_info()
         provider_id = model_info.get("provider_id", _DEFAULT_PROVIDER_ID)
+        gate_started = time.perf_counter()
         try:
             # The provider's own claim, so the gate can check it against the
             # consent record (D-04). A provider that does not report one
@@ -231,7 +232,11 @@ def _gate_providers(conn, trace_id: str, providers: list[BaseLLMProvider]) -> li
             )
             gated.append(provider)
         except stage_08.ProviderConsentError as e:
-            trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", f"{provider_id} blocked", error_detail=str(e))
+            gate_duration_ms = int(round((time.perf_counter() - gate_started) * 1000))
+            trace.stage_log(
+                conn, trace_id, "stage_08_provider_gate", "error",
+                f"{provider_id} blocked", error_detail=str(e), duration_ms=gate_duration_ms,
+            )
             logger.warning(f"Pipeline: provider '{provider_id}' blocked by Stage 8: {e}")
     return gated
 
@@ -268,8 +273,9 @@ def run(
     """
     if cache_generation is None:
         cache_generation = response_cache.generation()
-    t_pipeline_start = time.perf_counter()
     trace_id = trace.generate_trace_id()
+    # The conversation already stores message text; a trace only needs enough
+    # information to show which stages ran, not a second copy of the message.
     trace.stage_log(
         conn, trace_id, "pipeline", "ok",
         f"Starting pipeline for message ({len(user_message)} chars)",
@@ -327,6 +333,9 @@ def run(
     )
 
     # Response Cache (Part 7.1) - positioned here (between Stage 2 and Stage 7)
+    # deliberately: a hit skips Stages 3-9 entirely, not just Stage 9's LLM call.
+    # The record version prevents serving an answer after profile data changes.
+    # If it cannot be read, skip cache both ways rather than risk stale output.
     tc = time.perf_counter()
     try:
         record_version = profile_store.record_version(conn)
@@ -355,6 +364,8 @@ def run(
         )
         cache_hint = dict(cached["stage_hints"])
         cache_hint["cache_hit"] = True
+        # Reuse must be visible: a cached answer can look like a fast new one,
+        # but Stages 3-9 did not run for this turn.
         yield _stage_event("cache", "Answered this before", "reusing the saved response")
         yield {"type": "stage_hint", "data": cache_hint}
         yield {"type": "token", "data": cached["response_text"]}
@@ -415,6 +426,8 @@ def run(
 
     t5 = time.perf_counter()
     try:
+        # ADR-002: Stage 5 always runs, even when skip_rag is set. Its safety
+        # check is broader than the lightweight intent pre-check.
         rag_result = stage_05.run(conn, intent_result["retrieval_hint"], project_id)
     except Exception as e:
         logger.error(f"Pipeline: Stage 5 raised unexpectedly, returning empty: {e}")
@@ -427,6 +440,8 @@ def run(
     )
     _chunks = rag_result["chunks"]
     _files = {c.get("file_path") for c in _chunks if c.get("file_path")}
+    # An empty retrieval must be visible; otherwise a missing index looks like
+    # an ordinary question with no matching document.
     yield _stage_event(
         "documents",
         "Searching your documents",
@@ -440,6 +455,8 @@ def run(
     )
 
     t6 = time.perf_counter()
+    # Web search is external, so Stage 8 must approve its scope before Stage 6
+    # sends a query. Report that query only after the gate passes.
     web_results: list[dict[str, Any]] = []
     search_query: str | None = None
     try:
@@ -452,14 +469,16 @@ def run(
             stage_06.matches_trigger(user_message)
             and intent_result["category"] not in no_search_categories
         ):
+            web_gate_started = time.perf_counter()
             try:
                 stage_08.run(
                     conn, "web_search", requested_scope="web_search_only", provider_is_local=False
                 )
             except stage_08.ProviderConsentError as e:
+                gate_duration_ms = int(round((time.perf_counter() - web_gate_started) * 1000))
                 trace.stage_log(
                     conn, trace_id, "stage_08_provider_gate", "error",
-                    "web_search blocked", error_detail=str(e),
+                    "web_search blocked", error_detail=str(e), duration_ms=gate_duration_ms,
                 )
                 logger.warning(f"Pipeline: web_search blocked by Stage 8: {e}")
             else:
@@ -519,6 +538,8 @@ def run(
             duration_ms=dur_8,
         )
         no_provider = "No consented provider available"
+        # The final pipeline result is internal to the server. Send a terminal
+        # error event so the WebSocket client does not remain in writing state.
         yield {"type": "error", "data": no_provider}
         result = stage_10.run(
             trace_id,
@@ -547,13 +568,15 @@ def run(
         gated_providers,
         decision_log_hit=bool(decision_entries),
         web_search_used=bool(web_results),
-        cache_hit=False,
-        model_loading=False,
+        cache_hit=False,  # reaching here means the cache check above missed
+        model_loading=False,  # no reliable warm/cold signal exists on the provider API
         max_tokens=max_tokens,
         timeout_seconds=timeout_seconds,
         should_stop=should_stop,
     )
 
+    # Fold live events through Stage 9's shared accumulator so this streamed
+    # path and collect() use the same terminal status and response text.
     aggregate = stage_09.new_aggregate()
     for event in events:
         if ttft_ms is None and event.get("type") == "token":
