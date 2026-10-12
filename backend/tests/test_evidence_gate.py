@@ -9,7 +9,7 @@ from backend.core.evidence_gate import (
     adjudicate,
     normalize,
 )
-from backend.tests.evidence_cases import CASES, HELD_OUT, candidate
+from backend.tests.evidence_cases import CASES, HELD_OUT, NEW_HELD_OUT, candidate
 
 
 def _adjudicate(transcript: str, cand: dict):
@@ -41,7 +41,7 @@ def test_no_labelled_case_is_falsely_accepted():
     They are not symmetric, and this is the one that must be zero.
     """
     false_accepts = [
-        c["id"] for c in CASES + HELD_OUT
+        c["id"] for c in CASES + HELD_OUT + NEW_HELD_OUT
         if not c["should_accept"]
         and _adjudicate(c["transcript"], c["candidate"]).sufficient
     ]
@@ -100,6 +100,15 @@ def test_the_held_out_false_reject_rate_has_not_grown():
     ]
     assert set(missed) <= KNOWN_FALSE_REJECTS
     assert len(missed) <= 1, f"held-out false rejects grew to {len(missed)}: {missed}"
+
+
+@pytest.mark.parametrize("case", NEW_HELD_OUT, ids=[c["id"] for c in NEW_HELD_OUT])
+def test_a1_new_held_out_cases_behave_as_labelled(case):
+    verdict = _adjudicate(case["transcript"], case["candidate"])
+    assert verdict.state == case["expected_state"], (
+        f"{case['id']}: expected {case['expected_state']}, got {verdict.state} "
+        f"({verdict.detail})"
+    )
 
 
 def test_a_short_named_technology_can_still_be_anchored():
