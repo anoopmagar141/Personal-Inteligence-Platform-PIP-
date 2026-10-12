@@ -85,7 +85,7 @@ def get_stamp(model: str) -> dict:
     try:
         import urllib.request
         req = urllib.request.Request("http://localhost:11434/api/tags", method='GET')
-        with urllib.request.urlopen(req, timeout=2) as response:
+        with urllib.request.urlopen(req, timeout=15) as response:
             data = json.loads(response.read().decode('utf-8'))
     except Exception as exc:
         raise ValueError(f"Cannot read the Ollama model digest: {exc}") from exc

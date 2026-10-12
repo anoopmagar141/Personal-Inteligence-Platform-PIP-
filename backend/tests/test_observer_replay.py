@@ -166,6 +166,32 @@ def test_recording_stamp_requires_a_model_digest(monkeypatch):
         eval_script.get_stamp("qwen2.5:7b")
 
 
+def test_recording_stamp_allows_ollama_startup_time(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps({"models": [{"name": "qwen2.5:7b", "digest": "sha256:test"}]}).encode()
+
+    import urllib.request
+    seen = {}
+
+    def fake_urlopen(*args, **kwargs):
+        seen.update(kwargs)
+        return Response()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(eval_script, "get_settings", lambda: {"observer": {"max_session_tokens": 8000}})
+
+    eval_script.get_stamp("qwen2.5:7b")
+
+    assert seen["timeout"] >= 15
+
+
 def test_recording_stamp_does_not_call_transcript_cap_model_context(monkeypatch):
     class Response:
         def __enter__(self):
