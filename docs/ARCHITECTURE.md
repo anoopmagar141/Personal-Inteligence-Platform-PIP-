@@ -111,6 +111,13 @@ three sessions. Its verdict is expressed as an ordinary `ValidationResult`
 (`HARD_REJECT` for authenticity failures, `DISCARD` for entailment failures),
 so there is one write path, not two.
 
+**Trace timing:** `backend/core/trace.py` writes pipeline stage outcomes and
+elapsed `duration_ms` values to the encrypted `trace_log` table. Durations are
+rounded wall-clock milliseconds; a quick stage may therefore show `0`. The
+column is nullable so older rows and trace writers outside the message
+pipeline can remain unmeasured. Startup migrations add it to existing tables,
+and the legacy composite-key rebuild preserves it and the rows already there.
+
 ## Module boundaries
 
 - **Routes never touch the database directly.** A route closure opens a

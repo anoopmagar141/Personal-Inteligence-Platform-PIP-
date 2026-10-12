@@ -2524,6 +2524,18 @@ code (export again).
 
 ---
 
+### 7.35 B-2 per-stage trace durations (integrated 2026-10-12)
+
+- **Promise:** each pipeline trace row records its stage duration in integer milliseconds, so a slow operation can be found from the trace instead of inferred from the whole answer time.
+- **Mechanism:** the pipeline times Stages 0–10, response-cache lookup, and each denied provider gate; `trace_log.duration_ms` is nullable for older or non-pipeline rows. The legacy composite-key rebuild now always creates `duration_ms` and copies its prior rows, whether the migration runs before or during that rebuild.
+- **Break-it evidence:** the 50 ms Stage 4 delay asserts at least 50 ms. A second 50 ms denial test failed before timing was added (recorded 0 ms). The legacy table regression failed before the migration fix (column missing); the existing repeated-stage test also caught a direct rebuild that discarded the column.
+- **Live measurement:** one local Ollama chat on isolated backend port 53450 completed with `done`; its 12-row trace totaled 3,155 ms. Stage timings: pipeline 0, Stage 0 0, Stage 1 2, Stage 2 0, cache 0, Stage 3 3, Stage 4 0, Stage 5 retrieval 583, Stage 6 web 0, Stage 7 context 0, Stage 9 LLM stream 2,567, Stage 10 delivery 0 ms. One run on this machine; values rounded to milliseconds.
+- **Verification:** 6 focused migration/timing tests passed; full backend suite passed: **1416 passed in 984.76 s**.
+- **Limitation:** rounding can show a fast operation as 0 ms; this is elapsed wall-clock time, not CPU time. The measurement is one local run and is not a performance benchmark.
+- **History:** B-2 implementation `1b80982`; migration/timing correction committed separately before integration.
+
+---
+
 ## 8. Status
 
 ### 8.1 Decisions made (choices; need no evidence)

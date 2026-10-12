@@ -32,7 +32,7 @@
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from backend.config.settings import get_settings
 from backend.core.types import now_utc
@@ -52,6 +52,7 @@ def stage_log(
     status: str,
     message: str,
     error_detail: str = "",
+    duration_ms: Optional[int] = None,
 ) -> None:
     """
     Records one stage's outcome against a trace.
@@ -75,11 +76,13 @@ def stage_log(
     if conn is None:
         logger.warning(f"trace.stage_log called without a connection; dropping {stage}/{status}.")
         return
+    if duration_ms is None:
+        duration_ms = 0
     try:
         conn.execute(
-            "INSERT INTO trace_log (trace_id, timestamp, stage, status, message, error_detail) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (trace_id, now_utc(), stage, status, message, error_detail),
+            "INSERT INTO trace_log (trace_id, timestamp, stage, status, message, error_detail, duration_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (trace_id, now_utc(), stage, status, message, error_detail, duration_ms),
         )
         conn.commit()
     except Exception as e:
@@ -106,7 +109,7 @@ def get_trace(conn, trace_id: str) -> list[dict[str, Any]]:
 def list_recent_traces(conn, limit: int = 20) -> list[dict[str, Any]]:
     """
     Most recent traces, newest first, one summary row each: when it started, how
-    many stages it recorded, and whether any of them errored.
+    many stages it recorded, whether any of them errored, and total duration.
 
     A listing rather than raw entries, because the question this answers is
     "which run do I want to look at" - get_trace() answers the next one.
@@ -118,7 +121,8 @@ def list_recent_traces(conn, limit: int = 20) -> list[dict[str, Any]]:
             SELECT trace_id,
                    MIN(timestamp) AS started_at,
                    COUNT(*) AS entries,
-                   SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors
+                   SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors,
+                   SUM(duration_ms) AS total_duration_ms
             FROM trace_log
             GROUP BY trace_id
             ORDER BY MIN(id) DESC
