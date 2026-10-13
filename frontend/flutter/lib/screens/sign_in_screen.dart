@@ -1283,16 +1283,18 @@ class _NewProfileDialogState extends State<_NewProfileDialog> {
             onSubmitted: (_) => _submit(),
             style: const TextStyle(color: kGatewayText, fontSize: 15),
             cursorColor: kGatewayAccent,
-            decoration: const InputDecoration(
-              labelText: 'Profile name',
-              labelStyle: TextStyle(color: kGatewayTextMuted),
-              enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF2C2F43)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: kGatewayAccent),
-              ),
-            ),
+            // _stageField rather than borders spelled out here, which is what
+            // this was and why it broke: it set the label and the borders but
+            // never `filled`, so the field kept the app-wide
+            // InputDecorationTheme's fill - PipPalette.surface, which under the
+            // light theme is very nearly white. The text is kGatewayText, which
+            // is very nearly white too, so under a light theme somebody naming
+            // a profile typed into an empty white slab and saw nothing.
+            //
+            // Every other field on this stage already went through _stageField
+            // for exactly this reason. This one was written separately and
+            // therefore inherited the problem the helper exists to prevent.
+            decoration: _stageField('Profile name'),
           ),
           const SizedBox(height: AppSpacing.md),
           const Text(

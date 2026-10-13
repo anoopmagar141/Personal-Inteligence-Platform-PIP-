@@ -23,6 +23,7 @@
 //     The sentence saying so has to be in front of somebody before it happens,
 //     not in a docstring.
 
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -31,6 +32,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_flutter_client/api_client.dart';
 import 'package:pip_flutter_client/screens/profile_view.dart';
 import 'package:pip_flutter_client/screens/sign_in_screen.dart';
+import 'package:pip_flutter_client/theme.dart';
 
 class FakeApi extends ApiClient {
   FakeApi() : super('http://localhost:0', apiToken: 't');
@@ -147,10 +149,15 @@ class FakeApi extends ApiClient {
   }
 }
 
-Future<FakeApi> pumpSignIn(WidgetTester tester, {FakeApi? api_}) async {
+Future<FakeApi> pumpSignIn(WidgetTester tester, {FakeApi? api_, ThemeData? theme}) async {
   final api = api_ ?? FakeApi();
   await tester.pumpWidget(
     MaterialApp(
+      // Default to no theme, which is what most of these assert against - they
+      // are about what the screen does, not what it looks like. The legibility
+      // test passes AppTheme.light, because the app-wide theme is exactly what
+      // broke the field it checks.
+      theme: theme,
       home: Builder(
         // disableAnimations, because this screen sits on a particle field that
         // drifts forever by design and pumpAndSettle would never return.
@@ -275,6 +282,38 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(api.calls.where((c) => c.startsWith('create:')), isEmpty);
+    });
+
+    testWidgets('leaves the name readable under the light theme', (tester) async {
+      // The bug this replaces: the field set its own label and borders but not
+      // `filled`, so it kept the app-wide InputDecorationTheme's fill. That
+      // fill is PipPalette.surface - nearly white under the light theme - and
+      // the text on this fixed dark stage is nearly white too. Somebody naming
+      // a profile typed into a white slab and saw nothing come out.
+      //
+      // Asserted as contrast rather than as a literal colour, because the
+      // failure is not "the wrong hex" but "these two are the same". A palette
+      // may be retuned; a field whose text matches its background is a bug at
+      // any hex.
+      await pumpSignIn(tester, theme: AppTheme.light);
+
+      await tester.tap(find.text('Add a profile'));
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<TextField>(find.byType(TextField).last);
+      final fill = field.decoration?.fillColor;
+      final ink = field.style?.color;
+      expect(fill, isNotNull, reason: 'the field did not set its own fill');
+      expect(ink, isNotNull);
+
+      final a = fill!.computeLuminance();
+      final b = ink!.computeLuminance();
+      final ratio = (max(a, b) + 0.05) / (min(a, b) + 0.05);
+      expect(
+        ratio,
+        greaterThan(4.5),
+        reason: 'the profile name is invisible against its own field',
+      );
     });
 
     testWidgets("shows the server's own refusal", (tester) async {
