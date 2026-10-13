@@ -171,6 +171,34 @@ def test_rest_rejects_missing_token(tmp_path, monkeypatch):
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/llm/endpoints",
+        "/api/v1/llm/endpoints/some-endpoint-id",
+        "/api/v1/no-such-route",
+    ],
+)
+def test_rest_token_check_answers_before_the_router_does(tmp_path, monkeypatch, path):
+    # No path under /api/v1 may be reachable without the token, including a
+    # path no route serves. The first two are the paths a middleware exemption
+    # once let through (added 2026-10-10 so a half-built LLM-endpoint API could
+    # be tested without signing in). With no route behind it the exemption
+    # showed only as a 404 where the token check should answer 401, and the
+    # day those routes landed it would have let any local process list, add or
+    # change the model endpoints PIP sends prompts to, without the token. The
+    # third path pins the general rule: the check runs before routing, so an
+    # unknown path is a 401, never a 404.
+    monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
+    monkeypatch.delenv("PIP_DB_KEY", raising=False)
+    monkeypatch.setenv("PIP_TOKEN_PATH", str(tmp_path / "api_token.txt"))
+    auth.get_or_create_token(tmp_path / "api_token.txt")
+
+    client = TestClient(server.app)
+    assert client.get(path).status_code == 401
+    assert client.post(path, json={}).status_code == 401
+
+
 def test_rest_rejects_wrong_token(tmp_path, monkeypatch):
     monkeypatch.setenv("PIP_DB_PATH", str(tmp_path / "pip.db"))
     monkeypatch.delenv("PIP_DB_KEY", raising=False)
