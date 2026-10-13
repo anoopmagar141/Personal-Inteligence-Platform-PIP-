@@ -30,6 +30,7 @@ a dict.
 from __future__ import annotations
 
 import sys
+import argparse
 from collections import Counter
 from pathlib import Path
 
@@ -41,7 +42,7 @@ from backend.core.evidence_gate import (  # noqa: E402
     EvidenceLedger,
     adjudicate,
 )
-from backend.tests.evidence_cases import CASES, HELD_OUT  # noqa: E402
+from backend.tests.evidence_cases import CASES, HELD_OUT, NEW_HELD_OUT  # noqa: E402
 
 
 def _rule(char: str = "-") -> str:
@@ -181,7 +182,7 @@ def report(title: str, caveat: str, results: list[dict]) -> int:
     return len(false_accepts)
 
 
-def evaluate() -> int:
+def evaluate(include_new: bool = False) -> int:
     """
     Returns a process exit code: non-zero if anything was falsely accepted, in
     either set. A false reject never fails this - it is a cost the design
@@ -200,18 +201,30 @@ def evaluate() -> int:
         "cost is actually visible",
         score(HELD_OUT),
     )
+    new_held_out = 0
+    if include_new:
+        new_held_out = report(
+            "PIP evidence gate - A-1 new held-out set (written before gate changes)",
+            "small agent-written set; keep it separate from the tuned corpus and prior held-out cases",
+            score(NEW_HELD_OUT),
+        )
 
     print(_rule("="))
     print("bottom line")
     print(_rule("="))
     print(f"  false accepts, tuned corpus     {tuned:>3}")
     print(f"  false accepts, held-out set     {untuned:>3}")
+    if include_new:
+        print(f"  false accepts, A-1 new set      {new_held_out:>3}")
     print("  A false accept is an unjustified belief written into the profile.")
     print("  A false reject is a memory learned one session later, or via the")
     print("  pending-candidate queue where the user is asked directly.")
     print()
-    return 1 if (tuned or untuned) else 0
+    return 1 if (tuned or untuned or new_held_out) else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(evaluate())
+    parser = argparse.ArgumentParser(description="Score the PIP evidence gate against labelled cases.")
+    parser.add_argument("--include-new", action="store_true",
+                        help="also score the separate A-1 held-out set")
+    raise SystemExit(evaluate(parser.parse_args().include_new))

@@ -328,6 +328,8 @@ _PREFERENCE_MARKERS = _phrases(
     "i switched to", "i've switched to", "i moved to", "i've moved to",
     "i use", "i'm using", "i am using", "i keep using", "i want", "i'd like",
     "i work in", "i live in",
+    "i keep all my notes in", "i take my research notes in", "my editor is",
+    "i reach for", "i write all my essays in",
     # Elliptical habit statements - real speech drops the subject constantly,
     # and "still using Neovim" or "Neovim is my editor of choice" is exactly the
     # settled behaviour constitutional.json means by preference_memory's
@@ -362,6 +364,7 @@ _BRIEF_STYLE_MARKERS = _phrases(
     "just tell me", "stop explaining", "answer briefly", "to the point",
     "tldr", "short answers", "brief summary", "summary first", "get to the point",
     "cut the", "skip the explanation",
+    "keep your answers short", "lead with the answer", "keep the rest minimal",
 )
 
 _DETAILED_STYLE_MARKERS = _phrases(
@@ -370,6 +373,7 @@ _DETAILED_STYLE_MARKERS = _phrases(
     "full detail", "full explanation", "elaborate", "don't summarise",
     "don't summarize", "dont summarise", "dont summarize", "show your working",
     "show your work", "all the detail",
+    "i really like detailed explanations", "walks through each step",
 )
 
 # Tokens in a proposed style value that decide which direction it points. Read
@@ -388,6 +392,8 @@ _SKILL_MARKERS = _phrases(
     "i am an expert", "i'm advanced", "i'm proficient", "i'm comfortable with",
     "i am comfortable with", "i know", "i've shipped", "i ship",
     "years of", "years with", "years in", "professionally",
+    "i work mostly in", "i'm learning", "my day job", "i use at work",
+    "i look after",
 )
 
 # Phrasings that CAP how much ability a quote can support, however confident
@@ -404,6 +410,7 @@ _EXPERTISE_MARKERS = _phrases(
     "expert", "advanced", "senior", "proficient", "years", "professionally",
     "daily", "every day", "for a living", "i maintain", "i've built",
     "i have built", "i build", "i've shipped", "fluent", "deeply",
+    "i look after", "i work mostly in",
 )
 
 # constitutional.json: goal_memory validation = "commitment". Wanting to know
@@ -414,14 +421,21 @@ _GOAL_MARKERS = _phrases(
     "my goal", "my plan", "i need to", "i have to", "i must", "i want to",
     "i'm aiming", "i am aiming", "i'm building", "i am building",
     "i'm working on", "i am working on", "by the end of",
+    "my next milestone is", "i'm hoping to", "my target is", "is my target",
 )
 
 # Ownership of a thing being built, for active_projects.
-_PROJECT_MARKERS = _phrases(
+_PROJECT_MARKER_PHRASES = _phrases(
     "i'm building", "i am building", "i built", "i'm working on",
     "i am working on", "i started", "i've started", "i'm writing",
     "i am writing", "i'm developing", "i am developing", "my project",
-    "my app", "my side project", "i call it", "working on",
+    "my app", "my side project", "i call it", "working on", "my current project",
+)
+# A user can describe an active project as "I have a small app underway".
+# Keep this recogniser tied to first-person ownership and an in-progress word;
+# a generic "has an app" marker would also accept a third party's project.
+_PROJECT_MARKERS = re.compile(
+    rf"(?:{_PROJECT_MARKER_PHRASES.pattern}|(?<!\w)i have (?:a|an)(?: [a-z0-9'-]+){{1,5}} underway(?!\w))"
 )
 
 # A stance AGAINST the value being claimed. Only ever consulted alongside the
@@ -434,7 +448,100 @@ _NEGATIVE_STANCE_MARKERS = _phrases(
     "switched away from", "switched off", "avoid", "avoiding", "gave up on",
     "can't stand", "cant stand", "no longer use", "no longer using",
     "wouldn't use", "wouldnt use",
+    "don't keep", "dont keep", "do not keep", "never keep",
+    "don't intend to", "dont intend to", "do not intend to",
 )
+
+# Questions and tentative plans can contain the same words as a preference or
+# goal marker. Reject those forms before matching support language. Sarcasm is
+# checked against the complete user turn because the Observer may cite only
+# the straight-faced clause and omit its "sure, because ... obviously" frame.
+_HYPOTHETICAL_MARKERS = _phrases(
+    "maybe", "might", "if i ever", "if i get time", "if i have time", "someday",
+)
+_SARCASM_RE = re.compile(r"\bsure,? because\b.*\bobviously\b", re.DOTALL)
+_STYLE_NEGATION_MARKERS = _phrases(
+    "i don't want", "i do not want", "i don't like", "i do not like",
+    "i hate", "i dislike", "i prefer not",
+)
+
+
+def _style_marker_is_negated(
+    quote: str, marker_start: int, user_sources: list[EvidenceTurn]
+) -> bool:
+    """Check the source clause too, so an extracted quote cannot drop "don't"."""
+    normalized_quote = normalize(quote)
+    for turn in user_sources:
+        quote_start = turn["normalized"].find(normalized_quote)
+        if quote_start < 0:
+            continue
+        prefix = turn["normalized"][:quote_start + marker_start]
+        clause_prefix = re.split(r"[.!?;,:]|\bbut\b", prefix)[-1]
+        if _STYLE_NEGATION_MARKERS.search(clause_prefix):
+            return True
+    return False
+
+
+# A sentence ends at a run of ".", "!" or "?" followed by a space or the end of
+# the turn. The "followed by a space" half is what keeps "v1.2", "0.9" and
+# "main.py" in one piece.
+_SENTENCE_END_RE = re.compile(r"[.!?]+(?=\s|$)")
+# A full stop after one of these does not end the sentence: "Should I use Helix
+# vs. Neovim?" is one question, not a question cut short and then a fragment.
+_ABBREVIATION_RE = re.compile(r"(?:^|\s)(?:vs|e\.g|i\.e|etc|approx|mr|mrs|ms|dr)$")
+# What may trail a sentence's final mark without being part of the next one.
+_CLOSERS = "\"')]}"
+
+
+def _ends_in_question_mark(text: str, quote_end: int) -> bool:
+    """
+    Whether the sentence that a quote ending at text[quote_end - 1] was cut from
+    ends in a question mark.
+
+    A quote that carries its own final mark answers it directly. One that stops
+    short of the mark ("I use Neovim for everything", from "I use Neovim for
+    everything. Any plugin suggestions?") is followed to the first sentence-final
+    mark after it, and only that sentence counts: the question after it is a
+    different sentence and says nothing about this one.
+    """
+    last = text[:quote_end].rstrip(_CLOSERS)[-1:]
+    if last in (".", "!", "?"):
+        return last == "?"
+    for end in _SENTENCE_END_RE.finditer(text, quote_end):
+        if end.group() == "." and _ABBREVIATION_RE.search(text[: end.start()]):
+            continue
+        return "?" in end.group()
+    return False
+
+
+def _only_ever_asked(quote: str, user_sources: list[EvidenceTurn]) -> bool:
+    """
+    True when everywhere the user said these words, the sentence they sit in is
+    a question.
+
+    "Everywhere", for the reason _adjudicate_partial_quote gives: if the user
+    said it plainly once and asked about it elsewhere, the plain statement
+    stands. One occurrence inside a question only makes the quote a question
+    when no occurrence is anything else.
+
+    This replaced "does a source turn end with a question mark?", which was
+    wrong in both directions. It rejected a fact stated in a message that also
+    asked for help ("I use Neovim for everything. Any plugin suggestions?"),
+    which the gate before it had learned, and it accepted a question followed by
+    a statement ("Should I use Helix as my editor? I use Neovim.", cut down to
+    its first sentence) because the turn ended with a full stop.
+    """
+    asked = False
+    for turn in user_sources:
+        text = turn["normalized"]
+        at = text.find(quote)
+        while at != -1:
+            if not _ends_in_question_mark(text, at + len(quote)):
+                return False
+            asked = True
+            at = text.find(quote, at + 1)
+    return asked
+
 
 # Words that, left OUT of a quote but present in the turn it was cut from,
 # change what that turn actually said. A quote that drops one of these is a
@@ -752,6 +859,31 @@ def adjudicate(candidate: MemoryCandidate, ledger: EvidenceLedger) -> EvidenceVe
                     f"{turn['text'][:120]!r}",
                 )
 
+    if target_table != "topic_interests":
+        # A question can contain a literal support marker ("Should I use
+        # Helix?") without expressing a settled preference. Topic mentions
+        # are different: asking about a topic is enough to establish interest.
+        # What is judged is the SENTENCE the quote is cut from, never the whole
+        # turn: "I use Neovim for everything. Any plugin suggestions?" states a
+        # fact and asks for help, and "Should I use Helix as my editor? I use
+        # Neovim." asks before it states. See _only_ever_asked(), which also
+        # covers a quote that ends in the question mark itself.
+        if _only_ever_asked(quote, user_sources):
+            return EvidenceVerdict(
+                EvidenceState.EVIDENCE_NOT_ENTAILING,
+                "a question does not state a preference, skill, goal, or project",
+            )
+        if _HYPOTHETICAL_MARKERS.search(quote):
+            return EvidenceVerdict(
+                EvidenceState.EVIDENCE_NOT_ENTAILING,
+                "a tentative or hypothetical statement does not establish a current claim",
+            )
+        if any(_SARCASM_RE.search(turn["normalized"]) for turn in user_sources):
+            return EvidenceVerdict(
+                EvidenceState.EVIDENCE_NOT_ENTAILING,
+                "the complete user turn marks this claim as sarcasm",
+            )
+
     # 6. Does the evidence support THIS claim?
     if anchor_value is not None and not _anchored(anchor_value, quote):
         return EvidenceVerdict(
@@ -870,11 +1002,18 @@ def _adjudicate_style(
             "the user's words could confirm",
         )
     markers = _BRIEF_STYLE_MARKERS if family == "brief" else _DETAILED_STYLE_MARKERS
-    if not markers.search(quote):
+    normalized_quote = normalize(quote)
+    marker_match = markers.search(normalized_quote)
+    if not marker_match:
         return EvidenceVerdict(
             EvidenceState.EVIDENCE_NOT_ENTAILING,
             f"the cited evidence asks for nothing {family}, so it cannot establish "
             f"{str(proposed_value)[:40]!r}",
+        )
+    if _style_marker_is_negated(quote, marker_match.start(), user_sources):
+        return EvidenceVerdict(
+            EvidenceState.EVIDENCE_NOT_ENTAILING,
+            "the cited style direction is negated before its support phrase",
         )
     return None
 
