@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-10-13] claude · Moved the untracked working notes out of the repo root into `notes/` (agent prompts, `council/` transcripts and reports, `batman-import/`, `brag-output/`), still untracked, and pointed BLUEPRINT at the new paths; tracked docs, `docs/eval/` and `own-docs-eval/` left where code and records point to them · why: the owner asked to organise the scattered .md files · files: notes/, docs/BLUEPRINT.md
+
 - [2026-10-13] claude · Removed the token-check exemption for `/api/v1/llm/endpoints` that antigravity put into `TokenAuthMiddleware` on 2026-10-10 (it was never committed), and added a test that every path under `/api/v1`, including one no route serves, answers 401 without the token: it failed with the exemption (404 on the two exempt paths) and passes without it; B-4's HTTP tests will need to send the token · why: once B-4's endpoint routes exist the exemption would let any local process list, add or change the model endpoints PIP sends prompts to, without the token · files: backend/api/server.py, backend/tests/test_api_server.py
 
 - [2026-10-13] claude · Gave the new-profile name field the dark stage's own fill instead of the app theme's · why: it never set `filled`, so under the light theme a near-white text colour sat on a near-white surface and the name typed into it was invisible · files: frontend/flutter/lib/screens/sign_in_screen.dart, frontend/flutter/test/profile_management_test.dart
@@ -54,11 +56,10 @@ Format:
 
 - [2026-10-08] claude · Made both restores open the backup a person chose read-only (backup_mark.open_read_only, D-18's second point, which an earlier commit wrongly skipped on an unchecked assumption that the attached database would inherit the read-only flags; it does not): a rollback journal left beside the file is no longer played back into their own .pipbak and consumed, the open is refused with a sentence about the leftover journal instead of "wrong password"; 2 tests in test_backup_completeness.py using a journal made hot by a spilled cache (both seen failing first), 4 break-it mutations caught · why: choosing a backup modified it · files: backend/core/backup_mark.py, backend/core/restore.py, scripts/restore_backup.py, backend/tests/test_backup_completeness.py
 
-- [2026-10-08] claude · Made "close PIP and open it again" apply a staged restore, and let the restore shortcut close PIP (D-09): nothing stops the backend when the window closes, so scripts/_backend.ps1 finds PIP's backend by the port's owner AND a command line naming backend.api.server (never another program on 8765) and stops it; launch_pip.ps1 stops a running backend before deciding to reuse it only when pending-restore.json exists, so the new backend's lifespan installs the restore; restore_pip.ps1 says PIP is still running in the background and, on a typed "yes", closes it, which the first-run Import existing PIP path needs because restore_backup.py refuses while the backend holds the lock; the port reads PIP_PORT for the tests, nothing else sets it; 11 tests in test_backend_launcher.py run the real launch_pip.ps1, restore_pip.ps1 and helper against a stand-in backend (4 of the 5 script-level ones seen failing on the old scripts), 5 break-it mutations caught, one timing guard not pinned · why: the restore waited for a reboot and the shortcut refused to run on the machine the welcome screen is shown on · files: scripts/_backend.ps1, scripts/launch_pip.ps1, scripts/restore_pip.ps1, backend/tests/test_backend_launcher.py
-
 
 ## Archive
 
+- 2026-10-08 (claude, 1 entry): made "close PIP and open it again" apply a staged restore and let the restore shortcut close PIP's background backend (D-09); evidence in FREEZE_LIST §7.26.
 - 2026-10-08 (claude, 2 entries): scoped a staged restore to the profile it was staged for (D-19), and made export_backup.py take its row counts and its copy from one read snapshot (D-17); evidence in FREEZE_LIST §7.26.
 - 2026-10-07 (1 entry): archived the websocket turn-terminal handling change; detailed evidence remains in FREEZE_LIST §7.25.
 - 2026-10-07 (1 entry): archived the websocket turn-terminal handling change; detailed evidence remains in FREEZE_LIST §7.25.
