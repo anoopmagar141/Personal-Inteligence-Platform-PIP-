@@ -31,8 +31,9 @@ machine on 2026-10-08 when they turned Smart App Control off themselves (§7.26)
 still true wherever it is on. On 2026-10-16 a read-only review of D-22's fix
 found five small problems; the owner authorized fixing two of them (D-24, D-25),
 correcting the record and tightening the tests, landed the same day (§7.44). The
-third, D-26, was authorized next and landed the same day (§7.45). Anything
-further needs a new authorization.
+third, D-26, was authorized next and landed the same day (§7.45), and so was
+the Stage 9 item §7.44 had left open, D-27 (§7.46). Anything further needs a
+new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -2188,7 +2189,10 @@ same day.
 - **Stage 9 still does not fall back on an unexpected provider
   exception.** The turn now ends cleanly, but the next provider in the
   chain is not tried. Whether it should be is a Stage 9 decision, left
-  alone here.
+  alone here. *(2026-10-16, §7.46: the one way a shipped provider gets such
+  a thing out, a value that is not text, now counts as a provider failure and
+  falls back. An exception that is neither provider error still ends the
+  turn, on purpose; see there.)*
 - **The failed turn is not in `trace_log` as one.** The pipeline's
   trace_id never reaches the server, so the trace stops at the last stage
   that logged. The traceback is in the backend log.
@@ -2713,7 +2717,7 @@ record and tightening the tests; the third was recorded and left open, then fixe
   treat it as a contract violation, as it does a provider that yields
   nothing, so the next provider is not tried. Whether it should be is a
   Stage 9 decision, left alone with the other fall-back question under
-  §7.25.
+  §7.25. *(Fixed 2026-10-16, §7.46, D-27.)*
 - **The pipeline's generator is left suspended** when a failed fold ends a
   turn. It is closed by garbage collection on the event-loop thread, as a
   mid-stream disconnect already leaves it. Nothing in the chain
@@ -2828,6 +2832,72 @@ it; neither exists. No client file changed.
 - **The writes that fail open on purpose are unchanged:** trace entries and
   document access counts.
 
+### 7.46 A token that is not text is a provider failure, D-27 (authorized and landed 2026-10-16)
+
+The Stage 9 item §7.44 left open, by the same method. The owner asked for it
+to start the same day.
+
+- **Defect (A, low):** Stage 9 passed on whatever a provider yielded as a
+  token. `OpenAICompatibleProvider` yields a chunk's `content` as it finds it,
+  so a server that streams structured content (a list of parts), or a null,
+  put a value that is not text into the stream. Since §7.44 (D-25) that no
+  longer closes the connection: the transport withholds it and ends the turn
+  with one generic error. But a provider whose first token was not text was
+  not treated as having failed, so the next provider in the chain was never
+  asked, and the person got an error that named nothing.
+  - Reachable in the shipped app only through an OpenAI-compatible endpoint,
+    and no route adds one yet (§7.23): the committed `server.py` has none.
+- **Promise:** a provider that yields something that is not text has failed,
+  the same as one that yields nothing. Another is tried if nothing was shown
+  yet, and a turn that had already shown something ends with the
+  interruption, never with a second provider's answer under the first.
+- **Mechanism:** in `backend/stages/stage_09_llm_streaming.py`, a token that
+  is not a `str` raises `ProviderExecutionError`, inside the loop that
+  already handles the two provider errors, after the stop check (a stop still
+  wins) and before the token is sent. Everything after that is the existing
+  fallback: before any text, the next provider; after some, "Response
+  interrupted: ...".
+  - **The message names the type, not the value.** What a provider sent may
+    be anything, and this text reaches the client.
+  - **Consent is unchanged.** Stage 8 has already removed every provider
+    without it, so the fallback goes only to consented ones, as for any other
+    provider failure.
+  - **The empty string is still text.** A provider that streams an empty
+    piece is not broken.
+  - **The transport's guard stays** (§7.44, D-25), for whatever produces an
+    event it cannot fold. Its three tests were moved onto a fake pipeline:
+    Stage 9 now refuses these first, and left as they were the tests would
+    have passed without exercising the guard.
+- **Tests:** 10 added to `test_stage_09_llm_streaming.py` (22 in the file) and
+  2 end-to-end to `test_chat_turn_ends.py` (22 in the file), through the real
+  `/ws/chat` with a local second endpoint, which needs no consent.
+  - **Seen failing first:** 8 of the 10 unit tests and both end-to-end tests.
+    The other two unit tests are controls that pass either way: the empty
+    string, and a stop arriving before a bad token. The three D-25 tests pass
+    before and after the move, since they hold the transport, which this does
+    not change.
+  - **Break-it:** 6 mutations, one at a time on a clean copy, each caught:
+  - the check removed (the eight unit tests that fail on the old code and both end-to-end tests);
+  - the check made before the stop is looked at (the stop-first control, and the tests that read the
+    message the mutation changed);
+  - the offending value put into the message (the type-name checks, the after-text test and the
+    end-to-end leak check);
+  - the empty string refused as well (the empty-string control);
+  - the transport's fold put back after the send and outside the guard (the three transport tests,
+    now on a fake pipeline);
+  - the fold inside the guard but after the send, so the bad token still goes out (the same three).
+- **Suites:** Backend 1524 passed, 0 failed (16 min 7 s), run with the embedding shim on a clean export of `cb58910` plus this change. The two test files passed 8 runs in 8. No client file changed, so the Flutter suite was not re-run.
+
+**Not covered (still open):**
+- **An exception that is neither provider error still ends the turn.** The
+  other half of the fall-back question under §7.25, left as it is on purpose.
+  Both shipped providers turn every error they raise into one of the two, so
+  only a bug could produce one, and falling back on a bug would send the
+  prompt to a second provider for it.
+- **Structured content is refused, not read.** A server that streams its text
+  as a list of parts gets no answer from this provider: its first token fails
+  it. Reading the parts would be new behaviour and was not asked for.
+
 ---
 
 ## 8. Status
@@ -2883,6 +2953,7 @@ it; neither exists. No client file changed.
 | D-22 raising pipeline ends the turn | Landed 2026-10-03 (§7.25) | A: an exception from the pipeline closed the socket mid-turn with no done/error. The transport now ends the turn with one error, keeps the connection, and saves the turn as the client was shown it. 3 socket tests (all seen failing first), 6 break-it mutations caught. Found: D-23, the client never ends a turn on a dropped connection (code reading) |
 | D-24 stray Stop answered with an error, D-25 token the fold cannot take | Found by review and landed 2026-10-16 (§7.44) | A, low, both. A Stop with nothing streaming is dropped instead of answered "message is required"; the fold of each forwarded event moved inside D-22's guard and ahead of the send, so a token that is not text is withheld and ends the turn with one error instead of closing the socket. 5 of 15 tests failed first, 10 break-it mutations caught; the record's statements about what is wrapped, and its example of a crash, corrected |
 | D-26 failed write around a chat turn closed the connection | Found 2026-10-16 (§7.44), landed 2026-10-16 (§7.45) | A, medium: a project that no longer exists, or a conversation deleted under an open chat, ended the handler, with no ending event before the turn or after the reply was shown. Writes now go through a rollback; a message whose setup writes fail is refused with one error; a turn that cannot be saved is queued, retried in order before the next message, and that message is refused if it still cannot be written. 5 tests (all failed first, two on real triggers), 10 break-it mutations caught. Open: a failed save is told only at the next message; a turn queued at disconnect is not saved |
+| D-27 a token that is not text is a provider failure | Landed 2026-10-16 (§7.46) | A, low: a server streaming structured content, or a null, put a non-text token into the stream; a provider whose first token was one was not treated as failed, so the next was never asked. Stage 9 now fails it like one that yields nothing: the next provider before any text, "Response interrupted" after. The message names the type, never the value. 10 unit and 2 end-to-end tests (8 + 2 failed first), 6 break-it mutations caught; the transport's guard kept and its tests moved onto a fake pipeline. Open: an exception that is neither provider error still ends the turn, on purpose |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

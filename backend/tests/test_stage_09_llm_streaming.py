@@ -1,5 +1,6 @@
 from typing import Iterator
 
+import pytest
 
 from backend.providers.base_provider import (
     BaseLLMProvider,
@@ -137,3 +138,66 @@ def test_collect_aggregates_failed_stream():
     assert result["status"] == "error"
     assert result["response_text"] == ""
     assert "All providers failed" in result["error"]
+
+
+# --- D-27: a token that is not text -------------------------------------------
+#
+# OpenAICompatibleProvider yields a chunk's `content` as it finds it, so a
+# server that streams structured content (a list of parts) hands Stage 9 a
+# list. Stage 9 passed it on as a token. The transport then could not fold it
+# (D-25), and the turn ended in a generic error, with the next provider never
+# tried. A provider that yields something that is not text has broken the
+# provider contract, the same way one that yields nothing has, and is handled
+# the same way: it failed, and another is tried if nothing was shown yet.
+
+STRUCTURED = [{"type": "text", "text": "SECRET-CONTENT"}]
+
+
+def test_a_token_that_is_not_text_before_any_text_falls_through_to_the_next_provider():
+    broken = FakeProvider(provider_id="broken", tokens=[STRUCTURED, "never"])
+    working = FakeProvider(provider_id="working", tokens=["real content"])
+    events = list(stage_09.run("ctx", [], [broken, working]))
+    assert [e["data"] for e in events if e["type"] == "token"] == ["real content"]
+    assert events[-1] == {"type": "done", "data": None}
+    assert all(e.get("data") != STRUCTURED for e in events), "the structured token was passed on"
+
+
+def test_a_token_that_is_not_text_after_text_does_not_fall_through():
+    broken = FakeProvider(provider_id="broken", tokens=["a", STRUCTURED, "c"])
+    working = FakeProvider(provider_id="working", tokens=["should not appear"])
+    events = list(stage_09.run("ctx", [], [broken, working]))
+    assert [e["data"] for e in events if e["type"] == "token"] == ["a"]  # what was shown stays shown
+    assert events[-1]["type"] == "error"
+    assert events[-1]["data"].startswith("Response interrupted")
+    assert "list" in events[-1]["data"], "the error does not say what was wrong"
+    assert "SECRET-CONTENT" not in events[-1]["data"], "the error carries what the provider sent"
+
+
+@pytest.mark.parametrize("bad", [None, 7, b"bytes", {"a": 1}, ["x"]], ids=lambda value: type(value).__name__)
+def test_nothing_but_text_is_a_token(bad):
+    events = list(stage_09.run("ctx", [], [FakeProvider(provider_id="only", tokens=[bad])]))
+    assert not [e for e in events if e["type"] == "token"]
+    assert events[-1]["type"] == "error"
+    assert "All providers failed" in events[-1]["data"]
+    assert type(bad).__name__ in events[-1]["data"]
+
+
+def test_every_provider_yielding_something_that_is_not_text_ends_with_one_error():
+    first = FakeProvider(provider_id="first", tokens=[STRUCTURED])
+    second = FakeProvider(provider_id="second", tokens=[None])
+    events = list(stage_09.run("ctx", [], [first, second]))
+    assert [e["type"] for e in events if e["type"] in ("done", "error", "stopped")] == ["error"]
+    assert "All providers failed" in events[-1]["data"]
+    assert "SECRET-CONTENT" not in events[-1]["data"]
+
+
+def test_the_empty_string_is_still_a_token():
+    """Not text-with-content: only text. A provider that streams an empty piece is not broken."""
+    events = list(stage_09.run("ctx", [], [FakeProvider(tokens=["", "x"])]))
+    assert [e["data"] for e in events if e["type"] == "token"] == ["", "x"]
+    assert events[-1] == {"type": "done", "data": None}
+
+
+def test_a_stop_is_honoured_before_a_token_that_is_not_text_is_looked_at():
+    events = list(stage_09.run("ctx", [], [FakeProvider(tokens=[STRUCTURED])], should_stop=lambda: True))
+    assert events[-1] == {"type": "stopped", "data": None}

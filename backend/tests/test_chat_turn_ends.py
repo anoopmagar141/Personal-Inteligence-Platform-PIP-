@@ -666,29 +666,52 @@ def test_control_a_request_with_no_message_that_is_not_a_stop_still_gets_an_erro
 
 
 # --- D-25: a token that is not text -----------------------------------------
+#
+# Stage 9 now refuses these itself (D-27, below and in test_stage_09_llm_
+# streaming.py), so they no longer get as far as the transport. The transport's
+# own guard is held here with a pipeline that hands it the event directly: it
+# has to stand on its own, for whatever produces an event it cannot fold.
 
 
 @pytest.mark.parametrize(
-    "script, shown",
+    "tokens, shown",
     [
-        pytest.param(_yields("PART", [{"type": "text", "text": "hi"}], "NEVER"), ["PART"], id="structured-content-after-text"),
-        pytest.param(_yields("PART", None, "NEVER"), ["PART"], id="null-after-text"),
-        pytest.param(_yields([{"type": "text", "text": "hi"}], "NEVER"), [], id="structured-content-first"),
+        pytest.param(["PART", [{"type": "text", "text": "hi"}], "NEVER"], ["PART"], id="structured-content-after-text"),
+        pytest.param(["PART", None, "NEVER"], ["PART"], id="null-after-text"),
+        pytest.param([[{"type": "text", "text": "hi"}], "NEVER"], [], id="structured-content-first"),
     ],
 )
 def test_a_token_that_is_not_text_never_reaches_the_client_and_ends_the_turn_with_one_error(
-    token, ollama_script, script, shown
+    token, monkeypatch, tokens, shown
 ):
     """
-    The OpenAI-compatible provider yields a chunk's `content` as it finds it,
-    so a server that streams structured content hands Stage 9 a list. Nothing
-    in the provider raises, so the provider's own wrapping of errors never sees
-    it. The transport folds every event it forwards to know what the client was
-    shown, and that fold raised on the list - after the list had been sent, and
-    outside the guard, so the connection closed with no terminal event. The
-    client does `event.data as String` on every token.
+    The transport folds every event it forwards to know what the client was
+    shown. That fold raised on a token that is not text - after the token had
+    been sent, and outside the guard, so the connection closed with no terminal
+    event. The client does `event.data as String` on every token, so a token
+    that is not text must never be sent either.
     """
-    ollama_script.extend([script, _answers("LOCAL-OLLAMA")])
+    hint = {"decision_log_hit": False, "web_search_used": False, "cache_hit": False, "model_loading": False}
+
+    def broken(*args, **kwargs):
+        yield {"type": "stage_hint", "data": hint}
+        for piece in tokens:
+            yield {"type": "token", "data": piece}
+        yield {"type": "done", "data": None}
+        yield {"type": "pipeline_complete", "data": {
+            "trace_id": "t1", "response_text": "", "status": "success", "stage_hints": {},
+        }}
+
+    def whole(*args, **kwargs):
+        yield {"type": "stage_hint", "data": hint}
+        yield {"type": "token", "data": "LOCAL-OLLAMA"}
+        yield {"type": "done", "data": None}
+        yield {"type": "pipeline_complete", "data": {
+            "trace_id": "t2", "response_text": "LOCAL-OLLAMA", "status": "success", "stage_hints": {},
+        }}
+
+    plays = [broken, whole]
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: plays.pop(0)(*a, **kw))
 
     with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
         events = _Events(ws)
@@ -703,10 +726,80 @@ def test_a_token_that_is_not_text_never_reaches_the_client_and_ends_the_turn_wit
 
     assert _tokens(first) == shown, "a token that is not text was sent to the client"
     assert [e["type"] for e in _terminals(first)] == ["error"]
-    assert second[0]["type"] == "stage"
+    assert second[0]["type"] == "stage_hint"
     assert [e["type"] for e in _terminals(second)] == ["done"]
     assert "".join(_tokens(second)) == "LOCAL-OLLAMA"
     assert after == [], "something more was sent after the last turn had ended"
+
+
+# --- D-27: Stage 9 refuses a token that is not text --------------------------
+
+
+def _add_local_endpoint(tmp_path, url):
+    """A second provider that needs no consent, behind Ollama in the chain."""
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        llm_endpoint_store.add_endpoint(
+            conn, provider_id="lan-box", label="lan box", base_url=url, model_name="m", is_local=True,
+        )
+    finally:
+        conn.close()
+
+
+def test_a_provider_that_streams_structured_content_first_is_passed_over_for_the_next(
+    tmp_path, token, stub, ollama_script
+):
+    """
+    End to end through the real chat. Ollama leads the chain and its first
+    token is a list of content parts, which is what an OpenAI-compatible server
+    that streams structured content sends. It used to end the turn in an error
+    that named nothing, with the endpoint behind it never asked. It is now a
+    provider that failed before showing anything, and the endpoint answers.
+    """
+    _add_local_endpoint(tmp_path, stub.url)
+    ollama_script.append(_yields([{"type": "text", "text": "hi"}], "NEVER"))
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "explain how a hash map works"})
+        turn = events.turn()
+        after = events.settled()
+
+    assert [e["type"] for e in _terminals(turn)] == ["done"]
+    assert _tokens(turn) == ["STUB-REPLY"]
+    assert len(stub.sent) == 1
+    assert after == [], "something more was sent after the turn had ended"
+
+
+def test_a_provider_that_streams_structured_content_after_text_ends_the_turn_and_is_not_passed_over(
+    tmp_path, token, stub, ollama_script
+):
+    """
+    After something was shown, the next provider is not asked: starting a
+    second answer under the first would give a garbled one. The turn ends with
+    the interruption, naming the kind of thing that was wrong and none of what
+    was sent.
+    """
+    _add_local_endpoint(tmp_path, stub.url)
+    ollama_script.append(_yields("PART", [{"type": "text", "text": "SECRET-CONTENT"}], "NEVER"))
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "explain how a hash map works"})
+        turn = events.turn()
+        after = events.settled()
+
+    assert _tokens(turn) == ["PART"]
+    assert [e["type"] for e in _terminals(turn)] == ["error"]
+    assert turn[-1]["data"].startswith("Response interrupted")
+    assert "list" in turn[-1]["data"]
+    assert "SECRET-CONTENT" not in turn[-1]["data"]
+    assert stub.sent == [], "a second provider was asked after part of an answer had been shown"
+    assert after == [], "something more was sent after the turn had ended"
 
 
 # --- D-26: the writes around a turn -----------------------------------------

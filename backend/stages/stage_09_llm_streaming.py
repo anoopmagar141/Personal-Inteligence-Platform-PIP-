@@ -92,6 +92,24 @@ def run(
                     logger.info(f"Stage 9: {provider_id} stopped by client mid-stream")
                     yield {"type": "stopped", "data": None}
                     return
+                # Only text is a token. OpenAICompatibleProvider yields a chunk's
+                # `content` as it finds it, so a server that streams structured
+                # content (a list of parts) hands this loop a list, and a null
+                # reaches it the same way. Passed on, it is sent to a client that
+                # does `event.data as String` and cannot be folded into the reply
+                # (FREEZE_LIST §7.44, D-25), and the turn ends in an error that
+                # names nothing, with the next provider never tried. A provider
+                # that yields something that is not text has broken the contract
+                # the way one that yields nothing has (below), and is handled the
+                # same way: it failed, and another is tried if nothing was shown
+                # yet (FREEZE_LIST §7.46, D-27). Checked after the stop, so a
+                # stop still wins. The message names the type and not the value:
+                # what a provider sent may be anything, and this text reaches the
+                # client.
+                if not isinstance(token, str):
+                    raise ProviderExecutionError(
+                        f"provider yielded a {type(token).__name__} where text was expected"
+                    )
                 yield {"type": "token", "data": token}
                 yielded_any = True
 
