@@ -214,7 +214,11 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   carries the sentence explaining *why* an edit was rejected, and route closures
   convert it to `HTTPException(422)` so the client can show it.
 - **Two unlock states, two status codes.** 401 means the bearer token is wrong;
-  423 means the token is fine but no password has opened the database.
+  423 means the token is fine but no password has opened the database. That
+  includes a backend that has just started with profiles registered and none
+  chosen: the base slot is empty, `state()` says "setup", and `_is_locked()`
+  counts it as locked, in the gate, at the chat socket and in `_conn()`
+  (FREEZE_LIST §7.47).
   `_UNLOCKED_PATHS` is the small set the sign-in screen itself needs, plus
   `_UNLOCKED_PATH_RE` for the one per-profile path (`/auth/profiles/<slug>/
   picture`) whose slug cannot be an exact string.

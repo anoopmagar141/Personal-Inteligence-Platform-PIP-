@@ -32,8 +32,10 @@ still true wherever it is on. On 2026-10-16 a read-only review of D-22's fix
 found five small problems; the owner authorized fixing two of them (D-24, D-25),
 correcting the record and tightening the tests, landed the same day (§7.44). The
 third, D-26, was authorized next and landed the same day (§7.45), and so was
-the Stage 9 item §7.44 had left open, D-27 (§7.46). Anything further needs a
-new authorization.
+the Stage 9 item §7.44 had left open, D-27 (§7.46). The owner then started the
+blueprint's privacy and security cards with G-1: D-05, the plaintext base slot
+before sign-in, is fixed (§7.47), and D-28 was found beside it and left open.
+Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1437,7 +1439,7 @@ failing probe is its defect's regression test once a fix is authorized.
 | D-02 | High | env | The backend cannot import under Smart App Control: torch is unsigned and imported eagerly via `vector_store.py:41`. Confirmed on the staged payload `D:\pip-build\PIP` | Import fails in the payload's own Python |
 | D-03 | High | A | Export from the Backup screen fails with exactly one profile: `export_pip.ps1:62` passes `--db-path` only for `Count -gt 1` and falls back to `data/pip.db`. **Fixed 2026-10-02 (§7.18).** | Launcher's own condition on an isolated copy, plus a control |
 | D-04 | High (latent) | A/B | Stage 8 trusts `provider_consent.is_cloud` alone, and `add_endpoint` never updates it. A local→remote re-save, or an endpoint registered as `ollama`, was sent the full prompt with no consent. The reverse of §7.2 finding 2. No route adds endpoints yet. **Fixed 2026-10-02 (§7.21).** | Counting stub through the real pipeline |
-| D-05 | Medium | A | After a restart the backend serves the unencrypted `default` slot until a profile is chosen. `GET /status` created a plaintext `data/pip.db`, and a chat sent then was stored in plaintext; a phantom "Default" profile appeared and the next launch said `needs_migration`. The Flutter client avoids the window; the CLI does not | Real-process journey, canary on disk |
+| D-05 | Medium | A | After a restart the backend serves the unencrypted `default` slot until a profile is chosen. `GET /status` created a plaintext `data/pip.db`, and a chat sent then was stored in plaintext; a phantom "Default" profile appeared and the next launch said `needs_migration`. The Flutter client avoids the window; the CLI does not. **Fixed 2026-10-16 (§7.47).** | Real-process journey, canary on disk |
 | D-06 | Medium | D/A | Deleting a document leaves its plaintext file and its `document_blobs` content, so it also travels in later backups | Through `DELETE /rag/documents` |
 | D-07 | Medium | A | A restored document whose original absolute path exists is never re-indexed: write-back is skipped, and the rebuild's ingest refuses a path outside the profile. Retrieval is empty on every sign-in while the Documents screen lists it | Real-process restore |
 | D-08 | Medium | D | `/llm/pull` accepts any name and this Ollama has cloud enabled, so a `*-cloud` model would carry chat and the Observer off the machine as "local" `ollama` | Code reading only (would contact an external service) |
@@ -2898,6 +2900,97 @@ to start the same day.
   as a list of parts gets no answer from this provider: its first token fails
   it. Reading the parts would be new behaviour and was not asked for.
 
+### 7.47 G-1: no database before anyone has signed in, D-05 (authorized 2026-10-16)
+
+The first of the blueprint's privacy and security cards. It overlaps a guard
+another session left uncommitted in `_conn()`, for an installation whose registry
+lists nobody (with its own test, `test_empty_installation_creates_nothing.py`, and
+no FREEZE_LIST section or LOG line of its own). That guard is kept, and widened.
+
+- **Defect (A, medium; D-05, §7.16):** after a restart nothing has activated a
+  profile, so the process points at the base slot (`data/pip.db`,
+  `data/salt.bin`), where the installation lived before profiles existed. With
+  profiles registered that slot holds nothing, `session_key.state()` calls it
+  "setup" (no salt, no data), and `LockGateMiddleware`, which only gated
+  "locked", let everything through. `_conn()` then opened the missing database
+  and `open_app_connection()` created an empty unencrypted `pip.db` there.
+  - **Reproduced on `HEAD` through the real routes.** Two profiles made with
+    passwords, the first run ended, a second start (a real lifespan), nobody
+    signed in. Of 65 method-and-path pairs, 7 are the sign-in set. Of the other
+    58, **56 were served** (27 returned data, 6 crashed inside on the empty
+    payload) and 2 answered 423. The base slot ended up with `pip.db`,
+    `pip.db-wal` and `pip.db-shm`.
+  - **The chat socket was accepted,** so a message sent in that window was
+    stored unencrypted beside the encrypted profiles.
+  - **A "Default" profile appeared** in the sign-in list that nobody made:
+    `['default', 'alice', 'bob']` for two registered profiles.
+  - **The other session's guard does not reach it.** With that guard added to
+    `HEAD`, the same three tests fail: it refuses only when the registry lists
+    nobody, and here it lists two.
+- **Promise:** with profiles registered and nobody signed in, no request
+  creates or writes a database. The answer is 423 (4423 on the chat socket)
+  until a profile has been chosen and opened.
+- **Mechanism:** one rule, in `backend/api/server.py`.
+  - **`_no_profile_is_open()`:** a registry exists, and the profile the process
+    is pointed at is not in it. `_is_locked()` adds that to the old "locked"
+    state, only when the state is "setup".
+  - **Asked in three places that used to write `state == "locked"` for
+    themselves:** the lock gate, the chat socket's check before `accept()`,
+    and `_conn()` as the backstop. A case missing from any one would have been
+    found through it.
+  - **The other session's `_conn()` guard is widened, not replaced.** It asked
+    "the registry lists nobody"; this asks "the process is pointed at none of
+    the profiles the registry lists", of which an empty list is one case. Its
+    two tests still pass, and its 423 handler for `LockedError` is used as it
+    was.
+  - **Only when a registry exists.** An installation that never registered a
+    profile has none to be pointed away from, and the tests, which build
+    databases at isolated paths with no registry, are exactly that.
+  - **The sign-in screen is unaffected:** its routes are exempt by the gate's
+    own list, and choosing a profile and unlocking it, then using the app,
+    works as before.
+- **Tests:** 6 in `backend/tests/test_no_plaintext_database_before_sign_in.py`,
+  through the real routes and a real second lifespan.
+  - **Seen failing first (4 of 6, on `HEAD`):** the census, the chat socket,
+    the backstop in `_conn()`, and the phantom profile. The other two are
+    controls that pass before and after: starting the backend creates nothing
+    in the base slot, and signing in after the restart still works.
+  - **A status code cannot say which of the gate and the backstop answered,** so
+    the backstop has its own test, calling `_conn()` directly.
+- **Break-it:** 6 mutations, one at a time on a clean copy, each caught:
+  - the whole rule disabled (the census, the chat socket, the backstop, the phantom profile, and the
+    other session's own empty-installation test);
+  - the lock gate left on the old condition (the census alone: the routes that check their payload
+    first answered 422, not 423);
+  - the chat socket left on the old condition (the socket test);
+  - the `_conn()` backstop left on the old condition (the backstop test);
+  - the rule made to cover only a registry that lists someone (the other session's
+    empty-installation test);
+  - the registry no longer required (24 of the existing tests in `test_ws_chat.py`,
+    `test_api_server.py` and `test_pipeline.py`, which build databases with no registry).
+- **Suites:** Backend 1532 passed, 0 failed (17 min 43 s), run with the embedding shim on a clean export of `d560c30` plus the working-tree `server.py` and both test files, so with the other session's guard included. The two test files passed 8 runs in 8. No client file changed, so the Flutter suite was not re-run.
+
+**Found beside it, not fixed (D-28, A, medium):** a profile that has been
+created and chosen but has no password yet is in "setup" too, and the rule
+above lets it through, because the process *is* pointed at a registered
+profile. Reproduced through the real routes: create a profile, one
+`GET /status`, and a plaintext `pip.db` exists in that profile's own folder,
+the state becomes `needs_migration`, and `POST /auth/setup` is refused with
+"run scripts/set_db_password.py". The profile cannot be set up through the app
+after that, and a chat sent in the window would be stored unencrypted. The
+catch-up has refused to create a database that is not there since a fresh
+install hit the same thing (`_start_catch_up`); the routes never did. Whether
+the Flutter app reaches the window was not checked. The likely fix is the same
+rule one step further, "setup" with a registry means no database route, which
+changes more than G-1's card and needs its own authorization.
+
+**Not covered (still open):**
+- **An installation with no registry at all** (a first run, before any profile
+  exists) is unchanged: a request can still create the base database. It cannot
+  be told apart from the tests' own situation without a registry, and the
+  blueprint's card is about profiles being present.
+- **D-28,** above.
+
 ---
 
 ## 8. Status
@@ -2954,6 +3047,8 @@ to start the same day.
 | D-24 stray Stop answered with an error, D-25 token the fold cannot take | Found by review and landed 2026-10-16 (§7.44) | A, low, both. A Stop with nothing streaming is dropped instead of answered "message is required"; the fold of each forwarded event moved inside D-22's guard and ahead of the send, so a token that is not text is withheld and ends the turn with one error instead of closing the socket. 5 of 15 tests failed first, 10 break-it mutations caught; the record's statements about what is wrapped, and its example of a crash, corrected |
 | D-26 failed write around a chat turn closed the connection | Found 2026-10-16 (§7.44), landed 2026-10-16 (§7.45) | A, medium: a project that no longer exists, or a conversation deleted under an open chat, ended the handler, with no ending event before the turn or after the reply was shown. Writes now go through a rollback; a message whose setup writes fail is refused with one error; a turn that cannot be saved is queued, retried in order before the next message, and that message is refused if it still cannot be written. 5 tests (all failed first, two on real triggers), 10 break-it mutations caught. Open: a failed save is told only at the next message; a turn queued at disconnect is not saved |
 | D-27 a token that is not text is a provider failure | Landed 2026-10-16 (§7.46) | A, low: a server streaming structured content, or a null, put a non-text token into the stream; a provider whose first token was one was not treated as failed, so the next was never asked. Stage 9 now fails it like one that yields nothing: the next provider before any text, "Response interrupted" after. The message names the type, never the value. 10 unit and 2 end-to-end tests (8 + 2 failed first), 6 break-it mutations caught; the transport's guard kept and its tests moved onto a fake pipeline. Open: an exception that is neither provider error still ends the turn, on purpose |
+| G-1 / D-05 plaintext base slot before sign-in | Fixed 2026-10-16 (§7.47) | A, medium: with profiles registered and nobody signed in, 56 of 58 gated routes were served and the chat socket accepted, from a plaintext database created in the base slot, and a "Default" profile appeared. One rule (`_no_profile_is_open` / `_is_locked`) now answers 423 at the gate, 4423 at the socket and `LockedError` in `_conn()`, widening another session's uncommitted guard. 6 tests (4 failed first), 6 break-it mutations caught. Found beside it: D-28 |
+| D-28 a profile chosen before its password gets a plaintext database | Found 2026-10-16 (§7.47), open | A, medium: one request to any database route, before `/auth/setup`, creates a plaintext `pip.db` in the profile's folder; the state becomes `needs_migration` and `/auth/setup` is refused. Reproduced through the real routes; not fixed |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

@@ -62,6 +62,51 @@ def _db_path_or_default() -> str:
     be opened yet."""
     return os.environ.get("PIP_DB_PATH") or str(DEFAULT_DB_PATH)
 
+
+def _no_profile_is_open() -> bool:
+    """
+    Whether nobody is signed in and this process is pointed at a slot that no
+    registered profile owns.
+
+    That is a backend that has just started. Nothing has activated a profile -
+    the sign-in screen does that, and it has not run - so the paths are the base
+    slot's (data/pip.db, data/salt.bin), where the installation lived before
+    profiles existed. When profiles are registered that slot holds nothing, so
+    session_key.state() calls it "setup": no salt and no data. A gate does not
+    refuse "setup", because it is also the honest state of a profile that has
+    been chosen and not yet given a password. So every route was served, _conn()
+    opened the missing database, and open_app_connection() created an empty
+    UNENCRYPTED pip.db in the base slot: a chat sent then was stored in
+    plaintext, and the file made profiles.load() list a "Default" account that
+    nobody made (FREEZE_LIST §7.16 D-05, §7.47 G-1).
+
+    Only when a registry exists. An installation that never registered a
+    profile has none to be pointed away from, and the tests, which build
+    databases at isolated paths with no registry, are exactly that. An empty
+    registry counts: nobody is registered, so the process cannot be pointed at
+    anybody.
+
+    Asked only in the "setup" state, which already means no key is held, so
+    whether someone is signed in is not asked again here.
+    """
+    if not profiles.registry_path().exists():
+        return False
+    return profiles.active_slug() not in {p.slug for p in profiles.list_profiles()}
+
+
+def _is_locked() -> bool:
+    """
+    Whether a request may not touch a database yet.
+
+    One rule for the three places that ask - LockGateMiddleware, the chat
+    socket's own check before accept(), and _conn() behind them - because each
+    used to write out `state == "locked"` for itself, and a case left out of
+    that has to be added to all three or it is found through the one that was
+    missed.
+    """
+    state = session_key.state(_db_path_or_default())
+    return state == "locked" or (state == "setup" and _no_profile_is_open())
+
 VALID_CONSENT_SCOPES = {"full_inference", "web_search_only", "embedding_only", "none"}
 
 # Shared by CORSMiddleware (REST) and ws_chat()'s own manual check (WS upgrades
@@ -1098,8 +1143,34 @@ try:
         # Opening the database here with no key would not fail loudly: it would
         # quietly create an empty unencrypted one beside the encrypted database
         # it could not read.
-        if session_key.state(_db_path_or_default()) == "locked":
+        state = session_key.state(_db_path_or_default())
+        if state == "locked":
             raise LockedError("PIP is locked - a password is needed before the database can be opened.")
+        # NO PROFILE OPEN IS NOT "SETUP" FOR THIS PURPOSE
+        #
+        # After the last profile is deleted (or a data/ wipe) nothing is signed
+        # in, no salt exists and no database does, so state() says "setup" and
+        # LockGateMiddleware, which only gated "locked", let every route
+        # through. /status is one: the app asks it while still on the
+        # create-a-profile screen, _conn() opened the missing database, and
+        # open_app_connection() created an empty UNENCRYPTED pip.db at the base
+        # path. Because that file exists, profiles.load() counts it as legacy
+        # data and a "Default" account appears in the switcher, on a
+        # needs-migration screen, for a profile nobody ever made.
+        #
+        # The same happens with profiles that DO exist, after any restart:
+        # nothing has activated one yet, the process is pointed at the base
+        # slot, and the base slot is empty (G-1 / D-05). _no_profile_is_open is
+        # the rule for both, and the gate and the chat socket ask it too.
+        #
+        # Only when a registry exists: that is an installation that has had
+        # profiles. The tests build databases at isolated paths with no
+        # registry, which is a different situation and is deliberately
+        # unchanged.
+        if state == "setup" and _no_profile_is_open():
+            raise LockedError(
+                "No profile is open yet - choose one and sign in, or create one, before anything opens a database."
+            )
         return open_app_connection(os.environ.get("PIP_DB_PATH"), os.environ.get("PIP_DB_KEY"))
 
     def _token_path() -> Path | None:
@@ -1359,6 +1430,16 @@ try:
 
     app = FastAPI(title="PIP Core API", lifespan=lifespan)
 
+    # _conn() raises LockedError for a route that reached it with nothing to
+    # open. Without a handler that was a 500, which the app reads as a broken
+    # backend rather than "go to the sign-in screen"; 423 is what the lock gate
+    # answers for the same situation.
+    @app.exception_handler(LockedError)
+    async def _locked_error_handler(request, exc):
+        from starlette.responses import JSONResponse as _JSONResponse
+
+        return _JSONResponse({"detail": str(exc)}, status_code=423)
+
     # Local-only clients served from a different origin than this server -
     # e.g. `flutter run -d web-server` on its own port, vs. the HTML/JS web
     # client, which is same-origin because StaticFiles mounts it onto this
@@ -1435,7 +1516,7 @@ try:
                 request.url.path.startswith(BASE_PREFIX)
                 and request.url.path not in _UNLOCKED_PATHS
                 and not _UNLOCKED_PATH_RE.match(request.url.path)
-                and session_key.state(_db_path_or_default()) == "locked"
+                and _is_locked()
             ):
                 # 423 Locked, not 401. The caller's credentials are fine - the
                 # API token was accepted by the middleware outside this one -
@@ -1506,7 +1587,7 @@ try:
         # rather than after, so a locked backend never hands out a live socket.
         # 4423 mirrors HTTP 423 in the private close-code range, next to the
         # 4401 above.
-        if session_key.state(_db_path_or_default()) == "locked":
+        if _is_locked():
             await websocket.close(code=4423, reason="PIP is locked")
             return
 
