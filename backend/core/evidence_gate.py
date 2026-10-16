@@ -482,15 +482,22 @@ def _style_marker_is_negated(
     return False
 
 
-# A sentence ends at a run of ".", "!" or "?" followed by a space or the end of
-# the turn. The "followed by a space" half is what keeps "v1.2", "0.9" and
-# "main.py" in one piece.
-_SENTENCE_END_RE = re.compile(r"[.!?]+(?=\s|$)")
+# What may trail a sentence's final mark without being part of the next one.
+_CLOSERS = "\"')]}"
+# A sentence ends at a run of ".", "!" or "?" - with any closing quotation mark
+# or bracket sitting right against it - followed by a space or the end of the
+# turn. The "followed by a space" half is what keeps "v1.2", "0.9" and "main.py"
+# in one piece; the closers are what make `He asked "Should I use Helix?" and
+# left.` end its question at the `?"` instead of running on to the full stop.
+# A question mark is also an end when a comma or semicolon follows it (and its
+# closers): `"Should I use Helix?", he asked.` is a question reported, and a "?"
+# glued to a letter, as in a web address, is still not one.
+_SENTENCE_END_RE = re.compile(
+    rf"[.!?]+[{re.escape(_CLOSERS)}]*(?=\s|$)|\?+[{re.escape(_CLOSERS)}]*(?=[,;])"
+)
 # A full stop after one of these does not end the sentence: "Should I use Helix
 # vs. Neovim?" is one question, not a question cut short and then a fragment.
 _ABBREVIATION_RE = re.compile(r"(?:^|\s)(?:vs|e\.g|i\.e|etc|approx|mr|mrs|ms|dr)$")
-# What may trail a sentence's final mark without being part of the next one.
-_CLOSERS = "\"')]}"
 
 
 def _ends_in_question_mark(text: str, quote_end: int) -> bool:
@@ -541,6 +548,36 @@ def _only_ever_asked(quote: str, user_sources: list[EvidenceTurn]) -> bool:
             asked = True
             at = text.find(quote, at + 1)
     return asked
+
+
+def _declarative_text(quote: str) -> str:
+    """
+    What a quote asserts: its sentences with the questions taken out.
+
+    _only_ever_asked() refuses a quote whose own sentence is a question. It says
+    nothing about a quote that CONTAINS a question and ends on a statement, and
+    there the support checks used to read the quote as one blob:
+    "Should I use Helix? I use Neovim." cited whole for Helix took the value from
+    the question and its support phrase from the statement. A question states
+    nothing, so the value and the support language have to be in what is left
+    when the questions are taken out.
+
+    A quote with no question in it comes back untouched, so the support checks
+    read exactly what they read before. A trailing piece with no final mark is a
+    statement: nothing says it is anything else.
+    """
+    pieces: list[tuple[str, bool]] = []
+    start = 0
+    for end in _SENTENCE_END_RE.finditer(quote):
+        if end.group() == "." and _ABBREVIATION_RE.search(quote[: end.start()]):
+            continue
+        pieces.append((quote[start:end.end()], "?" in end.group()))
+        start = end.end()
+    if quote[start:].strip():
+        pieces.append((quote[start:], False))
+    if not any(is_question for _, is_question in pieces):
+        return quote
+    return " ".join(text.strip() for text, is_question in pieces if not is_question)
 
 
 # Words that, left OUT of a quote but present in the turn it was cut from,
@@ -859,6 +896,9 @@ def adjudicate(candidate: MemoryCandidate, ledger: EvidenceLedger) -> EvidenceVe
                     f"{turn['text'][:120]!r}",
                 )
 
+    # What the quote asserts. Topic mentions are the one table where a question
+    # is evidence in its own right, so there the whole quote counts.
+    asserted = quote
     if target_table != "topic_interests":
         # A question can contain a literal support marker ("Should I use
         # Helix?") without expressing a settled preference. Topic mentions
@@ -868,6 +908,12 @@ def adjudicate(candidate: MemoryCandidate, ledger: EvidenceLedger) -> EvidenceVe
         # fact and asks for help, and "Should I use Helix as my editor? I use
         # Neovim." asks before it states. See _only_ever_asked(), which also
         # covers a quote that ends in the question mark itself.
+        #
+        # A quote that contains a question and still ends on a statement gets
+        # past that refusal, so what step 6 reads is the quote without its
+        # questions (see _declarative_text): a value or a support phrase that
+        # only a question carries is not evidence.
+        asserted = _declarative_text(quote)
         if _only_ever_asked(quote, user_sources):
             return EvidenceVerdict(
                 EvidenceState.EVIDENCE_NOT_ENTAILING,
@@ -885,14 +931,26 @@ def adjudicate(candidate: MemoryCandidate, ledger: EvidenceLedger) -> EvidenceVe
             )
 
     # 6. Does the evidence support THIS claim?
-    if anchor_value is not None and not _anchored(anchor_value, quote):
+    if anchor_value is not None and not _anchored(anchor_value, asserted):
+        if _anchored(anchor_value, quote):
+            return EvidenceVerdict(
+                EvidenceState.EVIDENCE_NOT_ENTAILING,
+                f"the cited evidence names {str(anchor_value)[:60]!r} only in a question, "
+                "and a question states nothing",
+            )
         return EvidenceVerdict(
             EvidenceState.EVIDENCE_NOT_ENTAILING,
             f"the cited evidence never mentions {str(anchor_value)[:60]!r}",
         )
 
     markers = contract["markers"]
-    if markers is not None and not markers.search(quote):
+    if markers is not None and not markers.search(asserted):
+        if markers.search(quote):
+            return EvidenceVerdict(
+                EvidenceState.EVIDENCE_NOT_ENTAILING,
+                f"the cited evidence carries no {target_table} support language outside "
+                "its questions",
+            )
         return EvidenceVerdict(
             EvidenceState.EVIDENCE_NOT_ENTAILING,
             f"the cited evidence carries no {target_table} support language - "

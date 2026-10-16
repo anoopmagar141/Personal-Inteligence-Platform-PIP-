@@ -256,6 +256,147 @@ def test_a_quote_cut_from_a_question_is_still_a_question(transcript, cand):
     assert verdict.state == EvidenceState.EVIDENCE_NOT_ENTAILING, verdict.detail
 
 
+# --- A question contributes nothing to what a quote establishes --------------
+#
+# The refusal above judges a quote by the sentence it was cut from. It says
+# nothing about a quote that CONTAINS a question and still ends on a statement,
+# and there the support checks read the quote as one blob: "Should I use Helix?
+# I use Neovim." cited whole for Helix took the value from the question and its
+# support phrase from the statement (and "i use" is in the question too). A
+# belief about the user written from a question is the gate's critical failure.
+# The gate before A-1 accepted this as well, so it is older than the question
+# refusal, but a refusal of questions that a second sentence walks around is not
+# a refusal. The value and the support language are therefore looked for in the
+# sentences of the quote that are not questions.
+
+
+@pytest.mark.parametrize(
+    "transcript, cand",
+    [
+        pytest.param(
+            "User: Should I use Helix? I use Neovim.\n",
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      "Should I use Helix? I use Neovim."),
+            id="preference-value-only-in-the-question",
+        ),
+        pytest.param(
+            "User: Can I finish my thesis by December? I want to learn Rust.\n",
+            candidate("goal_memory", "active_goals", "finish my thesis by December",
+                      "Can I finish my thesis by December? I want to learn Rust."),
+            id="goal-value-only-in-the-question",
+        ),
+        pytest.param(
+            "User: Am I any good at Rust? I work mostly in Python.\n",
+            candidate("skill_memory", "Rust", "0.6",
+                      "Am I any good at Rust? I work mostly in Python."),
+            id="skill-value-only-in-the-question",
+        ),
+        pytest.param(
+            "User: Is Halyard worth building? I'm working on a budgeting app.\n",
+            candidate("active_projects", "Halyard", "a scheduling tool for boat clubs",
+                      "Is Halyard worth building? I'm working on a budgeting app."),
+            id="project-value-only-in-the-question",
+        ),
+        pytest.param(
+            "User: Should I use Helix? Neovim is fine.\n",
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      "Should I use Helix? Neovim is fine."),
+            id="support-language-only-in-the-question",
+        ),
+        pytest.param(
+            'User: He asked "Should I use Helix?" and I use Neovim.\n',
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      'He asked "Should I use Helix?" and I use Neovim.'),
+            id="question-in-quotation-marks-then-a-statement",
+        ),
+        pytest.param(
+            "User: Should I use Helix vs. Neovim? I use Vim.\n",
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      "Should I use Helix vs. Neovim? I use Vim."),
+            id="abbreviation-inside-the-question",
+        ),
+        pytest.param(
+            "User: I like editors. Should I use Helix? I use Neovim.\n",
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      "I like editors. Should I use Helix? I use Neovim."),
+            id="question-between-two-statements",
+        ),
+        pytest.param(
+            'User: He asked "Should I use Helix?" and left.\n',
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      "Should I use Helix"),
+            id="fragment-of-a-question-in-quotation-marks",
+        ),
+        pytest.param(
+            'User: "Should I use Helix?", he asked. I use Neovim.\n',
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      '"Should I use Helix?", he asked. I use Neovim.'),
+            id="quoted-question-closed-by-a-comma",
+        ),
+        pytest.param(
+            'User: He asked "Should I use Helix?", and left.\n',
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      "Should I use Helix"),
+            id="fragment-of-a-quoted-question-closed-by-a-comma",
+        ),
+    ],
+)
+def test_a_value_the_user_only_asked_about_is_not_established(transcript, cand):
+    verdict = _adjudicate(transcript, cand)
+    assert not verdict.sufficient
+    assert verdict.state == EvidenceState.EVIDENCE_NOT_ENTAILING, verdict.detail
+    assert "question" in verdict.detail, verdict.detail
+
+
+@pytest.mark.parametrize(
+    "transcript, cand",
+    [
+        pytest.param(
+            "User: Should I use Helix? I use Neovim.\n",
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      "Should I use Helix? I use Neovim."),
+            id="statement-after-a-question",
+        ),
+        pytest.param(
+            'User: He asked "Should I use Helix?" and I use Neovim.\n',
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      'He asked "Should I use Helix?" and I use Neovim.'),
+            id="statement-after-a-question-in-quotation-marks",
+        ),
+        pytest.param(
+            'User: "Should I use Helix?", he asked. I use Neovim.\n',
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      '"Should I use Helix?", he asked. I use Neovim.'),
+            id="statement-after-a-quoted-question-closed-by-a-comma",
+        ),
+        pytest.param(
+            "User: I use Neovim. It is my main editor.\n",
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      "I use Neovim. It is my main editor."),
+            id="two-statements-and-no-question-are-read-as-before",
+        ),
+        pytest.param(
+            "User: Which editor is fastest? I use Neovim\n",
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      "Which editor is fastest? I use Neovim"),
+            id="a-closing-piece-with-no-final-mark-is-a-statement",
+        ),
+        pytest.param(
+            "User: What is a vector clock? I read about them.\n",
+            candidate("topic_interests", "vector clocks", "vector clocks",
+                      "What is a vector clock? I read about them."),
+            id="a-question-still-establishes-a-topic-interest",
+        ),
+    ],
+)
+def test_what_the_statement_half_of_a_mixed_quote_names_is_still_established(transcript, cand):
+    # The other direction: the refusal is about borrowing from a question, not
+    # about quotes that contain one. And topic_interests keeps its exemption -
+    # asking about a topic is enough to show interest in it.
+    verdict = _adjudicate(transcript, cand)
+    assert verdict.sufficient, verdict.detail
+
+
 def test_a_short_named_technology_can_still_be_anchored():
     """
     Go, C, R and C# are all two characters or fewer once tokenised. The anchor
