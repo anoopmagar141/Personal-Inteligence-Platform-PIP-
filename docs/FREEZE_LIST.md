@@ -2491,20 +2491,6 @@ are written, which is a different decision and not one this measurement supports
 chat-connection drop (D-23) and the four failing tests were fixed earlier, and old unmarked backups cannot be detected in
 code (export again).
 
-### 7.36 Observer raw-output recording and unchanged-gate replay (run 2026-10-12)
-
-Recorded all 37 labelled Observer conversations three times with `qwen2.5:7b` (111 case runs, zero errors). The raw
-outputs and stamp are in `docs/eval/observer_raw_recording_2026-10-12.json`; the summary and replay check are in
-`docs/eval/observer_recording_2026-10-12.md`. Replay through the unchanged pipeline matched the live report for every
-case and pooled funnel, learned row, fact and trap result. The pooled result was 105 model candidates, 104 surviving
-grounding, 38 learned rows (27 TRUE, 8 UNLABELLED, 3 TRAP), 25/69 stated facts learned, and 3/75 traps reaching a
-belief table. Model-call time summed to 609.8 seconds; the approximate stamp-to-file wall interval was 616.4 seconds.
-No Observer prompt, evidence gate, Constitution or stages changed. Ollama's runtime context size remains unknown; the
-recording captures the configured 8,000-token transcript cap separately. This recording is valid for gate-only
-comparisons while its recorded prompt, model and code commit remain unchanged.
-
----
-
 ### 7.32 Response cache respects the selected model (fixed 2026-10-10)
 
 - **Promise:** after the selected Ollama model changes, an identical question cannot receive the prior model's cached answer.
@@ -2545,6 +2531,20 @@ comparisons while its recorded prompt, model and code commit remain unchanged.
 - **Verification:** 6 focused migration/timing tests passed; full backend suite passed: **1416 passed in 984.76 s**.
 - **Limitation:** rounding can show a fast operation as 0 ms; this is elapsed wall-clock time, not CPU time. The measurement is one local run and is not a performance benchmark.
 - **History:** B-2 implementation `1b80982`; migration/timing correction committed separately before integration.
+
+---
+
+### 7.36 Observer raw-output recording and unchanged-gate replay (run 2026-10-12)
+
+Recorded all 37 labelled Observer conversations three times with `qwen2.5:7b` (111 case runs, zero errors). The raw
+outputs and stamp are in `docs/eval/observer_raw_recording_2026-10-12.json`; the summary and replay check are in
+`docs/eval/observer_recording_2026-10-12.md`. Replay through the unchanged pipeline matched the live report for every
+case and pooled funnel, learned row, fact and trap result. The pooled result was 105 model candidates, 104 surviving
+grounding, 38 learned rows (27 TRUE, 8 UNLABELLED, 3 TRAP), 25/69 stated facts learned, and 3/75 traps reaching a
+belief table. Model-call time summed to 609.8 seconds; the approximate stamp-to-file wall interval was 616.4 seconds.
+No Observer prompt, evidence gate, Constitution or stages changed. Ollama's runtime context size remains unknown; the
+recording captures the configured 8,000-token transcript cap separately. This recording is valid for gate-only
+comparisons while its recorded prompt, model and code commit remain unchanged.
 
 ---
 

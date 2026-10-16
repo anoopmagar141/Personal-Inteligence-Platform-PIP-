@@ -6,6 +6,8 @@ Format:
 
 - [YYYY-MM-DD] <agent> · <what changed> · why: <one clause> · files: <paths>
 
+- [2026-10-16] claude · Brought the integration branch (A-0, A-1, A-2, B-1, B-2; 21 commits) into the main line (merge 9993d60): one conflict, docs/LOG.md, resolved by keeping the 20 entries added since the common ancestor and the 4 newest older ones and summarising the 21 older entries in three archive lines; the code is byte-identical to the merge tested on 2026-10-13, backend suite 1481 passed in 921.44 s (the integration branch's 1478 plus the 3 token-check cases) and Flutter suite 338 passed; FREEZE_LIST §7.36 moved into numeric order, so the committed file numbers its sections 7.30-7.37 once · why: I-1 of the blueprint; the integration branch had been merged and tested but sat beside the main line · files: docs/FREEZE_LIST.md, docs/LOG.md
+
 - [2026-10-13] claude · Moved the untracked working notes out of the repo root into `notes/` (agent prompts, `council/` transcripts and reports, `batman-import/`, `brag-output/`), still untracked, and pointed BLUEPRINT at the new paths; tracked docs, `docs/eval/` and `own-docs-eval/` left where code and records point to them · why: the owner asked to organise the scattered .md files · files: notes/, docs/BLUEPRINT.md
 
 - [2026-10-13] claude · Merged A-1 into integration/memory-first (cad8d82) after running the full backend suite on the merged tree, which is identical to the A-1 tip: 1478 passed in 933.51 s (the A-1 branch alone: 1478 in 889.71 s); FREEZE_LIST §7.37 now names the merge and the integration run · why: the merge protocol (agent-prompts §9) runs the suite before the merge is committed and records the result · files: docs/FREEZE_LIST.md, docs/LOG.md
