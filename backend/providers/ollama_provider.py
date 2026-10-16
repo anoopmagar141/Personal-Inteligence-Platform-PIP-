@@ -1,9 +1,37 @@
 import json
+import re
 import urllib.request
 import urllib.error
 from typing import Iterator, Optional, List, Dict, Any
 
 from backend.providers.base_provider import BaseLLMProvider, ProviderUnavailableError, ProviderExecutionError
+
+
+# The whole word "cloud" at the very end of a model name: after a hyphen
+# (gpt-oss:120b-cloud), after the colon that starts a tag (gpt-oss:cloud), after
+# a slash, or as the whole name. Not "cloudy:7b", not "cloud-atlas:3b", not
+# "my-cloud-model:13b": those say cloud somewhere else and run here.
+_CLOUD_NAME = re.compile(r"(?:^|[-:/])cloud$")
+
+
+def is_cloud_model(name: str) -> bool:
+    """
+    Whether Ollama would run this model on its own servers and not on this machine.
+
+    Signed in to Ollama, a model whose name ends in "-cloud" or whose tag is
+    "cloud" is answered over the internet, through the same local port and the
+    same API as a model that lives on this disk. Nothing in a request tells the
+    two apart, and `ollama` is recorded as a local provider, so a conversation -
+    and the Observer's whole session transcript - was sent off the machine as
+    though it were local (FREEZE_LIST §7.16 D-08, §7.48 G-3). The name is the
+    only signal there is before anything is sent, so it is the one used.
+
+    Fails closed: a name that matches is refused, whatever else is true of it.
+    A local model that merely has "cloud" in the middle of its name is not
+    caught, and one that really is called "cloud" is.
+    """
+    return bool(_CLOUD_NAME.search(str(name).strip().lower()))
+
 
 class OllamaProvider(BaseLLMProvider):
     def __init__(self, model_name: str = "llama3.1:8b", host: str = "http://localhost:11434"):
@@ -76,7 +104,13 @@ class OllamaProvider(BaseLLMProvider):
     def get_model_info(self) -> Dict[str, Any]:
         return {
             "provider_id": "ollama",
-            "is_local": True,
+            # Local only for a model that runs here. This used to say True for
+            # any name, so Stage 8 and the Observer's own check - which compare
+            # this claim with the consent record - agreed with each other and
+            # were both wrong for a cloud model. Now they disagree, and a
+            # disagreement is a refusal, including for a name stored before the
+            # pull and the selection learned to refuse it (D-08).
+            "is_local": not is_cloud_model(self.model_name),
             "model_name": self.model_name,
             "host": self.host
         }

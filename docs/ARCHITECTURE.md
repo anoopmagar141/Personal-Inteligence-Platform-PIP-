@@ -177,6 +177,10 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   rule Stage 11 already applies to the Observer; a disagreement is a refusal.
   An endpoint cannot be saved under the id of a built-in provider (`ollama`,
   `web_search`), since consent is recorded per id (FREEZE_LIST §7.21).
+  The built-in Ollama is local for a model that runs here: an Ollama `*-cloud`
+  model is refused at pull and at selection, and the provider reports itself
+  not local for one already stored, so Stage 8 and the Observer's own check
+  refuse it too (FREEZE_LIST §7.48).
 - **The evidence gate is an allowlist, and fails toward rejection.** Entailment
   is decided by requiring the user's own words to carry a recognised support
   construction for the kind of claim being made — the three the constitution

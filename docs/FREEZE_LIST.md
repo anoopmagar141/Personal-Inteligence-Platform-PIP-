@@ -34,8 +34,9 @@ correcting the record and tightening the tests, landed the same day (§7.44). Th
 third, D-26, was authorized next and landed the same day (§7.45), and so was
 the Stage 9 item §7.44 had left open, D-27 (§7.46). The owner then started the
 blueprint's privacy and security cards with G-1: D-05, the plaintext base slot
-before sign-in, is fixed (§7.47), and D-28 was found beside it and left open.
-Anything further needs a new authorization.
+before sign-in, is fixed (§7.47), and D-28 was found beside it and left open. G-3 followed: D-08, a `-cloud`
+Ollama model counted as local, is fixed (§7.48). Anything further needs a new
+authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -242,8 +243,10 @@ reaches a counting stub through the real pipeline (§7.21).
 **Limitations:**
 - Locality is attested, as in Promise 5: an endpoint saved as local by
   whoever configured it is believed.
-- The built-in Ollama is local by definition. An Ollama `*-cloud` model
-  would pass as local (D-08, §7.16, not fixed).
+- The built-in Ollama is local for a model that runs here. An Ollama
+  `*-cloud` model is refused at pull and selection, and the provider
+  reports itself not local for one already stored (D-08, §7.16; fixed
+  2026-10-16, §7.48).
 - An endpoint re-saved from remote to local stays refused until it is
   removed and added again (§7.2 finding 2).
 
@@ -1442,7 +1445,7 @@ failing probe is its defect's regression test once a fix is authorized.
 | D-05 | Medium | A | After a restart the backend serves the unencrypted `default` slot until a profile is chosen. `GET /status` created a plaintext `data/pip.db`, and a chat sent then was stored in plaintext; a phantom "Default" profile appeared and the next launch said `needs_migration`. The Flutter client avoids the window; the CLI does not. **Fixed 2026-10-16 (§7.47).** | Real-process journey, canary on disk |
 | D-06 | Medium | D/A | Deleting a document leaves its plaintext file and its `document_blobs` content, so it also travels in later backups | Through `DELETE /rag/documents` |
 | D-07 | Medium | A | A restored document whose original absolute path exists is never re-indexed: write-back is skipped, and the rebuild's ingest refuses a path outside the profile. Retrieval is empty on every sign-in while the Documents screen lists it | Real-process restore |
-| D-08 | Medium | D | `/llm/pull` accepts any name and this Ollama has cloud enabled, so a `*-cloud` model would carry chat and the Observer off the machine as "local" `ollama` | Code reading only (would contact an external service) |
+| D-08 | Medium | D | `/llm/pull` accepts any name and this Ollama has cloud enabled, so a `*-cloud` model would carry chat and the Observer off the machine as "local" `ollama`. **Fixed 2026-10-16 (§7.48).** | Code reading only (would contact an external service) |
 | D-09 | Medium | A | "Close PIP and open it again to finish" does not apply a restore: the launcher reuses the running backend, so the swap waits for an unclean exit, which feeds D-01 | Code reading |
 | D-10-13 | Low | | 500s for malformed onboarding input and a bit-flipped backup; a dismissed memory question is re-asked when the same words recur; Unlock sits below the fold at 1280x720 | Probes, screenshot |
 
@@ -1821,7 +1824,8 @@ which had no tests, its evidence (§4).
 - **Locality is still attested, not verified.** An endpoint saved as local
   by whoever configured it is believed (Promise 5's wording, kept).
 - **D-08 is unaffected.** The built-in Ollama is local by definition, so
-  an Ollama `*-cloud` model would still pass as local.
+  an Ollama `*-cloud` model would still pass as local. *(Fixed 2026-10-16,
+  §7.48.)*
 - **§7.2 finding 2 is unchanged.** An endpoint re-saved from remote to
   local stays refused until it is removed and added again: it fails
   closed. With this fix, a local-to-remote re-save is refused too, for the
@@ -2991,6 +2995,81 @@ changes more than G-1's card and needs its own authorization.
   blueprint's card is about profiles being present.
 - **D-28,** above.
 
+### 7.48 G-3: a cloud model is not a local one, D-08 (authorized 2026-10-16)
+
+The second of the blueprint's privacy and security cards.
+
+- **Defect (D, then A; medium; D-08, §7.16):** Ollama can run a model on its own
+  servers. Signed in to Ollama, a model whose name ends in `-cloud`, or whose
+  tag is `cloud`, is answered over the internet through the same local port and
+  API as a model on this disk. `OllamaProvider.get_model_info()` said
+  `is_local: True` for any model name, and the `ollama` consent record says
+  local, so Stage 8 and the Observer's own check, which compare the two,
+  agreed with each other and were both wrong. A conversation, and the
+  Observer's whole session transcript, went off the machine as though it were
+  local. Three ways in:
+  - **`POST /llm/pull`** accepts any name.
+  - **`POST /llm/active-model`** accepts a name Ollama lists, and Ollama lists a
+    cloud model once someone has run it.
+  - **A name already stored,** from before.
+  - **Read, not demonstrated,** as the card says: showing it for real would have
+    been the leak. Here Ollama is a stub that records what it is sent, and on
+    `HEAD` it was sent the conversation for a stored cloud model (the turn ended
+    `success`).
+- **Promise:** a conversation is never sent to a model Ollama runs elsewhere
+  under the name of a local provider. A cloud model cannot be pulled or
+  selected, and one already stored is refused like any provider whose own claim
+  and consent record disagree.
+- **Mechanism:** one predicate, `is_cloud_model()` in
+  `backend/providers/ollama_provider.py`: the whole word `cloud` at the end of a
+  name (`-cloud`, `:cloud`, `/cloud`, or the whole name), case and surrounding
+  spaces ignored. Used in three places.
+  - **Pull and selection** refuse with one sentence ("... would run it on its
+    own servers, so your conversation would leave this machine. PIP only uses
+    models that run here."), as 400 and 422. The selection check runs **before**
+    Ollama is asked whether the name is real: that lookup fails open when Ollama
+    is down, so that choosing a model for when it is back is not blocked, and a
+    cloud name must not ride that.
+  - **The provider** reports `is_local: False` for such a name. Stage 8 then
+    refuses it (its claim and the consent record disagree: D-04's rule), and so
+    does Stage 11 (`ObserverLocalProviderError`, the session stays queued), for
+    a name stored before this fix. Neither stage changed.
+  - **Fails closed.** A local model that merely has "cloud" inside its name
+    (`cloudy:7b`, `cloud-atlas:3b`, `my-cloud-model:13b`) is not caught; one that
+    really is called `cloud` is.
+- **Tests:** 43 in `backend/tests/test_cloud_model_is_not_local.py`, through the
+  real routes, pipeline and Stage 11, Ollama a stub.
+  - **Seen failing first:** 28 of the 43 on `HEAD`. The other 15 are controls
+    that pass before and after: local names are still recognised as local,
+    pulled, selected (also while Ollama is down) and used.
+  - **What they pin:** the refusal sentence, on six cloud spellings; that Ollama
+    is never asked to pull; that the active model is unchanged; that a stored
+    cloud name sends nothing; that the Observer's transcript is not sent; and
+    that a cloud name is refused while Ollama is unreachable.
+- **Break-it:** 7 mutations, one at a time on a clean copy, each caught:
+  - the pull no longer refusing a cloud name (the six pull tests);
+  - the selection no longer refusing it (the two selection tests, one of them with Ollama down);
+  - the provider claiming to be local for any name (the six provider tests, the stored-name test and
+    the Observer test);
+  - the predicate missing the `:cloud` tag (one case in each of the recognised, provider and pull tests);
+  - the predicate matching any name that contains "cloud" (`cloudy:7b` and the other local names, in
+    the recognised, provider and pull controls);
+  - the predicate case-sensitive (the upper-case name, in the same three);
+  - the predicate sensitive to surrounding spaces (the padded name, in the recognised and provider
+    tests; a pull strips it first).
+- **Suites:** Backend 1575 passed, 0 failed (13 min 11 s), run with the embedding shim on a clean export of `5a5a244` plus this change, with nothing else running. A first run, alongside other test runs of mine, had one failure, `test_profile_boundary.py::test_a_sign_in_gets_its_own_catch_up_while_the_previous_sessions_is_still_running`; it passed 6 of 6 alone on this change and 6 of 6 on `5a5a244`, and the quiet re-run passed everything, so it was load. The new file passed 8 runs in 8. No client file changed, so the Flutter suite was not re-run.
+
+**Not covered (still open):**
+- **The name is the signal.** It is the only one available before anything is
+  sent, and it is how Ollama names its cloud models. Ollama's own listing
+  carries more about such a model; it was not used, because it could not be
+  checked against a live Ollama here without contacting one.
+- **A stored cloud name ends the turn with "No consented provider available"**
+  and the Observer's session stays queued. The person is not told why in that
+  message; the log has Stage 8's reason.
+- **The picker still lists a cloud model** that Ollama has, until it is chosen
+  and refused with the sentence.
+
 ---
 
 ## 8. Status
@@ -3039,7 +3118,7 @@ changes more than G-1's card and needs its own authorization.
 | D-03 one-profile export fix | Landed 2026-10-02 (§7.18) | `export_pip.ps1` takes its profile from the shared `Resolve-PipLastProfile` and always sets the salt with the database; 6 tests through the real wrapper under PowerShell 5.1, 6 break-it mutations caught. Noted: the resolver's one-profile branch never runs under 5.1 (same answer by its fallback) |
 | Sign-out cache race (D-15) | Found 2026-10-02 (§7.19) | A: an answer written to the cache after sign-out cleared it is served to the next profile; deterministic with the write delayed (5/5); the §7.9 guard failed 7-8 of 20 runs alone. Fixed in §7.20 |
 | D-15 sign-out cache fix | Landed 2026-10-02 (§7.20) | Every cache key carries the session generation sign-out moves, taken per chat connection; also closes an open socket being served the next session's answers. 3 tests seen failing first, 4 break-it mutations caught; the §7.9 guard 159/160 after the fix (one early failure, output not kept) |
-| D-04 consent locality fix | Landed 2026-10-02 (§7.21) | Stage 8 counts a provider as local only when its own claim and its consent record agree; `add_endpoint` refuses built-in ids. 11 outcome tests (5 seen failing first), 3 gate unit tests, 6 break-it mutations caught. Promise 6 now has evidence. Open: locality attested not verified, D-08, §7.2 finding 2 |
+| D-04 consent locality fix | Landed 2026-10-02 (§7.21) | Stage 8 counts a provider as local only when its own claim and its consent record agree; `add_endpoint` refuses built-in ids. 11 outcome tests (5 seen failing first), 3 gate unit tests, 6 break-it mutations caught. Promise 6 now has evidence. Open: locality attested not verified, D-08 (fixed 2026-10-16, §7.48), §7.2 finding 2 |
 | D-14 staged restore and deletion fix | Landed 2026-10-02 (§7.22) | `profiles.delete()` first cancels a restore staged for that profile's database, so nothing is installed in a deleted profile's place and the staged copy is erased. 4 route tests (3 seen failing first), 3 break-it mutations caught. Open: `profiles.remove()`, which nothing calls |
 | D-16 chat turn with no terminal event | Found and landed 2026-10-03 (§7.23) | A, latent: with no provider left after Stage 8 the socket got stage lines and no done/error, so the chat stayed "writing". The pipeline now sends its error. 3 socket tests through the real pipeline (1 seen failing first), 2 Flutter tests, 4 break-it mutations caught. Open item, a pipeline that raises, fixed as D-22 (§7.25) |
 | Migration journey re-run | Run 2026-10-03 (§7.24), report only | 10 variants, exports and shortcut restores through the real `export_pip.ps1` and `restore_pip.ps1`, 307 checks at `9968e8c`, every failure attributed; negative controls catch D-03 and D-14. Round trip holds (D-01 on every in-app restore that had a WAL to swap, D-03 with two profiles). New: D-18 empty or partial backup accepted (medium), D-20 same-named document taken over the backup's (medium, upper end), D-21 shortcut restores the first backup of the day (medium, low end), D-17 export race with a false "Nothing was written" (low, upper end), D-19 staged-restore state not scoped to the profile (low). Exit criterion not met as worded: D-09, D-18, D-20 |
@@ -3049,6 +3128,7 @@ changes more than G-1's card and needs its own authorization.
 | D-27 a token that is not text is a provider failure | Landed 2026-10-16 (§7.46) | A, low: a server streaming structured content, or a null, put a non-text token into the stream; a provider whose first token was one was not treated as failed, so the next was never asked. Stage 9 now fails it like one that yields nothing: the next provider before any text, "Response interrupted" after. The message names the type, never the value. 10 unit and 2 end-to-end tests (8 + 2 failed first), 6 break-it mutations caught; the transport's guard kept and its tests moved onto a fake pipeline. Open: an exception that is neither provider error still ends the turn, on purpose |
 | G-1 / D-05 plaintext base slot before sign-in | Fixed 2026-10-16 (§7.47) | A, medium: with profiles registered and nobody signed in, 56 of 58 gated routes were served and the chat socket accepted, from a plaintext database created in the base slot, and a "Default" profile appeared. One rule (`_no_profile_is_open` / `_is_locked`) now answers 423 at the gate, 4423 at the socket and `LockedError` in `_conn()`, widening another session's uncommitted guard. 6 tests (4 failed first), 6 break-it mutations caught. Found beside it: D-28 |
 | D-28 a profile chosen before its password gets a plaintext database | Found 2026-10-16 (§7.47), open | A, medium: one request to any database route, before `/auth/setup`, creates a plaintext `pip.db` in the profile's folder; the state becomes `needs_migration` and `/auth/setup` is refused. Reproduced through the real routes; not fixed |
+| G-3 / D-08 a cloud model counted as local | Fixed 2026-10-16 (§7.48) | D then A, medium: Ollama's own `-cloud` models were answered over the internet but reported local, so a conversation and the Observer's transcript could leave the machine. One predicate (`is_cloud_model`): a pull and a selection are refused with a sentence (the selection before Ollama is asked, which fails open), and the provider reports itself not local, so Stage 8 and Stage 11 refuse a name already stored. 43 tests (28 failed first), 7 break-it mutations caught |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

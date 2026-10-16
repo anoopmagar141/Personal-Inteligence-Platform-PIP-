@@ -532,6 +532,23 @@ def api_pull_status() -> dict[str, Any]:
         return dict(_pull_state)
 
 
+def _refuse_cloud_model(model_name: str) -> None:
+    """
+    One sentence, used wherever a model name comes in: a model Ollama runs on its
+    own servers is not a model that runs here (FREEZE_LIST §7.16 D-08, §7.48
+    G-3). Ollama answers it through the same local port as any other, so
+    nothing else would tell the person that choosing it sends the conversation
+    away - and PIP records Ollama as a local provider.
+    """
+    from backend.providers.ollama_provider import is_cloud_model
+
+    if is_cloud_model(model_name):
+        raise ValueError(
+            f"'{model_name}' is an Ollama cloud model: Ollama would run it on its own servers, so your "
+            "conversation would leave this machine. PIP only uses models that run here."
+        )
+
+
 def api_start_pull(payload: dict[str, Any]) -> dict[str, Any]:
     """
     Start pulling a model, and report progress by polling rather than streaming.
@@ -552,6 +569,7 @@ def api_start_pull(payload: dict[str, Any]) -> dict[str, Any]:
     model_name = (payload.get("model_name") or "").strip()
     if not model_name:
         raise ValueError("model_name is required")
+    _refuse_cloud_model(model_name)
 
     with _pull_lock:
         if _pull_state["status"] == "pulling":
@@ -672,6 +690,10 @@ def api_set_active_model(conn, payload: dict[str, Any]) -> dict[str, Any]:
     model_name = payload.get("model_name")
     if not model_name:
         raise ValueError("model_name is required")
+    # Before Ollama is asked anything. The check below fails open when Ollama
+    # cannot be reached, and a name that sends the conversation away must not
+    # be able to ride that.
+    _refuse_cloud_model(model_name)
 
     # Validated against what Ollama actually has pulled - but only when
     # Ollama answers at all. If it's unreachable right now, the choice is
