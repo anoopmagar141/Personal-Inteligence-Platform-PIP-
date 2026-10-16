@@ -261,7 +261,8 @@ CREATE TABLE IF NOT EXISTS trace_log (
     stage TEXT NOT NULL,
     status TEXT NOT NULL,
     message TEXT,
-    error_detail TEXT
+    error_detail TEXT,
+    duration_ms INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_trace_log_trace_id ON trace_log(trace_id);

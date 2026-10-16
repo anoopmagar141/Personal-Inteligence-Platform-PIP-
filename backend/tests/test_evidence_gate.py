@@ -9,7 +9,7 @@ from backend.core.evidence_gate import (
     adjudicate,
     normalize,
 )
-from backend.tests.evidence_cases import CASES, HELD_OUT, candidate
+from backend.tests.evidence_cases import CASES, HELD_OUT, NEW_HELD_OUT, candidate
 
 
 def _adjudicate(transcript: str, cand: dict):
@@ -41,7 +41,7 @@ def test_no_labelled_case_is_falsely_accepted():
     They are not symmetric, and this is the one that must be zero.
     """
     false_accepts = [
-        c["id"] for c in CASES + HELD_OUT
+        c["id"] for c in CASES + HELD_OUT + NEW_HELD_OUT
         if not c["should_accept"]
         and _adjudicate(c["transcript"], c["candidate"]).sufficient
     ]
@@ -100,6 +100,160 @@ def test_the_held_out_false_reject_rate_has_not_grown():
     ]
     assert set(missed) <= KNOWN_FALSE_REJECTS
     assert len(missed) <= 1, f"held-out false rejects grew to {len(missed)}: {missed}"
+
+
+@pytest.mark.parametrize("case", NEW_HELD_OUT, ids=[c["id"] for c in NEW_HELD_OUT])
+def test_a1_new_held_out_cases_behave_as_labelled(case):
+    verdict = _adjudicate(case["transcript"], case["candidate"])
+    assert verdict.state == case["expected_state"], (
+        f"{case['id']}: expected {case['expected_state']}, got {verdict.state} "
+        f"({verdict.detail})"
+    )
+
+
+def test_style_question_does_not_establish_a_preference():
+    transcript = "User: Should you give me a full explanation?\n"
+    cand = candidate("interaction_style", "value", "full_detail",
+                     "Should you give me a full explanation?")
+    assert not _adjudicate(transcript, cand).sufficient
+
+
+def test_question_cannot_become_a_preference_when_quote_drops_question_mark():
+    transcript = "User: Should I use Helix as my editor?\n"
+    cand = candidate("preference_memory", "preferred_tools", "Helix",
+                     "Should I use Helix as my editor")
+    assert not _adjudicate(transcript, cand).sufficient
+
+
+def test_negated_style_marker_does_not_establish_a_preference():
+    transcript = "User: I don't want a full explanation.\n"
+    cand = candidate("interaction_style", "value", "full_detail",
+                     "I don't want a full explanation.")
+    assert not _adjudicate(transcript, cand).sufficient
+
+
+def test_style_quote_cannot_omit_the_negation_from_its_user_turn():
+    transcript = "User: I don't want a full explanation.\n"
+    cand = candidate("interaction_style", "value", "full_detail",
+                     "a full explanation")
+    assert not _adjudicate(transcript, cand).sufficient
+
+
+# --- The question guard looks at the quote's sentence, not at the turn -------
+#
+# The first version of the guard asked "does a source turn end with a question
+# mark?". That is wrong in both directions, and each direction has a test.
+#
+# It threw away a plain fact because the same message also asked for help,
+# which is the commonest way anyone talks to an assistant ("I use Neovim for
+# everything. Any plugin suggestions?"). The gate as it stood before A-1
+# accepted every one of these; the first version of the guard refused most.
+#
+# And it let a question through whenever the turn happened not to END on its
+# question mark: "Should I use Helix as my editor? I use Neovim." cut down to
+# its first sentence passed, because the turn ends with a full stop.
+
+
+@pytest.mark.parametrize(
+    "transcript, cand",
+    [
+        pytest.param(
+            "User: I use Neovim for everything. Any plugin suggestions?\n",
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      "I use Neovim for everything."),
+            id="preference-then-question",
+        ),
+        pytest.param(
+            "User: My goal is to finish my thesis draft by December. "
+            "Can you help me plan it?\n",
+            candidate("goal_memory", "active_goals", "finish my thesis draft by December",
+                      "My goal is to finish my thesis draft by December."),
+            id="goal-then-question",
+        ),
+        pytest.param(
+            "User: I work mostly in Python and I'm building my thesis backend. "
+            "What framework should I pick?\n",
+            candidate("skill_memory", "Python", "0.7", "I work mostly in Python"),
+            id="skill-fragment-then-question",
+        ),
+        pytest.param(
+            "User: I use Neovim for everything. Any plugin suggestions?\n",
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      "I use Neovim for everything"),
+            id="quote-stops-before-its-own-full-stop",
+        ),
+        pytest.param(
+            "User: Which editor is fastest? I use Neovim for everything.\n",
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      "I use Neovim for everything."),
+            id="question-then-preference",
+        ),
+        pytest.param(
+            "User: I use Neovim for everything.\nAssistant: Nice.\n"
+            "User: Do I use Neovim for everything?\n",
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      "I use Neovim for everything"),
+            id="said-plainly-once-and-asked-about-later",
+        ),
+    ],
+)
+def test_a_statement_is_still_learned_when_its_turn_also_asks_a_question(transcript, cand):
+    # The last case is the module's own rule for a quote found in more than one
+    # turn (see _adjudicate_partial_quote): if the user said it plainly once,
+    # the plain statement stands, however else the words came up.
+    verdict = _adjudicate(transcript, cand)
+    assert verdict.sufficient, verdict.detail
+
+
+@pytest.mark.parametrize(
+    "transcript, cand",
+    [
+        pytest.param(
+            "User: Should I use Helix as my editor? I use Neovim.\n",
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      "Should I use Helix as my editor"),
+            id="question-first-statement-last",
+        ),
+        pytest.param(
+            "User: I use Neovim for everything, but should I switch?\n",
+            candidate("preference_memory", "preferred_tools", "Neovim",
+                      "I use Neovim for everything"),
+            id="statement-and-question-in-one-sentence",
+        ),
+        pytest.param(
+            "User: Should I use Helix vs. Neovim for my thesis?\n",
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      "Should I use Helix"),
+            id="abbreviation-does-not-end-the-question",
+        ),
+        pytest.param(
+            "User: Should I use Helix, e.g. for my thesis? I use Neovim.\n",
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      "Should I use Helix"),
+            id="abbreviation-then-more-sentences",
+        ),
+        pytest.param(
+            "User: Should I use Helix v1.2 or Neovim 0.9?\n",
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      "Should I use Helix"),
+            id="version-numbers-do-not-end-the-question",
+        ),
+        pytest.param(
+            'User: I keep asking myself "Should I use Helix?"\n',
+            candidate("preference_memory", "preferred_tools", "Helix",
+                      'Should I use Helix?"'),
+            id="question-mark-inside-closing-quotation-marks",
+        ),
+    ],
+)
+def test_a_quote_cut_from_a_question_is_still_a_question(transcript, cand):
+    # The quote never reaches the question mark, so only the sentence it was
+    # cut from shows what it was. Sentence-final means a full stop, "!" or "?"
+    # followed by a space or the end of the turn: the dot in "vs.", "e.g." and
+    # "v1.2" is not one.
+    verdict = _adjudicate(transcript, cand)
+    assert not verdict.sufficient
+    assert verdict.state == EvidenceState.EVIDENCE_NOT_ENTAILING, verdict.detail
 
 
 def test_a_short_named_technology_can_still_be_anchored():

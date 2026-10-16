@@ -36,6 +36,7 @@
 # impossible.
 
 import logging
+import time
 from typing import Any, Callable, Generator, Optional, Union
 
 from backend.core import response_cache, trace
@@ -220,6 +221,7 @@ def _gate_providers(conn, trace_id: str, providers: list[BaseLLMProvider]) -> li
     for provider in providers:
         model_info = provider.get_model_info()
         provider_id = model_info.get("provider_id", _DEFAULT_PROVIDER_ID)
+        gate_started = time.perf_counter()
         try:
             # The provider's own claim, so the gate can check it against the
             # consent record (D-04). A provider that does not report one
@@ -230,7 +232,11 @@ def _gate_providers(conn, trace_id: str, providers: list[BaseLLMProvider]) -> li
             )
             gated.append(provider)
         except stage_08.ProviderConsentError as e:
-            trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", f"{provider_id} blocked", error_detail=str(e))
+            gate_duration_ms = int(round((time.perf_counter() - gate_started) * 1000))
+            trace.stage_log(
+                conn, trace_id, "stage_08_provider_gate", "error",
+                f"{provider_id} blocked", error_detail=str(e), duration_ms=gate_duration_ms,
+            )
             logger.warning(f"Pipeline: provider '{provider_id}' blocked by Stage 8: {e}")
     return gated
 
@@ -268,40 +274,45 @@ def run(
     if cache_generation is None:
         cache_generation = response_cache.generation()
     trace_id = trace.generate_trace_id()
-    # Logs the message's LENGTH, never its text.
-    #
-    # That began as a security fix. The trace used to carry the first 80 chars
-    # of the raw message, and it was written to backend/logs/trace_log.json - a
-    # plain file on disk, outside the SQLCipher boundary the rest of
-    # "structured data" gets - so names and anything else typed sat there in
-    # plaintext.
-    #
-    # That reason no longer holds: the trace lives in the encrypted database
-    # now (see core/trace.py), and the file is gone. Message text could be
-    # recorded here safely, so what remains is a choice rather than a
-    # constraint - a trace is read to find out which stages ran and what each
-    # retrieved, and a length answers that without keeping a second copy of
-    # every message the conversations/messages tables already hold.
-    trace.stage_log(conn, trace_id, "pipeline", "ok", f"Starting pipeline for message ({len(user_message)} chars)")
+    # The conversation already stores message text; a trace only needs enough
+    # information to show which stages ran, not a second copy of the message.
+    trace.stage_log(
+        conn, trace_id, "pipeline", "ok",
+        f"Starting pipeline for message ({len(user_message)} chars)",
+        duration_ms=0,
+    )
 
     # Stage 0
+    t0 = time.perf_counter()
     try:
         last_session_dt = _load_last_session_timestamp(conn)
         gap_result = stage_00.run(last_session_dt)
     except Exception as e:
         logger.error(f"Pipeline: Stage 0 raised unexpectedly, failing open: {e}")
         gap_result = {"warm_start_level": "none", "context_depth_modifier": 0}
-    trace.stage_log(conn, trace_id, "stage_00_gap_detector", "ok", f"warm_start_level={gap_result['warm_start_level']}")
+    dur_0 = int(round((time.perf_counter() - t0) * 1000))
+    trace.stage_log(
+        conn, trace_id, "stage_00_gap_detector", "ok",
+        f"warm_start_level={gap_result['warm_start_level']}",
+        duration_ms=dur_0,
+    )
 
     # Stage 1
+    t1 = time.perf_counter()
     try:
         intent_result = stage_01.run(user_message, gap_result["warm_start_level"], conn=conn)
     except Exception as e:
         logger.error(f"Pipeline: Stage 1 raised unexpectedly, failing open: {e}")
         intent_result = {"category": "general_knowledge", "skip_rag": False, "retrieval_hint": ""}
-    trace.stage_log(conn, trace_id, "stage_01_intent_classifier", "ok", f"category={intent_result['category']}")
+    dur_1 = int(round((time.perf_counter() - t1) * 1000))
+    trace.stage_log(
+        conn, trace_id, "stage_01_intent_classifier", "ok",
+        f"category={intent_result['category']}",
+        duration_ms=dur_1,
+    )
 
     # Stage 2
+    t2 = time.perf_counter()
     try:
         router_result = stage_02.run(
             intent_result["category"], intent_result["skip_rag"], intent_result["retrieval_hint"], gap_result["warm_start_level"]
@@ -309,7 +320,12 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: Stage 2 raised unexpectedly, defaulting to LLM-only: {e}")
         router_result = {"retrieval_priority": [], "provider_preference": "local"}
-    trace.stage_log(conn, trace_id, "stage_02_router", "ok", f"priority={router_result['retrieval_priority']}")
+    dur_2 = int(round((time.perf_counter() - t2) * 1000))
+    trace.stage_log(
+        conn, trace_id, "stage_02_router", "ok",
+        f"priority={router_result['retrieval_priority']}",
+        duration_ms=dur_2,
+    )
     yield _stage_event(
         "intent",
         "Working out what you're asking",
@@ -318,13 +334,9 @@ def run(
 
     # Response Cache (Part 7.1) - positioned here (between Stage 2 and Stage 7)
     # deliberately: a hit skips Stages 3-9 entirely, not just Stage 9's LLM call.
-    #
-    # Keyed on the record version as well as the message, so nothing cached
-    # before the user's documents, decisions or profile changed is served
-    # after. Read once, here: an answer is stored under the version it was
-    # built from. If it cannot be read the cache is skipped both ways for this
-    # turn - serving a possibly stale answer is the failure this key exists
-    # to prevent.
+    # The record version prevents serving an answer after profile data changes.
+    # If it cannot be read, skip cache both ways rather than risk stale output.
+    tc = time.perf_counter()
     try:
         record_version = profile_store.record_version(conn)
     except Exception as e:
@@ -343,13 +355,17 @@ def run(
         if record_version is not None and active_model_name is not None
         else None
     )
+    dur_c = int(round((time.perf_counter() - tc) * 1000))
     if cached is not None:
-        trace.stage_log(conn, trace_id, "response_cache", "ok", "cache hit, skipping Stages 3-9")
+        trace.stage_log(
+            conn, trace_id, "response_cache", "ok",
+            "cache hit, skipping Stages 3-9",
+            duration_ms=dur_c,
+        )
         cache_hint = dict(cached["stage_hints"])
         cache_hint["cache_hit"] = True
-        # Reported, because from outside a cached answer is indistinguishable
-        # from a fast one - and the two have very different reasons to be
-        # wrong. Stages 3-9 never ran for this turn.
+        # Reuse must be visible: a cached answer can look like a fast new one,
+        # but Stages 3-9 did not run for this turn.
         yield _stage_event("cache", "Answered this before", "reusing the saved response")
         yield {"type": "stage_hint", "data": cache_hint}
         yield {"type": "token", "data": cached["response_text"]}
@@ -361,15 +377,25 @@ def run(
         )
         yield {"type": "pipeline_complete", "data": result}
         return
-    trace.stage_log(conn, trace_id, "response_cache", "ok", "cache miss")
+    trace.stage_log(
+        conn, trace_id, "response_cache", "ok",
+        "cache miss",
+        duration_ms=dur_c,
+    )
 
     # Stages 3/4/5/6 - sequential here; see module docstring on parallelization.
+    t3 = time.perf_counter()
     try:
         decision_entries = stage_03.run(conn, intent_result["retrieval_hint"], project_id)
     except Exception as e:
         logger.error(f"Pipeline: Stage 3 raised unexpectedly, returning empty: {e}")
         decision_entries = []
-    trace.stage_log(conn, trace_id, "stage_03_decision_log_lookup", "ok", f"{len(decision_entries)} entries")
+    dur_3 = int(round((time.perf_counter() - t3) * 1000))
+    trace.stage_log(
+        conn, trace_id, "stage_03_decision_log_lookup", "ok",
+        f"{len(decision_entries)} entries",
+        duration_ms=dur_3,
+    )
     yield _stage_event(
         "decisions",
         "Checking your decisions",
@@ -377,12 +403,18 @@ def run(
         "ok" if decision_entries else "empty",
     )
 
+    t4 = time.perf_counter()
     try:
         profile_fields = stage_04.run(conn, intent_result["category"], intent_result["retrieval_hint"])
     except Exception as e:
         logger.error(f"Pipeline: Stage 4 raised unexpectedly, returning empty: {e}")
         profile_fields = []
-    trace.stage_log(conn, trace_id, "stage_04_memory_lookup", "ok", f"{len(profile_fields)} fields")
+    dur_4 = int(round((time.perf_counter() - t4) * 1000))
+    trace.stage_log(
+        conn, trace_id, "stage_04_memory_lookup", "ok",
+        f"{len(profile_fields)} fields",
+        duration_ms=dur_4,
+    )
     yield _stage_event(
         "profile",
         "Reading what it knows about you",
@@ -392,21 +424,24 @@ def run(
         "ok" if profile_fields else "empty",
     )
 
+    t5 = time.perf_counter()
     try:
-        # ADR-002: Stage 5 always runs regardless of skip_rag - the Mechanism 2
-        # safety net this satisfies is a superset of a lightweight pre-check, not a
-        # separate code path (see stage_05's own module docstring).
+        # ADR-002: Stage 5 always runs, even when skip_rag is set. Its safety
+        # check is broader than the lightweight intent pre-check.
         rag_result = stage_05.run(conn, intent_result["retrieval_hint"], project_id)
     except Exception as e:
         logger.error(f"Pipeline: Stage 5 raised unexpectedly, returning empty: {e}")
         rag_result = {"chunks": [], "conflict_flag": False}
-    trace.stage_log(conn, trace_id, "stage_05_rag_retrieval", "ok", f"{len(rag_result['chunks'])} chunks, conflict={rag_result['conflict_flag']}")
-    # The one this project learned to care about. An empty retrieval used to
-    # look exactly like a question no document answered, and PIP answered
-    # anyway - out of the decision log - for two days without a single surface
-    # saying the index was empty.
+    dur_5 = int(round((time.perf_counter() - t5) * 1000))
+    trace.stage_log(
+        conn, trace_id, "stage_05_rag_retrieval", "ok",
+        f"{len(rag_result['chunks'])} chunks, conflict={rag_result['conflict_flag']}",
+        duration_ms=dur_5,
+    )
     _chunks = rag_result["chunks"]
     _files = {c.get("file_path") for c in _chunks if c.get("file_path")}
+    # An empty retrieval must be visible; otherwise a missing index looks like
+    # an ordinary question with no matching document.
     yield _stage_event(
         "documents",
         "Searching your documents",
@@ -419,44 +454,56 @@ def run(
         "ok" if _chunks else "empty",
     )
 
-    # Security fix: Stage 6 used to fire on trigger-keyword match alone, with no
-    # consent check at all - the ONLY gate ever applied was to the LLM provider
-    # list below (Stage 8 -> Stage 9), never to web_search. config/provider_consent.json
-    # documents "ADR-030: hard_stop gate at Stage 8" for web_search right in its
-    # seed comment - the code didn't do it. Default seed state is
-    # user_consented=0, so this fired for real, off a fresh install, before
-    # anyone had granted anything, and revoking consent had zero effect on
-    # whether searches actually happened. Fail-closed, same pattern as
-    # _gate_providers: a blocked/missing consent record means no search fires,
-    # not a degraded one.
+    t6 = time.perf_counter()
+    # Web search is external, so Stage 8 must approve its scope before Stage 6
+    # sends a query. Report that query only after the gate passes.
     web_results: list[dict[str, Any]] = []
+    search_query: str | None = None
     try:
-        if stage_06.matches_trigger(user_message):
+        no_search_categories = {
+            "personal_question",
+            "project_question",
+            "project_continuation",
+        }
+        if (
+            stage_06.matches_trigger(user_message)
+            and intent_result["category"] not in no_search_categories
+        ):
+            web_gate_started = time.perf_counter()
             try:
-                # A search engine on the internet is never local, whatever its
-                # consent record says.
                 stage_08.run(
                     conn, "web_search", requested_scope="web_search_only", provider_is_local=False
                 )
             except stage_08.ProviderConsentError as e:
-                trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", "web_search blocked", error_detail=str(e))
+                gate_duration_ms = int(round((time.perf_counter() - web_gate_started) * 1000))
+                trace.stage_log(
+                    conn, trace_id, "stage_08_provider_gate", "error",
+                    "web_search blocked", error_detail=str(e), duration_ms=gate_duration_ms,
+                )
                 logger.warning(f"Pipeline: web_search blocked by Stage 8: {e}")
             else:
-                web_results = stage_06.run(intent_result["retrieval_hint"] or user_message)
+                search_query = intent_result["retrieval_hint"] or user_message
+                web_results = stage_06.run(search_query)
     except Exception as e:
         logger.error(f"Pipeline: Stage 6 raised unexpectedly, returning empty: {e}")
-    trace.stage_log(conn, trace_id, "stage_06_web_search", "ok", f"{len(web_results)} results")
-    # Only when it actually ran. A "Searched the web: 0 results" line on every
-    # ordinary question would report the absence of something nobody asked
-    # for, and would be indistinguishable from a search that failed.
-    if web_results:
+    dur_6 = int(round((time.perf_counter() - t6) * 1000))
+    trace.stage_log(
+        conn, trace_id, "stage_06_web_search", "ok",
+        f"{len(web_results)} results",
+        duration_ms=dur_6,
+    )
+    # Report the exact query whenever it was sent, including when the search
+    # returned no results, so the user can see what left the machine.
+    if search_query is not None:
         yield _stage_event(
             "web",
             "Searching the web",
-            f"{len(web_results)} result{'s' if len(web_results) != 1 else ''}",
+            f"query sent: {search_query!r}",
+            "ok" if web_results else "empty",
         )
 
     # Stage 7
+    t7 = time.perf_counter()
     try:
         snapshot = session_snapshot.load_snapshot(conn)
         assembled = stage_07.run(
@@ -473,17 +520,26 @@ def run(
     except Exception as e:
         logger.error(f"Pipeline: Stage 7 raised unexpectedly, falling back to minimal prompt: {e}")
         assembled = {"context": "", "messages": [{"role": "user", "content": user_message}]}
-    trace.stage_log(conn, trace_id, "stage_07_context_assembly", "ok", "context assembled")
+    dur_7 = int(round((time.perf_counter() - t7) * 1000))
+    trace.stage_log(
+        conn, trace_id, "stage_07_context_assembly", "ok",
+        "context assembled",
+        duration_ms=dur_7,
+    )
 
     # Stage 8
+    t8 = time.perf_counter()
     gated_providers = _gate_providers(conn, trace_id, providers or _default_providers(conn))
+    dur_8 = int(round((time.perf_counter() - t8) * 1000))
     if not gated_providers:
-        trace.stage_log(conn, trace_id, "stage_08_provider_gate", "error", "no consented providers available")
+        trace.stage_log(
+            conn, trace_id, "stage_08_provider_gate", "error",
+            "no consented providers available",
+            duration_ms=dur_8,
+        )
         no_provider = "No consented provider available"
-        # Sent, not only recorded. pipeline_complete never leaves the server,
-        # so without this event the turn had no done/error/stopped at all and
-        # the client stayed "writing" until the user left the conversation
-        # (FREEZE_LIST §7.23, D-16).
+        # The final pipeline result is internal to the server. Send a terminal
+        # error event so the WebSocket client does not remain in writing state.
         yield {"type": "error", "data": no_provider}
         result = stage_10.run(
             trace_id,
@@ -496,33 +552,48 @@ def run(
     # Before the call, not after: everything above is milliseconds of local
     # lookups and this is the part somebody actually waits through, so it has
     # to be on screen while it happens rather than announced once it is over.
-    yield _stage_event("writing", "Writing", get_active_model_name(conn))
+    provider_info = gated_providers[0].get_model_info()
+    writing_detail = (
+        f"{provider_info.get('provider_id', 'unknown')} / "
+        f"{provider_info.get('model_name', 'unknown')}"
+    )
+    yield _stage_event("writing", "Writing", writing_detail)
 
     # Stage 9 - streamed live to the caller.
+    t9 = time.perf_counter()
+    ttft_ms = None
     events = stage_09.run(
         assembled["context"],
         assembled["messages"],
         gated_providers,
         decision_log_hit=bool(decision_entries),
         web_search_used=bool(web_results),
-        cache_hit=False,  # reaching here means the cache check above already missed
-        model_loading=False,  # no reliable warm/cold detection without extending BaseLLMProvider
+        cache_hit=False,  # reaching here means the cache check above missed
+        model_loading=False,  # no reliable warm/cold signal exists on the provider API
         max_tokens=max_tokens,
         timeout_seconds=timeout_seconds,
         should_stop=should_stop,
     )
 
-    # Forward each event as it arrives, and fold it into the same aggregate
-    # collect() builds. The fold lives in stage_09 so this path and collect()
-    # cannot drift; what stays here is the yield, which is the one thing
-    # collect() cannot do for a live caller.
+    # Fold live events through Stage 9's shared accumulator so this streamed
+    # path and collect() use the same terminal status and response text.
     aggregate = stage_09.new_aggregate()
     for event in events:
+        if ttft_ms is None and event.get("type") == "token":
+            ttft_ms = int(round((time.perf_counter() - t9) * 1000))
         yield event
         stage_09.accumulate(aggregate, event)
 
+    dur_9 = int(round((time.perf_counter() - t9) * 1000))
     status = aggregate["status"]
-    trace.stage_log(conn, trace_id, "stage_09_llm_streaming", "error" if status == "error" else "ok", f"status={status}", error_detail=aggregate["error"] or "")
+    ttft_detail = f", ttft_ms={ttft_ms}" if ttft_ms is not None else ""
+    trace.stage_log(
+        conn, trace_id, "stage_09_llm_streaming",
+        "error" if status == "error" else "ok",
+        f"status={status}{ttft_detail}",
+        error_detail=aggregate["error"] or "",
+        duration_ms=dur_9,
+    )
 
     if status == "success" and record_version is not None and active_model_name is not None:
         response_cache.set(

@@ -67,7 +67,23 @@ def run(
 
     last_error: Optional[Exception] = None
 
-    for provider in providers:
+    for provider_index, provider in enumerate(providers):
+        if provider_index:
+            try:
+                model_info = provider.get_model_info()
+            except Exception:
+                model_info = {}
+            provider_label = model_info.get("provider_id", "unknown")
+            model_name = model_info.get("model_name", "unknown")
+            yield {
+                "type": "stage",
+                "data": {
+                    "stage": "writing",
+                    "label": "Writing",
+                    "detail": f"{provider_label} / {model_name}",
+                    "status": "ok",
+                },
+            }
         yielded_any = False
         try:
             for token in provider.chat(messages, context=context, max_tokens=max_tokens, timeout_seconds=timeout_seconds):

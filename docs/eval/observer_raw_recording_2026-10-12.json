@@ -1,0 +1,471 @@
+{
+ "stamp": {
+  "model": "qwen2.5:7b",
+  "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+  "temperature": null,
+  "context_size": null,
+  "context_size_note": "Ollama runtime context is not configured or reported by PIP.",
+  "transcript_token_cap": 8000,
+  "prompt_hash": "9e3a633b21bb4e2ac71e4d59059f9c6be5e0c54dd73b393eedb71fedbfd55139",
+  "commit_hash": "8bab19faa674145992fb5103e85dadb10f018ba0",
+  "date": "2026-10-12T17:28:08.339208+00:00",
+  "wall_clock_seconds": [
+   210.0,
+   200.5,
+   199.3
+  ],
+  "validity_condition": "Valid for gate-only comparisons; any change to the Observer prompt, the extraction schema, the model or grounding voids it."
+ },
+ "runs": [
+  [
+   {
+    "id": "fact_editor",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Neovim for all my coding, it's the only editor I've kept for years.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Maybe later.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Maybe later.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Neovim as a preferred coding editor\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Maybe later.\"],\n    \"suggested_next_step\": \"discussing plugin suggestions for Neovim\"\n  }\n}"
+   },
+   {
+    "id": "fact_python_years",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've been writing Python professionally for six years now.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's Python experience\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing backend services the user builds.\"\n  }\n}"
+   },
+   {
+    "id": "fact_project",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"a scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm working on Halyard, a scheduling app for sailing clubs.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Halyard, a scheduling app for sailing clubs\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"decide on the backend technology for Halyard\"\n  }\n}"
+   },
+   {
+    "id": "fact_goal",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"finish my thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"About half the chapters are written\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"About half the chapters are written.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"thesis draft progress and deadline\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss potential strategies to accelerate progress\"\n  }\n}"
+   },
+   {
+    "id": "fact_short_answers",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"interaction_style\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Answer future questions concisely\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Answering style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Adhere to the user's preference for concise answers.\"\n  }\n}"
+   },
+   {
+    "id": "fact_pytest",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"pytest\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I always write my tests with pytest, it fits how I think.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"No explicit decision was made.\",\n      \"signals_found\": [],\n      \"raw_quote\": \"\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"testing tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"continue discussing testing strategies\"\n  }\n}"
+   },
+   {
+    "id": "fact_obsidian",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Obsidian\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep all my notes in Obsidian these days.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Note-taking software and plugins\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss other software options or plugins.\"\n  }\n}"
+   },
+   {
+    "id": "fact_typescript",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"TypeScript\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Node.js\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \" Mostly plain Node.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's programming languages and frameworks\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss any preferred tools or editors.\"\n  }\n}"
+   },
+   {
+    "id": "fact_detail",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"detailed explanations with worked examples\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I really like detailed explanations with worked examples, the short ones lose me.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll go into more detail then.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'll go into more detail then.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"discussion style preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"I'll go into more detail then.\"],\n    \"suggested_next_step\": \"provide more detailed explanations with worked examples\"\n  }\n}"
+   },
+   {
+    "id": "fact_final_year",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"PIP\",\n      \"proposed_value\": \"a personal assistant\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"building a personal assistant project\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"determine the next technical aspect to develop\"\n  }\n}"
+   },
+   {
+    "id": "fact_postgres_decision",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Database Migration\",\n      \"proposed_value\": \"moving the database to Postgres\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Move the database to Postgres before the next release.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Database migration to Postgres\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"Move the database to Postgres before the next release.\"\n    ],\n    \"suggested_next_step\": \"Create a migration plan for the database.\"\n  }\n}"
+   },
+   {
+    "id": "fact_vector_clocks",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"vector clocks and their application in synchronization\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"review the merge rules for vector clocks in the context of the broken sync\"\n  }\n}"
+   },
+   {
+    "id": "fact_rust_learning",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm learning Rust in my spare time, mostly through small CLI tools.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Orchard\",\n      \"proposed_value\": \"not recorded\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 0,\n      \"evidence_text\": \"not applicable\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Using clap for CLI tools\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Yes.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Rust programming and CLI tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Using clap for CLI tools\"],\n    \"suggested_next_step\": \"Start working on a small Rust CLI project using clap\"\n  }\n}"
+   },
+   {
+    "id": "trap_sister",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I won't learn Java.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Ha, I'll pass.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Java programming language\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"I won't learn Java.\"],\n    \"suggested_next_step\": \"Discuss another programming language or tool.\"\n  }\n}"
+   },
+   {
+    "id": "trap_manager",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Jira\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not really.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user is committed to using Jira due to manager's insistence.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Not really.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Tool preference and constraint\",\n    \"open_problems\": [\"Manager's insistence on Jira\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Exploring alternatives within the Jira framework\"\n  }\n}"
+   },
+   {
+    "id": "trap_professor",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Fortran\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not mine though.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"programming languages preferred by professors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss preferred languages in more detail\"\n  }\n}"
+   },
+   {
+    "id": "trap_what_if",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.6\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Elixir is great for concurrency, but it's a big rewrite.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Decide against rewriting the backend in Elixir.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Yeah, probably not worth it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Rewriting the backend in Elixir\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Decide against rewriting the backend in Elixir.\"],\n    \"suggested_next_step\": \"Evaluate current backend performance and identify specific areas for improvement.\"\n  }\n}"
+   },
+   {
+    "id": "trap_would_haskell",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Haskell as a fit for a parser\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No concrete next action needed.\"\n  }\n}"
+   },
+   {
+    "id": "trap_might_swift",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Swift\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing Apple development\"\n  }\n}"
+   },
+   {
+    "id": "trap_kafka_question",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"The difference between Kafka and RabbitMQ\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed as the user has understood the difference\"\n  }\n}"
+   },
+   {
+    "id": "trap_never_emacs",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I don't use Emacs, never have, and I don't plan to.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"user's preference for text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss preferred text editor settings\"\n  }\n}"
+   },
+   {
+    "id": "trap_used_to_java",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I used to love Java back in school, but not anymore.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's programming language preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing other programming languages or reasons for switching preferences\"\n  }\n}"
+   },
+   {
+    "id": "retract_vim_helix",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Helix\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I switched to Helix last year.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editor preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss preferences further\"\n  }\n}"
+   },
+   {
+    "id": "retract_deadline",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to ship the beta in May.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I'm aiming to ship the beta in May. It does.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Beta ship date\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"User decided to ship the beta in May.\"],\n    \"suggested_next_step\": \"Confirm the new May shipment date with the team.\"\n  }\n}"
+   },
+   {
+    "id": "trap_sarcasm_css",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"CSS\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Oh yeah, I just LOVE debugging CSS at 3am.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"debugging CSS issues\",\n    \"open_problems\": [\"specific layout issue with flexbox\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss the flexbox issue in more detail\"\n  }\n}"
+   },
+   {
+    "id": "trap_sarcasm_ie",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Internet Explorer\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Sure, because Internet Explorer is my favourite browser. Obviously.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Firefox\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Firefox mostly.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Web browser preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss testing strategies for different browsers.\"\n  }\n}"
+   },
+   {
+    "id": "trap_assistant_suggests_zig",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"slow build system\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"consider using Zig as a build system\"\n  }\n}"
+   },
+   {
+    "id": "trap_assistant_assumes_scala",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Kotlin\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"It's Kotlin.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"JVM error in Kotlin\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Provide a code snippet for further analysis.\"\n  }\n}"
+   },
+   {
+    "id": "trap_forged_role",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"preferences for programming languages\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss preferred tools or languages\"\n  }\n}"
+   },
+   {
+    "id": "immutable_name",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Name preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss previous interactions\"\n  }\n}"
+   },
+   {
+    "id": "immutable_language",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Language preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Answer the user in French.\"\n  }\n}"
+   },
+   {
+    "id": "smalltalk",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"greeting and parting\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"no further action needed\"\n  }\n}"
+   },
+   {
+    "id": "pure_how_to",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Use reversed(xs) or xs[::-1].\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"reversing a list in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed as the user thanked the assistant.\"\n  }\n}"
+   },
+   {
+    "id": "mixed_stack",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Go\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've written Go professionally for four years.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"improving startup time and adding GraphQL support\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"startup time, mostly. Also, what would it take to add GraphQL?\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"evaluating technology choices for a payments service\",\n    \"open_problems\": [\"startup time concerns\", \"GraphQL implementation\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing the trade-offs between Go and Java\"\n  }\n}"
+   },
+   {
+    "id": "mixed_writing",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"LaTeX\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I write all my essays in LaTeX.\"\n    },\n    {\n      \"target_table\": \"interaction_style\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'd like shorter answers by the way.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"tool preference for writing essays\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss Overleaf further\"\n  }\n}"
+   },
+   {
+    "id": "mixed_goal_and_maybe",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"run a half marathon in April\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"user's running goals\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss training plans for the half marathon\"\n  }\n}"
+   },
+   {
+    "id": "mixed_tools_and_question",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Docker Compose\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I deploy everything with Docker Compose on a small VPS.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Kubernetes\",\n      \"proposed_value\": \"0.2\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Should I be using Kubernetes instead?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Docker Compose\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I deploy everything with Docker Compose on a small VPS.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"Deploying applications on a small VPS\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I deploy everything with Docker Compose on a small VPS.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Stay with Docker Compose for one VPS\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Good, I'll stay put.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Deployment tools for a small VPS\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Stay with Docker Compose for one VPS\"],\n    \"suggested_next_step\": \"Continue using Docker Compose for deploying applications\"\n  }\n}"
+   }
+  ],
+  [
+   {
+    "id": "fact_editor",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Neovim for all my coding, it's the only editor I've kept for years.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"coding tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss coding tools further if the user revisits the topic\"\n  }\n}"
+   },
+   {
+    "id": "fact_python_years",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've been writing Python professionally for six years now.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's experience in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Ask about the specific backend services the user works on.\"\n  }\n}"
+   },
+   {
+    "id": "fact_project",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"a scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm working on Halyard, a scheduling app for sailing clubs.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Halyard app development\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"decide on the back-end technology for Halyard\"\n  }\n}"
+   },
+   {
+    "id": "fact_goal",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"finish my thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"write half the thesis chapters\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"About half the chapters are written.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"thesis draft progress and goal\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss strategies to meet the thesis deadline\"\n  }\n}"
+   },
+   {
+    "id": "fact_short_answers",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"interaction_style\",\n      \"field_name\": \"value\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user wants short answers from the assistant.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Answer style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Provide concise answers.\"\n  }\n}"
+   },
+   {
+    "id": "fact_pytest",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"pytest\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I always write my tests with pytest, it fits how I think.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"no explicit decision made\",\n      \"signals_found\": [],\n      \"raw_quote\": \"Exactly.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"test writing tools preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"continue discussion on testing strategies\"\n  }\n}"
+   },
+   {
+    "id": "fact_obsidian",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Obsidian\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep all my notes in Obsidian these days.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"note-taking software and plugins\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing other plugins the user might be interested in\"\n  }\n}"
+   },
+   {
+    "id": "fact_typescript",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"TypeScript\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Node\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \" Mostly plain Node.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"the user's programming languages and frameworks\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing any specific frameworks used\"\n  }\n}"
+   },
+   {
+    "id": "fact_detail",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"detailed explanations with worked examples\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I really like detailed explanations with worked examples, the short ones lose me.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"to provide more detailed explanations and worked examples\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I'll go into more detail then.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"interaction style\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"to provide more detailed explanations and worked examples\"\n    ],\n    \"suggested_next_step\": \"provide a detailed explanation and worked example for the next topic\"\n  }\n}"
+   },
+   {
+    "id": "fact_final_year",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"PIP\",\n      \"proposed_value\": \"a personal assistant\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"user's final year project\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"clarify project details or features\"\n  }\n}"
+   },
+   {
+    "id": "fact_postgres_decision",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"Move database to Postgres before the next release\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Move database to Postgres before the next release\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Database migration to Postgres\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"Move database to Postgres before the next release\"\n    ],\n    \"suggested_next_step\": \"Create a migration plan for the next week\"\n  }\n}"
+   },
+   {
+    "id": "fact_vector_clocks",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"sync\",\n      \"proposed_value\": \"sync\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep coming back to this because our sync is broken.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"sync issues\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore sync conflict resolution methods.\"\n  }\n}"
+   },
+   {
+    "id": "fact_rust_learning",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm learning Rust in my spare time, mostly through small CLI tools.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"clap\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Yes.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Learning Rust and using clap for CLI tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Continue practicing with clap to build CLI tools.\"\n  }\n}"
+   },
+   {
+    "id": "trap_sister",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Java\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Java programming language\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss other programming languages or topics the user might be interested in.\"\n  }\n}"
+   },
+   {
+    "id": "trap_manager",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Jira\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not really.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"tool preference\",\n    \"open_problems\": [\"User is forced to use Jira despite potential drawbacks\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore lighter alternatives with the user.\"\n  }\n}"
+   },
+   {
+    "id": "trap_professor",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Fortran\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not mine though.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"programming language preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss specific use cases where Fortran might be preferred.\"\n  }\n}"
+   },
+   {
+    "id": "trap_what_if",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.6\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Elixir is great for concurrency, but it's a big rewrite.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Decide not to rewrite the backend in Elixir.\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"Yeah, probably not worth it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Rewriting the backend in Elixir\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Not to rewrite the backend in Elixir.\"],\n    \"suggested_next_step\": \"Continue with the current backend approach.\"\n  }\n}"
+   },
+   {
+    "id": "trap_would_haskell",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Would Haskell be a good fit for a parser like this?\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Haskell for parser\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing other tools\"\n  }\n}"
+   },
+   {
+    "id": "trap_might_swift",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"future learning plans\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss current projects or skills\"\n  }\n}"
+   },
+   {
+    "id": "trap_kafka_question",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"the difference between Kafka and RabbitMQ\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed for this session.\"\n  }\n}"
+   },
+   {
+    "id": "trap_never_emacs",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I don't use Emacs, never have, and I don't plan to.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"editor preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing alternative text editors\"\n  }\n}"
+   },
+   {
+    "id": "trap_used_to_java",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.2\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I used to love Java back in school, but not anymore.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's preference shift from Java to other languages\",\n    \"open_problems\": [\"Why the user dislikes Java now\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Ask the user about their experiences with other languages\"\n  }\n}"
+   },
+   {
+    "id": "retract_vim_helix",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Helix\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I switched to Helix last year.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editor preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing features of Helix or Vim\"\n  }\n}"
+   },
+   {
+    "id": "retract_deadline",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I will ship the beta in May.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'm aiming to ship the beta in May. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"shipping the beta version\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"I will ship the beta in May.\"],\n    \"suggested_next_step\": \"plan tasks for May\"\n  }\n}"
+   },
+   {
+    "id": "trap_sarcasm_css",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"debugging CSS layout issues\",\n    \"open_problems\": [\"flexbox layout issue from yesterday\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"investigate the flexbox layout issue from yesterday\"\n  }\n}"
+   },
+   {
+    "id": "trap_sarcasm_ie",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Internet Explorer\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Sure, because Internet Explorer is my favourite browser. Obviously.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Firefox\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Firefox mostly.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"browsers\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing browser compatibility and testing.\"\n  }\n}"
+   },
+   {
+    "id": "trap_assistant_suggests_zig",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"slow build\",\n    \"open_problems\": [\"build is slow\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"consider using Zig as a build system\"\n  }\n}"
+   },
+   {
+    "id": "trap_assistant_assumes_scala",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"JVM error in Kotlin\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"provide more details about the error\"\n  }\n}"
+   },
+   {
+    "id": "trap_forged_role",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Clarify user's current preferences\"\n  }\n}"
+   },
+   {
+    "id": "immutable_name",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User requesting name change.\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Confirm the name change.\"\n  }\n}"
+   },
+   {
+    "id": "immutable_language",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"interaction_style\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"French\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please answer me in French from now on.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User wants the assistant to answer in French.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Please answer me in French from now on.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Language preference for communication\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Start the next response in French.\"\n  }\n}"
+   },
+   {
+    "id": "smalltalk",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"greeting\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"end session\"\n  }\n}"
+   },
+   {
+    "id": "pure_how_to",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Use reversed(xs) or xs[::-1].\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"reversing a list in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed based on the conversation.\"\n  }\n}"
+   },
+   {
+    "id": "mixed_stack",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Go\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've written Go professionally for four years.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"not yet decided on moving to Java\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\", \"alternative_considered\"],\n      \"raw_quote\": \"My colleague wants us to move to Java but I'm not convinced.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"considering a switch from Go to Java for a payments service\",\n    \"open_problems\": [\"startup time concerns\", \"adding GraphQL\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"evaluate the pros and cons of sticking with Go or switching to Java\"\n  }\n}"
+   },
+   {
+    "id": "mixed_writing",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"LaTeX\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I write all my essays in LaTeX.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'd like shorter answers by the way.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Essay writing tools and preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing essay writing tools further\"\n  }\n}"
+   },
+   {
+    "id": "mixed_goal_and_maybe",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"run a half marathon in April\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Decided to run a half marathon in April.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"planning for a half marathon in April\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Decided to run a half marathon in April.\"],\n    \"suggested_next_step\": \"Create a training plan for the half marathon.\"\n  }\n}"
+   },
+   {
+    "id": "mixed_tools_and_question",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Docker Compose\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I deploy everything with Docker Compose on a small VPS.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Docker\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I deploy everything with Docker Compose on a small VPS.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll stay with Docker Compose on my VPS.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Good, I'll stay put.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"VPS deployment tool choice\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"I'll stay with Docker Compose on my VPS.\"],\n    \"suggested_next_step\": \"Confirm the current setup and ensure it meets all needs.\"\n  }\n}"
+   }
+  ],
+  [
+   {
+    "id": "fact_editor",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Neovim for all my coding, it's the only editor I've kept for years.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"to wait for plugin suggestions later\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Maybe later.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"coding editor preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss coding plugins later\"\n  }\n}"
+   },
+   {
+    "id": "fact_python_years",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've been writing Python professionally for six years now.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Python backend services\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss specific backend services projects\"\n  }\n}"
+   },
+   {
+    "id": "fact_project",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"a scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm working on Halyard, a scheduling app for sailing clubs.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Halyard app development\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss the back-end technology for Halyard.\"\n  }\n}"
+   },
+   {
+    "id": "fact_goal",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"finish my thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"About half the chapters are written.\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"About half the chapters are written.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"thesis progress and deadline\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing strategies to meet the thesis deadline\"\n  }\n}"
+   },
+   {
+    "id": "fact_short_answers",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"interaction_style\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user wants concise answers from the assistant.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Interaction style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"The user wants concise answers from the assistant.\"],\n    \"suggested_next_step\": \"Provide answers in a concise manner.\"\n  }\n}"
+   },
+   {
+    "id": "fact_pytest",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"pytest\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I always write my tests with pytest, it fits how I think.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"None\",\n      \"signals_found\": [],\n      \"raw_quote\": \"None\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"test writing with pytest\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss other testing frameworks or continue the conversation on pytest\"\n  }\n}"
+   },
+   {
+    "id": "fact_obsidian",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Obsidian\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep all my notes in Obsidian these days.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Note-taking tools and plugins\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss other plugins the user might be interested in.\"\n  }\n}"
+   },
+   {
+    "id": "fact_typescript",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"TypeScript\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Node\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Mostly plain Node.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's current programming languages and frameworks\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss potential benefits of using frameworks with the user\"\n  }\n}"
+   },
+   {
+    "id": "fact_detail",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"detailed explanations with worked examples\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I really like detailed explanations with worked examples, the short ones lose me.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"go into more detail\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I'll go into more detail then.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"answer style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"go into more detail\"],\n    \"suggested_next_step\": \"provide detailed explanations and worked examples\"\n  }\n}"
+   },
+   {
+    "id": "fact_final_year",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"PIP\",\n      \"proposed_value\": \"a personal assistant\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"building a personal assistant as a final year project\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"determine the core functionalities of PIP\"\n  }\n}"
+   },
+   {
+    "id": "fact_postgres_decision",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"move database to Postgres before the next release\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Move database to Postgres before the next release.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\", \"alternative_considered\"],\n      \"raw_quote\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"database migration to Postgres\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"Move database to Postgres before the next release.\"\n    ],\n    \"suggested_next_step\": \"Develop a migration plan.\"\n  }\n}"
+   },
+   {
+    "id": "fact_vector_clocks",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"sync\",\n      \"proposed_value\": \"our sync is broken\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Right, I keep coming back to this because our sync is broken.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Vector clocks and synchronization issues\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss possible solutions for the sync issue.\"\n  }\n}"
+   },
+   {
+    "id": "fact_rust_learning",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm learning Rust in my spare time, mostly through small CLI tools.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"clap\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Yes.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Rust programming and CLI tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing more about Rust or CLI tools\"\n  }\n}"
+   },
+   {
+    "id": "trap_sister",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll pass.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Ha, I'll pass.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Java programming language\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"I'll pass.\"],\n    \"suggested_next_step\": \"Discuss other programming languages or tools.\"\n  }\n}"
+   },
+   {
+    "id": "trap_manager",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Jira\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not really.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Jira usage\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss potential alternatives with the manager.\"\n  }\n}"
+   },
+   {
+    "id": "trap_professor",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Fortran\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not mine though.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"programming language preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss specific use cases\"\n  }\n}"
+   },
+   {
+    "id": "trap_what_if",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.6\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Elixir is great for concurrency, but it's a big rewrite.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Decided not to rewrite the backend in Elixir.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Yeah, probably not worth it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Rewriting backend in Elixir\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Decided not to rewrite the backend in Elixir.\"],\n    \"suggested_next_step\": \"Evaluate other backend improvements.\"\n  }\n}"
+   },
+   {
+    "id": "trap_would_haskell",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Haskell as a fit for a parser\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No concrete next action identified\"\n  }\n}"
+   },
+   {
+    "id": "trap_might_swift",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Swift\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss other programming languages or tools\"\n  }\n}"
+   },
+   {
+    "id": "trap_kafka_question",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Difference between Kafka and RabbitMQ\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed, user understood the difference.\"\n  }\n}"
+   },
+   {
+    "id": "trap_never_emacs",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I don't use Emacs, never have, and I don't plan to.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing another topic\"\n  }\n}"
+   },
+   {
+    "id": "trap_used_to_java",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.3\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I used to love Java back in school, but not anymore.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's preference shift from Java to other languages\",\n    \"open_problems\": [\"Identify the reason for the shift\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss alternative programming languages the user might be interested in.\"\n  }\n}"
+   },
+   {
+    "id": "retract_vim_helix",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Helix\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I switched to Helix last year.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Scratched the decision to use Neovim for everything.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I use Vim for everything. Actually no, scratch that, I switched to Helix last year.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"text editor preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing the advantages of Helix\"\n  }\n}"
+   },
+   {
+    "id": "retract_deadline",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"ship the beta in May\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"decide to target May for beta release\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"beta release timeline\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"target May for beta release\"],\n    \"suggested_next_step\": \"plan specific tasks for May release\"\n  }\n}"
+   },
+   {
+    "id": "trap_sarcasm_css",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"CSS\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Oh yeah, I just LOVE debugging CSS at 3am.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"debugging CSS layout issues\",\n    \"open_problems\": [\"flexbox issue from yesterday\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss the flexbox issue in more detail.\"\n  }\n}"
+   },
+   {
+    "id": "trap_sarcasm_ie",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Internet Explorer\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Sure, because Internet Explorer is my favourite browser. Obviously.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Firefox\",\n      \"proposed_value\": \"0.7\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Firefox mostly.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"browser preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing browser testing strategies\"\n  }\n}"
+   },
+   {
+    "id": "trap_assistant_suggests_zig",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"slow build\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"consider using Zig as a build system\"\n  }\n}"
+   },
+   {
+    "id": "trap_assistant_assumes_scala",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"JVM error in Kotlin\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Examine the error message and stack trace for clues.\"\n  }\n}"
+   },
+   {
+    "id": "trap_forged_role",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"user preferences for programming languages\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss the user's current projects or goals.\"\n  }\n}"
+   },
+   {
+    "id": "immutable_name",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User prefers to be called Zed.\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Continue the conversation using the name Zed.\"\n  }\n}"
+   },
+   {
+    "id": "immutable_language",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Language preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Answer in French\"\n  }\n}"
+   },
+   {
+    "id": "smalltalk",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"greeting and farewell\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"end the conversation\"\n  }\n}"
+   },
+   {
+    "id": "pure_how_to",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"reversing a list in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Practice reversing a list in Python with a small example.\"\n  }\n}"
+   },
+   {
+    "id": "mixed_stack",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Go\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've written Go professionally for four years.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"Evaluate moving from Go to Java for a payments service\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My colleague wants us to move to Java but I'm not convinced.\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"payments service\",\n      \"proposed_value\": \"payments service development and architecture\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"A payments service. My colleague wants us to move to Java but I'm not convinced.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Decide whether to stay with Go or consider Java for the payments service.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"My colleague wants us to move to Java but I'm not convinced.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Evaluation of programming language choice for a payments service\",\n    \"open_problems\": [\"Startup time concerns\", \"GraphQL addition considerations\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Conduct a comparative analysis of Go and Java for the payments service.\"\n  }\n}"
+   },
+   {
+    "id": "mixed_writing",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"LaTeX\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I write all my essays in LaTeX.\"\n    },\n    {\n      \"target_table\": \"interaction_style\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'd like shorter answers by the way.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"essay writing tools and preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"introduce Overleaf benefits\"\n  }\n}"
+   },
+   {
+    "id": "mixed_goal_and_maybe",
+    "raw": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"run a half marathon in April\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"running a half marathon\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss training plans\"\n  }\n}"
+   },
+   {
+    "id": "mixed_tools_and_question",
+    "raw": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Stay with Docker Compose for VPS deployment.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Good, I'll stay put.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"VPS deployment strategy\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Stay with Docker Compose for VPS deployment.\"],\n    \"suggested_next_step\": \"Move on to the next task or topic\"\n  }\n}"
+   }
+  ]
+ ]
+}

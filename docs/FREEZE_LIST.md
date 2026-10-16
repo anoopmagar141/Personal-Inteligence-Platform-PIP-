@@ -2491,6 +2491,76 @@ are written, which is a different decision and not one this measurement supports
 chat-connection drop (D-23) and the four failing tests were fixed earlier, and old unmarked backups cannot be detected in
 code (export again).
 
+### 7.36 Observer raw-output recording and unchanged-gate replay (run 2026-10-12)
+
+Recorded all 37 labelled Observer conversations three times with `qwen2.5:7b` (111 case runs, zero errors). The raw
+outputs and stamp are in `docs/eval/observer_raw_recording_2026-10-12.json`; the summary and replay check are in
+`docs/eval/observer_recording_2026-10-12.md`. Replay through the unchanged pipeline matched the live report for every
+case and pooled funnel, learned row, fact and trap result. The pooled result was 105 model candidates, 104 surviving
+grounding, 38 learned rows (27 TRUE, 8 UNLABELLED, 3 TRAP), 25/69 stated facts learned, and 3/75 traps reaching a
+belief table. Model-call time summed to 609.8 seconds; the approximate stamp-to-file wall interval was 616.4 seconds.
+No Observer prompt, evidence gate, Constitution or stages changed. Ollama's runtime context size remains unknown; the
+recording captures the configured 8,000-token transcript cap separately. This recording is valid for gate-only
+comparisons while its recorded prompt, model and code commit remain unchanged.
+
+---
+
+### 7.32 Response cache respects the selected model (fixed 2026-10-10)
+
+- **Promise:** after the selected Ollama model changes, an identical question cannot receive the prior model's cached answer.
+- **Mechanism:** `response_cache.cache_key()` includes the selected model name from `llm_settings`; the pipeline uses it for lookup and storage. If the setting cannot be read, that turn bypasses caching.
+- **Test-first evidence:** the outcome test failed on the old code because it returned model one's answer after switching to model two. Removing the model component from the key made the test fail again.
+- **Verification:** focused pipeline/cache tests passed (42); the full backend suite on the fix alone passed (1399). The combined integration suite below also covers this commit.
+
+---
+
+### 7.33 A-2 schema-table and trigger coverage guard (integrated 2026-10-11)
+
+- **Promise:** every table in a freshly initialized profile database is listed in `RECORD_TABLES` or explicitly excluded with a reason; every listed table has INSERT, UPDATE, and DELETE version triggers.
+- **Mechanism:** `backend/tests/test_record_version_coverage.py` compares `sqlite_master` against both lists and checks trigger names. `llm_settings` is excluded from `record_version` because the selected model has its own response-cache key component.
+- **Break-it evidence:** removing `documents` from the list while adding `_test_unlisted` makes the real coverage assertion fail and name both. Dropping the `documents` DELETE trigger makes the trigger assertion fail and name it. Weakening each assertion by hand made its break-it test fail with DID NOT RAISE.
+- **Limitation:** a fresh-schema test cannot see tables created lazily by application code or only by migrations; review the exclusion list whenever the schema changes.
+- **Verification:** 5 focused tests passed; combined pipeline/cache/coverage tests passed (47); full backend suite on `integration/memory-first` passed: **1403 passed in 986.34 s**.
+- **History:** initial A-2 test `90cfbb7`; strengthened break-it checks `a076c5a`; integrated with cache fix `4ea3376` in merge `1ac8bb8`.
+
+---
+
+### 7.34 B-1 provider, search, and consent honesty fixes (integrated 2026-10-11)
+
+- **Promise 1 — provider status:** the initial Writing event names the provider and model about to answer. If a provider fails and Stage 9 tries another, it emits a new Writing event naming that provider and model before the attempt. The two outcome tests failed on the old behavior and when either status rule was removed.
+- **Promise 2 — web search:** trigger words match whole words; personal and project categories skip web search; a status event shows the exact query sent even when there are no results; the consent choice explains that a short query (normally the first 12 words) may leave the machine. Tests failed on the old substring, category, empty-result, and consent-copy behavior. Break-it mutations caught substring matching, removing the category guard, and hiding a sent query with no results.
+- **Promise 3 — revocation:** `api_revoke_consent()` commits the revocation and clears the response cache, so an answer cached under the prior permission state is unavailable. The regression failed before the fix and when the cache-clear call was removed.
+- **Promise 4 — provider fallback docs:** `docs/ARCHITECTURE.md` now states that an enabled, previously consented endpoint may be used automatically when Ollama is unreachable; provider priority does not grant consent.
+- **Verification:** the B-1 backend module passed (8 tests); the Flutter provider screen tests passed (17). The merged full backend suite passed with the project virtual environment: **1411 passed in 959.02 s**. A preliminary system-Python run had one failure in the existing sign-out cache race test; it passed alone and did not recur in the configured-environment full run.
+- **History:** separate promise commits `a245253`, `19a9015`, `bcc5f2b`, and `4ae00fb`; integrated in merge `cbc4aca`.
+
+---
+
+### 7.35 B-2 per-stage trace durations (integrated 2026-10-12)
+
+- **Promise:** each pipeline trace row records its stage duration in integer milliseconds, so a slow operation can be found from the trace instead of inferred from the whole answer time.
+- **Mechanism:** the pipeline times Stages 0–10, response-cache lookup, and each denied provider gate; `trace_log.duration_ms` is nullable for older or non-pipeline rows. The legacy composite-key rebuild now always creates `duration_ms` and copies its prior rows, whether the migration runs before or during that rebuild.
+- **Break-it evidence:** the 50 ms Stage 4 delay asserts at least 50 ms. A second 50 ms denial test failed before timing was added (recorded 0 ms). The legacy table regression failed before the migration fix (column missing); the existing repeated-stage test also caught a direct rebuild that discarded the column.
+- **Live measurement:** one local Ollama chat on isolated backend port 53450 completed with `done`; its 12-row trace totaled 3,155 ms. Stage timings: pipeline 0, Stage 0 0, Stage 1 2, Stage 2 0, cache 0, Stage 3 3, Stage 4 0, Stage 5 retrieval 583, Stage 6 web 0, Stage 7 context 0, Stage 9 LLM stream 2,567, Stage 10 delivery 0 ms. One run on this machine; values rounded to milliseconds.
+- **Verification:** 6 focused migration/timing tests passed; full backend suite passed: **1416 passed in 984.76 s**.
+- **Limitation:** rounding can show a fast operation as 0 ms; this is elapsed wall-clock time, not CPU time. The measurement is one local run and is not a performance benchmark.
+- **History:** B-2 implementation `1b80982`; migration/timing correction committed separately before integration.
+
+---
+
+### 7.37 A-1 evidence gate accepts ordinary first-person statements (run 2026-10-13)
+
+- **Promise:** plain first-person statements the gate used to reject ("I keep all my notes in Obsidian", "I work mostly in TypeScript", "keep your answers short") are accepted for the claim types they support, while third-party statements, hypotheticals, negations, questions, past-tense statements, text only the assistant said, and sarcasm are still refused.
+- **Order of work:** the 20 new accept cases and 20 near-miss traps were committed before the gate was touched (`4ca3e66`). The old gate was then scored on them (`b7eaec3`): 1 of 20 accepts right, 17 of 20 traps refused, **3 false accepts**, 19 false rejects.
+- **Mechanism (`backend/core/evidence_gate.py`):** more first-person support phrases for tool and note habits, answer style, skills and day-job work, goals, and projects ("I have a small app underway"). On every table except `topic_interests`, a quote is refused when the sentence it was cut from is a question, when it carries a tentative word ("maybe", "might", "someday"), or when its user turn has the frame "sure, because ... obviously". For style, a "don't want / don't like / hate" in front of the phrase refuses it even when the quote left that out.
+- **Gate sets** (`scripts/eval_evidence_gate.py --include-new`; `docs/eval/a1_gate_baseline_2026-10-12.txt`, `a1_gate_after_2026-10-12.txt`): the new set 20 of 20 accepts and 20 of 20 refusals, **0 false accepts**, 0 false rejects. The tuned set (40) and earlier held-out set (25) are unchanged with 0 false accepts each. The one held-out false reject (`held_accept_tool_habit`, "I do all my writing in Obsidian these days") is left as it was on purpose, so that set does not become a tuning set.
+- **Recorded Observer answers** (37 conversations, 3 runs, A-0's recording replayed with no model call; `a1_observer_old_gate_2026-10-12.md` against `a1_observer_new_gate_2026-10-12.md`): traps reaching a belief table 3 of 75 to **0 of 75** (1, 1, 1 of 25 to 0, 0, 0); stated facts learned 25 of 69 to 37 of 69 (8, 8, 9 of 23 to 12, 12, 13); of the learned rows that carry a label, true ones 27 of 30 to 39 of 39. No case got worse in any run. The recall figures in §7.14 are the old gate's.
+- **Review found two defects in the first version of the question refusal; both fixed test-first.** It asked whether the whole turn ended in a question mark. So it dropped a plain fact that shared a message with a question ("I use Neovim for everything. Any plugin suggestions?"; "My goal is to finish my thesis draft by December. Can you help me plan it?"; the old gate had learned both), and it let a question through whenever the turn did not end on one ("Should I use Helix as my editor? I use Neovim." cut to its first sentence was a false accept). It now judges the sentence the quote is cut from, and a quote said plainly once stays accepted even if the same words were asked about elsewhere. The recorded answers contain no turn that mixes a fact with a question (the one recorded mixed case keeps them in separate turns), so the replay could not have shown either defect; 8 of the 12 new tests fail on the first version, 3 of those as false accepts.
+- **Break-it:** 12 hand-made removals or weakenings, each caught by at least one test: two new accept phrases, the hypothetical, sarcasm, style-negation and question refusals, the question refusal put back to turn level, the abbreviation skip ("vs.", "e.g."), the "followed by a space" rule ("v1.2"), "any occurrence" in place of "every occurrence", the look-through of closing quotation marks, and "any mark after a fragment is a question".
+- **Limits:** the 20 + 20 cases were written by the agent that then edited the gate and the accept side reuses the phrases it added, so they show the gate knows these phrases, not that it generalises. The replay corpus is the one the lost phrasings were found in, and holds only while the Observer prompt, schema and model are unchanged. The sarcasm refusal matches one frame. A tag question ("I use Neovim, right?") is refused as a question. Sentence ends are `.`, `!` and `?` only (no full-width marks). **Open, not fixed here:** a quote that spans a question and a statement can take the claimed value from the question and the support phrase from the statement: "Should I use Helix? I use Neovim." cited whole for Helix is accepted (found by probe on 2026-10-13; the gate before A-1 accepted it too, so A-1 did not cause it). The fix would be to require the value to be named in a sentence of the quote that is not a question.
+- **Verification:** the 293 tests in the gate, Observer and session files passed; full backend suite on the A-1 branch: **1478 passed in 889.71 s** (one run, no failures; for scale, 1416 on `integration/memory-first` before A-1's cases and tests). The merged tree on `integration/memory-first`, run before the merge commit was made, is identical to the A-1 tip: **1478 passed in 933.51 s**.
+- **History:** cases `4ca3e66`, old-gate baseline `b7eaec3`; the gate change, its tests and the evidence files are `6399367`; integrated in merge `cad8d82`.
+
 ---
 
 ## 8. Status
@@ -2524,7 +2594,7 @@ code (export again).
 | 4a Stage 1 routing | Returned 2026-09-27 (§7.5) | A: 10 of 14 identity/project questions lost the project; header claimed a complete record. Recommendations 1–2 fixed (§7.10); 3, Stage 1 precedence, open |
 | 4b Cache safety | Returned 2026-09-27 (§7.6) | A: stale answers replayed after documents or decisions existed; one profile's answer served to another. Cross-profile fixed (§7.9), staleness fixed (§7.10) |
 | Promises 1–3 tests | Written 2026-09-28 (§7.13) | C: all three hold, each break-it seen failing; two findings (decisions skip the gate; immutable names shadowed in preferences) |
-| End-to-end Observer measurement | Run 2026-09-28 (§7.14) | 37 conversations, 3 runs, qwen2.5:7b: precision 88–90% (memory), 77–83% with decisions; recall 30–39%; sarcasm gets through |
+| End-to-end Observer measurement | Run 2026-09-28 (§7.14) | 37 conversations, 3 runs, qwen2.5:7b: precision 88–90% (memory), 77–83% with decisions; recall 30–39%; sarcasm gets through. These are the old gate's figures: after the A-1 gate change the same recorded answers give 0 of 75 traps and 37 of 69 facts learned (§7.37) |
 | Promise 4 threshold measurement | Not started | — |
 | Database census | Not run | — |
 | Cross-track synthesis | Done 2026-09-27 (§7.7) | 5 confirmed patterns; 2 candidate promises; fix order recommended |
