@@ -921,16 +921,31 @@ async def stream_pipeline_to_websocket(
 
         try:
             event: Union[WSChatEvent, PipelineCompleteEvent] = await loop.run_in_executor(executor, next, gen)
+            if event["type"] != "pipeline_complete":
+                # Folded here: before the event is sent, and inside this guard.
+                # A token that cannot be folded - a provider yielded something
+                # that is not text, which the OpenAI-compatible provider does
+                # with a structured `content`, since it yields what it finds -
+                # is then withheld from the client and ends the turn like any
+                # other failure of the pipeline. The fold used to follow the
+                # send, outside the guard: the client was sent the bad token
+                # (its token handler does `event.data as String`) and the
+                # TypeError then left ws_chat's loop, which is D-22's symptom
+                # again, reached through the line D-22 added (FREEZE_LIST
+                # §7.44, D-25).
+                stage_09.accumulate(aggregate, event)
         except Exception:
             # The pipeline raised, or ended without pipeline_complete (a
             # StopIteration reaches here as RuntimeError: asyncio futures
-            # refuse to carry one). Either way the turn still has to end on
-            # the socket. This used to propagate out of ws_chat's loop and
-            # close the connection mid-turn, so the client got no terminal
-            # event and kept its composer locked (FREEZE_LIST §7.25, D-22).
+            # refuse to carry one), or produced an event this loop cannot
+            # fold. Either way the turn still has to end on the socket. This
+            # used to propagate out of ws_chat's loop and close the connection
+            # mid-turn, so the client got no terminal event and kept its
+            # composer locked (FREEZE_LIST §7.25, D-22).
             #
-            # Only next() is guarded. A send that fails because the client
-            # has gone is a disconnect, and still has to reach ws_chat as one.
+            # Only the pipeline's next event, and folding it, are guarded. A
+            # send that fails because the client has gone is a disconnect, and
+            # still has to reach ws_chat as one.
             logger.exception("Chat turn failed inside the pipeline")
             if not ended:
                 # The exception's own text stays in the log: it can carry
@@ -953,7 +968,6 @@ async def stream_pipeline_to_websocket(
         # event is a WSChatEvent here (the pipeline_complete branch above is the
         # only other member of the union) - forwarded verbatim, Part 14.3.
         await websocket.send_json(event)
-        stage_09.accumulate(aggregate, event)
         # Once a turn has ended, nothing may end it again: a second terminal
         # event would arrive at the start of the next turn and end that one.
         ended = ended or event["type"] in ("done", "error", "stopped")
@@ -1625,6 +1639,20 @@ try:
 
                 if data is _DISCONNECT:
                     break
+
+                # A Stop with nothing streaming is dropped. ws_chat_client.stop()
+                # says the backend does exactly that, citing the protocol's
+                # one-request-per-turn rule (Part 15.2). It reaches here when
+                # no turn read it: sent while idle, in the last moments of a
+                # turn after the drain's final pass, or while the pipeline was
+                # blocked and then raised - D-22's early return does not drain
+                # again, so a Stop sent in that window was still queued when the
+                # turn ended. It is a dict with no message, and fell through to
+                # "message is required": a second error, which the client shows
+                # as an "Error:" row and takes as ending whatever turn it has
+                # open (FREEZE_LIST §7.44, D-24).
+                if isinstance(data, dict) and data.get("type") == "stop":
+                    continue
 
                 user_message = (data or {}).get("message", "")
                 project_id = (data or {}).get("project_id")

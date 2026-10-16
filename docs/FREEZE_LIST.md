@@ -28,7 +28,10 @@ On 2026-10-07 the owner asked for the import and export logic to be tested
 and its errors fixed: D-18, D-21, D-11, D-20, D-07, D-17, D-19 and D-09 landed
 (§7.26). D-02 is an environment condition: it stopped reproducing on the owner's
 machine on 2026-10-08 when they turned Smart App Control off themselves (§7.26), and is
-still true wherever it is on. Anything further needs a new authorization.
+still true wherever it is on. On 2026-10-16 a read-only review of D-22's fix
+found five small problems; the owner authorized fixing two of them (D-24, D-25),
+correcting the record and tightening the tests, landed the same day (§7.44). The
+third, D-26, is open. Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -1941,10 +1944,14 @@ any track. The owner authorized the fix test-first the same day.
 **Not covered (still open):**
 - **A pipeline that raises** instead of returning still ends the turn with
   no terminal event. *(Fixed 2026-10-03 as D-22, §7.25.)* The exception leaves `ws_chat`'s loop and the socket
-  closes. Every stage is wrapped to fail open, and trace writes swallow
-  their own errors, but the database reads in `_default_providers` and
-  `get_active_model_name` are not wrapped. Whether the client unlocks on
-  that disconnect was not checked.
+  closes. Stages 0 to 7 are each wrapped to fail open, and trace writes
+  swallow their own errors; Stage 8's gate catches only its own refusal,
+  Stages 9 and 10 are not wrapped, and neither is the read in
+  `_default_providers`, which `run()` calls on the Stage 8 line. Whether the
+  client unlocks on that disconnect was not checked. *(Corrected
+  2026-10-16, §7.44: this said every stage was wrapped and that nothing
+  wrapped `get_active_model_name`. `run()` wraps its own call to it, for the
+  cache key; the call inside `_default_providers` is the one that is not.)*
 - **The message is the gate's summary, not its reason.** It does not say
   that Ollama was down or which endpoint lacked consent; the trace does.
 
@@ -2091,10 +2098,16 @@ same day.
   mid-turn with no `done`, `error` or `stopped`, and the client's composer
   stayed locked (D-23 below).
   - **Not latent, unlike D-16.** Stage 9 falls back only on the two
-    provider errors. Any other exception from a provider ends the pipeline
-    with it: a model server answering in a shape the provider did not
-    expect, for example. So do the database reads in `_default_providers`
-    and `get_active_model_name`, which nothing wraps.
+    provider errors, and anything else that left the pipeline closed the
+    socket. What can: the database reads in `_default_providers`, a
+    failure while the answer is cached or delivered (Stages 9 and 10 are
+    not wrapped either), and a value a provider yields that is not text.
+    *(Corrected 2026-10-16, §7.44: this bullet named "a model server
+    answering in a shape the provider did not expect" as an exception
+    that gets out of a provider. Neither shipped provider lets one out:
+    both turn every error they raise while streaming into a provider
+    error, which Stage 9 handles. The shape gets through as a value
+    instead, which is D-25.)*
   - **After `done`** (a failure while caching the answer), the reply had
     been shown, but the connection still dropped and the reply was not
     saved.
@@ -2102,7 +2115,8 @@ same day.
   exactly one `done`, `error` or `stopped`, and a failed turn does not cost
   the connection.
 - **Mechanism:** `stream_pipeline_to_websocket` guards the one call that
-  runs the pipeline, `next(gen)`.
+  runs the pipeline, `next(gen)`. *(Since §7.44 the guard also covers
+  folding the event it returns.)*
   - **On an exception** it logs the traceback. If no terminal event has
     gone out, it sends one `error`. It then returns what the client was
     shown, folded by `stage_09.accumulate`, the fold `pipeline.run()`
@@ -2112,7 +2126,8 @@ same day.
     `error`. The user's message is kept.
   - **A generator that ends without `pipeline_complete`** takes the same
     path; it used to raise.
-  - **Only `next()` is guarded.** A send that fails because the client has
+  - **Only `next()` is guarded.** *(Since §7.44: `next()` and the fold of
+    the event it returns.)* A send that fails because the client has
     gone still reaches `ws_chat` as a disconnect.
   - **Generic message.** The exception's text stays in the log, because an
     exception can carry model output or message text. The client is told
@@ -2562,6 +2577,152 @@ comparisons while its recorded prompt, model and code commit remain unchanged.
 - **Verification:** the 293 tests in the gate, Observer and session files passed; full backend suite on the A-1 branch: **1478 passed in 889.71 s** (one run, no failures; for scale, 1416 on `integration/memory-first` before A-1's cases and tests). The merged tree on `integration/memory-first`, run before the merge commit was made, is identical to the A-1 tip: **1478 passed in 933.51 s**.
 - **History:** cases `4ca3e66`, old-gate baseline `b7eaec3`; the gate change, its tests and the evidence files are `6399367`; integrated in merge `cad8d82`.
 
+### 7.44 Two holes in the turn-end guarantee, D-24 and D-25 (found by review; authorized and landed 2026-10-16)
+
+D-22's fix (§7.25) was reviewed read-only the same day, on clean copies of
+the commit: three reviewers, each with a different lens (the server change;
+whether exactly one terminal event holds on every path a turn can take, and
+what the client does with each; whether the tests prove what §7.25 says),
+and then one skeptic per finding, told to refute it and to default to "not
+real". 13 agents. 10 findings, none refuted, which are five distinct
+problems, all low once the skeptics had rated them. Nine ways a turn can end
+were traced and each gave exactly one terminal event, so the promise held.
+The owner authorized fixing the first two problems below, correcting the
+record and tightening the tests; the third is recorded and left open.
+
+- **D-24 (A, low): a Stop with nothing left to stop was answered with an
+  error.** `ws_chat_client.stop()` says the backend drops a Stop sent when
+  nothing is streaming (Part 15.2). `ws_chat`'s main loop read it as a
+  request with no `message` and sent "message is required", which the
+  client shows as an "Error:" row and takes as ending whatever turn it has
+  open.
+  - **Three ways in:** sent while idle; sent after a turn's last read of
+    the queue, in the final moments of a normal turn; and sent while the
+    pipeline was blocked on a slow first token and then raised. A turn reads
+    a Stop only between events, and D-22's early return does not read again,
+    so that third Stop was still queued when the turn ended. The first two
+    predate D-22.
+  - The second error followed the first with no await between the two
+    sends, so a message typed in the gap was not reachable. The cost was a
+    duplicate, meaningless row.
+- **D-25 (A, low): a token that is not text closed the connection with no
+  terminal event, through the line D-22 added.** The transport folds every
+  event it forwards (`stage_09.accumulate`) to know what the client was
+  shown. §7.25 put that fold after the send and outside the guard.
+  `OpenAICompatibleProvider._tokens_from_line` yields a chunk's `content`
+  as it finds it (run: a list of parts comes out as a list), and nothing in
+  the provider raises, so its own wrapping of errors never sees it. The
+  list was sent to the client, whose token handler does `event.data as
+  String`, and the fold then raised `TypeError` out of `ws_chat`'s loop:
+  the socket closed mid-turn, D-22's symptom, and a later message got
+  nothing.
+  - D-22 did not make it worse: before it, the pipeline's own fold raised
+    the same error out of the same loop. D-22's guard did not cover this
+    input.
+  - Reachable in the shipped app only through an OpenAI-compatible endpoint,
+    and no route adds one yet (§7.23).
+- **Promise:** §7.23's and §7.25's, and two more: a Stop is never answered
+  with an error of its own, and an event the transport cannot fold is
+  never sent.
+- **Mechanism:** both in `backend/api/server.py`.
+  - **D-24:** `ws_chat`'s main loop drops a request whose `type` is `stop`
+    and carries on. A request with no text that is anything else is still
+    answered "message is required". What a turn does with a Stop it reads
+    between events is unchanged.
+  - **D-25:** the fold moves inside the guard and runs before the send. An
+    event it cannot fold is withheld, and the turn ends as it does for any
+    other failure of the pipeline: one generic `error`, the traceback in
+    the log, the turn saved as the client was shown it. A send that fails
+    is still a disconnect and still reaches `ws_chat` as one.
+- **Tests:** 9 added in `backend/tests/test_chat_turn_ends.py` and the six
+  already there tightened (15 in the file now), through the real `/ws/chat`
+  and the real pipeline.
+  - **Seen failing first (5 of the 15):** the two Stop tests, which got
+    "message is required"; and the three non-text-token cases, which got no
+    terminal event in 20 s, with the fold's `TypeError`, after the bad token
+    had been sent.
+  - **Pass on the unfixed code too (10):** the six existing tests and four
+    of the new ones. They hold the code to what it already promised; the
+    break-it list below says which test guards what.
+  - **A check after the last turn.** `_Events.settled()` collects what
+    arrives in the half second after a turn's terminal event, and every
+    test asserts it is empty. `turn()` stops at the first terminal event,
+    so a duplicate was only ever noticed when it landed at the start of a
+    following turn, and the last turn of a test has none.
+  - **Raised after an `error`, and after a `stopped`.** §7.25's guard
+    against a second terminal event was only exercised after `done`; a
+    version that remembered only `done` passed every test. Delivery is now
+    made to fail after Stage 9's "All providers failed", and after a Stop.
+  - **The log the client is sent to.** The generic message says the details
+    are in the backend log; a test now checks the traceback is there.
+  - **A generator that ends without `pipeline_complete`,** claimed in
+    §7.25 and not tested.
+  - **Control:** a request with no text that is not a Stop is still
+    answered "message is required" (and `test_ws_chat.py`'s existing
+    missing-message test, unchanged).
+- **Break-it:** 10 mutations of the fix, one at a time on a clean copy, each caught:
+  - the Stop no longer dropped (the two Stop tests);
+  - every request without a message dropped, not only a Stop (my control test, which gets no answer; and
+    `test_ws_chat.py`'s existing missing-message test, which then waits for an error that is never sent and
+    hangs: it was killed at 60 s);
+  - the fold back after the send and outside the guard (the three non-text-token cases);
+  - the fold inside the guard but after the send, so the bad token is still sent (the same three);
+  - the guard against a second terminal event remembering only `done` (the tests that raise after an `error` and
+    after a `stopped`);
+  - the same guard forgetting `stopped` (the test that raises after a `stopped`);
+  - a second error sent after any terminal event once the connection has history, the version the old six tests
+    let through (caught after `done`, after an `error` and after a `stopped`, by the check after the last turn);
+  - the traceback no longer logged (the log check);
+  - the exception's text sent to the client (the test that raises before answering);
+  - no error sent when a turn fails (7 tests).
+- **Record corrected (D):** three statements in §7.23 and §7.25, each marked
+  where it stands.
+  - **"Every stage is wrapped to fail open"** (§7.23). Stages 0 to 7 are.
+    Stage 8's gate catches only its own refusal; Stages 9 and 10 are not
+    wrapped; the read in `_default_providers`, which `run()` calls on the
+    Stage 8 line, is not.
+  - **"`get_active_model_name`, which nothing wraps"** (§7.23, §7.25).
+    `run()` wraps its own call to it, for the cache key; the call inside
+    `_default_providers` is the one that is not.
+  - **The example of a crash** (§7.25). "A model server answering in a shape
+    the provider did not expect" does not get an exception out of a
+    shipped provider: both turn every error they raise while streaming into
+    a provider error, which Stage 9 handles. The shape gets through as a
+    value, which is D-25. What does leave the pipeline as an exception is a
+    failure outside the providers: a database read, the cache write,
+    delivery. The test fixture's docstring said the same and is corrected.
+    §7.25's "not latent" still holds, on those grounds.
+- **Suites:** Backend 1507 passed, 0 failed (16 min 37 s), run with the embedding shim on a clean export of `c0edb29` plus this change. The turn-end file alone passed 8 runs in 8. No client file changed, so the Flutter suite was
+  not re-run.
+
+**Not covered (still open):**
+- **D-26 (A, low, found by the review, not fixed): the database writes
+  around a turn are not guarded.** `start_session` and `create_conversation`
+  run before a turn's first event, and both `append_message` calls run
+  after its terminal event. `ws_chat` catches only `WebSocketDisconnect`,
+  so a failure in any of them (a locked or full database) closes the
+  connection: with no terminal event if it comes before the turn, and with
+  the reply already shown if it comes after. §7.25 said only `next()` was
+  guarded and this is what that left; its promise line read as broader.
+  Reproduced in the review through the real `/ws/chat`. Needs its own
+  authorization, and a decision on what the client should be told when its
+  message could not be saved.
+- **A non-text token ends the turn; it is not skipped.** Stage 9 does not
+  treat it as a contract violation, as it does a provider that yields
+  nothing, so the next provider is not tried. Whether it should be is a
+  Stage 9 decision, left alone with the other fall-back question under
+  §7.25.
+- **The pipeline's generator is left suspended** when a failed fold ends a
+  turn. It is closed by garbage collection on the event-loop thread, as a
+  mid-stream disconnect already leaves it. Nothing in the chain
+  (`pipeline.run()`, Stage 9, both providers) has a `finally`, a
+  `BaseException` handler or a database call that closing it would run: it
+  closes the connection to the model server and nothing else. Read, not
+  tested.
+- **The client is unchanged.** `ws_chat_client.dart`'s comment, that the
+  backend just drops a Stop with nothing streaming, is now true. Not run in
+  a window.
+
 ---
 
 ## 8. Status
@@ -2615,6 +2776,8 @@ comparisons while its recorded prompt, model and code commit remain unchanged.
 | D-16 chat turn with no terminal event | Found and landed 2026-10-03 (§7.23) | A, latent: with no provider left after Stage 8 the socket got stage lines and no done/error, so the chat stayed "writing". The pipeline now sends its error. 3 socket tests through the real pipeline (1 seen failing first), 2 Flutter tests, 4 break-it mutations caught. Open item, a pipeline that raises, fixed as D-22 (§7.25) |
 | Migration journey re-run | Run 2026-10-03 (§7.24), report only | 10 variants, exports and shortcut restores through the real `export_pip.ps1` and `restore_pip.ps1`, 307 checks at `9968e8c`, every failure attributed; negative controls catch D-03 and D-14. Round trip holds (D-01 on every in-app restore that had a WAL to swap, D-03 with two profiles). New: D-18 empty or partial backup accepted (medium), D-20 same-named document taken over the backup's (medium, upper end), D-21 shortcut restores the first backup of the day (medium, low end), D-17 export race with a false "Nothing was written" (low, upper end), D-19 staged-restore state not scoped to the profile (low). Exit criterion not met as worded: D-09, D-18, D-20 |
 | D-22 raising pipeline ends the turn | Landed 2026-10-03 (§7.25) | A: an exception from the pipeline closed the socket mid-turn with no done/error. The transport now ends the turn with one error, keeps the connection, and saves the turn as the client was shown it. 3 socket tests (all seen failing first), 6 break-it mutations caught. Found: D-23, the client never ends a turn on a dropped connection (code reading) |
+| D-24 stray Stop answered with an error, D-25 token the fold cannot take | Found by review and landed 2026-10-16 (§7.44) | A, low, both. A Stop with nothing streaming is dropped instead of answered "message is required"; the fold of each forwarded event moved inside D-22's guard and ahead of the send, so a token that is not text is withheld and ends the turn with one error instead of closing the socket. 5 of 15 tests failed first, 10 break-it mutations caught; the record's statements about what is wrapped, and its example of a crash, corrected |
+| D-26 database writes around a turn unguarded | Found 2026-10-16 (§7.44), open | A, low: a failure in `start_session`, `create_conversation` or either `append_message` closes the connection, with no terminal event before the turn or after the reply was shown. Reproduced in the review; not fixed |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

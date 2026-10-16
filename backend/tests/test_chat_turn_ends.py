@@ -17,8 +17,26 @@ no timeout, and the defect under test is an event that never comes.
 The second half is D-22 (§7.25): a pipeline that raises instead of returning.
 The exception left ws_chat's loop and closed the socket mid-turn, so the client
 got no terminal event there either - and lost the connection with it.
+
+The third is what a review of D-22 found (§7.44), and the tests it found
+missing:
+- D-24: a Stop that reached the server with nothing left to stop was answered
+  with "message is required". D-22's early return made it easy to hit: the
+  turn's Stop is only read between events, so one sent while the pipeline was
+  blocked and then raised was still queued when the turn ended.
+- D-25: D-22 added a fold of every forwarded event, and put it after the send
+  and outside the guard. A token that is not text - the OpenAI-compatible
+  provider yields a structured `content` as it finds it - was sent to the
+  client and then raised out of ws_chat's loop, D-22's symptom again, reached
+  by the line D-22 added.
+- The tests never counted terminal events after the LAST turn of a test (the
+  first terminal ends _Events.turn(), so a duplicate was only ever seen when
+  it leaked into a following turn), never raised after an `error` or a
+  `stopped` (the guard against a second terminal event was only exercised after
+  `done`), and never looked at the log the client is sent to.
 """
 
+import logging
 import queue
 import threading
 import time
@@ -140,9 +158,29 @@ class _Events:
             if event["type"] in TERMINAL:
                 return events
 
+    def settled(self, seconds=0.5):
+        """
+        What arrives in the next half second, once a turn has ended. Nothing
+        may. turn() stops at the first terminal event, so on its own it can
+        never show a second one: a duplicate was only ever noticed when it
+        happened to land at the start of the NEXT turn, and the last turn of a
+        test has no next turn.
+        """
+        time.sleep(seconds)
+        left = []
+        while True:
+            try:
+                left.append(self._queue.get_nowait())
+            except queue.Empty:
+                return left
+
 
 def _terminals(events):
     return [e for e in events if e["type"] in TERMINAL]
+
+
+def _tokens(events):
+    return [e["data"] for e in events if e["type"] == "token"]
 
 
 def test_a_turn_no_provider_may_answer_ends_with_one_error(tmp_path, token, stub, ollama_down):
@@ -163,6 +201,7 @@ def test_a_turn_no_provider_may_answer_ends_with_one_error(tmp_path, token, stub
 
         ws.send_json({"message": "explain how a linked list works"})
         second = events.turn()
+        after = events.settled()
 
     for turn in (first, second):
         assert [e["type"] for e in _terminals(turn)] == ["error"]
@@ -170,6 +209,7 @@ def test_a_turn_no_provider_may_answer_ends_with_one_error(tmp_path, token, stub
         assert not any(e["type"] == "token" for e in turn)
     # The second turn begins with its own work, not with a late event from the first.
     assert second[0]["type"] == "stage"
+    assert after == [], "something more was sent after the last turn had ended"
     assert stub.sent == [], "an unconsented endpoint was sent the prompt"
 
 
@@ -182,9 +222,11 @@ def test_control_ollama_down_with_nothing_else_configured_ends_with_one_error(to
 
         ws.send_json({"message": "explain how a hash map works"})
         turn = events.turn()
+        after = events.settled()
 
     assert [e["type"] for e in _terminals(turn)] == ["error"]
     assert "All providers failed" in turn[-1]["data"]
+    assert after == [], "something more was sent after the turn had ended"
 
 
 def test_control_a_consented_endpoint_still_streams_its_answer(tmp_path, token, stub, ollama_down):
@@ -197,10 +239,12 @@ def test_control_a_consented_endpoint_still_streams_its_answer(tmp_path, token, 
 
         ws.send_json({"message": "explain how a hash map works"})
         turn = events.turn()
+        after = events.settled()
 
     assert [e["type"] for e in _terminals(turn)] == ["done"]
-    assert "".join(e["data"] for e in turn if e["type"] == "token") == "STUB-REPLY"
+    assert "".join(_tokens(turn)) == "STUB-REPLY"
     assert len(stub.sent) == 1
+    assert after == [], "something more was sent after the turn had ended"
 
 
 # --- D-22: a pipeline that raises -------------------------------------------
@@ -224,13 +268,22 @@ def _answers(text):
     return step
 
 
+def _yields(*tokens):
+    def step():
+        yield from tokens
+    return step
+
+
 @pytest.fixture
 def ollama_script(monkeypatch):
     """
     Ollama available; each chat() call plays the next scripted step. A
     ValueError is not one of the two provider errors Stage 9 falls back on,
-    so it travels out of the pipeline - the crash, from a realistic place: a
-    model server answering in a shape the provider did not expect.
+    so it travels out of the pipeline - the crash, from a place that is
+    reachable: the shipped providers turn every error they raise into a
+    provider error, so what actually gets out is a failure elsewhere (a
+    database read, the cache write) or a value the provider yielded that
+    nothing downstream can use (D-25, below).
     """
     script = []
 
@@ -240,6 +293,46 @@ def ollama_script(monkeypatch):
     monkeypatch.setattr(OllamaProvider, "is_available", lambda self: True)
     monkeypatch.setattr(OllamaProvider, "chat", chat)
     return script
+
+
+class _Gate:
+    """
+    A scripted provider that stops partway through a turn until the test lets
+    it go. `reached` is set once the provider is actually waiting, so the test
+    sends nothing until the server is blocked inside next() - which is after
+    the last time it looks at what the client has sent. Without that, a Stop
+    sent too early is read by the turn itself and the test passes for the wrong
+    reason.
+    """
+
+    def __init__(self):
+        self.reached = threading.Event()
+        self.release = threading.Event()
+
+    def wait(self):
+        self.reached.set()
+        assert self.release.wait(10), "the test never released the provider"
+
+
+def _blocks_then_fails(gate):
+    def step():
+        gate.wait()
+        raise ValueError("unexpected response shape from the model server")
+        yield  # pragma: no cover - makes this a generator like the real chat
+    return step
+
+
+def _streams_until_stopped(gate):
+    def step():
+        yield "A"
+        gate.wait()
+        # Paced, and bounded: Stop is read between events, so the provider has
+        # to keep producing for it to take effect, and must not run forever if
+        # it never does.
+        for _ in range(200):
+            yield "x"
+            time.sleep(0.05)
+    return step
 
 
 def _messages(tmp_path, conversation_id):
@@ -254,14 +347,16 @@ def _conversation_id(turn):
     return next(e["data"]["conversation_id"] for e in turn if e["type"] == "session_info")
 
 
-def test_a_pipeline_that_raises_before_answering_ends_the_turn_with_one_error(token, ollama_script):
+def test_a_pipeline_that_raises_before_answering_ends_the_turn_with_one_error(token, ollama_script, caplog):
     """
     The turn ends with one error, and the connection survives it: the next
     message on the same socket is answered. The exception's own text stays in
     the backend log - an exception can carry whatever it was handed, model
     output or message text included, and the client is told only that the
-    reply was abandoned.
+    reply was abandoned. It is told that the details are in the log, so they
+    have to be.
     """
+    caplog.set_level(logging.ERROR, logger="backend.api.server")
     ollama_script.extend([_fails_at_once, _answers("LOCAL-OLLAMA")])
 
     with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
@@ -273,15 +368,23 @@ def test_a_pipeline_that_raises_before_answering_ends_the_turn_with_one_error(to
 
         ws.send_json({"message": "explain how a linked list works"})
         second = events.turn()
+        after = events.settled()
 
     assert [e["type"] for e in _terminals(first)] == ["error"]
     assert not any(e["type"] == "token" for e in first)
     assert first[-1]["data"]
     assert "unexpected response shape" not in first[-1]["data"]
+    assert any(
+        r.name == "backend.api.server" and r.exc_info
+        and isinstance(r.exc_info[1], ValueError)
+        and "unexpected response shape" in str(r.exc_info[1])
+        for r in caplog.records
+    ), "the client was sent to the backend log, and the traceback is not in it"
 
     assert second[0]["type"] == "stage"
     assert [e["type"] for e in _terminals(second)] == ["done"]
-    assert "".join(e["data"] for e in second if e["type"] == "token") == "LOCAL-OLLAMA"
+    assert "".join(_tokens(second)) == "LOCAL-OLLAMA"
+    assert after == [], "something more was sent after the last turn had ended"
 
 
 def test_a_pipeline_that_raises_mid_reply_ends_with_one_error_and_saves_no_partial_reply(tmp_path, token, ollama_script):
@@ -302,9 +405,11 @@ def test_a_pipeline_that_raises_mid_reply_ends_with_one_error_and_saves_no_parti
 
         ws.send_json({"message": "explain how a linked list works"})
         second = events.turn()
+        after = events.settled()
 
     assert [e["type"] for e in first if e["type"] in ("token",) + TERMINAL] == ["token", "error"]
     assert [e["type"] for e in _terminals(second)] == ["done"]
+    assert after == [], "something more was sent after the last turn had ended"
     # Only the first turn's rows are certain here: the server saves a turn
     # after sending its terminal event, and the first turn's save finished
     # before the second message was taken. So: the user's first message, and
@@ -338,11 +443,254 @@ def test_a_pipeline_that_raises_after_its_answer_is_done_sends_nothing_more(tmp_
 
         ws.send_json({"message": "explain how a linked list works"})
         second = events.turn()
+        after = events.settled()
 
     assert [e["type"] for e in _terminals(first)] == ["done"]
     assert second[0]["type"] == "stage"
     assert [e["type"] for e in _terminals(second)] == ["done"]
+    assert after == [], "something more was sent after the last turn had ended"
     assert _messages(tmp_path, _conversation_id(first))[:2] == [
         ("user", "explain how a hash map works"),
         ("assistant", "FIRST-ANSWER"),
     ]
+
+
+def test_a_pipeline_that_raises_after_an_error_has_gone_out_sends_nothing_more(token, ollama_down, monkeypatch):
+    """
+    The same promise after `error`. Stage 9 reports "All providers failed" and
+    the pipeline then fails in delivery. That error is the turn's terminal
+    event; a second one - the generic "something went wrong" - would be read as
+    the start of the next turn's. The guard against it used to be exercised
+    only after `done`, and a version of it that remembered only `done` passed
+    every test.
+    """
+    def refuse(*args, **kwargs):
+        raise RuntimeError("delivery failed")
+
+    monkeypatch.setattr(server.pipeline.stage_10, "run", refuse)
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "explain how a hash map works"})
+        first = events.turn()
+
+        ws.send_json({"message": "explain how a linked list works"})
+        second = events.turn()
+        after = events.settled()
+
+    for turn in (first, second):
+        assert [e["type"] for e in _terminals(turn)] == ["error"]
+        assert "All providers failed" in turn[-1]["data"]
+    assert second[0]["type"] == "stage", "a second terminal event was left over from the first turn"
+    assert after == [], "something more was sent after the last turn had ended"
+
+
+def test_a_pipeline_that_raises_after_a_stop_has_gone_out_sends_nothing_more(tmp_path, token, ollama_script, monkeypatch):
+    """
+    And after `stopped`. The user pressed Stop, the answer was cut short and
+    saved as shown, and delivery then failed: the turn already ended on the
+    `stopped`, so nothing more goes out.
+    """
+    gate = _Gate()
+    ollama_script.extend([_streams_until_stopped(gate), _answers("SECOND-ANSWER")])
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("delivery failed")
+
+    monkeypatch.setattr(server.pipeline.stage_10, "run", refuse)
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "explain how a hash map works"})
+        assert gate.reached.wait(10), "the provider was never reached"
+        ws.send_json({"type": "stop"})
+        time.sleep(0.3)  # long enough for the server to have queued it
+        gate.release.set()
+        first = events.turn()
+
+        ws.send_json({"message": "explain how a linked list works"})
+        second = events.turn()
+        after = events.settled()
+
+    assert [e["type"] for e in _terminals(first)] == ["stopped"]
+    assert second[0]["type"] == "stage", "a second terminal event was left over from the first turn"
+    assert [e["type"] for e in _terminals(second)] == ["done"]
+    assert after == [], "something more was sent after the last turn had ended"
+    shown = "".join(_tokens(first))
+    assert shown.startswith("A")
+    assert _messages(tmp_path, _conversation_id(first))[:2] == [
+        ("user", "explain how a hash map works"),
+        ("assistant", shown),
+    ]
+
+
+def test_a_pipeline_that_ends_without_completing_ends_the_turn_with_one_error(token, monkeypatch):
+    """
+    A generator that stops with no pipeline_complete used to raise out of the
+    loop. Nothing in the pipeline does this today - Stage 9 always ends in
+    done, error or stopped - so it is the transport's own check that is being
+    held to its word here.
+    """
+    hint = {"decision_log_hit": False, "web_search_used": False, "cache_hit": False, "model_loading": False}
+
+    def truncated(*args, **kwargs):
+        yield {"type": "stage_hint", "data": hint}
+        yield {"type": "token", "data": "PART "}
+
+    def whole(*args, **kwargs):
+        yield {"type": "stage_hint", "data": hint}
+        yield {"type": "token", "data": "WHOLE "}
+        yield {"type": "done", "data": None}
+        yield {"type": "pipeline_complete", "data": {
+            "trace_id": "t1", "response_text": "WHOLE ", "status": "success", "stage_hints": {},
+        }}
+
+    plays = [truncated, whole]
+    monkeypatch.setattr(server.pipeline, "run", lambda *a, **kw: plays.pop(0)(*a, **kw))
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "explain how a hash map works"})
+        first = events.turn()
+
+        ws.send_json({"message": "explain how a linked list works"})
+        second = events.turn()
+        after = events.settled()
+
+    assert [e["type"] for e in _terminals(first)] == ["error"]
+    assert _tokens(first) == ["PART "]
+    assert second[0]["type"] == "stage_hint"
+    assert [e["type"] for e in _terminals(second)] == ["done"]
+    assert after == [], "something more was sent after the last turn had ended"
+
+
+# --- D-24: a Stop with nothing left to stop ---------------------------------
+
+
+def test_a_stop_with_nothing_streaming_is_dropped_not_answered(token, ollama_script):
+    """
+    ws_chat_client.stop() says sending a Stop when nothing is streaming is
+    harmless because the backend just drops it. The backend answered it with
+    "message is required": the main loop reads whatever the turn's own loop
+    did not, and a Stop is a dict with no message. The client turns any error
+    into a visible "Error:" row.
+    """
+    ollama_script.append(_answers("LOCAL-OLLAMA"))
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"type": "stop"})
+        ws.send_json({"message": "explain how a hash map works"})
+        turn = events.turn()
+        after = events.settled()
+
+    assert [e["type"] for e in _terminals(turn)] == ["done"], (
+        f"the Stop was answered: {[e.get('data') for e in turn if e['type'] == 'error']}"
+    )
+    assert "".join(_tokens(turn)) == "LOCAL-OLLAMA"
+    assert after == [], "something more was sent after the turn had ended"
+
+
+def test_a_stop_during_a_turn_that_then_raises_is_not_answered_afterwards(token, ollama_script):
+    """
+    The turn reads a Stop only between events. Sent while the provider is
+    blocked on a slow first token and the pipeline then raises, it is still
+    queued when D-22's early return ends the turn - and the next pass through
+    the main loop answered it with a second error, right behind the first.
+    """
+    gate = _Gate()
+    ollama_script.extend([_blocks_then_fails(gate), _answers("LOCAL-OLLAMA")])
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "explain how a hash map works"})
+        assert gate.reached.wait(10), "the provider was never reached"
+        ws.send_json({"type": "stop"})
+        time.sleep(0.3)  # long enough for the server to have queued it
+        gate.release.set()
+        first = events.turn()
+
+        ws.send_json({"message": "explain how a linked list works"})
+        second = events.turn()
+        after = events.settled()
+
+    assert [e["type"] for e in _terminals(first)] == ["error"]
+    assert second[0]["type"] == "stage", (
+        f"the Stop was answered after the turn ended: {second[0].get('data')!r}"
+    )
+    assert [e["type"] for e in _terminals(second)] == ["done"]
+    assert after == [], "something more was sent after the last turn had ended"
+
+
+def test_control_a_request_with_no_message_that_is_not_a_stop_still_gets_an_error(token, ollama_script):
+    """The fix drops a Stop and nothing else: a request with no text is still
+    a mistake the client is told about."""
+    ollama_script.append(_answers("LOCAL-OLLAMA"))
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"type": "stopp"})
+        refused = events.turn()
+        ws.send_json({"message": "explain how a hash map works"})
+        answered = events.turn()
+        after = events.settled()
+
+    assert [(e["type"], e["data"]) for e in refused] == [("error", "message is required")]
+    assert [e["type"] for e in _terminals(answered)] == ["done"]
+    assert after == []
+
+
+# --- D-25: a token that is not text -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "script, shown",
+    [
+        pytest.param(_yields("PART", [{"type": "text", "text": "hi"}], "NEVER"), ["PART"], id="structured-content-after-text"),
+        pytest.param(_yields("PART", None, "NEVER"), ["PART"], id="null-after-text"),
+        pytest.param(_yields([{"type": "text", "text": "hi"}], "NEVER"), [], id="structured-content-first"),
+    ],
+)
+def test_a_token_that_is_not_text_never_reaches_the_client_and_ends_the_turn_with_one_error(
+    token, ollama_script, script, shown
+):
+    """
+    The OpenAI-compatible provider yields a chunk's `content` as it finds it,
+    so a server that streams structured content hands Stage 9 a list. Nothing
+    in the provider raises, so the provider's own wrapping of errors never sees
+    it. The transport folds every event it forwards to know what the client was
+    shown, and that fold raised on the list - after the list had been sent, and
+    outside the guard, so the connection closed with no terminal event. The
+    client does `event.data as String` on every token.
+    """
+    ollama_script.extend([script, _answers("LOCAL-OLLAMA")])
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "explain how a hash map works"})
+        first = events.turn()
+
+        ws.send_json({"message": "explain how a linked list works"})
+        second = events.turn()
+        after = events.settled()
+
+    assert _tokens(first) == shown, "a token that is not text was sent to the client"
+    assert [e["type"] for e in _terminals(first)] == ["error"]
+    assert second[0]["type"] == "stage"
+    assert [e["type"] for e in _terminals(second)] == ["done"]
+    assert "".join(_tokens(second)) == "LOCAL-OLLAMA"
+    assert after == [], "something more was sent after the last turn had ended"
