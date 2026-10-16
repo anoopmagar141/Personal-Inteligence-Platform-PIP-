@@ -25,6 +25,7 @@ from backend.core import (
     startup_progress,
     trace,
 )
+from backend.core.types import now_utc
 from backend.memory import (
     avatar_store,
     conversation_store,
@@ -745,6 +746,49 @@ def start_session(conn) -> int | None:
     session_no = profile_store.begin_session(conn)
     verification.run_if_due(conn, session_no)
     return session_no
+
+
+# What a client is told when its message cannot be answered because the chat
+# cannot be written to. It names no cause: an exception can carry whatever it
+# was handed, and the cause is in the backend log, which is where the message
+# sends the person.
+_CHAT_NOT_SAVED = (
+    "This chat could not be saved just now, so your message was not answered. "
+    "Send it again, or start a new chat if this keeps happening. "
+    "The details are in the backend log."
+)
+
+
+async def _run_write(loop, executor, conn, write, *args, **kwargs):
+    """
+    One database write, run on the connection's own thread and rolled back if
+    it fails.
+
+    The rollback is what makes it safe to keep a connection after a write has
+    failed, which a failed write used not to allow: it ended the handler, and
+    closing the connection threw away whatever the write had left behind
+    (FREEZE_LIST §7.45, D-26). A connection that goes on keeps it.
+    conversation_store's writers are several statements and a commit, so one
+    that fails between them leaves its first statement pending in the
+    connection's open transaction, and the next write's commit would save it:
+    a message half written, then written again by the retry. The rollback runs
+    on the thread that owns the connection, because a SQLCipher connection can
+    only be used on the thread that created it.
+
+    A rollback that itself fails is logged and does not replace the error that
+    was being reported.
+    """
+    def run():
+        try:
+            return write(*args, **kwargs)
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                logger.exception("Rolling back a failed chat write failed as well")
+            raise
+
+    return await loop.run_in_executor(executor, run)
 
 
 def api_ingest_document(conn, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1569,6 +1613,23 @@ try:
         session_id = id(websocket)
         await _session_registry.register(session_id, conn, executor, conversation_history, session_state)
 
+        # Messages of finished turns that the database has not taken yet, oldest
+        # first, as (role, content, created_at). A message gets here at the end of
+        # every turn and leaves when it has been written; if the write fails it
+        # stays, and is tried again before the next message is looked at (see
+        # both ends of the turn below). Only this coroutine touches it.
+        pending_saves: list[tuple[str, str, str]] = []
+
+        async def flush_pending_saves() -> None:
+            """Writes what an earlier turn could not, in order, stopping at the first failure."""
+            while pending_saves:
+                role, content, created_at = pending_saves[0]
+                await _run_write(
+                    loop, executor, conn, conversation_store.append_message,
+                    conn, conversation_id, role, content, timestamp=created_at,
+                )
+                pending_saves.pop(0)
+
         # Sent once, before the main loop - not part of the per-turn
         # stage_hint -> token* -> (done|error|stopped) sequence (Part 14.3).
         # See SessionInfoEvent's docstring in shared/ws_spec.py.
@@ -1660,28 +1721,58 @@ try:
                     await websocket.send_json({"type": "error", "data": "message is required"})
                     continue
 
-                if not session_counted:
-                    session_counted = True
-                    await loop.run_in_executor(executor, start_session, conn)
+                # What has to be written before this message can be answered:
+                # whatever an earlier turn could not save, the session count, and
+                # the conversation row. A failure in any of them refuses the
+                # message - one error, nothing sent to the model, the connection
+                # kept - where it used to end the handler, so the client got no
+                # terminal event at all and the chat sat "writing" (FREEZE_LIST
+                # §7.45, D-26). Fail closed: a chat that cannot be written to is
+                # not answered into. Nothing the person typed is lost either,
+                # since it was never accepted; they send it again.
+                #
+                # Not a path only a broken disk reaches. Foreign keys are
+                # enforced, so a message naming a project that no longer exists
+                # fails here, and so does one for a conversation that was deleted
+                # while the chat was open.
+                new_conversation = False
+                try:
+                    if pending_saves:
+                        await flush_pending_saves()
 
-                # Lazy conversation creation: see _resolve_connection_state's
-                # docstring - a brand-new connection arrives here with
-                # conversation_id still None, and only gets a real (committed)
-                # row now that there's an actual first message to attach it to.
-                # Done BEFORE streaming starts, not after, so the client learns
-                # the real id promptly rather than only once the whole reply
-                # has already streamed in.
-                if conversation_id is None:
-                    # WITH the project. conversations.project_id, its foreign
-                    # key to active_projects, list_conversations()'s filter and
-                    # create_conversation()'s parameter were all built; this
-                    # call - the only one the app ever reaches - left the
-                    # argument off, so every conversation the UI created was
-                    # filed against nothing while the client dutifully sent a
-                    # project_id on every message.
-                    conversation_id = await loop.run_in_executor(
-                        executor, conversation_store.create_conversation, conn, project_id
-                    )
+                    # Counted only once the write has gone through. It was set
+                    # first, which a handler that died on a failure could afford
+                    # and a connection that goes on cannot: the next message
+                    # would have found the session counted that never was.
+                    if not session_counted:
+                        await _run_write(loop, executor, conn, start_session, conn)
+                        session_counted = True
+
+                    # Lazy conversation creation: see _resolve_connection_state's
+                    # docstring - a brand-new connection arrives here with
+                    # conversation_id still None, and only gets a real (committed)
+                    # row now that there's an actual first message to attach it to.
+                    # Done BEFORE streaming starts, not after, so the client learns
+                    # the real id promptly rather than only once the whole reply
+                    # has already streamed in.
+                    if conversation_id is None:
+                        # WITH the project. conversations.project_id, its foreign
+                        # key to active_projects, list_conversations()'s filter and
+                        # create_conversation()'s parameter were all built; this
+                        # call - the only one the app ever reaches - left the
+                        # argument off, so every conversation the UI created was
+                        # filed against nothing while the client dutifully sent a
+                        # project_id on every message.
+                        conversation_id = await _run_write(
+                            loop, executor, conn, conversation_store.create_conversation, conn, project_id
+                        )
+                        new_conversation = True
+                except Exception:
+                    logger.exception("Chat message refused: a write it needed first failed")
+                    await websocket.send_json({"type": "error", "data": _CHAT_NOT_SAVED})
+                    continue
+
+                if new_conversation:
                     await websocket.send_json({
                         "type": "session_info",
                         "data": {"conversation_id": conversation_id, "title": "New chat", "messages": []},
@@ -1702,14 +1793,25 @@ try:
 
                 conversation_history.append({"role": "user", "content": user_message})
                 session_state["has_unobserved_turns"] = True
-                await loop.run_in_executor(
-                    executor, conversation_store.append_message, conn, conversation_id, "user", user_message
-                )
+                pending_saves.append(("user", user_message, now_utc()))
                 if result.get("status") in ("success", "stopped") and result.get("response_text"):
                     conversation_history.append({"role": "assistant", "content": result["response_text"]})
-                    await loop.run_in_executor(
-                        executor, conversation_store.append_message,
-                        conn, conversation_id, "assistant", result["response_text"],
+                    pending_saves.append(("assistant", result["response_text"], now_utc()))
+                # Queued first and written second, so a write that fails leaves
+                # the turn queued instead of lost: it is tried again before the
+                # next message is looked at, and if it still cannot be written
+                # that message is refused (above). The turn has been shown and has
+                # ended, so the failure is not announced: the only event there is
+                # for it is an error, and a second terminal event for a turn is
+                # what the client takes as the end of the next one. The rows keep
+                # the time the turn happened, not the time of a retry. The turn is
+                # in conversation_history either way, so the Observer at
+                # disconnect still sees it.
+                try:
+                    await flush_pending_saves()
+                except Exception:
+                    logger.exception(
+                        "Chat turn could not be saved; it is kept and tried again before the next message"
                     )
         except WebSocketDisconnect:
             # Belt-and-suspenders alongside the reader's own _DISCONNECT

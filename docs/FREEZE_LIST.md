@@ -31,7 +31,8 @@ machine on 2026-10-08 when they turned Smart App Control off themselves (§7.26)
 still true wherever it is on. On 2026-10-16 a read-only review of D-22's fix
 found five small problems; the owner authorized fixing two of them (D-24, D-25),
 correcting the record and tightening the tests, landed the same day (§7.44). The
-third, D-26, is open. Anything further needs a new authorization.
+third, D-26, was authorized next and landed the same day (§7.45). Anything
+further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -2588,7 +2589,7 @@ real". 13 agents. 10 findings, none refuted, which are five distinct
 problems, all low once the skeptics had rated them. Nine ways a turn can end
 were traced and each gave exactly one terminal event, so the promise held.
 The owner authorized fixing the first two problems below, correcting the
-record and tightening the tests; the third is recorded and left open.
+record and tightening the tests; the third was recorded and left open, then fixed (§7.45).
 
 - **D-24 (A, low): a Stop with nothing left to stop was answered with an
   error.** `ws_chat_client.stop()` says the backend drops a Stop sent when
@@ -2696,8 +2697,9 @@ record and tightening the tests; the third is recorded and left open.
   not re-run.
 
 **Not covered (still open):**
-- **D-26 (A, low, found by the review, not fixed): the database writes
-  around a turn are not guarded.** `start_session` and `create_conversation`
+- **D-26 (A, found by the review): the database writes around a turn are
+  not guarded.** *(Fixed 2026-10-16, §7.45. Not "low", as rated here: see
+  there.)* `start_session` and `create_conversation`
   run before a turn's first event, and both `append_message` calls run
   after its terminal event. `ws_chat` catches only `WebSocketDisconnect`,
   so a failure in any of them (a locked or full database) closes the
@@ -2722,6 +2724,109 @@ record and tightening the tests; the third is recorded and left open.
 - **The client is unchanged.** `ws_chat_client.dart`'s comment, that the
   backend just drops a Stop with nothing streaming, is now true. Not run in
   a window.
+
+### 7.45 A failed write around a chat turn closed the connection, D-26 (authorized and landed 2026-10-16)
+
+The third problem of §7.44's review, which that section left open. The owner
+authorized it the same day.
+
+- **Defect (A, medium):** a database write that failed around a chat turn
+  ended the handler, and the connection with it. §7.44 rated it low, as a
+  failure of a locked or full database. It does not need one. Foreign keys
+  are enforced, and two ordinary things trip them. Both were reproduced on
+  `HEAD` through the real `/ws/chat` with nothing patched:
+  - **A message naming a project that no longer exists.**
+    `create_conversation` raises `FOREIGN KEY constraint failed` before the
+    turn's first event, so the client got nothing at all, not the stage
+    lines and not an error, and the chat sat "writing": D-16's symptom from
+    a different line.
+  - **A conversation deleted while a chat is open on it.** The turn is
+    answered and shown, then `append_message` fails on the same constraint
+    and the handler dies. The reply is on screen, the connection is gone,
+    and the turn is in no transcript.
+  - **And a write that fails leaves its first statement pending.**
+    `append_message` is three statements and a commit. Closing the
+    connection threw that away; keeping the connection, which is the point,
+    would have let the next write's commit save it.
+- **Promise:** a failed write around a turn costs neither the connection
+  nor the integrity of the next write, and no message is answered into a
+  chat that is not being kept: it is saved, or the person is told it was not
+  answered.
+- **Mechanism:** all in `backend/api/server.py`.
+  - **`_run_write`** runs one write on the connection's own thread and, if
+    it fails, rolls it back and raises. Every write around a turn goes
+    through it.
+  - **Before a message is answered,** whatever an earlier turn could not
+    save, the session count and the conversation row are written inside a
+    guard. A failure refuses the message: one `error` ("This chat could not
+    be saved just now, so your message was not answered. Send it again, or
+    start a new chat if this keeps happening. The details are in the backend
+    log."), nothing sent to the model, the connection kept. The text names no
+    cause; the exception stays in the log. The session is counted only after
+    its write has gone through. It was marked first, which a handler that
+    died could afford.
+  - **After a turn,** its messages are queued with the time they happened,
+    then written. A write that fails leaves them queued and is logged with
+    its traceback. They are written, in order and with their own times,
+    before the next message is looked at; if that fails too, the message is
+    refused as above, so a chat that cannot be saved is not carried on
+    silently. At most one turn is ever queued, since a message is refused
+    while the queue cannot be written.
+  - **The failed save is not announced when it happens.** The turn has
+    ended, and the only event there is for a failure is an `error`, which
+    would be a second terminal event for the turn, and which the client
+    takes as the end of the next one. A decision, listed below.
+- **Tests:** 5 added to `backend/tests/test_chat_turn_ends.py` (20 in the
+  file now), through the real `/ws/chat` and the real pipeline. Two use the
+  real triggers above. Two inject a failure: `begin_session` locked once, and
+  a write that fails after its row is inserted, run for each of the pair of
+  messages.
+  - **Seen failing first (all 5):** on `HEAD` the exception left the handler
+    in each, at `create_conversation`, at `start_session`, at the user
+    message's write, at the reply's write, and at the write after the
+    conversation was deleted. The 15 earlier tests passed.
+  - **What they pin:** the refusal is a single `error` with nothing else
+    around it and no exception text in it; the refused message never reaches
+    the model and leaves no conversation row; the session is counted exactly
+    once; after a half-written failure the rows are exactly the four
+    expected, in order, with none doubled; the retried rows carry the first
+    turn's time and not the retry's; a failed save after a reply sends
+    nothing; and the next two messages are refused without being answered.
+- **Break-it:** 10 mutations of the fix, one at a time on a clean copy, each caught:
+  - a failed write not rolled back (the two half-written-save cases);
+  - the queue not written before the next message is looked at, so nothing refuses it (the
+    deleted-conversation test);
+  - a queued row dropped when its write fails instead of kept (the two half-written-save cases
+    and the deleted-conversation test);
+  - the refusal removed, so a failed write before the turn ends the handler again (the stale-project
+    test, the session-count test and the deleted-conversation test);
+  - the session marked counted before its write (the session-count test);
+  - the retried rows stamped at the time of the retry, not of the turn (the two half-written-save cases);
+  - the exception's text added to the error the client is sent (the three refusal tests, through the
+    check on the text);
+  - the refusal sent and the message answered anyway (the same three);
+  - the failed save announced as a second error (the two half-written-save cases and the
+    deleted-conversation test);
+  - a failure of the queue ignored before the next message, so it is answered anyway (the
+    deleted-conversation test).
+- **Suites:** Backend 1512 passed, 0 failed (15 min 31 s), run with the embedding shim on a clean export of `7239b81` plus this change. The turn-end file alone passed 8 runs in 8. No client file changed, so the Flutter suite was not re-run.
+
+**Decision made here (easy to reverse):** a save that fails after a reply was
+shown is told to the person only when they send the next message. Telling
+them at once needs an event that does not end a turn, and a client that shows
+it; neither exists. No client file changed.
+
+**Not covered (still open):**
+- **A turn still queued when the connection closes is not saved.** It is
+  logged when the write fails, and the Observer at disconnect still learns
+  from it, since it reads the history in memory, but the saved transcript
+  lacks it. The disconnect path is the one the `TestClient` harness cannot be
+  relied on to run (see the flaky disconnect test), so it is read, not tested.
+- **The refusal does not say which write failed.** The log does. For a
+  deleted project, "send it again" will fail again until the person changes
+  the project scope, which the client holds.
+- **The writes that fail open on purpose are unchanged:** trace entries and
+  document access counts.
 
 ---
 
@@ -2777,7 +2882,7 @@ record and tightening the tests; the third is recorded and left open.
 | Migration journey re-run | Run 2026-10-03 (§7.24), report only | 10 variants, exports and shortcut restores through the real `export_pip.ps1` and `restore_pip.ps1`, 307 checks at `9968e8c`, every failure attributed; negative controls catch D-03 and D-14. Round trip holds (D-01 on every in-app restore that had a WAL to swap, D-03 with two profiles). New: D-18 empty or partial backup accepted (medium), D-20 same-named document taken over the backup's (medium, upper end), D-21 shortcut restores the first backup of the day (medium, low end), D-17 export race with a false "Nothing was written" (low, upper end), D-19 staged-restore state not scoped to the profile (low). Exit criterion not met as worded: D-09, D-18, D-20 |
 | D-22 raising pipeline ends the turn | Landed 2026-10-03 (§7.25) | A: an exception from the pipeline closed the socket mid-turn with no done/error. The transport now ends the turn with one error, keeps the connection, and saves the turn as the client was shown it. 3 socket tests (all seen failing first), 6 break-it mutations caught. Found: D-23, the client never ends a turn on a dropped connection (code reading) |
 | D-24 stray Stop answered with an error, D-25 token the fold cannot take | Found by review and landed 2026-10-16 (§7.44) | A, low, both. A Stop with nothing streaming is dropped instead of answered "message is required"; the fold of each forwarded event moved inside D-22's guard and ahead of the send, so a token that is not text is withheld and ends the turn with one error instead of closing the socket. 5 of 15 tests failed first, 10 break-it mutations caught; the record's statements about what is wrapped, and its example of a crash, corrected |
-| D-26 database writes around a turn unguarded | Found 2026-10-16 (§7.44), open | A, low: a failure in `start_session`, `create_conversation` or either `append_message` closes the connection, with no terminal event before the turn or after the reply was shown. Reproduced in the review; not fixed |
+| D-26 failed write around a chat turn closed the connection | Found 2026-10-16 (§7.44), landed 2026-10-16 (§7.45) | A, medium: a project that no longer exists, or a conversation deleted under an open chat, ended the handler, with no ending event before the turn or after the reply was shown. Writes now go through a rollback; a message whose setup writes fail is refused with one error; a turn that cannot be saved is queued, retried in order before the next message, and that message is refused if it still cannot be written. 5 tests (all failed first, two on real triggers), 10 break-it mutations caught. Open: a failed save is told only at the next message; a turn queued at disconnect is not saved |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

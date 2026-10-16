@@ -34,10 +34,21 @@ missing:
   it leaked into a following turn), never raised after an `error` or a
   `stopped` (the guard against a second terminal event was only exercised after
   `done`), and never looked at the log the client is sent to.
+
+The last is D-26 (§7.45), the one that review left open: the database writes
+around a turn were not guarded, so a write that failed closed the connection -
+with no terminal event if it came before the turn, and with the reply already
+shown if it came after. Not an exotic failure: foreign keys are enforced, so a
+message sent with a project id that no longer exists fails in
+create_conversation, and a conversation deleted under an open chat fails in
+append_message. Those two are the real triggers used below; the rest are
+injected, since a locked or full database cannot be produced on demand.
 """
 
+import datetime
 import logging
 import queue
+import sqlite3
 import threading
 import time
 
@@ -46,11 +57,13 @@ from fastapi.testclient import TestClient
 
 from backend.api import server
 from backend.core import auth, response_cache
+from backend.core.types import TIMESTAMP_FORMAT
 from backend.memory import conversation_store, llm_endpoint_store, vector_store
 from backend.providers.base_provider import ProviderUnavailableError
 from backend.providers.ollama_provider import OllamaProvider
 from backend.stages import stage_06_web_search as stage_06
 from backend.tests.test_consent_before_sending import _Stub
+from backend.tests.test_ws_chat import _onboard, _session_count
 
 TERMINAL = ("done", "error", "stopped")
 
@@ -694,3 +707,255 @@ def test_a_token_that_is_not_text_never_reaches_the_client_and_ends_the_turn_wit
     assert [e["type"] for e in _terminals(second)] == ["done"]
     assert "".join(_tokens(second)) == "LOCAL-OLLAMA"
     assert after == [], "something more was sent after the last turn had ended"
+
+
+# --- D-26: the writes around a turn -----------------------------------------
+
+
+def _not_saved(event):
+    """The one thing a client is told when the chat cannot be written to: that
+    it was not answered, what to do, and nothing from inside the exception."""
+    assert event["type"] == "error"
+    text = event["data"]
+    assert "could not be saved" in text and "not answered" in text
+    for inside in ("FOREIGN KEY", "constraint", "IntegrityError", "OperationalError", "database is locked"):
+        assert inside not in text, f"the error leaks what the exception said: {inside!r}"
+    return text
+
+
+def _stored(tmp_path):
+    """Every message in the database, oldest first, across all conversations."""
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        return [(r["role"], r["content"], r["created_at"]) for r in conn.execute(
+            "SELECT role, content, created_at FROM messages ORDER BY id").fetchall()]
+    finally:
+        conn.close()
+
+
+def _conversations(tmp_path):
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        return conversation_store.list_conversations(conn)
+    finally:
+        conn.close()
+
+
+def _wait_until_stored(tmp_path, count, seconds=10.0):
+    """The server saves a turn AFTER it has sent the terminal event, so a test
+    that acts on the database straight after `done` races the save."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if len(_stored(tmp_path)) >= count:
+            return
+        time.sleep(0.05)
+    pytest.fail(f"the turn was not saved within {seconds}s ({len(_stored(tmp_path))} of {count} rows)")
+
+
+def test_a_message_whose_conversation_cannot_be_created_is_refused_and_the_connection_survives(
+    tmp_path, token, ollama_script, caplog
+):
+    """
+    Real trigger: foreign keys are enforced, and a message names the project it
+    belongs to, so one that names a project which no longer exists makes
+    create_conversation raise. That used to end the handler: the client got
+    nothing at all - not even the stage lines, which come later - and the chat
+    sat "writing". Now the message is refused with one error, nothing reaches
+    the model, no conversation row is left behind, and the next message on the
+    same socket is answered.
+    """
+    caplog.set_level(logging.ERROR, logger="backend.api.server")
+    ollama_script.append(_answers("LOCAL-OLLAMA"))
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "explain how a hash map works", "project_id": "a-project-that-was-deleted"})
+        refused = events.turn()
+        assert len(ollama_script) == 1, "the refused message reached the model"
+
+        ws.send_json({"message": "explain how a linked list works"})
+        answered = events.turn()
+        after = events.settled()
+        _wait_until_stored(tmp_path, 2)
+
+    assert len(refused) == 1, f"the refusal came with other events: {[e['type'] for e in refused]}"
+    _not_saved(refused[0])
+    assert [e["type"] for e in _terminals(answered)] == ["done"]
+    assert answered[0]["type"] == "session_info", "the conversation was not created for the message that could be saved"
+    assert "".join(_tokens(answered)) == "LOCAL-OLLAMA"
+    assert after == [], "something more was sent after the last turn had ended"
+    assert len(_conversations(tmp_path)) == 1, "the refused message left a conversation behind"
+    assert [(role, text) for role, text, _ in _stored(tmp_path)] == [
+        ("user", "explain how a linked list works"),
+        ("assistant", "LOCAL-OLLAMA"),
+    ]
+    assert any(
+        r.name == "backend.api.server" and r.exc_info and isinstance(r.exc_info[1], sqlite3.IntegrityError)
+        for r in caplog.records
+    ), "the reason is not in the backend log, and the client was sent there"
+
+
+def test_a_session_that_cannot_be_counted_is_refused_and_counted_once_when_it_can(
+    tmp_path, token, ollama_script, monkeypatch
+):
+    """
+    Injected: begin_session raising as a locked database does. The flag that
+    says "this connection's session is counted" was set BEFORE the write, so a
+    write that failed - on a handler that used to die - would have been counted
+    as done. It is set after, so the next message tries again, and the session
+    is counted exactly once: not zero times, which is the failure the counter's
+    own comment worries about, and not twice.
+    """
+    _onboard(tmp_path)
+    assert _session_count(tmp_path) == 1
+    real = server.profile_store.begin_session
+    calls = {"n": 0}
+
+    def locked_once(conn):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return real(conn)
+
+    monkeypatch.setattr(server.profile_store, "begin_session", locked_once)
+    ollama_script.append(_answers("LOCAL-OLLAMA"))
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "explain how a hash map works"})
+        refused = events.turn()
+        assert len(ollama_script) == 1, "the refused message reached the model"
+
+        ws.send_json({"message": "explain how a hash map works"})
+        answered = events.turn()
+        after = events.settled()
+
+    assert len(refused) == 1
+    _not_saved(refused[0])
+    assert [e["type"] for e in _terminals(answered)] == ["done"]
+    assert after == []
+    assert calls["n"] == 2
+    assert _session_count(tmp_path) == 2, "the session was counted zero or two times"
+
+
+@pytest.mark.parametrize("failing_role", ["user", "assistant"])
+def test_a_turn_that_cannot_be_saved_is_saved_in_order_before_the_next_one_is_answered(
+    tmp_path, token, ollama_script, monkeypatch, failing_role
+):
+    """
+    Injected: one write of the turn fails HALFWAY - the row is inserted and the
+    write then fails, as a full disk does at the commit. The turn has already
+    been shown, so nothing is sent for it; it is kept, and written before the
+    next message is looked at. Three things are held here:
+    - it is rolled back, or the half-written row sits in the connection's open
+      transaction and the next write's commit saves it a second time;
+    - the rows land in order, whichever of the pair failed;
+    - they keep the time the turn happened, not the time of the retry. Seconds
+      are the resolution of created_at, so the test waits long enough to tell.
+    """
+    real = conversation_store.append_message
+    state = {"failed": False}
+
+    def halfway(conn, conversation_id, role, content, *, timestamp=None):
+        if role == failing_role and not state["failed"]:
+            state["failed"] = True
+            conn.execute(
+                "INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+                (conversation_id, role, content, timestamp or "1999-01-01T00:00:00Z"),
+            )
+            raise sqlite3.OperationalError("database or disk is full")
+        return real(conn, conversation_id, role, content, timestamp=timestamp)
+
+    monkeypatch.setattr(conversation_store, "append_message", halfway)
+    ollama_script.extend([_answers("FIRST-ANSWER"), _answers("SECOND-ANSWER")])
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "first question"})
+        first = events.turn()
+        first_done = datetime.datetime.now(datetime.timezone.utc)
+        time.sleep(1.5)
+
+        ws.send_json({"message": "second question"})
+        second = events.turn()
+        after = events.settled()
+        _wait_until_stored(tmp_path, 4)
+
+    assert state["failed"], "the injected failure never happened"
+    assert [e["type"] for e in _terminals(first)] == ["done"], "a failed save changed how the turn ended"
+    assert [e["type"] for e in _terminals(second)] == ["done"]
+    assert after == [], "something more was sent after the last turn had ended"
+    stored = _stored(tmp_path)
+    assert [(role, text) for role, text, _ in stored] == [
+        ("user", "first question"),
+        ("assistant", "FIRST-ANSWER"),
+        ("user", "second question"),
+        ("assistant", "SECOND-ANSWER"),
+    ], "the rows are missing, doubled or out of order"
+
+    def stamp(text):
+        return datetime.datetime.strptime(text, TIMESTAMP_FORMAT).replace(tzinfo=datetime.timezone.utc)
+
+    for role, text, created_at in stored[:2]:
+        assert stamp(created_at) < first_done + datetime.timedelta(seconds=1), (
+            f"the first turn's {role} row was stamped {created_at}, the time of the retry"
+        )
+
+
+def test_a_conversation_that_cannot_be_saved_to_refuses_the_next_message_and_says_so(
+    tmp_path, token, ollama_script, caplog
+):
+    """
+    Real trigger: the conversation is deleted while a chat is open on it, so
+    every write for it fails the foreign key. The turn that was already being
+    answered is shown and ends as any turn does - the user is not told then,
+    there being no event that is not the end of a turn - and is kept. The next
+    message finds it still cannot be written, and is refused rather than
+    answered into a chat that is not being kept, with the reason in the log and
+    a way out in the message. A fourth is refused the same way: nothing piles up
+    and nothing is answered.
+    """
+    caplog.set_level(logging.ERROR, logger="backend.api.server")
+    ollama_script.extend([_answers("FIRST-ANSWER"), _answers("SECOND-ANSWER"), _answers("NEVER-ANSWERED")])
+
+    with TestClient(server.app).websocket_connect(f"/ws/chat?token={token}") as ws:
+        events = _Events(ws)
+        assert events.next()["type"] == "session_info"
+
+        ws.send_json({"message": "first question"})
+        first = events.turn()
+        _wait_until_stored(tmp_path, 2)
+        conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+        try:
+            server.api_delete_conversation(conn, _conversation_id(first))
+        finally:
+            conn.close()
+
+        ws.send_json({"message": "second question"})
+        second = events.turn()
+        quiet = events.settled()
+        assert len(ollama_script) == 1, "a third answer was consumed already"
+
+        ws.send_json({"message": "third question"})
+        refused = events.turn()
+        ws.send_json({"message": "fourth question"})
+        refused_again = events.turn()
+        after = events.settled()
+
+    assert [e["type"] for e in _terminals(second)] == ["done"], "the turn that could not be saved was not answered normally"
+    assert "".join(_tokens(second)) == "SECOND-ANSWER"
+    assert quiet == [], "the failed save was announced with an event of its own"
+    for turn in (refused, refused_again):
+        assert len(turn) == 1, f"the refusal came with other events: {[e['type'] for e in turn]}"
+        _not_saved(turn[0])
+    assert len(ollama_script) == 1, "a refused message was answered"
+    assert after == []
+    messages = [r.getMessage() for r in caplog.records if r.name == "backend.api.server" and r.exc_info]
+    assert any("tried again" in m for m in messages), "the failed save was not logged where the user is sent to look"
+    assert any("refused" in m for m in messages), "the refusal was not logged"

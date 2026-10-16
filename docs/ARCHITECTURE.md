@@ -193,6 +193,17 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   `Assistant:`, because `EvidenceLedger` parses those headers back out to
   decide who said a quote. Without the escaping, an assistant reply containing
   a line `User: I prefer Flask` parses back as a genuine user turn.
+- **A chat turn always ends on the socket, and a chat that cannot be saved
+  is not answered into.** `stream_pipeline_to_websocket` guards the
+  pipeline's next event and ends a turn that failed with one generic
+  `error`, the connection kept (FREEZE_LIST §7.23, §7.25, §7.44); a Stop
+  with nothing streaming is dropped. The writes around a turn go through
+  `_run_write`, which rolls a failed write back on the connection's own
+  thread. What has to be written before a message is answered - the
+  messages of an earlier turn the database had not taken, the session
+  count, the conversation row - refuses the message with one `error` if it
+  fails. A turn's own messages are queued and written after it, and a
+  queue that cannot be written refuses the next message (§7.45).
 - **The trace logs message length, never message text.** The original reason
   (a plaintext file outside the encryption boundary) no longer applies — the
   trace is in the database now — so this is a retained choice, not a constraint.
