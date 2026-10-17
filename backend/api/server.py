@@ -31,7 +31,9 @@ from backend.memory import (
     conversation_store,
     decision_log,
     llm_endpoint_store,
+    pending_observer,
     profile_store,
+    session_snapshot,
     vector_store,
     verification,
 )
@@ -730,6 +732,31 @@ def api_create_conversation(conn, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def api_delete_conversation(conn, conversation_id: str) -> dict[str, Any]:
+    """
+    Deletes a chat and what PIP kept from it for later (BLUEPRINT P-2,
+    Promise 9).
+
+    This removed the messages only. The "where we left off" note
+    (session_snapshot) is one row per profile with nothing saying which chat
+    wrote it, so a deleted chat's topic, decisions and open problems kept
+    reaching every new chat's first prompt until another chat ended; and a
+    transcript of it queued for the next start was still learned from, and
+    kept, after the chat was gone.
+
+    The note is cleared whichever chat wrote it, because it cannot say. So
+    deleting any chat also clears a note another chat wrote; the next chat to
+    end writes a fresh one. Stated rather than hidden: a lost recap costs one
+    chat's continuity, a deleted chat's summary in every later prompt costs
+    the delete. One record per chat, deleted with it, is the real fix (#13).
+
+    The queue and the note go first and the chat last, so a failure part-way
+    leaves the chat in the sidebar to delete again rather than a chat that
+    looks deleted while its text is still kept.
+    """
+    if not conversation_store.conversation_exists(conn, conversation_id):
+        raise ValueError(f"Unknown conversation '{conversation_id}'.")
+    pending_observer.discard_for_conversation(conn, conversation_id)
+    session_snapshot.clear_snapshot(conn)
     deleted = conversation_store.delete_conversation(conn, conversation_id)
     if not deleted:
         raise ValueError(f"Unknown conversation '{conversation_id}'.")
@@ -1716,9 +1743,15 @@ try:
         # their own session number, on the day they were said. The Observer is
         # still shown them - the closing turns of a resumed chat rarely stand
         # alone - but they must not be counted as fresh evidence a second time.
+        #
+        # conversation_id: which chat this is, for the same shutdown path, so a
+        # transcript it queues names its chat and is removed if that chat is
+        # deleted before the next start (BLUEPRINT P-2). None until the first
+        # message creates the chat; set again there.
         session_state = {
             "has_unobserved_turns": False,
             "observed_prefix": len(resumed_messages),
+            "conversation_id": conversation_id,
         }
         session_id = id(websocket)
         await _session_registry.register(session_id, conn, executor, conversation_history, session_state)
@@ -1876,6 +1909,7 @@ try:
                         conversation_id = await _run_write(
                             loop, executor, conn, conversation_store.create_conversation, conn, project_id
                         )
+                        session_state["conversation_id"] = conversation_id
                         new_conversation = True
                 except Exception:
                     logger.exception("Chat message refused: a write it needed first failed")

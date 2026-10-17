@@ -22,7 +22,7 @@ import re
 from typing import Any, Optional
 
 from backend.core import trace
-from backend.memory import conversation_store, pending_observer
+from backend.memory import conversation_store, pending_observer, session_snapshot
 from backend.providers.base_provider import BaseLLMProvider
 from backend.stages import stage_11_observer as observer
 
@@ -185,6 +185,17 @@ async def run_observer_now(
         # documents hitting in production. Keeping them inside also honours the
         # constraint stated above: one executor round trip, no extra
         # submissions on a disconnect path already known to wedge.
+        # A chat the user deleted is not learned from (BLUEPRINT P-2). The app
+        # deletes the open chat first and then leaves it, and leaving ends this
+        # connection, so the disconnect trigger used to run the whole pass on a
+        # chat that no longer existed and write its "where we left off" note
+        # straight back - the note the delete had just cleared.
+        if conversation_id and not conversation_store.conversation_exists(conn, conversation_id):
+            trace.stage_log(
+                conn, trace_id, "stage_11_observer", "ok",
+                "session-end run skipped: the chat was deleted",
+            )
+            return {"memory_results": [], "decision_results": []}
         trace.stage_log(
             conn, trace_id, "stage_11_observer", "ok",
             f"session-end run starting, {len(conversation_history)} messages",
@@ -199,6 +210,17 @@ async def run_observer_now(
                 "session-end run raised", error_detail=str(e),
             )
             raise
+        if conversation_id and not conversation_store.conversation_exists(conn, conversation_id):
+            # Deleted while the pass ran (it can take minutes). The delete
+            # cleared the note before this pass wrote one from the deleted
+            # chat, so clear it again. What the pass learned beyond the note
+            # stays: taking that back needs one record per chat (#13).
+            session_snapshot.clear_snapshot(conn)
+            trace.stage_log(
+                conn, trace_id, "stage_11_observer", "ok",
+                "the chat was deleted during the session-end run; its note was cleared",
+            )
+            return outcome
         if conversation_id:
             conversation_store.mark_observed(conn, conversation_id)
         trace.stage_log(
@@ -241,8 +263,12 @@ async def enqueue_for_shutdown(loop, session: dict[str, Any]) -> None:
     transcript = format_transcript(history[observed_prefix:])
     if not transcript:
         return
+    # Which chat it is, so deleting that chat before the next start takes this
+    # transcript with it (BLUEPRINT P-2). ws_chat keeps it in session_state.
+    conversation_id = (state or {}).get("conversation_id")
     await loop.run_in_executor(
-        session["executor"], pending_observer.enqueue, session["conn"], transcript
+        session["executor"],
+        lambda: pending_observer.enqueue(session["conn"], transcript, conversation_id=conversation_id),
     )
 
 
@@ -287,7 +313,7 @@ def recover_unobserved_conversations(conn) -> list[str]:
         ]
         if not history:
             continue
-        pending_observer.enqueue(conn, format_transcript(history))
+        pending_observer.enqueue(conn, format_transcript(history), conversation_id=conversation["id"])
         conversation_store.mark_observed(conn, conversation["id"])
         recovered.append(conversation["id"])
         logger.info(

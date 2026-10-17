@@ -38,18 +38,41 @@ def enqueue(
     session_transcript: str,
     session_ended_at: Optional[str] = None,
     session_started_at: Optional[str] = None,
+    conversation_id: Optional[str] = None,
 ) -> int:
     timestamp = now_utc()
     cur = conn.execute(
         """
         INSERT INTO pending_observer
-            (session_transcript, session_started_at, session_ended_at, status, created_at)
-        VALUES (?, ?, ?, 'pending', ?)
+            (session_transcript, session_started_at, session_ended_at, status, created_at, conversation_id)
+        VALUES (?, ?, ?, 'pending', ?, ?)
         """,
-        (session_transcript, session_started_at, session_ended_at or timestamp, timestamp),
+        (session_transcript, session_started_at, session_ended_at or timestamp, timestamp, conversation_id),
     )
     conn.commit()
     return int(cur.lastrowid)
+
+
+def discard_for_conversation(conn, conversation_id: str) -> int:
+    """
+    Removes every queued transcript of one chat, whatever its status, because
+    the user deleted that chat. Returns how many rows went.
+
+    The one hard delete in this module, and not a contradiction of drain()'s
+    "never hard-deleted": that rule keeps a transcript the pipeline failed on,
+    so a failure leaves evidence instead of vanishing. This is the user's own
+    delete. A transcript is the chat's text; keeping it after the chat is gone
+    would let the next catch-up learn from a chat that no longer exists, and
+    keep its words in every backup (BLUEPRINT P-2, Promise 9).
+
+    A row already being processed is removed too, but a pass already reading
+    it is not stopped: it can still finish and write what it learned, its note
+    included. That race (a chat deleted during the catch-up of that very chat)
+    is recorded, not closed; one record per chat (#13) is the real fix.
+    """
+    cur = conn.execute("DELETE FROM pending_observer WHERE conversation_id = ?", (conversation_id,))
+    conn.commit()
+    return cur.rowcount
 
 
 def list_pending(conn, limit: Optional[int] = None) -> list[dict[str, Any]]:

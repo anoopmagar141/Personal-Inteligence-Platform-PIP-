@@ -347,6 +347,13 @@ CREATE TABLE IF NOT EXISTS session_snapshot (
 -- 'processing' rows are included in drain queries, not just 'pending': a row left in
 -- 'processing' means a previous drain attempt was itself interrupted mid-run, which is
 -- exactly the crash case this table exists to survive - it must be retried, not ignored.
+-- conversation_id: the chat the transcript came from, so deleting that chat can
+-- take its queued transcript with it (BLUEPRINT P-2). Without it the next
+-- start's catch-up learned from a chat the user had deleted in between, and the
+-- transcript stayed in this table after the chat was gone. Deliberately no
+-- foreign key: a FK cannot be added to an existing table, and the delete path
+-- removes these rows itself. NULL on rows queued before the column existed;
+-- those cannot be traced to a chat and are drained as before.
 CREATE TABLE IF NOT EXISTS pending_observer (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_transcript TEXT NOT NULL,
@@ -355,7 +362,8 @@ CREATE TABLE IF NOT EXISTS pending_observer (
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     error_detail TEXT,
     created_at TEXT NOT NULL,
-    processed_at TEXT
+    processed_at TEXT,
+    conversation_id TEXT
 );
 
 -- llm_settings Table (added after the original numbered sequence below - not

@@ -148,6 +148,11 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("identity", "preferred_name", "TEXT"),
     # See schema.sql: per-stage duration in trace_log.
     ("trace_log", "duration_ms", "INTEGER"),
+    # See schema.sql: which chat a queued transcript came from, so deleting the
+    # chat removes it. Deliberately no backfill - a queued transcript does not
+    # say which chat it was, and guessing from its text could take the wrong
+    # chat's learning with a delete. NULL rows are drained as they always were.
+    ("pending_observer", "conversation_id", "TEXT"),
 )
 
 # Run once, immediately after the named column is first added, to give existing

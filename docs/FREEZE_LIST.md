@@ -331,6 +331,10 @@ the prompt the model receives (§7.10).
 question category, so a phrasing Stage 1 misroutes gets "not in front of
 me" for them rather than the answer. The tests check what the model is
 told, not what it says; its replies are not measured.
+Deleting a chat clears the "where we left off" note whichever chat wrote
+it, removes the chat's queued transcripts and stops its session-end pass
+(D-32, §7.53); what the Observer already learned from the chat stays, and
+a catch-up already reading its queued transcript can still write a note.
 **Origin:** as Promise 8 - found by Tracks 4a and 4b, outside the original
 seven.
 
@@ -3399,6 +3403,89 @@ The first card of the final plan's step 1 (BLUEPRINT P-1, issue #1 of
   (Stage 1 finds "recent" inside "recently"). It sends nothing, because Stage 6
   matches whole words only.
 
+### 7.53 P-2: deleting a chat removes what PIP kept from it for later, D-32 (authorized 2026-10-17)
+
+The second card of the final plan's step 1 (BLUEPRINT P-2, issue #2 of
+`notes/pip-issues-and-solutions-for-review-2026-10-17.md`).
+
+- **Defect (D-32, A, medium):** deleting a chat removed its messages and
+  nothing PIP had kept from it for later. Three ways it came back:
+  - **The note.** The "where we left off" note (`session_snapshot`) is one row
+    per profile with nothing saying which chat wrote it. A deleted chat's topic,
+    decisions, open problems and next step kept reaching every new chat's first
+    prompt until another chat ended and overwrote it. Seen on `HEAD` (7e358af)
+    through the real `DELETE /api/v1/conversations/{id}` route and the real
+    pipeline: the deleted chat's topic was in the next chat's prompt.
+  - **The app's own delete order** (found while writing the card, not in it):
+    `chat_view.dart` `_delete` deletes the open chat first and then leaves it,
+    and leaving ends the chat connection, whose disconnect trigger ran the
+    session-end Observer pass on that chat's turns. So deleting the chat you
+    are in ran the pass on a chat that no longer existed: it learned from it
+    and wrote its note straight back. Seen on `HEAD` with the pass replaced by
+    a recorder: it was handed the deleted chat's transcript.
+  - **The queue.** A chat open when the server stopped, or left by a killed
+    process, waits in `pending_observer` as a transcript with nothing naming
+    the chat. Deleting the chat before the next start left it there: the
+    catch-up learned from it, and the transcript stayed in the table (and so
+    in every backup) after the chat was gone. Seen on `HEAD` for both ways in.
+- **Promise:** 9 (answers reflect the current record). Deleting a chat means
+  PIP does not keep using it.
+- **Mechanism:**
+  - `api_delete_conversation` removes the chat's queued transcripts
+    (`pending_observer.discard_for_conversation`, any status), clears the note
+    (`session_snapshot.clear_snapshot`), then deletes the chat. It checks the
+    chat exists first, so an unknown id still answers 404 and touches nothing.
+  - `pending_observer` has a new nullable column `conversation_id`, added to an
+    existing database by `apply_column_migrations` with no backfill. The
+    shutdown path (`enqueue_for_shutdown`, from the id `ws_chat` now keeps in
+    `session_state`) and crash recovery (`recover_unobserved_conversations`)
+    fill it.
+  - `run_observer_now` (the idle and disconnect triggers) does not run the pass
+    for a chat that no longer exists, and if the chat was deleted while the
+    pass ran it clears the note the pass wrote.
+- **Tests:** `backend/tests/test_deleting_a_chat_forgets_it.py`, 8:
+  - **Seen failing first (7 of 8 on `HEAD`):** the note through the real route
+    (with a precondition that the note does reach the prompt before the
+    delete); the pass not run on a deleted chat; no note after a delete during
+    the pass; a shutdown-queued transcript not learned or kept after its chat is
+    deleted, with a second chat's transcript still learned; the same for a
+    crash-recovered transcript; `ws_chat` telling the shutdown path which chat
+    it is; and the upgrade test, a queue row written by an older PIP (no
+    column) kept and still drained after the migration (on `HEAD` it errors:
+    the column it drops does not exist).
+  - **Passing before and after:** a chat that still exists is observed as
+    before (the control for the new check).
+- **Break-it:** 6 mutations, each alone, restored byte for byte, each caught:
+  the delete keeping the note (1 test); the delete keeping the queued
+  transcripts (2); the pass running on a deleted chat (1); the note kept when
+  the chat is deleted mid-pass (1); `ws_chat` not giving the chat's id to the
+  shutdown path (1); the shutdown queue not linked to its chat (1).
+- **Suites:** Backend 1618 passed, 0 failed (17 min 43 s): P-1's 1610 plus
+  these 8, on the main checkout's working tree at 7e358af plus this change
+  (which also held other sessions' uncommitted `httpx2` requirement and its
+  test), with nothing else running; the six changed code and test files were
+  compared byte for byte with copies taken before the run. The neighbouring
+  files (session lifecycle, queue, API server, chat socket, profile store,
+  record-version coverage, Observer authorization) passed 182 of 182 first. No
+  Flutter file changed, so the Flutter suite was not re-run.
+
+**Not covered (still open):**
+- **The note is cleared whichever chat wrote it.** Deleting any chat also
+  clears a note another chat wrote; the next chat to end writes a fresh one.
+  The note cannot say which chat it came from; one record per chat (#13) is
+  the real fix.
+- **What a pass learned before the delete stays.** Memories, decisions and
+  candidates the Observer took from a chat (at its end, or during a pass the
+  delete raced) are not taken back by deleting the chat. Only the note is.
+- **A catch-up already reading the deleted chat's queued transcript** at the
+  next start is not stopped; it can finish and write its note. Rare (the delete
+  has to land during the catch-up of that very chat), and not closed.
+- **Rows queued before this change** have no `conversation_id` and cannot be
+  traced to a chat; a deleted chat's old queued transcript stays and is
+  drained as before. And `pending_observer` keeps every processed transcript
+  (`completed`, `failed`) indefinitely, for chats that were not deleted too;
+  that retention is unchanged.
+
 ---
 
 ## 8. Status
@@ -3463,6 +3550,7 @@ The first card of the final plan's step 1 (BLUEPRINT P-1, issue #1 of
 | G-6 the older web client granted full consent in one click | Fixed 2026-10-16 (§7.51) | A, low: `frontend/web/` sent `consent_scope: "full_inference"`, the broadest scope, for any cloud provider on one click, with nothing explained and nothing chosen. The button and its handler are gone; the tab says to grant it in the PIP app; Revoke stays. 3 tests (2 failed first) that read the served files, 4 break-it mutations caught. The server still accepts any valid scope from any token holder |
 | D-30 the command-line client's /consent defaults to full_inference | Found 2026-10-16 (§7.51), open | A, low: `/consent PROVIDER_ID` with no `--scope` grants the broadest scope, a default the person did not choose. A typed command, in a client that is not shipped. Not fixed |
 | D-31 a question about the user sent to the web | Fixed 2026-10-17 (§7.52) | A, low: with web search consented, a message with a news word was filed as news before Stage 1 asked whether it was about the user or a project, so "what is my current project?" sent its first 12 words to the search provider. Stage 1 now asks that first (no words added). 12 tests (7 failed first), 2 break-it mutations; the 14 §7.5 phrasings send 1 query instead of 4. Open: a phrasing Stage 1 does not recognise as about the user is still sent |
+| D-32 a deleted chat kept reaching later prompts | Fixed 2026-10-17 (§7.53) | A, medium: deleting a chat removed its messages only. Its "where we left off" note kept reaching every new chat's first prompt; the app's own order (delete the open chat, then leave it) ran the session-end pass on the deleted chat and wrote the note back; and a transcript queued for the next start was learned from and kept. The delete now removes the chat's queued transcripts (new `pending_observer.conversation_id`) and clears the note, and the pass skips a chat that is gone. 8 tests (7 failed first), 6 break-it mutations. Open: the note is cleared whichever chat wrote it; what was already learned stays |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

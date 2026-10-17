@@ -88,7 +88,11 @@ idle timeout, disconnect, clean shutdown (queued to `pending_observer`), or, for
 a killed process, rebuilt at the next startup from `conversations` /`messages`
 where `observed_at IS NULL`. Catch-up drains in a background task, never inline
 before serving. Every sign-in gets its own: one still running from a previous
-session queues the next behind it rather than standing in for it.
+session queues the next behind it rather than standing in for it. A queued
+transcript names its chat (`pending_observer.conversation_id`); deleting a chat
+removes its queued transcripts and clears the "where we left off" note
+(`session_snapshot`, one row per profile), and the session-end pass does not run
+for a chat that no longer exists.
 
 Each memory candidate then passes **two independent gates, in this order**:
 
