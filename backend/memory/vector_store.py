@@ -137,6 +137,10 @@ class IndexLockedError(RuntimeError):
     """The profile is password-protected and no key is held to encrypt with."""
 
 
+class DocumentFileError(RuntimeError):
+    """A deleted document's file is still there and could not be removed."""
+
+
 def _get_db_key() -> Optional[str]:
     key = os.environ.get("PIP_DB_KEY") or None
     if key is None and db_key_module.salt_path().exists():
@@ -455,17 +459,72 @@ def _delete_chunks_for_path(collection, file_path: str, db_key: Optional[str]) -
         collection.delete(where={"file_path": file_path})
 
 
+def _remove_uploaded_file(file_path: str) -> None:
+    """
+    Remove the copy of a document that PIP keeps in this profile's documents
+    folder, if there is one and it is PIP's to remove.
+
+    Only a file that resolves INSIDE documents_root() - the same rule that
+    decides what may be ingested. A registry row can name a file elsewhere (a
+    backup restored into a second profile on the same machine records paths
+    into the first profile's folder, FREEZE_LIST D-07), and that file belongs to
+    someone else: the document is forgotten, the file is left alone.
+
+    A file that is already gone is nothing to do. A file that cannot be removed
+    - held open on Windows, or read-only - is raised, not swallowed (see
+    delete_document).
+    """
+    try:
+        path = _validate_file_path(file_path)
+    except ValueError:
+        return
+    if not path.is_file():
+        return
+    try:
+        path.unlink()
+    except OSError as exc:
+        raise DocumentFileError(
+            f"The file {path.name} could not be removed ({exc.strerror or exc}), so the document was kept. "
+            "Close anything that has it open, then delete it again."
+        ) from exc
+
+
 def delete_document(conn, file_path: str) -> bool:
+    """
+    Remove a document and every copy PIP made of it: its chunks, the uploaded
+    file in the profile's documents folder, and its bytes in document_blobs.
+
+    This used to remove the chunks and mark the registry row "removed", and
+    stop. The file stayed in the documents folder as an ordinary readable file,
+    and the bytes stayed in document_blobs - inside the encrypted database, but
+    so inside every backup made afterwards, for a document the person had been
+    told was gone (FREEZE_LIST D-06, §7.50).
+
+    The file goes BEFORE the index and the registry row are touched, and a file
+    that cannot be removed stops the delete with the document exactly as it was.
+    The other order reports "removed" and leaves a readable file that nothing in
+    the app can reach any more, because the document is no longer listed to be
+    deleted again. As it is, the person is told, the document is still there,
+    and deleting it again works: every step here is safe to repeat.
+
+    The index and the key are asked for first, only to be asked, so that a
+    locked profile (IndexLockedError) fails before the file is touched, as it
+    always failed before the chunks were.
+    """
     row = conn.execute(
         "SELECT id FROM documents WHERE file_path = ? AND status = 'active'", (file_path,)
     ).fetchone()
     if not row:
         return False
 
-    _delete_chunks_for_path(_get_collection(), file_path, _get_db_key())
+    collection = _get_collection()
+    db_key = _get_db_key()
+    _remove_uploaded_file(file_path)
+    _delete_chunks_for_path(collection, file_path, db_key)
     conn.execute(
         "UPDATE documents SET status = 'removed' WHERE id = ?", (row["id"],)
     )
+    conn.execute("DELETE FROM document_blobs WHERE document_id = ?", (row["id"],))
     conn.commit()
     return True
 

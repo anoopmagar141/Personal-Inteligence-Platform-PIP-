@@ -37,8 +37,9 @@ blueprint's privacy and security cards with G-1: D-05, the plaintext base slot
 before sign-in, is fixed (§7.47), and D-28 was found beside it. G-3 followed: D-08, a `-cloud`
 Ollama model counted as local, is fixed (§7.48), and so is D-28, a profile
 chosen before its password has been set (G-1b, §7.49), which also put right
-G-1's refusal of the first-run import. Anything further needs a new
-authorization.
+G-1's refusal of the first-run import, and so is D-06, a
+deleted document that left its file and its stored bytes behind (G-2,
+§7.50). Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -269,7 +270,9 @@ reaches a counting stub through the real pipeline (§7.21).
 **Limitation kept by decision:** the uploaded-file copy stays unencrypted
 on disk. The alternative - keeping only the database copy and writing
 files out only when a rebuild needs them - is a code change and was not
-authorized.
+authorized. Deleting a document removes its uploaded file and its stored
+bytes (D-06, §7.50); copies made before the delete, and in earlier backups,
+are not scrubbed.
 **Enforced by:** SQLCipher on the database; Fernet/HMAC in `vector_store`
 under the same key, which refuses to write without it (§7.9).
 **Evidence:** §7.3 (key consumers and child-process inheritance, measured);
@@ -1445,7 +1448,7 @@ failing probe is its defect's regression test once a fix is authorized.
 | D-03 | High | A | Export from the Backup screen fails with exactly one profile: `export_pip.ps1:62` passes `--db-path` only for `Count -gt 1` and falls back to `data/pip.db`. **Fixed 2026-10-02 (§7.18).** | Launcher's own condition on an isolated copy, plus a control |
 | D-04 | High (latent) | A/B | Stage 8 trusts `provider_consent.is_cloud` alone, and `add_endpoint` never updates it. A local→remote re-save, or an endpoint registered as `ollama`, was sent the full prompt with no consent. The reverse of §7.2 finding 2. No route adds endpoints yet. **Fixed 2026-10-02 (§7.21).** | Counting stub through the real pipeline |
 | D-05 | Medium | A | After a restart the backend serves the unencrypted `default` slot until a profile is chosen. `GET /status` created a plaintext `data/pip.db`, and a chat sent then was stored in plaintext; a phantom "Default" profile appeared and the next launch said `needs_migration`. The Flutter client avoids the window; the CLI does not. **Fixed 2026-10-16 (§7.47).** | Real-process journey, canary on disk |
-| D-06 | Medium | D/A | Deleting a document leaves its plaintext file and its `document_blobs` content, so it also travels in later backups | Through `DELETE /rag/documents` |
+| D-06 | Medium | D/A | Deleting a document leaves its plaintext file and its `document_blobs` content, so it also travels in later backups. **Fixed 2026-10-16 (§7.50).** | Through `DELETE /rag/documents` |
 | D-07 | Medium | A | A restored document whose original absolute path exists is never re-indexed: write-back is skipped, and the rebuild's ingest refuses a path outside the profile. Retrieval is empty on every sign-in while the Documents screen lists it | Real-process restore |
 | D-08 | Medium | D | `/llm/pull` accepts any name and this Ollama has cloud enabled, so a `*-cloud` model would carry chat and the Observer off the machine as "local" `ollama`. **Fixed 2026-10-16 (§7.48).** | Code reading only (would contact an external service) |
 | D-09 | Medium | A | "Close PIP and open it again to finish" does not apply a restore: the launcher reuses the running backend, so the swap waits for an unclean exit, which feeds D-01 | Code reading |
@@ -3179,6 +3182,74 @@ an import through in a state nobody has watched it work in.
 - **The import in a real window** was not watched (blueprint card V-1); the route
   was driven through the real backend, as before.
 
+### 7.50 G-2: deleting a document removes the copies PIP made of it, D-06 (authorized 2026-10-16)
+
+The fourth of the blueprint's privacy and security cards.
+
+- **Defect (D, then A; medium; D-06, §7.16):** `DELETE /rag/documents` removed a
+  document's chunks from the index and marked its registry row "removed", and
+  stopped there. Beside the person's own file, PIP holds a document in three
+  places, and two of them stayed:
+  - **The uploaded file** in the profile's documents folder, an ordinary
+    readable file (Promise 7 says uploads are kept there, unencrypted).
+  - **Its bytes in `document_blobs`,** inside the encrypted database, and so
+    inside every backup made afterwards.
+  - **Reproduced on `HEAD` through the real routes.** Upload `budget.txt` through the real route and delete it through the real route: the answer is 200 and the document leaves the list and the search, but the file is still in the profile's documents folder with its bytes, the `document_blobs` row is still there, and a backup exported afterwards by the real export script carries it (one stored document in the backup, as before the delete). The original validation probe for this defect (`test_D1_document_delete_lifecycle`, `docs/eval/reliability_2026-10-01`) fails the same way on `HEAD` ("deleted document's plaintext file remains on disk") and passes now.
+- **Promise:** a deleted document leaves nothing of itself that PIP made: not the
+  file in the profile's documents folder, not its stored bytes, so not a later
+  backup. Promise 7's wording stays true: it says uploaded documents are kept as
+  files, and a deleted one is no longer kept.
+- **Mechanism:** `vector_store.delete_document()`.
+  - **The file, only if it is PIP's to remove.** It must resolve inside this
+    profile's own documents folder, the rule ingest already applies
+    (`_validate_file_path`). A registry row can name a file elsewhere: a backup
+    restored into a second profile on the same machine records paths into the
+    first profile's folder (D-07). That document is forgotten and the file is left
+    alone.
+  - **A file that cannot be removed stops the delete.** Held open on Windows, or
+    read-only: the route answers 500 with a sentence ("The file budget.txt could
+    not be removed (...), so the document was kept. Close anything that has it
+    open, then delete it again."), the document stays registered, and deleting it
+    again works. The other order says "removed" and leaves a readable file that
+    nothing in the app can reach, because the document is no longer listed to be
+    deleted again. A file that is already gone is nothing to do.
+  - **The order:** the file, then the chunks, then the registry row and the
+    `document_blobs` row in one commit. The index and the key are asked for before
+    the file is touched, so a locked profile still fails before anything is removed.
+  - **A name can be uploaded again.** The first upload's file used to stay, so a
+    second upload of `budget.txt` was stored as `budget (1).txt`.
+- **Tests:** 12 in `backend/tests/test_deleting_a_document_removes_its_copies.py`, through
+  the real routes with a signed-in profile; what is asserted is what is left on
+  disk and in the database, and what a fresh export of the encrypted profile
+  holds.
+  - **Seen failing first (9 of the 12, on `HEAD`):** the file left in the folder; the stored bytes left in the database; the deleted document still in a backup made afterwards; the bytes of a deleted document left beside another's (two tests, the second asked on the same connection); a registry row naming a file elsewhere keeping its stored bytes; a file that cannot be removed still answered 200; a document whose file was already gone keeping its stored bytes; and a name uploaded again being stored as `budget (1).txt`.
+  - **What passes before and after:** that a path which is not a document touches nothing (the validation probe's D-2), that a sign-out landing in the middle of a delete removes nothing, and that a deleted document is not found a second time.
+- **Break-it:** 7 mutations, one at a time on a clean copy, each caught:
+  - the stored bytes no longer removed (8 of the 12 tests);
+  - the file no longer removed (the file test, the cannot-be-removed test and the upload-again test);
+  - no containment, so a file outside the profile's folder is removed too (the outside-the-folder test);
+  - a file that cannot be removed ignored, and the delete carried on (the cannot-be-removed test);
+  - the stored bytes of every document removed, not only this one's (the same-connection test, and only that one:
+    a second connection stores the bytes of any active document again at start-up and hides it);
+  - the document forgotten first and the file removed after the commit (the cannot-be-removed test);
+  - the file removed before the index and the key are asked for (the sign-out-in-the-middle test).
+- **Suites:** Backend 1594 passed, 0 failed (16 min 29 s), run with the embedding shim on a clean export of `001774c` plus this change, with nothing else running. The new file passed 8 runs in 8. The validation probe for this defect (`probe_boundaries.py` D1 and D2, copied into a scratch export) failed D1 on `HEAD` and passed both with the change. No client file changed, so the Flutter suite was not re-run.
+
+**Not covered (still open):**
+- **A file the person put in the documents folder by hand** and then ingested is
+  removed with its document: PIP keeps no record of which files it wrote and
+  which were placed there, and the ingest sentence tells people to place files
+  there. The Documents screen only uploads copies.
+- **The registry keeps a "removed" row** (path, content hash, date) for a deleted
+  document. It holds no content.
+- **Older copies are not scrubbed:** backups made before the delete, a file an
+  older version left in the shared `data/documents` folder, free pages inside the
+  encrypted database, and the index's own files until they are compacted (the
+  chunk text in them is encrypted).
+- **A failed delete reaches the person through the Documents screen's error line:**
+  the Flutter client unwraps the route's `detail` sentence (`ApiException`) and
+  prints it above the list. Read from the code, not looked at in a window.
+
 ---
 
 ## 8. Status
@@ -3239,6 +3310,7 @@ an import through in a state nobody has watched it work in.
 | D-28 / G-1b a profile chosen before its password gets a plaintext database | Fixed 2026-10-16 (§7.49) | A, medium: one request to any database route, before `/auth/setup`, created a plaintext `pip.db` in the profile's folder; the state became `needs_migration` and `/auth/setup` was refused, so the profile could not be given a password through the app, and 56 of 58 gated routes were served. G-1's rule one step further: with a registry, "setup" is refused at the gate, the chat socket and `_conn()` (`_has_profiles` replaces `_no_profile_is_open`). The first-run import, which G-1's gate had made dead after the last profile was deleted, is on the exempt list now. 7 tests (5 failed first), 9 break-it mutations caught |
 | D-29 the first-run import refuses for any registered profile | Found 2026-10-16 (§7.49), open | A, low: the route's rule is meant to be "no profile has a database" but tests the method `exists`, not its result, so a profile with no password yet also refuses it, with a sentence that is untrue then. Over-refuses only; the welcome screen cannot reach it. Not fixed |
 | G-3 / D-08 a cloud model counted as local | Fixed 2026-10-16 (§7.48) | D then A, medium: Ollama's own `-cloud` models were answered over the internet but reported local, so a conversation and the Observer's transcript could leave the machine. One predicate (`is_cloud_model`): a pull and a selection are refused with a sentence (the selection before Ollama is asked, which fails open), and the provider reports itself not local, so Stage 8 and Stage 11 refuse a name already stored. 43 tests (28 failed first), 7 break-it mutations caught |
+| G-2 / D-06 a deleted document left its file and its stored bytes | Fixed 2026-10-16 (§7.50) | D then A, medium: `DELETE /rag/documents` removed the chunks and marked the row, but the uploaded file stayed in the documents folder and its bytes stayed in `document_blobs`, so in every later backup. Delete now removes the file (only one inside the profile's own folder; one that cannot be removed stops the delete with a sentence) and the stored bytes. 12 tests (9 failed first), 7 break-it mutations caught |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

@@ -368,6 +368,9 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   copied into the profile's own and re-indexed by the sign-in catch-up
   (`vector_store.adopt_shared_documents`) - copied, not moved, since another
   profile may name the same file, so those originals stay where they were.
+  Deleting a document removes its file there and its bytes in `document_blobs`
+  as well as its chunks; only a file inside that folder is ever removed, and
+  one that cannot be removed stops the delete (FREEZE_LIST §7.50).
 - **The sign-in screen's profile picture is deliberately unencrypted.** That
   screen draws profiles *before* a password exists, so anything it can render
   is by definition readable without one — there is no third option. Publishing

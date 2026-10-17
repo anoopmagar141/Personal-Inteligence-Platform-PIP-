@@ -3210,6 +3210,9 @@ try:
                 return api_delete_document(conn, ref)
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail=str(exc))
+            except vector_store.DocumentFileError as exc:
+                # Not a 404: the document exists, and is still registered.
+                raise HTTPException(status_code=500, detail=str(exc))
 
     # Part 14.1: plain HTML/JS web client, built and proven before Flutter.
     # Mounted LAST so it never shadows the /api/v1/* and /ws/chat routes above -
