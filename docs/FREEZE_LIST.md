@@ -258,6 +258,11 @@ reaches a counting stub through the real pipeline (§7.21).
   nothing preselected, is in the Flutter client; the older web client no
   longer grants at all (G-6, §7.51). The command-line client's `/consent`
   still defaults to `full_inference` when no scope is typed (D-30, §7.51).
+- A question about the user is kept off the web only when Stage 1
+  recognises it as one: a first-person phrase ("my", "I'm", "do I"), the
+  word project or program, an active project's name, or a word shared with a
+  recent decision. "what am I working on right now?" has none of these and,
+  with web search consented, is still sent (D-31, §7.52).
 
 ### Promise 7 — Encryption at rest
 **Rejected wording:** "Disk access alone yields only ciphertext."
@@ -3313,6 +3318,87 @@ the card's case; not fixed, outside it.
   provider from it. The PIP app is the deliverable; the web client is kept as a
   contract-proving reference (ARCHITECTURE).
 
+### 7.52 P-1: a question about the user is not sent to the web, D-31 (authorized 2026-10-17)
+
+The first card of the final plan's step 1 (BLUEPRINT P-1, issue #1 of
+`notes/pip-issues-and-solutions-for-review-2026-10-17.md`).
+
+- **Defect (D-31, A, low: only with web search consented, and then the first
+  12 words):** Stage 1 checked the news words ("today", "current", "latest",
+  "news", ...) before it asked whether a message was about the user or a
+  project, and the pipeline's web guard skips Stage 6 only for the personal,
+  project and continuation categories. So "what is my current project?",
+  "what's the latest on my project?" and "what should I do today on my
+  thesis?" were filed as `external_information`, and with web search consented
+  their words went to the search provider. §7.5 noted it as a side observation,
+  "not investigated". The guard's own test (`test_b1_honesty_fixes.py`) stubs
+  Stage 1 and hands the pipeline a category, so the routing in front of the
+  guard was never tested.
+  - **Seen on `HEAD` (069f9bc)** through the real pipeline with the real
+    Stage 1, web consent granted and Stage 6 replaced by a recorder: all 7 of
+    the new test's questions about the user sent their words; 4 of the 14 §7.5
+    phrasings sent one query each.
+- **Promise:** 6. A question about the user's own work is not a web search,
+  so it is not sent under the web-search consent.
+- **Mechanism:** `stage_01_intent_classifier.run` asks "about a project?" (the
+  existing project word, active project name and decision-overlap check) and
+  "about the user?" (the existing first-person patterns) before it asks "news?".
+  Only the news check moved: coding and research keep their place ahead of
+  project and personal. The only messages whose category changes are those
+  with a news word and one of those signals, from `external_information` to
+  `project_question` or `personal_question` (neither is cached, and both look
+  up more of the profile). No words added. A message that triggers Stage 6
+  always carries a Stage 1 news word (Stage 6 matches the same words, whole),
+  so web search still fires for `external_information` only, as before.
+- **Tests:** `backend/tests/test_personal_questions_stay_off_the_web.py`, 12
+  cases, both lists fixed before the fix was written: 7 questions about the
+  user or a project that carry a whole-word web trigger (3 from §7.5, 4 in
+  wording that appears in neither §7.5 nor Stage 1's lists) send 0 queries; 5
+  plain news questions still send 1 each.
+  - **Seen failing first:** 7 of 7 on `HEAD`. The 5 news controls passed
+    before and after.
+  - **One existing test changed:**
+    `test_the_prompt_does_not_present_what_was_looked_up_as_the_whole_record`
+    used "what is my current project?" as an `external_information` question,
+    which does not look up goals. It is a `project_question` now, which does,
+    so the test asks "what am I working on?" (`general_knowledge`, no goals)
+    instead. Same assertions.
+- **Break-it:** 2 mutations, each alone on the fixed file and restored by copy
+  (`cmp` equal):
+  - the personal branch disabled: 3 failed (the thesis, "do I", "I'm behind");
+  - the project branch disabled: 1 failed ("any news on Heliotrope?"); the
+    other project questions also say "my" or "I'm", fall to the personal branch
+    and stay unsent.
+- **The 14 §7.5 phrasings re-run** (seeded name and active project, web
+  consent on): web queries sent 4 before, 1 after. Categories changed: "what is
+  my current project?" and "what's the latest on my project?" to
+  `project_question`, "what should I do today on my thesis?" to
+  `personal_question`. Name and project reached the prompt in 14 of 14 before
+  and after (Stage 4's always-looked-up tables, already in place).
+- **Suites:** Backend 1610 passed, 0 failed (17 min 44 s), on the main
+  checkout's working tree at 069f9bc plus this change, which also holds other
+  sessions' uncommitted work (the `httpx2` requirement and its one test), with
+  nothing else running; the three changed files were compared byte for byte
+  with the copies taken before the run. No Flutter file changed, so the Flutter
+  suite was not re-run.
+
+**Not covered (still open):**
+- **A question the existing checks do not recognise is still sent.** "what am I
+  working on right now?" (one of the 14) has no "my", "I'm" or project word, so
+  it is still news and, with web search consented, its words still go out.
+  Catching it means adding words, which the owner's rule rules out; the plan's
+  later web decider (#17) replaces this ordering, and when unsure it says no.
+  Added to Promise 6's limitations.
+- **The cost, accepted on purpose:** a real news question that says "my",
+  names an active project, uses the word "program", or shares a word longer
+  than three letters with one of the 20 newest decisions is no longer searched
+  (for example "latest news on the space program"). Not measured on real use.
+  A wrong "no" costs a missed web result; a wrong "yes" sends the user's own
+  words out.
+- **"what have I been working on recently?" is still `external_information`**
+  (Stage 1 finds "recent" inside "recently"). It sends nothing, because Stage 6
+  matches whole words only.
+
 ---
 
 ## 8. Status
@@ -3376,6 +3462,7 @@ the card's case; not fixed, outside it.
 | G-2 / D-06 a deleted document left its file and its stored bytes | Fixed 2026-10-16 (§7.50) | D then A, medium: `DELETE /rag/documents` removed the chunks and marked the row, but the uploaded file stayed in the documents folder and its bytes stayed in `document_blobs`, so in every later backup. Delete now removes the file (only one inside the profile's own folder; one that cannot be removed stops the delete with a sentence) and the stored bytes. 12 tests (9 failed first), 7 break-it mutations caught |
 | G-6 the older web client granted full consent in one click | Fixed 2026-10-16 (§7.51) | A, low: `frontend/web/` sent `consent_scope: "full_inference"`, the broadest scope, for any cloud provider on one click, with nothing explained and nothing chosen. The button and its handler are gone; the tab says to grant it in the PIP app; Revoke stays. 3 tests (2 failed first) that read the served files, 4 break-it mutations caught. The server still accepts any valid scope from any token holder |
 | D-30 the command-line client's /consent defaults to full_inference | Found 2026-10-16 (§7.51), open | A, low: `/consent PROVIDER_ID` with no `--scope` grants the broadest scope, a default the person did not choose. A typed command, in a client that is not shipped. Not fixed |
+| D-31 a question about the user sent to the web | Fixed 2026-10-17 (§7.52) | A, low: with web search consented, a message with a news word was filed as news before Stage 1 asked whether it was about the user or a project, so "what is my current project?" sent its first 12 words to the search provider. Stage 1 now asks that first (no words added). 12 tests (7 failed first), 2 break-it mutations; the 14 §7.5 phrasings send 1 query instead of 4. Open: a phrasing Stage 1 does not recognise as about the user is still sent |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

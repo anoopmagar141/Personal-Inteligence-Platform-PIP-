@@ -168,9 +168,38 @@ def run(message: str, warm_start_level: str = "none", conn=None) -> IntentResult
             or bool(_PROJECT_TERM_PATTERN.search(lowered))
         )
 
+        is_news = any(kw in lowered for kw in EXTERNAL_INFO_KEYWORDS)
+        is_personal = _matches_any(_PERSONAL_PATTERNS, lowered)
+
+        # "Is it about the user or a project?" is asked before "is it news?".
+        # The news check used to come first, and external_information is the
+        # one category the pipeline's web guard lets through to Stage 6. So
+        # "what is my current project?", "what's the latest on my project?"
+        # and "what should I do today on my thesis?" were filed as news, and
+        # with web search consented their first 12 words went to the search
+        # provider (FREEZE_LIST §7.5, Promise 6). The guard's own test stubbed
+        # this stage, so it never saw the routing that defeated it.
+        #
+        # Only the news check moves. Coding and research still come before
+        # project and personal, as they always have; the sole change is that
+        # a message carrying a news word AND one of the existing project or
+        # first-person signals is now a project or personal question instead
+        # of external_information. No new words - a phrasing those signals do
+        # not recognise ("what am I working on right now?" has no "my" or
+        # "i'm") is still filed as news and still searched.
+        #
+        # The cost is the other direction: a real news question that says
+        # "my", names a project, uses the word "program", or shares a word
+        # with a recent decision now goes unsearched. Accepted on purpose: a
+        # wrong "no" costs a missed web result, a wrong "yes" sends the user's
+        # own words out of the machine.
         if _matches_any(_CONTINUATION_PATTERNS, lowered):
             category = "project_continuation"
-        elif any(kw in lowered for kw in EXTERNAL_INFO_KEYWORDS):
+        elif is_news and has_project_terms:
+            category = "project_question"
+        elif is_news and is_personal:
+            category = "personal_question"
+        elif is_news:
             category = "external_information"
         elif _matches_any(_CODING_PATTERNS, lowered):
             category = "coding_question"
@@ -178,7 +207,7 @@ def run(message: str, warm_start_level: str = "none", conn=None) -> IntentResult
             category = "research_request"
         elif has_project_terms:
             category = "project_question"
-        elif _matches_any(_PERSONAL_PATTERNS, lowered):
+        elif is_personal:
             category = "personal_question"
         elif _matches_any(_TECHNICAL_EXPLANATION_PATTERNS, lowered):
             category = "technical_explanation"

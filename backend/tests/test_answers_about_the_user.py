@@ -106,16 +106,21 @@ def _add_goal(conn, text):
 
 def test_the_prompt_does_not_present_what_was_looked_up_as_the_whole_record(seeded):
     """
-    "what is my current project?" is external_information, which does not
+    "what is my current project?" was external_information, which does not
     look up goals. The prompt used to head what it did look up "the complete
     record, not a sample", and its rule 4 told the model to answer that
     anything missing was not recorded - so a user with a recorded goal who
     asked about it this way would be told, confidently, that there was none
     (FREEZE_LIST §7.5).
+
+    That question is a project_question now (card P-1: a news word no longer
+    outranks "my"), and project_question looks up goals, so it can no longer
+    show the header problem. "what am I working on?" still can: it is
+    general_knowledge, whose set holds no goals.
     """
     _add_goal(seeded, "Finish the viva demo by November")
 
-    prompt = _prompt_for(seeded, "what is my current project?")
+    prompt = _prompt_for(seeded, "what am I working on?")
 
     assert "the complete record" not in prompt
     not_looked_up = [line for line in prompt.splitlines() if line.startswith("Not looked up for this question:")]
