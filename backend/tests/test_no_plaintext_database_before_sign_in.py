@@ -23,6 +23,15 @@ The second start is a real lifespan.
 test_empty_installation_creates_nothing.py is the neighbouring case, an
 installation whose registry lists nobody. This one is a registry that lists
 people and a process that is pointed at none of them.
+
+The second half is G-1b / D-28 (§7.47, §7.49), the case G-1 found beside itself:
+a profile that has been created and chosen but has no password yet. The process
+IS pointed at a registered profile, so G-1's rule let it through, and one request
+to any database route created a plaintext pip.db in that profile's folder. The
+state then read needs_migration, and /auth/setup refused to choose a password
+("run scripts/set_db_password.py"): the profile could not be set up through the
+app, and a chat sent in the window was stored unencrypted. The fix is the same
+rule one step further.
 """
 
 import os
@@ -214,3 +223,98 @@ def test_control_signing_in_after_the_restart_still_works(restarted):
     assert client.get(f"{API}/status", headers=headers).status_code == 200
 
     assert _nothing_in_the_base_slot(base_db)
+
+
+# --- G-1b / D-28: a profile chosen before its password ----------------------
+
+
+@pytest.fixture
+def chosen_without_a_password():
+    """
+    A profile made through the real route, which also chooses it, and no password
+    yet: the moment between "Create" and the password screen asking for one.
+    """
+    headers = _headers()
+    with TestClient(server.app, raise_server_exceptions=False) as client:
+        created = client.post(f"{API}/auth/profiles", json={"name": "Carol"}, headers=headers)
+        assert created.status_code == 200, created.text
+        slug = created.json()["slug"]
+        profile_db = Path(os.environ["PIP_DB_PATH"])
+        assert profile_db.parent.name == slug, "the route did not point the process at the new profile"
+        assert not any(profile_db.parent.glob(profile_db.name + "*")), "the profile has a database before it has a password"
+        assert client.get(f"{API}/auth/state", headers=headers).json()["state"] == "setup"
+        yield client, headers, slug, profile_db
+
+
+def _encrypted(profile_db):
+    """A plaintext SQLite file starts with its own name; an encrypted one looks like noise."""
+    return not profile_db.read_bytes().startswith(b"SQLite format 3")
+
+
+def test_no_route_is_served_for_a_profile_chosen_before_its_password(chosen_without_a_password, monkeypatch):
+    client, headers, slug, profile_db = chosen_without_a_password
+
+    def no_network(*args, **kwargs):
+        raise OSError("no network in this test")
+
+    monkeypatch.setattr(urllib.request, "urlopen", no_network)
+
+    served = []
+    for method, path, template in _routes():
+        response = client.request(method, path, headers=headers, json={})
+        exempt = path in server._UNLOCKED_PATHS or server._UNLOCKED_PATH_RE.match(path)
+        if not exempt and response.status_code != 423:
+            served.append((method, template, response.status_code))
+
+    assert not served, f"routes that answered before the profile had a password: {served}"
+    assert _nothing_in_the_base_slot(profile_db), (
+        f"a request created a database in the profile's folder: {sorted(p.name for p in profile_db.parent.glob(profile_db.name + '*'))}"
+    )
+
+
+def test_the_chat_socket_is_refused_for_a_profile_chosen_before_its_password(chosen_without_a_password):
+    client, headers, slug, profile_db = chosen_without_a_password
+    token = headers["Authorization"].split()[1]
+
+    with pytest.raises(WebSocketDisconnect) as refused:
+        with client.websocket_connect(f"/ws/chat?token={token}") as ws:
+            ws.receive_json()
+
+    assert refused.value.code == 4423
+    assert _nothing_in_the_base_slot(profile_db)
+
+
+def test_the_backstop_refuses_for_a_profile_chosen_before_its_password(chosen_without_a_password):
+    client, headers, slug, profile_db = chosen_without_a_password
+
+    with pytest.raises(server.LockedError):
+        server._conn()
+
+    assert _nothing_in_the_base_slot(profile_db)
+
+
+def test_a_status_asked_before_the_password_does_not_stop_the_password_being_set(chosen_without_a_password):
+    """
+    The whole defect in three requests, as the probe found it: ask a database
+    route, then set the password. The route used to create the plaintext file
+    that /auth/setup then refused to encrypt.
+    """
+    client, headers, slug, profile_db = chosen_without_a_password
+
+    asked = client.get(f"{API}/status", headers=headers)
+    assert asked.status_code == 423, asked.text
+
+    setup = client.post(f"{API}/auth/setup", json={"password": "carol-password-1", "profile": slug}, headers=headers)
+    assert setup.status_code == 200, setup.text
+    assert client.get(f"{API}/status", headers=headers).status_code == 200
+    assert profile_db.exists() and _encrypted(profile_db), "the profile's database is not encrypted"
+
+
+def test_control_setting_the_password_straight_away_still_works(chosen_without_a_password):
+    client, headers, slug, profile_db = chosen_without_a_password
+
+    setup = client.post(f"{API}/auth/setup", json={"password": "carol-password-1", "profile": slug}, headers=headers)
+
+    assert setup.status_code == 200, setup.text
+    assert client.get(f"{API}/status", headers=headers).status_code == 200
+    assert profile_db.exists() and _encrypted(profile_db)

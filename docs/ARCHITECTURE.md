@@ -220,9 +220,12 @@ and the legacy composite-key rebuild preserves it and the rows already there.
 - **Two unlock states, two status codes.** 401 means the bearer token is wrong;
   423 means the token is fine but no password has opened the database. That
   includes a backend that has just started with profiles registered and none
-  chosen: the base slot is empty, `state()` says "setup", and `_is_locked()`
-  counts it as locked, in the gate, at the chat socket and in `_conn()`
-  (FREEZE_LIST §7.47).
+  chosen (the base slot is empty) and a profile that has been created and
+  chosen but has no password yet: `state()` says "setup" for both, and with a
+  registry `_is_locked()` counts it as locked, in the gate, at the chat socket
+  and in `_conn()`, so no request creates a database that has no password
+  (FREEZE_LIST §7.47, §7.49). The first-run import is on `_UNLOCKED_PATHS`
+  with the sign-in routes: it opens no live database and refuses for itself.
   `_UNLOCKED_PATHS` is the small set the sign-in screen itself needs, plus
   `_UNLOCKED_PATH_RE` for the one per-profile path (`/auth/profiles/<slug>/
   picture`) whose slug cannot be an exact string.

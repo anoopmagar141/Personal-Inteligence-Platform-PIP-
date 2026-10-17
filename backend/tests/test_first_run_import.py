@@ -264,3 +264,55 @@ def test_a_failure_after_the_profile_was_registered_unregisters_it(fresh, tmp_pa
     assert profiles.list_profiles() == [], "a profile the failed import registered was left behind"
     assert not (data / "profiles" / "batman" / "pip.db").exists()
     assert not list(data.glob("restore-*.tmp.*"))
+
+
+# ---------------------------------------------------------------------------
+# The lock gate must leave this route to its own rule (FREEZE_LIST §7.47, §7.49)
+# ---------------------------------------------------------------------------
+#
+# With profiles registered the lock gate refuses every route outside the sign-in set while no
+# database can be opened, so that a request cannot create one unencrypted. This route is on the
+# sign-in screen (the welcome screen's "Import existing PIP") and opens no live database, so it
+# has to be in that set: the route itself decides, and refuses with its own sentence. Without it
+# the button was dead after the last profile was deleted: the registry stays behind, listing
+# nobody, and the gate answered 423 before the route could run.
+
+
+def test_a_backup_can_be_imported_after_every_profile_was_deleted(fresh, tmp_path, monkeypatch):
+    """
+    The welcome screen comes back when the last profile is deleted: nobody is signed in, the
+    list is empty, and the registry file stays behind, listing nobody. Its Import button must
+    still work there.
+    """
+    client, headers, data = fresh
+    backup = _make_backup(tmp_path, monkeypatch)
+    _a_profile_with_a_database(client, headers)
+    opened = client.post("/api/v1/auth/unlock", json={"password": "priyas-own-password", "profile": "priya"}, headers=headers)
+    assert opened.status_code == 200, opened.text
+    deleted = client.request("DELETE", "/api/v1/auth/profiles/priya", json={"password": "priyas-own-password"}, headers=headers)
+    assert deleted.status_code == 200, deleted.text
+    assert profiles.registry_path().exists() and profiles.list_profiles() == [], "not the state this test is about"
+
+    response = _post(client, headers, path=str(backup))
+
+    assert response.status_code == 200, response.text
+    assert [p.name for p in profiles.list_profiles()] == ["BatMan"]
+
+
+def test_the_route_answers_with_its_own_sentence_for_a_profile_chosen_before_its_password(fresh, tmp_path, monkeypatch):
+    """
+    A profile that was created and chosen but has no password yet is in "setup". The lock gate
+    refuses database routes there (G-1b), but this route is not one: what answers is the
+    route's own sentence about Backup, not the gate's "PIP is locked".
+    """
+    client, headers, data = fresh
+    backup = _make_backup(tmp_path, monkeypatch)
+    created = client.post("/api/v1/auth/profiles", json={"name": "Carol"}, headers=headers)
+    assert created.status_code == 200, created.text
+    assert client.get("/api/v1/auth/state", headers=headers).json()["state"] == "setup"
+
+    response = _post(client, headers, path=str(backup))
+
+    assert response.status_code == 409, response.text
+    assert "Backup" in response.json()["detail"], "the gate answered, not the route"
+    assert [p.name for p in profiles.list_profiles()] == ["Carol"], "an imported profile was registered anyway"

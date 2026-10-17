@@ -63,40 +63,34 @@ def _db_path_or_default() -> str:
     return os.environ.get("PIP_DB_PATH") or str(DEFAULT_DB_PATH)
 
 
-def _no_profile_is_open() -> bool:
+def _has_profiles() -> bool:
     """
-    Whether nobody is signed in and this process is pointed at a slot that no
-    registered profile owns.
+    Whether this installation has had profiles: a registry exists, even one that
+    lists nobody now.
 
-    That is a backend that has just started. Nothing has activated a profile -
-    the sign-in screen does that, and it has not run - so the paths are the base
-    slot's (data/pip.db, data/salt.bin), where the installation lived before
-    profiles existed. When profiles are registered that slot holds nothing, so
-    session_key.state() calls it "setup": no salt and no data. A gate does not
-    refuse "setup", because it is also the honest state of a profile that has
-    been chosen and not yet given a password. So every route was served, _conn()
-    opened the missing database, and open_app_connection() created an empty
-    UNENCRYPTED pip.db in the base slot: a chat sent then was stored in
-    plaintext, and the file made profiles.load() list a "Default" account that
-    nobody made (FREEZE_LIST §7.16 D-05, §7.47 G-1).
-
-    Only when a registry exists. An installation that never registered a
-    profile has none to be pointed away from, and the tests, which build
-    databases at isolated paths with no registry, are exactly that. An empty
-    registry counts: nobody is registered, so the process cannot be pointed at
-    anybody.
-
-    Asked only in the "setup" state, which already means no key is held, so
-    whether someone is signed in is not asked again here.
+    Only then is "setup" - no salt and no data - a state in which a database must
+    not be created. An installation that never registered a profile has none to
+    wait for, and the tests, which build databases at isolated paths with no
+    registry, are exactly that.
     """
-    if not profiles.registry_path().exists():
-        return False
-    return profiles.active_slug() not in {p.slug for p in profiles.list_profiles()}
+    return profiles.registry_path().exists()
 
 
 def _is_locked() -> bool:
     """
     Whether a request may not touch a database yet.
+
+    "locked" is a password that has not been given. "setup" is a password that
+    has not been CHOSEN: no salt, no data, so there is no database to open, and
+    opening one creates it unencrypted. For an installation with profiles that is
+    never what a request wants, however the process came to be there:
+    - after a restart nothing has activated a profile, so it points at the empty
+      base slot where the installation lived before profiles existed (G-1 / D-05);
+    - or a profile has just been created and chosen and its password is not set
+      yet (G-1b / D-28), and one request to any database route used to create a
+      plaintext pip.db in its folder, after which /auth/setup refused to choose a
+      password. The sign-in screen's own routes are exempt from the gate, and
+      /auth/setup is how a database comes to exist.
 
     One rule for the three places that ask - LockGateMiddleware, the chat
     socket's own check before accept(), and _conn() behind them - because each
@@ -105,7 +99,7 @@ def _is_locked() -> bool:
     missed.
     """
     state = session_key.state(_db_path_or_default())
-    return state == "locked" or (state == "setup" and _no_profile_is_open())
+    return state == "locked" or (state == "setup" and _has_profiles())
 
 VALID_CONSENT_SCOPES = {"full_inference", "web_search_only", "embedding_only", "none"}
 
@@ -1180,18 +1174,21 @@ try:
         # data and a "Default" account appears in the switcher, on a
         # needs-migration screen, for a profile nobody ever made.
         #
-        # The same happens with profiles that DO exist, after any restart:
-        # nothing has activated one yet, the process is pointed at the base
-        # slot, and the base slot is empty (G-1 / D-05). _no_profile_is_open is
-        # the rule for both, and the gate and the chat socket ask it too.
+        # The same happens with profiles that DO exist. After any restart
+        # nothing has activated one yet and the process is pointed at the empty
+        # base slot (G-1 / D-05); and a profile that has just been created and
+        # chosen has no password yet, so no database either (G-1b / D-28).
+        # _has_profiles is the rule for all of them, and the gate and the chat
+        # socket ask it too.
         #
         # Only when a registry exists: that is an installation that has had
         # profiles. The tests build databases at isolated paths with no
         # registry, which is a different situation and is deliberately
         # unchanged.
-        if state == "setup" and _no_profile_is_open():
+        if state == "setup" and _has_profiles():
             raise LockedError(
-                "No profile is open yet - choose one and sign in, or create one, before anything opens a database."
+                "No database exists yet - sign in, or choose the password of the profile you are creating, "
+                "before anything opens one."
             )
         return open_app_connection(os.environ.get("PIP_DB_PATH"), os.environ.get("PIP_DB_KEY"))
 
@@ -1513,12 +1510,22 @@ try:
     # is: neither touches a database. One lists names out of a registry that is
     # not encrypted and never was, the other sets four path variables. Reading
     # anything those paths point at still needs the password that follows.
+    #
+    # /backup/import is the welcome screen's "Import existing PIP". It opens no
+    # live database - it checks a backup file, registers a new profile and
+    # stages the restore - and it carries its own rule: it refuses (409) the
+    # moment any profile has a database or anyone is signed in. So the gate has
+    # nothing to add. A gate that answered first made the button dead whenever a
+    # registry existed but no profile had a database yet - the last profile
+    # deleted, or one chosen before its password - which is exactly when the
+    # welcome screen is shown (FREEZE_LIST §7.47, §7.49).
     _UNLOCKED_PATHS = frozenset({
         f"{BASE_PREFIX}/auth/state",
         f"{BASE_PREFIX}/auth/profiles",
         f"{BASE_PREFIX}/auth/profile",
         f"{BASE_PREFIX}/auth/unlock",
         f"{BASE_PREFIX}/auth/setup",
+        f"{BASE_PREFIX}/backup/import",
     })
 
     # The one path-shaped exception to the exact-match set above:

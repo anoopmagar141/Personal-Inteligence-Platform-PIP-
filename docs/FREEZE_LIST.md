@@ -34,8 +34,10 @@ correcting the record and tightening the tests, landed the same day (§7.44). Th
 third, D-26, was authorized next and landed the same day (§7.45), and so was
 the Stage 9 item §7.44 had left open, D-27 (§7.46). The owner then started the
 blueprint's privacy and security cards with G-1: D-05, the plaintext base slot
-before sign-in, is fixed (§7.47), and D-28 was found beside it and left open. G-3 followed: D-08, a `-cloud`
-Ollama model counted as local, is fixed (§7.48). Anything further needs a new
+before sign-in, is fixed (§7.47), and D-28 was found beside it. G-3 followed: D-08, a `-cloud`
+Ollama model counted as local, is fixed (§7.48), and so is D-28, a profile
+chosen before its password has been set (G-1b, §7.49), which also put right
+G-1's refusal of the first-run import. Anything further needs a new
 authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
@@ -2937,7 +2939,9 @@ no FREEZE_LIST section or LOG line of its own). That guard is kept, and widened.
 - **Mechanism:** one rule, in `backend/api/server.py`.
   - **`_no_profile_is_open()`:** a registry exists, and the profile the process
     is pointed at is not in it. `_is_locked()` adds that to the old "locked"
-    state, only when the state is "setup".
+    state, only when the state is "setup". *(G-1b, §7.49, replaced it with
+    `_has_profiles()`: a registry exists, with no condition on which profile
+    the process is pointed at.)*
   - **Asked in three places that used to write `state == "locked"` for
     themselves:** the lock gate, the chat socket's check before `accept()`,
     and `_conn()` as the backstop. A case missing from any one would have been
@@ -2952,7 +2956,9 @@ no FREEZE_LIST section or LOG line of its own). That guard is kept, and widened.
     databases at isolated paths with no registry, are exactly that.
   - **The sign-in screen is unaffected:** its routes are exempt by the gate's
     own list, and choosing a profile and unlocking it, then using the app,
-    works as before.
+    works as before. *(Not quite: the welcome screen's first-run import,
+    `POST /backup/import`, was not on that list and was refused with 423 after
+    the last profile was deleted. Found and fixed in G-1b, §7.49.)*
 - **Tests:** 6 in `backend/tests/test_no_plaintext_database_before_sign_in.py`,
   through the real routes and a real second lifespan.
   - **Seen failing first (4 of 6, on `HEAD`):** the census, the chat socket,
@@ -2974,7 +2980,7 @@ no FREEZE_LIST section or LOG line of its own). That guard is kept, and widened.
     `test_api_server.py` and `test_pipeline.py`, which build databases with no registry).
 - **Suites:** Backend 1532 passed, 0 failed (17 min 43 s), run with the embedding shim on a clean export of `d560c30` plus the working-tree `server.py` and both test files, so with the other session's guard included. The two test files passed 8 runs in 8. No client file changed, so the Flutter suite was not re-run.
 
-**Found beside it, not fixed (D-28, A, medium):** a profile that has been
+**Found beside it (D-28, A, medium; fixed the same day, §7.49):** a profile that has been
 created and chosen but has no password yet is in "setup" too, and the rule
 above lets it through, because the process *is* pointed at a registered
 profile. Reproduced through the real routes: create a profile, one
@@ -2984,16 +2990,15 @@ the state becomes `needs_migration`, and `POST /auth/setup` is refused with
 after that, and a chat sent in the window would be stored unencrypted. The
 catch-up has refused to create a database that is not there since a fresh
 install hit the same thing (`_start_catch_up`); the routes never did. Whether
-the Flutter app reaches the window was not checked. The likely fix is the same
-rule one step further, "setup" with a registry means no database route, which
-changes more than G-1's card and needs its own authorization.
+the Flutter app reaches the window was checked in G-1b (§7.49). The fix is the
+same rule one step further, "setup" with a registry means no database route,
+which changed more than G-1's card and was authorized as its own.
 
 **Not covered (still open):**
 - **An installation with no registry at all** (a first run, before any profile
   exists) is unchanged: a request can still create the base database. It cannot
   be told apart from the tests' own situation without a registry, and the
   blueprint's card is about profiles being present.
-- **D-28,** above.
 
 ### 7.48 G-3: a cloud model is not a local one, D-08 (authorized 2026-10-16)
 
@@ -3070,6 +3075,110 @@ The second of the blueprint's privacy and security cards.
 - **The picker still lists a cloud model** that Ollama has, until it is chosen
   and refused with the sentence.
 
+### 7.49 G-1b: no database for a profile that has no password, D-28 (authorized 2026-10-16)
+
+The third of the blueprint's privacy and security cards: the one G-1 found
+beside itself (§7.47). It also puts right something G-1 itself broke, found on
+the way (second bullet).
+
+- **Defect (A, medium; D-28):** a profile that has been created and chosen but
+  has no password yet is in "setup" too: no salt, no data. G-1's rule let it
+  through, because the process *is* pointed at a registered profile.
+  - **Reproduced on `HEAD` through the real routes.** Create a profile, ask any
+    database route once, and a plaintext `pip.db` exists in that profile's own
+    folder; the state becomes `needs_migration`; and `POST /auth/setup` is
+    refused ("run scripts/set_db_password.py"). The profile can no longer be
+    given a password through the app, and a chat sent in that window would be
+    stored unencrypted. Of the 58 gated method-and-path pairs, 56 were
+    served (27 returned data).
+  - **The Flutter app does not reach the window.** Read from the code, not run in
+    a window: it asks `/auth/state` first and calls no database route before the
+    profile is unlocked. What can reach it is anything holding the API token: the
+    older web client, a script, a second window.
+- **Also found, and G-1's own doing: the welcome screen's Import.** The first-run
+  import (`POST /backup/import`) is the one route the sign-in screen calls that is
+  not on the gate's exempt list. It opens no live database (it checks a backup
+  file, registers a new profile and stages the restore) and carries its own rule.
+  After the last profile is deleted the registry file stays behind, listing nobody,
+  and the welcome screen comes back; G-1's gate then answered it 423 before the
+  route could run, so the button was dead. Seen failing on `HEAD`. Found when the
+  full suite was run on G-1b's rule alone: one existing test, which expects the
+  route's own 409 for a chosen profile with no password, got the gate's 423.
+- **Promise:** a request never creates a database that has no password. With
+  profiles registered, "setup" means 423 (4423 on the chat socket) until
+  `/auth/setup` has chosen the password, however the process came to be there;
+  and the sign-in screen's own routes, the first-run import among them, are never
+  refused by the gate.
+- **Mechanism:** G-1's rule one step further, in `backend/api/server.py`.
+  - **`_has_profiles()`** replaces `_no_profile_is_open()`: a registry exists, even
+    one that lists nobody. `_is_locked()` is "locked", or "setup" with a registry,
+    asked in the same three places: the lock gate, the chat socket before
+    `accept()`, and `_conn()`.
+  - **The condition got simpler, not only wider.** G-1 asked whether the profile
+    the process is pointed at is registered, because that told the empty base slot
+    from a chosen profile. Once both are refused the question has one answer for
+    both, so it went.
+  - **The sign-in screen and `/auth/setup` are unaffected:** both are in the
+    gate's exempt list, and `/auth/setup` is how a database comes to exist, as is
+    creating a profile.
+  - **`/backup/import` joins that list.** The route refuses for itself (409) as
+    soon as any profile is registered or anyone is signed in, so the gate has
+    nothing to add; in a locked installation it now answers with its own sentence
+    instead of "PIP is locked".
+  - **Only when a registry exists,** as before (§7.47).
+- **Tests:** 7 added, through the real routes: 5 in
+  `backend/tests/test_no_plaintext_database_before_sign_in.py` (now 11) and 2 in
+  `backend/tests/test_first_run_import.py` (now 15).
+  - **Seen failing first (5 of the 7, on `HEAD`):** the census of every gated
+    route, the chat socket, `_conn()` called directly, and the whole defect as a
+    sequence (a database route, then the password: the route must answer 423 and
+    `/auth/setup` must then work and leave an encrypted file); and the import after
+    every profile was deleted. The other two pass before and after: setting the
+    password straight away still works, and a chosen profile with no password still
+    gets the import route's own sentence, not the gate's.
+  - **G-1's six still pass,** and so do the other session's two and the whole
+    first-run import file.
+- **Break-it:** 9 mutations, one at a time on a clean copy, each caught:
+  - the whole rule disabled (8 of the 11 tests in the sign-in file: the four new ones and the four of G-1 that
+    need it; the three controls pass);
+  - the lock gate left on the old condition (the census of G-1 and the new one);
+  - the chat socket left on the old condition (the socket test of G-1 and the new one);
+  - the `_conn()` backstop left on the old condition (the backstop test of G-1 and the new one);
+  - G-1's narrower rule put back, "the process is pointed at none of the registered profiles" (exactly the four
+    new tests that need the new behaviour: the gate, the socket, the backstop and the request-then-password
+    sequence);
+  - the first-run import left to the lock gate again (the new import-after-delete test, the new own-sentence
+    test, and the existing test that expects the route's own 409);
+  - the import route's own refusal removed, so that the exemption alone would guard it (the same existing test,
+    its locked-profile twin, and the new own-sentence test);
+  - the registry no longer required (24 of the 153 tests in `test_ws_chat.py`, `test_api_server.py`,
+    `test_pipeline.py` and `test_sign_in.py`, which build databases with no registry);
+  - every state but "unlocked" refused, which is wider than "setup" (41 of the same 153: it also refuses
+    `needs_migration` and the no-registry setup those tests use).
+- **Suites:** Backend 1582 passed, 0 failed (17 min 6 s), run with the embedding shim on a clean export of `5a3000a` plus this change, with nothing else running. A first attempt was cut short about half way when the machine stopped (no result, not a failure) and was run again from the start. An earlier full run on the rule alone, before the import route was put on the exempt list, had one failure, `test_first_run_import.py::test_it_is_refused_once_any_profile_has_a_database` (423 where the route's own 409 was expected), which is how the import problem was found. The new tests passed 8 runs in 8. No client file changed, so the Flutter suite was not re-run.
+
+**Found beside it, not fixed (D-29, A, low):** the import route's own rule is
+meant to be "no profile has a database", but it reads
+`any(p.exists for p in profiles.list_profiles())`, and `exists` is a method, so
+the test is on the method object and is true for any registered profile.
+Through the real routes: create a profile and do not give it a password, then
+import a backup, and the answer is 409 "PIP already has a profile on this
+computer" although no profile has a database. It only over-refuses, so it is
+safe, and the welcome screen cannot reach it (it is shown only when no profile
+is listed). Not fixed: it is outside this card, and the right fix (call it) lets
+an import through in a state nobody has watched it work in.
+
+**Not covered (still open):**
+- **An installation with no registry at all** is unchanged (§7.47): a request can
+  still create the base database on a first run, before any profile exists. The
+  app creates a profile first, so it does not; the tests' own situation cannot be
+  told apart without a registry.
+- **The sentence at the gate** is the old one for every refusal ("PIP is locked.
+  Sign in to open your data."). For a profile with no password yet, "choose a
+  password" would be truer. No client shows it in this window.
+- **The import in a real window** was not watched (blueprint card V-1); the route
+  was driven through the real backend, as before.
+
 ---
 
 ## 8. Status
@@ -3126,8 +3235,9 @@ The second of the blueprint's privacy and security cards.
 | D-24 stray Stop answered with an error, D-25 token the fold cannot take | Found by review and landed 2026-10-16 (§7.44) | A, low, both. A Stop with nothing streaming is dropped instead of answered "message is required"; the fold of each forwarded event moved inside D-22's guard and ahead of the send, so a token that is not text is withheld and ends the turn with one error instead of closing the socket. 5 of 15 tests failed first, 10 break-it mutations caught; the record's statements about what is wrapped, and its example of a crash, corrected |
 | D-26 failed write around a chat turn closed the connection | Found 2026-10-16 (§7.44), landed 2026-10-16 (§7.45) | A, medium: a project that no longer exists, or a conversation deleted under an open chat, ended the handler, with no ending event before the turn or after the reply was shown. Writes now go through a rollback; a message whose setup writes fail is refused with one error; a turn that cannot be saved is queued, retried in order before the next message, and that message is refused if it still cannot be written. 5 tests (all failed first, two on real triggers), 10 break-it mutations caught. Open: a failed save is told only at the next message; a turn queued at disconnect is not saved |
 | D-27 a token that is not text is a provider failure | Landed 2026-10-16 (§7.46) | A, low: a server streaming structured content, or a null, put a non-text token into the stream; a provider whose first token was one was not treated as failed, so the next was never asked. Stage 9 now fails it like one that yields nothing: the next provider before any text, "Response interrupted" after. The message names the type, never the value. 10 unit and 2 end-to-end tests (8 + 2 failed first), 6 break-it mutations caught; the transport's guard kept and its tests moved onto a fake pipeline. Open: an exception that is neither provider error still ends the turn, on purpose |
-| G-1 / D-05 plaintext base slot before sign-in | Fixed 2026-10-16 (§7.47) | A, medium: with profiles registered and nobody signed in, 56 of 58 gated routes were served and the chat socket accepted, from a plaintext database created in the base slot, and a "Default" profile appeared. One rule (`_no_profile_is_open` / `_is_locked`) now answers 423 at the gate, 4423 at the socket and `LockedError` in `_conn()`, widening another session's uncommitted guard. 6 tests (4 failed first), 6 break-it mutations caught. Found beside it: D-28 |
-| D-28 a profile chosen before its password gets a plaintext database | Found 2026-10-16 (§7.47), open | A, medium: one request to any database route, before `/auth/setup`, creates a plaintext `pip.db` in the profile's folder; the state becomes `needs_migration` and `/auth/setup` is refused. Reproduced through the real routes; not fixed |
+| G-1 / D-05 plaintext base slot before sign-in | Fixed 2026-10-16 (§7.47) | A, medium: with profiles registered and nobody signed in, 56 of 58 gated routes were served and the chat socket accepted, from a plaintext database created in the base slot, and a "Default" profile appeared. One rule (`_is_locked`, whose condition was `_no_profile_is_open` until G-1b replaced it with `_has_profiles`, §7.49) now answers 423 at the gate, 4423 at the socket and `LockedError` in `_conn()`, widening another session's uncommitted guard. 6 tests (4 failed first), 6 break-it mutations caught. Found beside it: D-28, fixed in G-1b (§7.49), which also put right the first-run import this refused |
+| D-28 / G-1b a profile chosen before its password gets a plaintext database | Fixed 2026-10-16 (§7.49) | A, medium: one request to any database route, before `/auth/setup`, created a plaintext `pip.db` in the profile's folder; the state became `needs_migration` and `/auth/setup` was refused, so the profile could not be given a password through the app, and 56 of 58 gated routes were served. G-1's rule one step further: with a registry, "setup" is refused at the gate, the chat socket and `_conn()` (`_has_profiles` replaces `_no_profile_is_open`). The first-run import, which G-1's gate had made dead after the last profile was deleted, is on the exempt list now. 7 tests (5 failed first), 9 break-it mutations caught |
+| D-29 the first-run import refuses for any registered profile | Found 2026-10-16 (§7.49), open | A, low: the route's rule is meant to be "no profile has a database" but tests the method `exists`, not its result, so a profile with no password yet also refuses it, with a sentence that is untrue then. Over-refuses only; the welcome screen cannot reach it. Not fixed |
 | G-3 / D-08 a cloud model counted as local | Fixed 2026-10-16 (§7.48) | D then A, medium: Ollama's own `-cloud` models were answered over the internet but reported local, so a conversation and the Observer's transcript could leave the machine. One predicate (`is_cloud_model`): a pull and a selection are refused with a sentence (the selection before Ollama is asked, which fails open), and the provider reports itself not local, so Stage 8 and Stage 11 refuse a name already stored. 43 tests (28 failed first), 7 break-it mutations caught |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
