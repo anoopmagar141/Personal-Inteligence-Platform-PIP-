@@ -51,6 +51,8 @@ import _venv
 
 _venv.require("sqlcipher3")
 
+import _stamp  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))
@@ -163,11 +165,21 @@ def generate(args) -> None:
     if not OllamaProvider(model_name=model).is_available():
         sys.exit("Ollama is not reachable on localhost:11434 - start it first")
 
+    # Before any answer exists (BLUEPRINT S-1): the options PinnedOllama below
+    # sends with every question (num_predict 400, from the run_sync call).
+    try:
+        stamp = _stamp.run_stamp(
+            model, options_sent={"num_predict": 400, "temperature": 0, "seed": 1, "num_ctx": NUM_CTX},
+        )
+    except _stamp.StampError as e:
+        sys.exit(str(e))
+
     out_path = Path(args.out)
-    state = json.load(open(out_path, encoding="utf-8")) if out_path.exists() else {
+    # One stamp per start: a resumed file holds answers from every start.
+    state = _stamp.resumable_state(out_path, {
         "model": model, "num_ctx": NUM_CTX, "snapshot_commit": snapshot,
         "conditions": conds, "replication_ids": sorted(replication), "records": [], "answers": {},
-    }
+    }, stamp)
     done = {(r["set"], r["qid"], r["condition"]) for r in state["records"]}
 
     class PinnedOllama(OllamaProvider):
@@ -265,6 +277,7 @@ def generate(args) -> None:
     def save():
         json.dump(state, open(out_path, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
 
+    save()
     warm = PinnedOllama(model_name=model)
     list(warm.chat([{"role": "user", "content": "Say ready."}], max_tokens=5, timeout_seconds=300))
     print("model warm", flush=True)
@@ -431,6 +444,7 @@ def score(args) -> None:
 
     out = ["# Levers - results\n"]
     p = out.append
+    p(_stamp.markdown(state.get("stamps")))
     p(f"Model {state['model']}, num_ctx {state['num_ctx']}, temperature 0, snapshot `{state['snapshot_commit']}`. "
       "Conditions: " + "; ".join(f"{k} = {v}" for k, v in state["conditions"].items()) + ".\n")
     main = variants["main"]

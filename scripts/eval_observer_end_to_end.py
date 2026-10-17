@@ -76,46 +76,40 @@ LEARNED_TABLES = (
 
 
 import hashlib
-import datetime
-import subprocess
+import _stamp
 from backend.config.settings import get_settings
 from backend.stages.stage_11_observer import _EXTRACTION_PROMPT_PREFIX, _EXTRACTION_SCHEMA
 
-def get_stamp(model: str) -> dict:
-    try:
-        import urllib.request
-        req = urllib.request.Request("http://localhost:11434/api/tags", method='GET')
-        with urllib.request.urlopen(req, timeout=15) as response:
-            data = json.loads(response.read().decode('utf-8'))
-    except Exception as exc:
-        raise ValueError(f"Cannot read the Ollama model digest: {exc}") from exc
-    digest = next((m.get("digest", "") for m in data.get("models", [])
-                   if m.get("name") == model), "")
-    if not isinstance(digest, str) or not digest.strip():
-        raise ValueError(f"Ollama model {model!r} is missing or has no digest")
-    
-    commit_hash = ""
-    try:
-        commit_hash = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    except Exception:
-        pass
-        
+
+def _observer_fields() -> dict:
+    """What this harness adds to the shared run stamp: the Observer's own inputs."""
     text = _EXTRACTION_PROMPT_PREFIX + json.dumps(_EXTRACTION_SCHEMA, sort_keys=True)
-    prompt_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    
     return {
-        "model": model,
-        "digest": digest,
-        "temperature": None,
-        "context_size": None,
-        "context_size_note": "Ollama runtime context is not configured or reported by PIP.",
         "transcript_token_cap": get_settings()["observer"]["max_session_tokens"],
-        "prompt_hash": prompt_hash,
-        "commit_hash": commit_hash,
-        "date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "prompt_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
         "wall_clock_seconds": [],
-        "validity_condition": "Valid for gate-only comparisons; any change to the Observer prompt, the extraction schema, the model or grounding voids it."
+        "validity_condition": "Valid for gate-only comparisons; any change to the Observer prompt, the extraction schema, the model or grounding voids it.",
     }
+
+
+def get_stamp(model: str) -> dict:
+    """
+    The stamp of a live run (BLUEPRINT S-1): the shared one from _stamp, which
+    refuses a model whose digest or Ollama version it cannot read, plus the
+    Observer's own fields. The app's OllamaProvider, which this harness uses,
+    sends neither a temperature nor num_ctx, so both are recorded as not sent.
+    """
+    stamp = _stamp.run_stamp(model, options_sent={"temperature": None, "num_ctx": None})
+    stamp.update(_observer_fields())
+    return stamp
+
+
+def replay_stamp(recorded) -> dict:
+    """A replay calls no model; it says which recording it replayed instead."""
+    stamp = _stamp.run_stamp(None)
+    stamp.update(_observer_fields())
+    stamp["replayed_from"] = recorded
+    return stamp
 
 class RecordingProvider(OllamaProvider):
     """The real Ollama provider, keeping the raw extraction for the funnel."""
@@ -327,8 +321,12 @@ def main(argv=None) -> int:
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             parser.error(f"invalid replay file: {exc}")
         
-    stamp = None
-    if args.save_raw:
+    # Every run is stamped at its start, before any number exists; this used to
+    # happen only with --save-raw, so a report or --json result said nothing
+    # about which weights, Ollama or commit produced it (BLUEPRINT S-1).
+    if replay_data is not None:
+        stamp = replay_stamp(replay_data.get("stamp"))
+    else:
         try:
             stamp = get_stamp(args.model)
         except ValueError as exc:
@@ -350,8 +348,7 @@ def main(argv=None) -> int:
                   f"{'ERROR' if result['error'] else len(result['learned'])} learned", flush=True)
                   
         runs.append(results)
-        if stamp:
-            stamp["wall_clock_seconds"].append(round(wall_clock, 1))
+        stamp["wall_clock_seconds"].append(round(wall_clock, 1))
 
     if args.save_raw:
         raw_runs = []
@@ -368,12 +365,12 @@ def main(argv=None) -> int:
         with open(args.save_raw, "w", encoding="utf-8") as f:
             json.dump(out_data, f, indent=1)
 
-    text = report(args.model, runs)
+    text = _stamp.markdown(stamp) + "\n" + report(args.model, runs)
     print("\n" + text)
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
     if args.json:
-        Path(args.json).write_text(json.dumps(runs, indent=1, default=str), encoding="utf-8")
+        Path(args.json).write_text(json.dumps({"stamp": stamp, "runs": runs}, indent=1, default=str), encoding="utf-8")
     return 0
 
 

@@ -58,8 +58,9 @@ def test_observer_replay_reproduces_live_funnel(monkeypatch, tmp_path):
     with open(json_out2) as f:
         out2 = json.load(f)
         
-    assert out1[0][0]["funnel"] == out2[0][0]["funnel"]
-    assert out1[0][0]["learned"] == out2[0][0]["learned"]
+    # --json holds {"stamp", "runs"} since every result carries its run stamp (S-1).
+    assert out1["runs"][0][0]["funnel"] == out2["runs"][0][0]["funnel"]
+    assert out1["runs"][0][0]["learned"] == out2["runs"][0][0]["learned"]
 
 def test_observer_replay_break_it(monkeypatch, tmp_path):
     monkeypatch.setattr(eval_script, "CASES", [CASES[0]])
@@ -130,7 +131,7 @@ def test_observer_replay_break_it(monkeypatch, tmp_path):
     with open(json_out2) as f:
         out2 = json.load(f)
         
-    assert out1[0][0]["funnel"] != out2[0][0]["funnel"] or out1[0][0]["learned"] != out2[0][0]["learned"]
+    assert out1["runs"][0][0]["funnel"] != out2["runs"][0][0]["funnel"] or out1["runs"][0][0]["learned"] != out2["runs"][0][0]["learned"]
 
 
 def test_replay_refuses_missing_case_before_running_any_model(monkeypatch, tmp_path):
@@ -148,66 +149,70 @@ def test_replay_refuses_missing_case_before_running_any_model(monkeypatch, tmp_p
     assert exc.value.code == 2
 
 
+class _FakeOllama:
+    """
+    Stands in for urlopen against Ollama. get_stamp goes through the shared
+    run stamp (scripts/_stamp.py, BLUEPRINT S-1), which asks for Ollama's
+    version as well as the model list, so the fake answers by path.
+    """
+
+    def __init__(self, digest):
+        self.digest = digest
+        self.kwargs = []
+
+    def __call__(self, request, **kwargs):
+        self.kwargs.append(kwargs)
+        url = request.full_url if hasattr(request, "full_url") else str(request)
+        if url.endswith("/api/version"):
+            body = {"version": "0.40.3"}
+        elif url.endswith("/api/tags"):
+            body = {"models": [{"name": "qwen2.5:7b", "digest": self.digest}]}
+        else:
+            body = {}
+        return _Response(body)
+
+
+class _Response:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return json.dumps(self.body).encode()
+
+
 def test_recording_stamp_requires_a_model_digest(monkeypatch):
-    class Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def read(self):
-            return json.dumps({"models": [{"name": "qwen2.5:7b", "digest": ""}]}).encode()
-
     import urllib.request
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: Response())
+    monkeypatch.setattr(urllib.request, "urlopen", _FakeOllama(""))
 
     with pytest.raises(ValueError, match="digest"):
         eval_script.get_stamp("qwen2.5:7b")
 
 
 def test_recording_stamp_allows_ollama_startup_time(monkeypatch):
-    class Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def read(self):
-            return json.dumps({"models": [{"name": "qwen2.5:7b", "digest": "sha256:test"}]}).encode()
-
     import urllib.request
-    seen = {}
-
-    def fake_urlopen(*args, **kwargs):
-        seen.update(kwargs)
-        return Response()
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    fake = _FakeOllama("sha256:test")
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
     monkeypatch.setattr(eval_script, "get_settings", lambda: {"observer": {"max_session_tokens": 8000}})
 
     eval_script.get_stamp("qwen2.5:7b")
 
-    assert seen["timeout"] >= 15
+    assert fake.kwargs and all(k["timeout"] >= 15 for k in fake.kwargs)
 
 
 def test_recording_stamp_does_not_call_transcript_cap_model_context(monkeypatch):
-    class Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def read(self):
-            return json.dumps({"models": [{"name": "qwen2.5:7b", "digest": "sha256:test"}]}).encode()
-
     import urllib.request
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: Response())
+    monkeypatch.setattr(urllib.request, "urlopen", _FakeOllama("sha256:test"))
     monkeypatch.setattr(eval_script, "get_settings", lambda: {"observer": {"max_session_tokens": 8000}})
 
     stamp = eval_script.get_stamp("qwen2.5:7b")
 
-    assert stamp["context_size"] is None
+    # PIP sends no num_ctx, so the context window is recorded as not sent,
+    # and the transcript cap is kept apart from it rather than passed off as it.
+    assert stamp["options_sent"]["num_ctx"] is None
     assert stamp["transcript_token_cap"] == 8000

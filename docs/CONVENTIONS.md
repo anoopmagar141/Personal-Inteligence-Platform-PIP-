@@ -177,3 +177,9 @@ than a winner picked.
   and recording them in a `calls` list. → `test/decisions_view_test.dart:20`
 - **Empty directory:** `backend/tests/test_stages/` exists and contains nothing;
   stage tests are flat in `backend/tests/`.
+- **Every evaluation stamps its run.** A `scripts/eval_*.py` calls
+  `_stamp.run_stamp()` before any number exists and writes the stamp into every
+  result file and report it produces (a resumable run keeps one per start,
+  `_stamp.resumable_state`). A run that calls a model refuses to start when it
+  cannot read the model's digest and Ollama's version.
+  → `scripts/_stamp.py`, held by `backend/tests/test_run_stamp.py`

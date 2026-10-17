@@ -59,6 +59,8 @@ import _venv
 
 _venv.require("sqlcipher3")
 
+import _stamp  # noqa: E402
+
 REPO = Path(__file__).resolve().parent.parent
 TOP_K = 10
 HINT_WORDS = 12  # stage_01_intent_classifier._extract_retrieval_hint
@@ -99,6 +101,9 @@ def read_corpus(commit: str, files: list[str], local_dir: str | None = None) -> 
 
 def run(args) -> None:
     labels = json.load(open(args.labels, encoding="utf-8"))
+    # At the start, before any number exists (BLUEPRINT S-1). No language model
+    # is called; the embedder is recorded beside it, under "embedder".
+    stamp = _stamp.run_stamp(None)
     work = Path(tempfile.mkdtemp(prefix="pip_eval_retrieval_"))
     # Isolated BEFORE anything from backend/ is imported: these are read at call time, but a
     # path that was ever the real one is a path somebody can write to by mistake.
@@ -133,6 +138,7 @@ def run(args) -> None:
     near_topic = labels["near_topic"]
 
     results = {
+        "stamp": stamp,
         "embedder": embedder,
         "snapshot_commit": labels["snapshot_commit"],
         "top_k": TOP_K,
@@ -278,8 +284,9 @@ def report(args) -> None:
     res = json.load(open(args.results, encoding="utf-8"))
     out = []
     p = out.append
-    p(f"# Retrieval measurement - {res['embedder']}")
-    p(f"\nCorpus snapshot `{res['snapshot_commit']}`. Search depth {res['top_k']} for ranking; production top_k {PRODUCTION_TOP_K}.\n")
+    p(f"# Retrieval measurement - {res['embedder']}\n")
+    p(_stamp.markdown(res.get("stamp")))
+    p(f"Corpus snapshot `{res['snapshot_commit']}`. Search depth {res['top_k']} for ranking; production top_k {PRODUCTION_TOP_K}.\n")
 
     p("## 1. Chunk sizes")
     p("\n| chunk words (overlap) | chunks | ingest | median query |")

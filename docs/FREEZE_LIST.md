@@ -3486,6 +3486,81 @@ The second card of the final plan's step 1 (BLUEPRINT P-2, issue #2 of
   (`completed`, `failed`) indefinitely, for chats that were not deleted too;
   that retention is unchanged.
 
+### 7.54 S-1: every evaluation result carries a run stamp (authorized 2026-10-17)
+
+The first card of the final plan's step 2, the validity baseline (BLUEPRINT
+S-1). Needed by every run in V-2: a number is only comparable with another if
+both came from the same system.
+
+- **Gap:** of the five evaluation scripts, one stamped its results, and only
+  with `--save-raw`: `eval_observer_end_to_end.py` recorded the model's digest
+  and the commit in its raw recording, but not in its report or its `--json`
+  result. `eval_retrieval_e2e.py` and `eval_retrieval_levers.py` recorded the
+  model tag (and the levers run its pinned num_ctx); `eval_retrieval.py` the
+  embedder; `eval_evidence_gate.py` nothing. None recorded Ollama's version
+  (it updated itself once during this project), the model's digest (a tag is
+  mutable: a re-pull can point `qwen2.5:7b` at other weights), whether the
+  working tree had uncommitted edits, or which Constitution was in force (its
+  version has not been bumped across rule changes, BLUEPRINT G-5).
+- **Mechanism:** `scripts/_stamp.py`, standard library only (so the evidence
+  gate's script still runs under any interpreter), and it only reads: Ollama
+  over HTTP (`/api/version`, `/api/tags`, `/api/show`), never the ollama CLI,
+  which starts the app and can install an update.
+  - `run_stamp(model, options_sent=...)`, called by every evaluation at the
+    start of a run, before any number exists: date; git commit, a dirty flag
+    for tracked files and the changed paths; the Constitution's version and
+    the sha256 of its text with LF line endings; and, for a run that calls a
+    model, Ollama's version, the model's tag, digest and own default
+    parameters, and the options the harness sends (a key recorded as null was
+    not sent, so Ollama's or the model's default applied: PIP sends no
+    temperature and no num_ctx). A model run whose digest or Ollama version
+    cannot be read refuses to start (`StampError`).
+  - `resumable_state(path, initial, stamp)` for the two retrieval harnesses
+    that save after every answer and can be resumed: one stamp per start, so a
+    file holding answers from two starts says so.
+  - `markdown(stamp or stamps)` for the top of every report; a result from
+    before stamps existed says "none recorded".
+- **Per script:** the evidence gate prints the stamp before its report; the
+  observer harness stamps every run (a replay records the recording's stamp
+  under `replayed_from` and no model), and writes it into `--json` (now
+  `{"stamp", "runs"}`), `--out` and `--save-raw`; `eval_retrieval.py` puts it
+  in its results and its report; the end-to-end and levers harnesses keep
+  `stamps` in their state file and print them in the scored report.
+- **Tests:** `backend/tests/test_run_stamp.py`, 23: 12 on the helper against
+  a stub Ollama, a throwaway git repository and the real Constitution; 11 on
+  the scripts. Seen failing first: 10 of the 11 script tests on the unchanged
+  scripts (no stamp in the evidence gate's output, the observer's `--json` a
+  bare list, `KeyError: 'stamp'` in the retrieval results, no `_stamp` call in
+  any of the five); the 11th only checks there are scripts to check. The
+  helper's 12 were written with it and not seen failing beyond its absence. `test_observer_replay.py`: 5 tests changed, for the `--json`
+  shape and because their fake Ollama now also has to answer `/api/version`;
+  same assertions, plus the context window is now checked as `num_ctx` not
+  sent.
+- **Break-it:** 8 mutations, each alone, restored byte for byte, each caught: a
+  model with no digest stamped anyway (3 tests); a server with no version
+  stamped anyway (1); the dirty flag ignoring edits (1); the Constitution hash
+  keeping line endings (1); the evidence gate's report without the stamp (2);
+  the observer's `--json` without it (3); the retrieval results without it (1);
+  the end-to-end state built without it (1).
+- **Suites:** Backend 1641 passed, 0 failed (18 min 0 s): P-2's 1618 plus
+  these 23, on the main checkout's working tree at d5f9b88 plus this change
+  (which also held other sessions' uncommitted `httpx2` requirement and its
+  test), with nothing else running; the eight changed script and test files
+  were compared byte for byte with copies taken before the run. No Flutter file
+  changed, so the Flutter suite was not re-run.
+
+**Not covered (still open):**
+- **The two model-calling retrieval harnesses were not run.** Their generate
+  step needs a running Ollama and minutes per question, so the tests pin that
+  they call `run_stamp`, build their state with `resumable_state` and print the
+  stamps (by reading their code), not that a real run's file holds a stamp. No
+  live stamp against the real Ollama was taken either: it was not running, and
+  starting it is the owner's call (V-2 asks first).
+- **What Ollama does with an option that is not sent is not recorded**: the
+  server's default context window depends on its version and settings, which
+  the stamp records only as "not sent". V-2's window probe measures it.
+- **Result files from before this card** carry no stamp; they stay as they are.
+
 ---
 
 ## 8. Status
@@ -3551,6 +3626,7 @@ The second card of the final plan's step 1 (BLUEPRINT P-2, issue #2 of
 | D-30 the command-line client's /consent defaults to full_inference | Found 2026-10-16 (§7.51), open | A, low: `/consent PROVIDER_ID` with no `--scope` grants the broadest scope, a default the person did not choose. A typed command, in a client that is not shipped. Not fixed |
 | D-31 a question about the user sent to the web | Fixed 2026-10-17 (§7.52) | A, low: with web search consented, a message with a news word was filed as news before Stage 1 asked whether it was about the user or a project, so "what is my current project?" sent its first 12 words to the search provider. Stage 1 now asks that first (no words added). 12 tests (7 failed first), 2 break-it mutations; the 14 §7.5 phrasings send 1 query instead of 4. Open: a phrasing Stage 1 does not recognise as about the user is still sent |
 | D-32 a deleted chat kept reaching later prompts | Fixed 2026-10-17 (§7.53) | A, medium: deleting a chat removed its messages only. Its "where we left off" note kept reaching every new chat's first prompt; the app's own order (delete the open chat, then leave it) ran the session-end pass on the deleted chat and wrote the note back; and a transcript queued for the next start was learned from and kept. The delete now removes the chat's queued transcripts (new `pending_observer.conversation_id`) and clears the note, and the pass skips a chat that is gone. 8 tests (7 failed first), 6 break-it mutations. Open: the note is cleared whichever chat wrote it; what was already learned stays |
+| S-1 a run stamp on every evaluation result | Built 2026-10-17 (§7.54) | Method: one of five evaluation scripts stamped its results, and only with --save-raw. `scripts/_stamp.py` now records, at the start of every run, the commit and a dirty flag, the Constitution's version and hash and, for a model run, Ollama's version, the model's digest and the options sent (a model run that cannot read them refuses to start); every result file and report carries it, one per start for a resumed run. 23 tests (10 script tests failed first), 8 break-it mutations. The two model-calling retrieval harnesses were not run |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

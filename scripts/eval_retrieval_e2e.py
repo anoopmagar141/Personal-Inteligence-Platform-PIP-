@@ -54,6 +54,8 @@ import _venv
 
 _venv.require("sqlcipher3")
 
+import _stamp  # noqa: E402
+
 REPO = Path(__file__).resolve().parent.parent
 PROTOCOL = REPO / "docs" / "eval" / "retrieval_e2e_protocol_2026-10-08.json"
 LABELS = REPO / "docs" / "eval" / "retrieval_labels_2026-10-08.json"
@@ -153,6 +155,14 @@ def generate(args) -> None:
     model = "qwen2.5:7b"
     if not OllamaProvider(model_name=model).is_available():
         sys.exit("Ollama is not reachable on localhost:11434 - start it first")
+    # Before any answer exists (BLUEPRINT S-1). PinnedOllama below sends these
+    # options and no num_ctx, so Ollama's default context window applied.
+    try:
+        stamp = _stamp.run_stamp(
+            model, options_sent={"num_predict": max_tokens, "temperature": 0, "seed": 1, "num_ctx": None},
+        )
+    except _stamp.StampError as e:
+        sys.exit(str(e))
 
     corpus = read_corpus(labels["snapshot_commit"], labels["corpus"])
     docs_root = work / "documents"
@@ -190,14 +200,17 @@ def generate(args) -> None:
     pipeline.stage_05.run = spy
 
     out_path = Path(args.out)
-    state = json.load(open(out_path, encoding="utf-8")) if out_path.exists() else {
+    # One stamp per start: a resumed file holds answers from every start.
+    state = _stamp.resumable_state(out_path, {
         "model": model, "snapshot_commit": labels["snapshot_commit"], "conditions": conditions,
         "records": [], "answers": {},
-    }
+    }, stamp)
     done = {(r["qid"], r["condition"]) for r in state["records"]}
 
     def save():
         json.dump(state, open(out_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+
+    save()
 
     # Warm-up: loads the model into memory so the first real call does not time out waiting for it.
     warm = PinnedOllama(model_name=model)
@@ -322,6 +335,7 @@ def score(args) -> None:
         by.setdefault((r["group"], r["condition"]), {})[r["qid"]] = r
     out = ["# End-to-end check on the similarity cut-off - results\n"]
     p = out.append
+    p(_stamp.markdown(state.get("stamps")))
     p(f"Model {state['model']}, snapshot `{state['snapshot_commit']}`, temperature 0. Conditions: "
       + ", ".join(f"{c} = {t}" for c, t in state["conditions"].items()) + ".\n")
 

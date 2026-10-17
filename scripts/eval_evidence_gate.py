@@ -36,6 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import _stamp  # noqa: E402  (standard library only, so this script still runs anywhere)
 from backend.core.evidence_gate import (  # noqa: E402
     AUTHENTICITY_STATES,
     SUPPORT_STATES,
@@ -189,6 +190,10 @@ def evaluate(include_new: bool = False) -> int:
     accepts on purpose, and turning it into a build failure would create
     exactly the pressure to loosen the gate that the design exists to resist.
     """
+    # No model is called, but the score still depends on the commit (the
+    # gate's marker lists) and on the Constitution, so the printed report says
+    # which ones it scored (BLUEPRINT S-1).
+    print(_stamp.markdown(_stamp.run_stamp(None)))
     tuned = report(
         "PIP evidence gate - labelled corpus (TUNED)",
         "the gate was built against these; a perfect score here proves "
