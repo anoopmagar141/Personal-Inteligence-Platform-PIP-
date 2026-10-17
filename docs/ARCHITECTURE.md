@@ -416,5 +416,7 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   contract-proving reference; `frontend/cli/pip_cli.py` is a urllib CLI. Only
   the Flutter one is built and shipped. The CLI is still tested (12 tests in
   `backend/tests/test_cli.py`, which imports `frontend.cli.pip_cli` — the one
-  place a backend test reaches into `frontend/`); `frontend/web/` has no tests.
+  place a backend test reaches into `frontend/`); `frontend/web/` has no test
+  harness, only `test_web_client_consent.py`, which reads what the server
+  serves and pins that the client does not grant consent (FREEZE_LIST §7.51).
 - **`ollama` is a declared dependency that nothing imports** (see Layers).

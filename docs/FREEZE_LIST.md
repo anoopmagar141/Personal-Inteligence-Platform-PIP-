@@ -39,7 +39,8 @@ Ollama model counted as local, is fixed (§7.48), and so is D-28, a profile
 chosen before its password has been set (G-1b, §7.49), which also put right
 G-1's refusal of the first-run import, and so is D-06, a
 deleted document that left its file and its stored bytes behind (G-2,
-§7.50). Anything further needs a new authorization.
+§7.50), and so is the older web client's one-click grant of full consent
+(G-6, §7.51). Anything further needs a new authorization.
 
 Contents: 1 Principle · 2 Development strategy · 3 Classification ·
 4 The nine promises · 5 Evidence · 6 Rejected methods · 7 Evidence tracks ·
@@ -252,6 +253,11 @@ reaches a counting stub through the real pipeline (§7.21).
   2026-10-16, §7.48).
 - An endpoint re-saved from remote to local stays refused until it is
   removed and added again (§7.2 finding 2).
+- The server accepts any valid scope for any known provider from any caller
+  that holds the API token. The dialog that explains the four scopes, with
+  nothing preselected, is in the Flutter client; the older web client no
+  longer grants at all (G-6, §7.51). The command-line client's `/consent`
+  still defaults to `full_inference` when no scope is typed (D-30, §7.51).
 
 ### Promise 7 — Encryption at rest
 **Rejected wording:** "Disk access alone yields only ciphertext."
@@ -3250,6 +3256,63 @@ The fourth of the blueprint's privacy and security cards.
   the Flutter client unwraps the route's `detail` sentence (`ApiException`) and
   prints it above the list. Read from the code, not looked at in a window.
 
+### 7.51 G-6: the older web client does not grant consent, G-6 (authorized 2026-10-16)
+
+The fifth of the blueprint's privacy and security cards.
+
+- **Defect (A, low; the blueprint's planning note, now verified):** `frontend/web/`
+  is the HTML/JS client PIP was proven with before Flutter, and the backend still
+  serves it at `/`. Its Providers tab showed a "Grant consent" button on every
+  cloud provider that was not consented to, and one click sent
+  `consent_scope: "full_inference"`: the broadest of the four scopes, with no
+  sentence saying what would leave the computer and no way to choose a narrower
+  one. Promise 6 says nothing is preselected. The Flutter client stopped doing
+  this (its own header comment says the button used to send full_inference for
+  every provider, "in this client and in the web prototype before it") and asks
+  for one scope, nothing preselected, each saying what actually leaves. The web
+  client was never changed.
+  - **Seen on `HEAD` from what the server serves,** the bytes a browser would
+    run: `GET /app.js` returns a script that renders a `data-consent` "Grant consent" button for a cloud provider that is not consented to and, on a click, posts `{ consent_scope: "full_inference" }` to `/providers/<id>/consent`; neither the script nor the page says anywhere that consent is given elsewhere.
+- **Promise:** consent is only granted where the person is told what it covers,
+  and chooses a scope. Revoking, which only ever narrows what PIP may do, can be
+  done from either client.
+- **Mechanism:** `frontend/web/app.js` no longer renders the button or handles a
+  click on it; in its place a cloud provider that is not consented to reads
+  "Grant it in the PIP app". The Providers paragraph in `index.html` says the same
+  in a sentence. The Revoke button stays.
+- **Tests:** 3 in `backend/tests/test_web_client_consent.py`. The web client has no
+  test harness, so they read what the server actually serves at `/app.js` and `/`
+  (the same bytes a browser would run): that none of a consent call, a grant button or the name of the broadest scope is in it,
+  that it says where consent is given, and that Revoke is still there. They pin
+  that the call is not there; they are not a behaviour test of the page.
+  - **Seen failing first (2 of the 3, on `HEAD`):** that the served script has no consent call, no grant button and not the name of the broadest scope (it had all three), and that it says where consent is given (it did not).
+  - **Passing before and after:** that Revoke, the button and what handles it, is still there.
+- **Break-it:** 4 mutations, one at a time on a clean copy, each caught:
+  - the grant button put back with its handler (the no-consent-call test and the says-where test);
+  - a grant still posted, only with a narrower scope (the no-consent-call test: it pins that there is no call, not
+    which scope it carries);
+  - the sentence saying where consent is given taken out of the tab and the paragraph (the says-where test);
+  - the Revoke button taken away (the revoke control).
+- **Suites:** Backend 1597 passed, 0 failed (17 min 30 s), run with the embedding shim on a clean export of `df220e1` plus this change, with nothing else running. The new file passed 8 runs in 8. The change is two web files that no other test reads, and no Flutter file changed, so the Flutter suite was not re-run.
+
+**Found beside it, not fixed (D-30, A, low):** the command-line client has the
+same shape in a typed command. `/consent PROVIDER_ID` in `frontend/cli/pip_cli.py`
+sends `full_inference` when no `--scope` is typed (its usage line says "Default
+scope: full_inference"), a default the person did not choose, which is what
+Promise 6 rules out. It is not a click and the CLI is not shipped, so it is not
+the card's case; not fixed, outside it.
+
+**Not covered (still open):**
+- **The server still accepts any valid scope for any known provider** from any
+  caller that holds the API token (`POST /providers/<id>/consent`). Nothing on
+  the server side asks that a scope was explained; the Flutter dialog is the only
+  place that does. Added to Promise 6's limitations.
+- **The page was not opened in a browser.** The tests read the served bytes; the
+  new text is one `<span>` and one sentence.
+- **A person who only has the web client** cannot now grant consent to a cloud
+  provider from it. The PIP app is the deliverable; the web client is kept as a
+  contract-proving reference (ARCHITECTURE).
+
 ---
 
 ## 8. Status
@@ -3311,6 +3374,8 @@ The fourth of the blueprint's privacy and security cards.
 | D-29 the first-run import refuses for any registered profile | Found 2026-10-16 (§7.49), open | A, low: the route's rule is meant to be "no profile has a database" but tests the method `exists`, not its result, so a profile with no password yet also refuses it, with a sentence that is untrue then. Over-refuses only; the welcome screen cannot reach it. Not fixed |
 | G-3 / D-08 a cloud model counted as local | Fixed 2026-10-16 (§7.48) | D then A, medium: Ollama's own `-cloud` models were answered over the internet but reported local, so a conversation and the Observer's transcript could leave the machine. One predicate (`is_cloud_model`): a pull and a selection are refused with a sentence (the selection before Ollama is asked, which fails open), and the provider reports itself not local, so Stage 8 and Stage 11 refuse a name already stored. 43 tests (28 failed first), 7 break-it mutations caught |
 | G-2 / D-06 a deleted document left its file and its stored bytes | Fixed 2026-10-16 (§7.50) | D then A, medium: `DELETE /rag/documents` removed the chunks and marked the row, but the uploaded file stayed in the documents folder and its bytes stayed in `document_blobs`, so in every later backup. Delete now removes the file (only one inside the profile's own folder; one that cannot be removed stops the delete with a sentence) and the stored bytes. 12 tests (9 failed first), 7 break-it mutations caught |
+| G-6 the older web client granted full consent in one click | Fixed 2026-10-16 (§7.51) | A, low: `frontend/web/` sent `consent_scope: "full_inference"`, the broadest scope, for any cloud provider on one click, with nothing explained and nothing chosen. The button and its handler are gone; the tab says to grant it in the PIP app; Revoke stays. 3 tests (2 failed first) that read the served files, 4 break-it mutations caught. The server still accepts any valid scope from any token holder |
+| D-30 the command-line client's /consent defaults to full_inference | Found 2026-10-16 (§7.51), open | A, low: `/consent PROVIDER_ID` with no `--scope` grants the broadest scope, a default the person did not choose. A typed command, in a client that is not shipped. Not fixed |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

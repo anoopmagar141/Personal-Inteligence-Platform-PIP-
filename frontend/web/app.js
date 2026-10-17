@@ -399,10 +399,16 @@ async function loadProviders() {
   tbody.innerHTML = providers
     .map((p) => {
       const consented = p.user_consented && !p.revoked;
+      // No "Grant consent" button. This client used to grant the broadest of the
+      // four consent scopes for any provider on one click, with no sentence saying
+      // what would leave the machine. The PIP app asks for one scope, nothing
+      // preselected, each saying what actually leaves; consent is given there
+      // (FREEZE_LIST section 7.51). Revoking only ever narrows what PIP may do, so
+      // it stays.
       const actionBtn = p.is_cloud
         ? consented
           ? `<button class="small danger" data-revoke="${escapeHtml(p.provider_id)}">Revoke</button>`
-          : `<button class="small" data-consent="${escapeHtml(p.provider_id)}">Grant consent</button>`
+          : '<span class="muted">Grant it in the PIP app</span>'
         : '<span class="muted">n/a (local)</span>';
       return `<tr>
         <td>${escapeHtml(p.provider_id)}</td>
@@ -414,12 +420,6 @@ async function loadProviders() {
     })
     .join("");
 
-  tbody.querySelectorAll("[data-consent]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      await apiPost(`/providers/${btn.dataset.consent}/consent`, { consent_scope: "full_inference" });
-      await loadProviders();
-    });
-  });
   tbody.querySelectorAll("[data-revoke]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       await apiPost(`/providers/${btn.dataset.revoke}/revoke`);
