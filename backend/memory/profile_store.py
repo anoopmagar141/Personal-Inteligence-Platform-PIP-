@@ -10,6 +10,17 @@ from typing import Any, Iterable
 from backend.config.settings import get_settings
 from backend.core.types import TIMESTAMP_FORMAT, now_utc
 
+
+def _constitution_version_or_unknown() -> str:
+    # The column is NOT NULL; an unreadable rules file is reported by the
+    # sign-in check, and must not stop someone being onboarded.
+    from backend.core import constitution_version
+
+    try:
+        return constitution_version.current()["version"] or "unknown"
+    except Exception:
+        return "unknown"
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -713,13 +724,16 @@ def complete_onboarding(
             id, session_count, schema_version, constitution_version,
             first_session_date, last_session_date, onboarding_complete
         )
-        VALUES (1, 1, '1.0', '1.0', ?, ?, 1)
+        VALUES (1, 1, '1.0', ?, ?, ?, 1)
         ON CONFLICT(id) DO UPDATE SET
             first_session_date = COALESCE(profile_meta.first_session_date, excluded.first_session_date),
             last_session_date = excluded.last_session_date,
             onboarding_complete = 1
         """,
-        (timestamp, timestamp),
+        # The rules this profile starts under, read from the file rather than
+        # the literal "1.0" every profile used to get whatever rules were in
+        # force (BLUEPRINT G-5); the sign-in check compares against it.
+        (_constitution_version_or_unknown(), timestamp, timestamp),
     )
 
     if current_project and current_project.get("name"):

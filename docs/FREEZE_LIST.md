@@ -3733,6 +3733,51 @@ The first card of the final plan's step 4 (BLUEPRINT C-14, issue #14; its card w
 - **A chat moved to another project afterwards:** the decision keeps the project the chat had when the Observer
   ran.
 
+### 7.58 G-5: the Constitution's version is bumped and checked at sign-in, D-35 (authorized 2026-10-18, DEC-6)
+
+The second card of the final plan's step 4 (BLUEPRINT G-5). Owner decision DEC-6, 2026-10-18: on a mismatch,
+warn loudly and keep running.
+
+- **Defect (D-35, A, low):** `backend/core/constitutional.json` declares "version 1.0, locked before Observer
+  build" and was edited twice after that with no bump: gated fields became table-and-field patterns
+  (2026-07-04, 1fcdc42) and `session_continuity` left `observer_may_write` (2026-08-16, 9ace30e). Its own
+  `amendment_process` says "on_startup: check profile.constitution_version vs current"; nothing did, and every
+  profile stored the literal "1.0" from `complete_onboarding`, whatever rules were in force. So "which rules
+  decided this?" had no answer, and an edit to the rules could go unnoticed.
+- **Promise:** 1 and 3 rest on the Constitution being the rules that were measured; the thesis's "auditable
+  enforcement" needs to say which rules decided a record.
+- **Mechanism:**
+  - the rules are now version 1.1, with a changelog entry naming the two silent edits; no rule changed;
+  - `backend/core/constitution_version.py` registers each released version with the sha256 of its LF-normalised
+    text (`KNOWN_VERSIONS`; the same fingerprint the S-1 run stamp records). `check(conn)` reports an edit
+    without a bump (the text does not match its version's fingerprint, or the version is not registered) and a
+    profile that last ran other rules; `check_and_record(conn)` warns for each (log at WARNING, a
+    `constitution` trace row) and then records the version now in force, so a change is reported once;
+  - the sign-in catch-up runs it first, in its own try: DEC-6, nothing may stop PIP; `/status` reports
+    `constitution` (version, the profile's, warnings), read-only; a new profile records the version it starts
+    under instead of "1.0".
+- **Tests:** `backend/tests/test_constitution_version.py`, 8: the rules in force are a registered version with
+  this exact text and a changelog entry; the run stamp records the same fingerprint; an edit without a bump is
+  reported; a profile that last ran 1.0 is warned once (log and trace), recorded, and then quiet; a new profile
+  records the current version; an unreadable rules file is a warning, not a failed start; `/status` reports it;
+  and signing in, through the app's own start-up catch-up, runs the check and records the version.
+  - **Seen failing first:** the whole file on `HEAD` (320159f), where the check did not exist.
+- **Break-it:** 5 mutations, each alone, restored byte for byte, each caught: an edit without a bump not compared
+  (1 test); the new version never recorded (2); no trace row for the warning (2); onboarding back to the literal
+  "1.0" (1); sign-in not running the check (1).
+- **Suites:** Backend 1674 passed, 0 failed (18 min 14 s), on the working tree at 320159f plus this change (with
+  other sessions' uncommitted `httpx2` requirement and its test), nothing else running; the changed files were
+  compared byte for byte with copies taken before the run. No Flutter file changed.
+
+**Not covered (still open):**
+- **The app does not show the warning.** It is in the log, the trace and `/status`; the Flutter client reads
+  none of them for this. Someone who never opens the trace will not see it.
+- **Results from before S-1** cannot say which rules they ran under. Results from S-1 on carry the fingerprint:
+  V-2's and W-1's runs recorded `3908bd8d...`, the text labelled 1.0 with both silent edits in it, which is the
+  same set of rules as 1.1 (only the version and changelog changed).
+- **A version is registered by hand:** forgetting to register a new version makes the next sign-in warn "not a
+  registered version", which is the intended reminder.
+
 ---
 
 ## 8. Status
@@ -3803,6 +3848,7 @@ The first card of the final plan's step 4 (BLUEPRINT C-14, issue #14; its card w
 | D-33 a third person's goal accepted as the user's interest | Found 2026-10-18 (§7.55), open | A, medium: "My friend wants to pass the Azure Fundamentals exam by March" is EVIDENCE_SUFFICIENT for the user's `topic_interests`; on a long chat it reached the confirmation queue (asked, not written). Not fixed |
 | W-1 one settings block: 16k window, qwen2.5:7b, temperature 0.0 | Built and measured 2026-10-18 (§7.56) | A, medium: Ollama's default 4096 window cut long prompts from the front and the default model was llama3.1:8b in code. Every request now asks for 16384 (all 27 long prompts read in full; fully on the GPU, 6.6-6.8 of 8 GB in use with a browser open); qwen2.5:7b is the one default; temperature 0.0 chosen by a fixed rule. 13 tests, 7 break-it mutations. Its long-chat bar 2 is NOT met: 2 near-misses (1 before) reached the decision log, which skips the gate (G-4) |
 | D-34 a learned decision saved with no project | Fixed 2026-10-18 (§7.57) | A, medium: the Observer was called without the chat's project and a queued decision had no project column, so every learned decision was saved with none and a project's own lookup never found it. The project is now read from the chat's row on every path (end of chat, shutdown queue, crash recovery), and logged and queued decisions keep the project and the chat's id. 7 tests (7 failed first), 5 break-it mutations |
+| D-35 the Constitution edited after it was locked, its version never checked | Fixed 2026-10-18 (§7.58) | A, low: constitutional.json said 1.0 and was edited twice with no bump; every profile stored the literal 1.0 and nothing compared it. Now 1.1 with a changelog, each version registered with its text's fingerprint, and a sign-in check that warns (log, trace, /status) and keeps running (DEC-6). 8 tests, 5 break-it mutations. The app does not show the warning yet |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

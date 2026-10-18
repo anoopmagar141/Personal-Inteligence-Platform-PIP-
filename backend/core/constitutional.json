@@ -1,10 +1,15 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "changelog": [
     {
       "version": "1.0",
       "date": "2026-06",
       "reason": "Initial constitution — locked before Observer build"
+    },
+    {
+      "version": "1.1",
+      "date": "2026-10-18",
+      "reason": "Names two edits made after 1.0 without a version bump: gated_fields became table-and-field patterns such as skill_memory.*.level (2026-07-04, commit 1fcdc42), and session_continuity left observer_may_write, never a real table (2026-08-16, commit 9ace30e). No rule changes in 1.1 itself. From 1.1 each version is registered with a fingerprint of its text and checked when a profile signs in (BLUEPRINT G-5)."
     }
   ],
   "immutable_fields": {

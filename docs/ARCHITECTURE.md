@@ -202,6 +202,14 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   prompt from the front - the Observer's instructions first (FREEZE_LIST
   §7.55). The chat (Stage 9) and Observer trace lines record the prompt tokens
   Ollama read, the window, and whether PIP's estimate said it would not fit.
+- **The Constitution has a checked version** (`constitution_version.py`, G-5).
+  Each released version of `constitutional.json` is registered with the
+  sha256 of its LF-normalised text (the fingerprint the S-1 run stamp also
+  records); each profile records the version it last ran under
+  (`profile_meta.constitution_version`). The sign-in catch-up compares both
+  and, on an edit without a bump or a changed version, warns loudly (log,
+  trace, `/status` `constitution`) and keeps running (owner decision DEC-6),
+  then records the version now in force.
 - **The evidence gate is an allowlist, and fails toward rejection.** Entailment
   is decided by requiring the user's own words to carry a recognised support
   construction for the kind of claim being made — the three the constitution

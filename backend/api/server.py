@@ -12,6 +12,7 @@ from typing import Any, Optional, Union
 from backend.config.settings import get_settings
 from backend.core import (
     auth,
+    constitution_version,
     db_key,
     instance_lock,
     pinned_executor,
@@ -221,6 +222,10 @@ def api_status(conn) -> dict[str, Any]:
         "active_decisions": decision_count,
         "pending_decisions": pending_count,
         "pending_memory": pending_memory_count,
+        # The rules in force, the version this profile last ran under, and any
+        # mismatch (BLUEPRINT G-5, DEC-6: warn and keep running). Read-only
+        # here; the sign-in catch-up records the new version.
+        "constitution": constitution_version.check(conn),
     }
 
 
@@ -1289,6 +1294,14 @@ try:
     def _catch_up_blocking() -> None:
         conn = _conn()
         try:
+            # First and in its own try: which rules this profile now runs
+            # under, warned loudly on a mismatch and then recorded (BLUEPRINT
+            # G-5). DEC-6: a mismatch never stops PIP - it is normal after an
+            # update - so nothing here may skip the work below.
+            try:
+                constitution_version.check_and_record(conn)
+            except Exception as e:
+                logger.error(f"Constitution check failed, continuing: {e}")
             # Cheap (one UPDATE), and it belongs before the drain rather
             # than after: the drain can run for minutes, and a goal that
             # went stale while the app was closed should be marked by

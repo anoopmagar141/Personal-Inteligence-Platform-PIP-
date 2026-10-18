@@ -110,11 +110,18 @@ than a winner picked.
   → `backend/memory/decision_log.py:77`
 - **Paths are overridable by environment variable with a default**, so tests can
   isolate them. → `backend/api/server.py:60` (`PIP_DB_PATH`)
+- **The local model's settings are one block, `settings.json` `llm`** (default
+  model, window, temperature, tokens per word); `pipeline.DEFAULT_MODEL_NAME`
+  and `OllamaProvider` read it, and a test pins that they agree (W-1; the old,
+  unread `observer.model` key is gone). → `backend/providers/ollama_provider.py`
+- **Changing `backend/core/constitutional.json` means a new version:** bump
+  `version`, add a changelog entry, and register the new text's fingerprint in
+  `constitution_version.KNOWN_VERSIONS`. A sign-in warns (and keeps running) on
+  an edit without a bump, and on a profile that last ran other rules (G-5).
+  → `backend/core/constitution_version.py`
 - **Inconsistent / dead config:** `settings.json` contains keys nothing reads —
-  `observer.model` (the model actually comes from
-  `pipeline.get_active_model_name()`, falling back to the hardcoded
-  `DEFAULT_MODEL_NAME`), and the whole `performance_targets` and `database`
-  blocks. `database.kdf_iterations` is duplicated as a constant in
+  the whole `performance_targets` and `database` blocks.
+  `database.kdf_iterations` is duplicated as a constant in
   `backend/core/db_key.py:42` (`KDF_ITERATIONS = 256_000`), which is the value
   that is actually used.
 
