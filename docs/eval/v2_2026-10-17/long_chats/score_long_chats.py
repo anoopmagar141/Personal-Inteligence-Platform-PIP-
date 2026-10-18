@@ -22,8 +22,9 @@ LENGTHS = ["S", "M", "L"]
 
 
 def bound(n, d):
-    if d == 0:
-        return f"{n}/0"
+    # The rule of three means nothing on a handful: 0 of 1 is not "at most 300%".
+    if d < 10:
+        return f"{n}/{d}"
     if n == 0:
         return f"0/{d} (at most about {300 / d:.0f}%)"
     if n == d:

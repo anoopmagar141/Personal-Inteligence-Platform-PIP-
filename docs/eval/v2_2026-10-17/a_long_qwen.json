@@ -1,0 +1,3781 @@
+{
+ "stamp": {
+  "stamp_version": 1,
+  "date": "2026-10-18T04:34:18+00:00",
+  "git": {
+   "commit": "4744edaf2489d11be4bd24164afa45df61a9da9a",
+   "dirty": false,
+   "changed": []
+  },
+  "constitution": {
+   "version": "1.0",
+   "sha256": "3908bd8df7125990198086b6b0d9c09dc47d38c7ddcb383b28b31184a8328733"
+  },
+  "ollama": {
+   "host": "http://localhost:11434",
+   "version": "0.40.3"
+  },
+  "model": {
+   "tag": "qwen2.5:7b",
+   "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+   "parameters": null
+  },
+  "options_sent": {
+   "temperature": null,
+   "num_ctx": null
+  },
+  "note": "options_sent lists what the harness put in Ollama's request options. A key whose value is null was not sent, so Ollama's or the model's own default applied (the model's own defaults are under model.parameters).",
+  "transcript_token_cap": 8000,
+  "prompt_hash": "9e3a633b21bb4e2ac71e4d59059f9c6be5e0c54dd73b393eedb71fedbfd55139",
+  "wall_clock_seconds": [
+   635.6
+  ],
+  "validity_condition": "Valid for gate-only comparisons; any change to the Observer prompt, the extraction schema, the model or grounding voids it.",
+  "count_prompt_tokens_num_ctx": 16384
+ },
+ "runs": [
+  [
+   {
+    "id": "long_S_r0_d7",
+    "category": "long",
+    "seconds": 19.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"If I ever had a free summer I might look at Elixir, but honestly that is not going to happen. What is it actually good at?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"various coding and exam-related topics\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"review AWS Solutions Architect Associate exam materials\"\n  }\n}",
+    "raw_candidates": 5,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Rust",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Elixir",
+      "0.5",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Pebblebox",
+      "a recipe-sharing app",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2572,
+     "eval_count": 509,
+     "done_reason": "stop",
+     "load_duration": 5219984200,
+     "prompt_eval_duration": 1226570000,
+     "eval_duration": 11375683000,
+     "total_duration": 17847978900
+    },
+    "prompt_words": 1883,
+    "full_prompt_tokens": 2572
+   },
+   {
+    "id": "long_S_r0_d21",
+    "category": "long",
+    "seconds": 21.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: What do the Cache-Control and ETag headers actually do in HTTP? (Assistant provided context about using Git)\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Android development\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: Can you look at this null pointer error from the Android build? (Assistant provided context about using Kotlin)\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decides to revise for the AWS Solutions Architect Associate exam by spacing out revision.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"User: Could you summarise the Big-O costs of the common data structure operations? Assistant: Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"various software development and exam preparation topics\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"User decides to revise for the AWS Solutions Architect Associate exam by spacing out revision.\"\n    ],\n    \"suggested_next_step\": \"User should start implementing the spaced practice plan for the AWS exam\"\n  }\n}",
+    "raw_candidates": 5,
+    "funnel": [
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Pebblebox",
+      "a recipe-sharing app",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2572,
+     "eval_count": 619,
+     "done_reason": "stop",
+     "load_duration": 4033977500,
+     "prompt_eval_duration": 1249475000,
+     "eval_duration": 13877082000,
+     "total_duration": 19184806600
+    },
+    "prompt_words": 1883,
+    "full_prompt_tokens": 2572
+   },
+   {
+    "id": "long_S_r0_d63",
+    "category": "long",
+    "seconds": 31.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open. Anyway, what makes a good sequence diagram?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"HTTP\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"What do the Cache-Control and ETag headers actually do in HTTP?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Git\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"When should someone use git rebase instead of git merge?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.6\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses? My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call? If I ever had a free summer I might look at Elixir, but honestly that is not going to happen. What is it actually good at?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Unit testing\",\n      \"proposed_value\": \"0.7\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"What is the difference between unit tests and integration tests?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Big-O notation\",\n      \"proposed_value\": \"0.6\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Could you summarise the Big-O costs of the common data structure operations?\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"Pass the AWS Solutions Architect Associate exam by March\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March. What is a sensible way to space out revision?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Pass the AWS Solutions Architect Associate exam by March\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March. What is a sensible way to space out revision?\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"various technical questions and project-related discussions\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Continue with the next technical question or project-related discussion\"\n  }\n}",
+    "raw_candidates": 10,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Rust",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "HTTP",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Git",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Unit testing",
+      "0.7",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Big-O notation",
+      "0.6",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "goal_memory",
+      "active_goals",
+      "Pass the AWS Solutions Architect Associate exam by March",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Pebblebox",
+      "a recipe-sharing app",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 pass the aws solutions architect associate exam by march 0.7 active 2026-10-18t04:35:43z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2572,
+     "eval_count": 1035,
+     "done_reason": "stop",
+     "load_duration": 4090635700,
+     "prompt_eval_duration": 2206679000,
+     "eval_duration": 23255383000,
+     "total_duration": 29577334900
+    },
+    "prompt_words": 1883,
+    "full_prompt_tokens": 2572
+   },
+   {
+    "id": "long_S_r1_d7",
+    "category": "long",
+    "seconds": 23.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"my main project this term is Lanternfish, a budgeting app for student hostels\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"his main project is Pebblebox, a recipe-sharing app\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I can help you with Rust if you need it, but I have more experience with other languages\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"database indexing\",\n      \"proposed_value\": \"B-tree\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Can you explain how a B-tree index makes lookups faster in a database?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"HTTP headers\",\n      \"proposed_value\": \"Cache-Control and ETag\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"What do the Cache-Control and ETag headers actually do in HTTP?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Git workflow\",\n      \"proposed_value\": \"rebase vs merge\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"When should someone use git rebase instead of git merge?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"exam preparation\",\n      \"proposed_value\": \"AWS Solutions Architect Associate exam\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March. What is a sensible way to space out revision?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"To pass the AWS Solutions Architect Associate exam by March, the user should follow a spaced practice schedule.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\", \"alternative_considered\"],\n      \"raw_quote\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"various technical topics including database indexing, HTTP headers, Git workflow, and exam preparation\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Review sequence diagrams for the Lanternfish project\"\n  }\n}",
+    "raw_candidates": 7,
+    "funnel": [
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "database indexing",
+      "B-tree",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "topic_interests",
+      "HTTP headers",
+      "Cache-Control and ETag",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "topic_interests",
+      "Git workflow",
+      "rebase vs merge",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "topic_interests",
+      "exam preparation",
+      "AWS Solutions Architect Associate exam",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "topic_interests",
+      "text": "2 http headers 1 2026-10-18t04:36:09z active",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "written",
+      "table": "topic_interests",
+      "text": "1 database indexing 1 2026-10-18t04:36:09z active",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "written",
+      "table": "topic_interests",
+      "text": "4 exam preparation 1 2026-10-18t04:36:09z active",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "written",
+      "table": "topic_interests",
+      "text": "3 git workflow 1 2026-10-18t04:36:09z active",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 to pass the aws solutions architect associate exam by march, the user should follow a spaced practice schedule. 1.0 active 2026-10-18t04:36:09z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2572,
+     "eval_count": 705,
+     "done_reason": "stop",
+     "load_duration": 4055655800,
+     "prompt_eval_duration": 1245594000,
+     "eval_duration": 15807157000,
+     "total_duration": 21133554600
+    },
+    "prompt_words": 1883,
+    "full_prompt_tokens": 2572
+   },
+   {
+    "id": "long_S_r1_d21",
+    "category": "long",
+    "seconds": 30.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"my main project this term is Lanternfish, a budgeting app for student hostels.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"my cousin's main project is Pebblebox, a recipe-sharing app\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Git\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Can you look at this null pointer error from the Android build?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Kotlin\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I don't write Kotlin at all, it's someone else's code, but thanks.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"AWS Solutions Architect Associate exam\",\n      \"proposed_value\": \"pass by March\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"Azure Fundamentals exam\",\n      \"proposed_value\": \"pass by March\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend wants to pass the Azure Fundamentals exam by March.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Big-O\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Could you summarise the Big-O costs of the common data structure operations?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"UML\",\n      \"proposed_value\": \"0.3\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open. Anyway, what makes a good sequence diagram?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"Excalidraw\",\n      \"proposed_value\": \"drawing tool\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"Notepad++\",\n      \"proposed_value\": \"plain editor\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My flatmate swears by Notepad++ for everything and keeps telling me to switch. Is a plain editor ever enough for a real project?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"A sensible way to space out revision is short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"various technical topics and user preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Decide on a consistent diagramming tool for all projects.\"\n  }\n}",
+    "raw_candidates": 11,
+    "funnel": [
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Pebblebox",
+      "a recipe-sharing app",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Python",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Git",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Kotlin",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "goal_memory",
+      "AWS Solutions Architect Associate exam",
+      "pass by March",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "goal_memory",
+      "Azure Fundamentals exam",
+      "pass by March",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Big-O",
+      "0.5",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "UML",
+      "0.3",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "Excalidraw",
+      "drawing tool",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "Notepad++",
+      "plain editor",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 a sensible way to space out revision is short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only. 0.7 active 2026-10-18t04:36:42z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2572,
+     "eval_count": 1033,
+     "done_reason": "stop",
+     "load_duration": 4051828000,
+     "prompt_eval_duration": 1265253000,
+     "eval_duration": 23343598000,
+     "total_duration": 28685889600
+    },
+    "prompt_words": 1883,
+    "full_prompt_tokens": 2572
+   },
+   {
+    "id": "long_S_r1_d63",
+    "category": "long",
+    "seconds": 20.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"my main project this term is Lanternfish, a budgeting app for student hostels.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"my cousin's main project is Pebblebox, a recipe-sharing app\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Kotlin\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I don't write Kotlin at all, it's someone else's code, but thanks.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Diagramming\",\n      \"proposed_value\": \"0.7\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open. Anyway, what makes a good sequence diagram?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Use Excalidraw for all diagrams due to personal preference and efficiency.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"various technical topics including database indexing, software project management, and programming tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Continue with the next technical question or topic.\"\n  }\n}",
+    "raw_candidates": 5,
+    "funnel": [
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Pebblebox",
+      "a recipe-sharing app",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Rust",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Kotlin",
+      "0.9",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Diagramming",
+      "0.7",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 use excalidraw for all diagrams due to personal preference and efficiency. 0.7 active 2026-10-18t04:37:04z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2572,
+     "eval_count": 575,
+     "done_reason": "stop",
+     "load_duration": 4044502600,
+     "prompt_eval_duration": 1267717000,
+     "eval_duration": 12949296000,
+     "total_duration": 18286618000
+    },
+    "prompt_words": 1883,
+    "full_prompt_tokens": 2572
+   },
+   {
+    "id": "long_S_r2_d7",
+    "category": "long",
+    "seconds": 33.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"AWS\",\n      \"proposed_value\": \"AWS Solutions Architect Associate exam\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: Can you explain how a B-tree index makes lookups faster in a database? One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March. What is a sensible way to space out revision?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Azure\",\n      \"proposed_value\": \"Azure Fundamentals exam\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: My friend wants to pass the Azure Fundamentals exam by March. Is two months enough for an entry-level cloud exam?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Android\",\n      \"proposed_value\": \"null pointer error in Android build\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: Can you look at this null pointer error from the Android build?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"HTTP\",\n      \"proposed_value\": \"Cache-Control and ETag headers\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: What do the Cache-Control and ETag headers actually do in HTTP?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Git\",\n      \"proposed_value\": \"git rebase vs git merge\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: When should someone use git rebase instead of git merge?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Diagramming\",\n      \"proposed_value\": \"sequence diagram\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open. Anyway, what makes a good sequence diagram?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Notepad++\",\n      \"proposed_value\": \"plain editor for projects\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: My flatmate swears by Notepad++ for everything and keeps telling me to switch. Is a plain editor ever enough for a real project?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Testing\",\n      \"proposed_value\": \"unit tests vs integration tests\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: What is the difference between unit tests and integration tests?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Big-O notation\",\n      \"proposed_value\": \"common data structure operations\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: Could you summarise the Big-O costs of the common data structure operations?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"language\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: If I ever had a free summer I might look at Elixir, but honestly that is not going to happen. What is it actually good at?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Pass AWS Solutions Architect Associate exam by March\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\", \"alternative_considered\"],\n      \"raw_quote\": \"User: One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March. What is a sensible way to space out revision?\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"various technical topics and project-related questions\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Continue the conversation with the user on their project or technical interest.\"\n  }\n}",
+    "raw_candidates": 12,
+    "funnel": [
+     [
+      "topic_interests",
+      "Azure",
+      "Azure Fundamentals exam",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "Android",
+      "null pointer error in Android build",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "HTTP",
+      "Cache-Control and ETag headers",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "Git",
+      "git rebase vs git merge",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "Diagramming",
+      "sequence diagram",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "Notepad++",
+      "plain editor for projects",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "Testing",
+      "unit tests vs integration tests",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "Big-O notation",
+      "common data structure operations",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Pebblebox",
+      "a recipe-sharing app",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "Elixir",
+      "language",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 pass aws solutions architect associate exam by march 1.0 active 2026-10-18t04:37:40z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2572,
+     "eval_count": 1179,
+     "done_reason": "stop",
+     "load_duration": 4043149900,
+     "prompt_eval_duration": 1262170000,
+     "eval_duration": 26561336000,
+     "total_duration": 31892252700
+    },
+    "prompt_words": 1883,
+    "full_prompt_tokens": 2572
+   },
+   {
+    "id": "long_S_r2_d21",
+    "category": "long",
+    "seconds": 16.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"database\",\n      \"proposed_value\": \"B-tree index, Cache-Control, ETag, Git, HTTP headers, Sequence diagram, Unit tests, Integration tests, Big-O\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 5,\n      \"evidence_text\": \"Can you explain how a B-tree index makes lookups faster in a database? When should someone use git rebase instead of git merge? Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open. Anyway, what makes a good sequence diagram? What is the difference between unit tests and integration tests? Could you summarise the Big-O costs of the common data structure operations?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"various topics related to software development and database management\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"none provided\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Pebblebox",
+      "a recipe-sharing app",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2572,
+     "eval_count": 419,
+     "done_reason": "stop",
+     "load_duration": 4025064000,
+     "prompt_eval_duration": 1276620000,
+     "eval_duration": 9399549000,
+     "total_duration": 14723949200
+    },
+    "prompt_words": 1883,
+    "full_prompt_tokens": 2572
+   },
+   {
+    "id": "long_S_r2_d63",
+    "category": "long",
+    "seconds": 22.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"database\",\n      \"proposed_value\": \"B-tree index, Cache-Control, ETag, Git, Sequence diagram, Unit testing, Data structures, Big-O, Project management, Software development tools\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 7,\n      \"evidence_text\": \"Can you explain how a B-tree index makes lookups faster in a database?\\nWhat do the Cache-Control and ETag headers actually do in HTTP?\\nWhen should someone use git rebase instead of git merge?\\nQuick aside before the next question: I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open. Anyway, what makes a good sequence diagram?\\nWhat is the difference between unit tests and integration tests?\\nCould you summarise the Big-O costs of the common data structure operations?\\nContext for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\\nMy cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\\nIf I ever had a free summer I might look at Elixir, but honestly that is not going to happen. What is it actually good at?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Use separate tables for ingredients in a recipe-sharing app\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Is a separate table the right call?\\nUsually yes: an ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"various software development topics and project management\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"Use separate tables for ingredients in a recipe-sharing app\"\n    ],\n    \"suggested_next_step\": \"Further discuss Elixir for the user's project or next task\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Pebblebox",
+      "a recipe-sharing app",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2572,
+     "eval_count": 654,
+     "done_reason": "stop",
+     "load_duration": 4374075600,
+     "prompt_eval_duration": 1268525000,
+     "eval_duration": 14732072000,
+     "total_duration": 20398930900
+    },
+    "prompt_words": 1883,
+    "full_prompt_tokens": 2572
+   },
+   {
+    "id": "long_M_r0_d7",
+    "category": "long",
+    "seconds": 33.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"main_project\",\n      \"proposed_value\": \"Lanternfish\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"main_project\",\n      \"proposed_value\": \"Pebblebox\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"exam\",\n      \"proposed_value\": \"AWS Solutions Architect Associate\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March. What is a sensible way to space out revision?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"exam\",\n      \"proposed_value\": \"Azure Fundamentals\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend wants to pass the Azure Fundamentals exam by March. Is two months enough for an entry-level cloud exam?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"language\",\n      \"proposed_value\": \"Elixir\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: How do TCP and UDP differ, and when would each be the better choice? Assistant: Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses? User: My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call? User: If I ever had a free summer I might look at Elixir, but honestly that is not going to happen. What is it actually good at?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Long-running services with many concurrent connections, because it runs on the Erlang virtual machine and its processes are cheap and isolated.\",\n      \"signals_found\": [\"Elixir\", \"long-running services\", \"concurrent connections\"],\n      \"raw_quote\": \"Long-running services with many concurrent connections, because it runs on the Erlang virtual machine and its processes are cheap and isolated.\"\n    },\n    {\n      \"decision_text\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\",\n      \"signals_found\": [\"AWS Solutions Architect Associate\", \"spaced practice\", \"short sessions\", \"practice test\", \"weak areas\"],\n      \"raw_quote\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"various\",\n    \"open_problems\": [\n      \"How should I name the tables for shared expenses in Lanternfish?\",\n      \"Is a separate table the right call for storing ingredients in Pebblebox?\",\n      \"What is Elixir actually good at?\",\n      \"What is a sensible way to space out revision for the AWS Solutions Architect Associate exam?\",\n      \"Is two months enough for my friend to pass the Azure Fundamentals exam?\"\n    ],\n    \"last_decisions\": [\n      \"Long-running services with many concurrent connections, because it runs on the Erlang virtual machine and its processes are cheap and isolated.\",\n      \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    ],\n    \"suggested_next_step\": \"Review the database normalization process and first three normal forms for the Lanternfish project.\"\n  }\n}",
+    "raw_candidates": 6,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "main_project",
+      "Lanternfish",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "main_project",
+      "Pebblebox",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "exam",
+      "AWS Solutions Architect Associate",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "exam",
+      "Azure Fundamentals",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 4058,
+     "eval_count": 1047,
+     "done_reason": "stop",
+     "load_duration": 4293144400,
+     "prompt_eval_duration": 2048665000,
+     "eval_duration": 24579457000,
+     "total_duration": 30958207400
+    },
+    "prompt_words": 3165,
+    "full_prompt_tokens": 4058
+   },
+   {
+    "id": "long_M_r0_d21",
+    "category": "long",
+    "seconds": 36.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"main_projects\",\n      \"proposed_value\": \"Lanternfish\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"main_projects\",\n      \"proposed_value\": \"Pebblebox\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"desired_exams\",\n      \"proposed_value\": \"AWS Solutions Architect Associate exam\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March. What is a sensible way to space out revision?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"desired_exams\",\n      \"proposed_value\": \"Azure Fundamentals exam\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend wants to pass the Azure Fundamentals exam by March. Is two months enough for an entry-level cloud exam?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"My main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\",\n      \"signals_found\": [\"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\"],\n      \"raw_quote\": \"Plain nouns that match what people say out loud work best: expense, share, member, settlement. Avoid abbreviations and keep one naming style for every table.\"\n    },\n    {\n      \"decision_text\": \"My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\",\n      \"signals_found\": [\"My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\"],\n      \"raw_quote\": \"Usually yes: an ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes.\"\n    },\n    {\n      \"decision_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March. What is a sensible way to space out revision?\",\n      \"signals_found\": [\"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March. What is a sensible way to space out revision?\"],\n      \"raw_quote\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    },\n    {\n      \"decision_text\": \"My friend wants to pass the Azure Fundamentals exam by March. Is two months enough for an entry-level cloud exam?\",\n      \"signals_found\": [\"My friend wants to pass the Azure Fundamentals exam by March. Is two months enough for an entry-level cloud exam?\"],\n      \"raw_quote\": \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Project Management and Technical Advice\",\n    \"open_problems\": [\n      \"How should I name the tables for shared expenses in my main project?\",\n      \"How should I store ingredients in my cousin's main project?\",\n      \"What is a sensible way to space out revision for passing the AWS Solutions Architect Associate exam by March?\",\n      \"Is two months enough for my friend to pass the Azure Fundamentals exam by March?\"\n    ],\n    \"last_decisions\": [\n      \"Plain nouns that match what people say out loud work best: expense, share, member, settlement. Avoid abbreviations and keep one naming style for every table.\",\n      \"Usually yes: an ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes.\",\n      \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\",\n      \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\"\n    ],\n    \"suggested_next_step\": \"Continue discussing the specific needs and contexts of each project to refine the advice provided.\"\n  }\n}",
+    "raw_candidates": 5,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "main_projects",
+      "Lanternfish",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "main_projects",
+      "Pebblebox",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "desired_exams",
+      "AWS Solutions Architect Associate exam",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "desired_exams",
+      "Azure Fundamentals exam",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 4058,
+     "eval_count": 1193,
+     "done_reason": "stop",
+     "load_duration": 4049949000,
+     "prompt_eval_duration": 2011631000,
+     "eval_duration": 28354000000,
+     "total_duration": 34449568300
+    },
+    "prompt_words": 3165,
+    "full_prompt_tokens": 4058
+   },
+   {
+    "id": "long_M_r0_d63",
+    "category": "long",
+    "seconds": 22.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Lanternfish\",\n      \"proposed_value\": \"a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Pebblebox\",\n      \"proposed_value\": \"a recipe-sharing app\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My cousin's main project is Pebblebox, a recipe-sharing app.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"AWS Solutions Architect Associate exam\",\n      \"proposed_value\": \"pass by March\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Azure Fundamentals exam\",\n      \"proposed_value\": \"pass by March\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend wants to pass the Azure Fundamentals exam by March.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\",\n      \"signals_found\": [\"short sessions several times a week\", \"practice test every two weeks\", \"last fortnight on weak areas only\"],\n      \"raw_quote\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    },\n    {\n      \"decision_text\": \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\",\n      \"signals_found\": [\"two months of steady study\", \"free practice questions\"],\n      \"raw_quote\": \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"null pointer error\",\n    \"open_problems\": [\"someone else's code\"],\n    \"last_decisions\": [\"the value is read before it is initialised\"],\n    \"suggested_next_step\": \"Understand the codebase or seek help from the author.\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "active_projects",
+      "Lanternfish",
+      "a budgeting app for student hostels",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "AWS Solutions Architect Associate exam",
+      "pass by March",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Azure Fundamentals exam",
+      "pass by March",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 4058,
+     "eval_count": 596,
+     "done_reason": "stop",
+     "load_duration": 4046574700,
+     "prompt_eval_duration": 2094255999,
+     "eval_duration": 14436283000,
+     "total_duration": 20611236600
+    },
+    "prompt_words": 3165,
+    "full_prompt_tokens": 4058
+   },
+   {
+    "id": "long_M_r1_d7",
+    "category": "long",
+    "seconds": 28.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"exam_goal\",\n      \"proposed_value\": \"AWS Solutions Architect Associate exam by March\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"exam_goal\",\n      \"proposed_value\": \"Azure Fundamentals exam by March\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend wants to pass the Azure Fundamentals exam by March.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"programming_language\",\n      \"proposed_value\": \"Kotlin\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Since you write Kotlin every day, you will spot this quickly: the value is read before it is initialised.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"text_editor\",\n      \"proposed_value\": \"Notepad++\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My flatmate swears by Notepad++ for everything and keeps telling me to switch. Is a plain editor ever enough for a real project?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Pass the AWS Solutions Architect Associate exam by March\",\n      \"signals_found\": [\"exam_goal\", \"exam_strategy\"],\n      \"raw_quote\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    },\n    {\n      \"decision_text\": \"Pass the Azure Fundamentals exam by March\",\n      \"signals_found\": [\"exam_goal\", \"exam_strategy\"],\n      \"raw_quote\": \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\"\n    },\n    {\n      \"decision_text\": \"Use Excalidraw for diagrams\",\n      \"signals_found\": [\"tool_preference\", \"tool_usage\"],\n      \"raw_quote\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"decision_text\": \"Use Notepad++ for text editing\",\n      \"signals_found\": [\"tool_preference\", \"tool_usage\"],\n      \"raw_quote\": \"My flatmate swears by Notepad++ for everything and keeps telling me to switch. Is a plain editor ever enough for a real project?\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Technical Skills and Exams\",\n    \"open_problems\": [\n      \"Null pointer error from Android build\",\n      \"Understanding race conditions\",\n      \"Database normalization and normal forms\",\n      \"Sequence diagrams\",\n      \"DNS resolution process\"\n    ],\n    \"last_decisions\": [\n      \"Use Excalidraw for diagrams\",\n      \"Use Notepad++ for text editing\"\n    ],\n    \"suggested_next_step\": \"Review the AWS Solutions Architect Associate exam material and start a spaced practice routine.\"\n  }\n}",
+    "raw_candidates": 5,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "exam_goal",
+      "AWS Solutions Architect Associate exam by March",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "preference_memory",
+      "exam_goal",
+      "Azure Fundamentals exam by March",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "programming_language",
+      "Kotlin",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "text_editor",
+      "Notepad++",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending",
+     "pending",
+     "pending",
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 exam_goal aws solutions architect associate exam by march 1 explicit 0 0.18 active",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 4058,
+     "eval_count": 834,
+     "done_reason": "stop",
+     "load_duration": 4030028000,
+     "prompt_eval_duration": 2058627000,
+     "eval_duration": 20004219000,
+     "total_duration": 26129188900
+    },
+    "prompt_words": 3165,
+    "full_prompt_tokens": 4058
+   },
+   {
+    "id": "long_M_r1_d21",
+    "category": "long",
+    "seconds": 21.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"exam_targets\",\n      \"proposed_value\": \"AWS Solutions Architect Associate exam\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"exam_targets\",\n      \"proposed_value\": \"Azure Fundamentals exam\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend wants to pass the Azure Fundamentals exam by March.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Sensible way to space out revision for AWS Solutions Architect Associate exam\",\n      \"signals_found\": [\"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"],\n      \"raw_quote\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    },\n    {\n      \"decision_text\": \"If two months is enough for Azure Fundamentals exam\",\n      \"signals_found\": [\"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\"],\n      \"raw_quote\": \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Various\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"Sensible way to space out revision for AWS Solutions Architect Associate exam\",\n      \"If two months is enough for Azure Fundamentals exam\"\n    ],\n    \"suggested_next_step\": \"Continue studying for the AWS Solutions Architect Associate exam with spaced practice and regular practice tests.\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "exam_targets",
+      "AWS Solutions Architect Associate exam",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "exam_targets",
+      "Azure Fundamentals exam",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending",
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 4058,
+     "eval_count": 534,
+     "done_reason": "stop",
+     "load_duration": 4044322900,
+     "prompt_eval_duration": 2040015000,
+     "eval_duration": 13020176000,
+     "total_duration": 19138908000
+    },
+    "prompt_words": 3165,
+    "full_prompt_tokens": 4058
+   },
+   {
+    "id": "long_M_r1_d63",
+    "category": "long",
+    "seconds": 33.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"exam_goals\",\n      \"proposed_value\": \"AWS Solutions Architect Associate exam by March\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"exam_goals\",\n      \"proposed_value\": \"Azure Fundamentals exam by March\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend wants to pass the Azure Fundamentals exam by March.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"exam_preparation\",\n      \"proposed_value\": \"spaced practice\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"editor_tools\",\n      \"proposed_value\": \"Notepad++\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My flatmate swears by Notepad++ for everything and keeps telling me to switch.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"When would TCP and UDP be the better choice?\",\n      \"signals_found\": [\"For anything where every byte matters and a short delay is acceptable, such as web pages, file transfers and database connections.\", \"For real-time traffic where a late packet is worse than a missing one: voice and video calls, online games, and DNS lookups that are small enough to simply retry.\"],\n      \"raw_quote\": \"TCP gives you a reliable, ordered stream. It sets up a connection with a handshake, numbers every byte, resends anything that is lost, and slows down when the network is congested. The price is latency: a lost packet holds up everything behind it until it is resent. UDP sends independent datagrams with no connection, no ordering and no retransmission; a packet either arrives or it does not, and the application decides what to do about it.\"\n    },\n    {\n      \"decision_text\": \"What are the trade-offs between REST and GraphQL for an API?\",\n      \"signals_found\": [\"REST is simple, works with ordinary HTTP caching, and every endpoint is easy to reason about on its own. Its weak points are over-fetching and under-fetching.\", \"GraphQL is more flexible but introduces costs to the server: one query can be expensive to resolve, so you need limits on depth and cost, and naive resolvers produce the classic N plus one query problem against the database.\"],\n      \"raw_quote\": \"A REST API exposes resources at fixed URLs and uses HTTP methods to act on them. It is simple, works with ordinary HTTP caching, and every endpoint is easy to reason about on its own. Its weak points are over-fetching, where an endpoint returns far more fields than a screen needs, and under-fetching, where one screen needs several requests. GraphQL exposes a single endpoint and a typed schema, and the client asks for exactly the fields it wants, nested across related objects, in one request. That suits apps with many different screens built by separate teams. The costs move to the server: one query can be expensive to resolve, so you need limits on depth and cost, and naive resolvers produce the classic N plus one query problem against the database. Caching is also harder because every request is a POST to the same URL. For a small project with a few clients, REST is usually enough; GraphQL pays off when the number of clients and the variety of data they need keep growing.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Technical skills and exam preparation\",\n    \"open_problems\": [\n      \"Understanding null pointer errors in codebases\",\n      \"Managing memory in languages that use automatic garbage collection\"\n    ],\n    \"last_decisions\": [\n      \"TCP is better for scenarios requiring reliability and order, while UDP is better for real-time traffic where a late packet is worse than a missing one.\",\n      \"REST is simple but may require more requests, while GraphQL is more flexible but introduces costs to the server.\"\n    ],\n    \"suggested_next_step\": \"Review and implement the chosen approach in the current project.\"\n  }\n}",
+    "raw_candidates": 5,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "exam_goals",
+      "AWS Solutions Architect Associate exam by March",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "exam_goals",
+      "Azure Fundamentals exam by March",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "exam_preparation",
+      "spaced practice",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "editor_tools",
+      "Notepad++",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 4058,
+     "eval_count": 1075,
+     "done_reason": "stop",
+     "load_duration": 4050605700,
+     "prompt_eval_duration": 2033800000,
+     "eval_duration": 25260724000,
+     "total_duration": 31381429200
+    },
+    "prompt_words": 3165,
+    "full_prompt_tokens": 4058
+   },
+   {
+    "id": "long_M_r2_d7",
+    "category": "long",
+    "seconds": 21.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"project_management\",\n      \"proposed_value\": \"Lanternfish, a budgeting app for student hostels\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"programming_languages\",\n      \"proposed_value\": \"Elixir\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"If I ever had a free summer I might look at Elixir, but honestly that is not going to happen.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Should I use a separate table for ingredients in Pebblebox, a recipe-sharing app?\",\n      \"signals_found\": [\n        \"Usually yes: an ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes.\"\n      ],\n      \"raw_quote\": \"Usually yes: an ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Database Normalization and Elixir\",\n    \"open_problems\": [\n      \"How should I name the tables for shared expenses in Lanternfish?\",\n      \"How to store ingredients in Pebblebox?\",\n      \"What is Elixir actually good at?\"\n    ],\n    \"last_decisions\": [\n      \"Plain nouns that match what people say out loud work best: expense, share, member, settlement. Avoid abbreviations and keep one naming style for every table.\",\n      \"Usually yes: an ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes.\",\n      \"Long-running services with many concurrent connections, because it runs on the Erlang virtual machine and its processes are cheap and isolated.\"\n    ],\n    \"suggested_next_step\": \"Continue with the next question on DNS.\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "project_management",
+      "Lanternfish, a budgeting app for student hostels",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "preference_memory",
+      "programming_languages",
+      "Elixir",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 project_management lanternfish, a budgeting app for student hostels 1 explicit 0 0.18 active",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 4058,
+     "eval_count": 563,
+     "done_reason": "stop",
+     "load_duration": 4034054500,
+     "prompt_eval_duration": 2091437000,
+     "eval_duration": 13664832000,
+     "total_duration": 19824467400
+    },
+    "prompt_words": 3165,
+    "full_prompt_tokens": 4058
+   },
+   {
+    "id": "long_M_r2_d21",
+    "category": "long",
+    "seconds": 24.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"You mentioned the Rust programming language in the context of race conditions and database normalization.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Excalidraw\",\n      \"proposed_value\": \"1\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"You mentioned using Excalidraw for all diagrams.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Notepad++\",\n      \"proposed_value\": \"1\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"You mentioned Notepad++ for everything and keeping it open for plain editing.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"What makes a good sequence diagram?\",\n      \"signals_found\": [\"Excalidraw\", \"actor\", \"message\", \"steps\"],\n      \"raw_quote\": \"Keep one diagram per scenario, put the actor who starts it on the left, and label every arrow with the message rather than the method name. Number the steps if people will discuss them in a review.\"\n    },\n    {\n      \"decision_text\": \"What makes a good commit message?\",\n      \"signals_found\": [\"summary\", \"reason\", \"diff\", \"evidence\", \"logic\"],\n      \"raw_quote\": \"A good commit message lets someone who was not there understand why the change was made, months later, from the log alone. The first line is a short summary in the imperative mood, kept under about fifty characters so it reads well in one-line views. After a blank line, the body explains the reason: what was wrong, how it showed up, and why this change fixes it rather than another one that was considered. The diff already shows what changed, so repeating it line by line adds nothing; the reasoning is the part that is otherwise lost. Mention the evidence when there is some, such as the test that failed before the change or the error message a user saw. Keep one logical change per commit, so that reverting it or bisecting through history to find a regression stays possible. Messages like fix stuff or wip are cheap to write and expensive to read, because the next person has to reconstruct the reasoning from the code.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Software Development Tools and Practices\",\n    \"open_problems\": [\n      \"How to name tables for shared expenses in a budgeting app for student hostels.\",\n      \"How to store ingredients in a recipe-sharing app.\"\n    ],\n    \"last_decisions\": [\n      \"Excalidraw is the preferred diagram tool.\",\n      \"Notepad++ is the preferred editor for plain editing.\"\n    ],\n    \"suggested_next_step\": \"Discuss the use of race conditions in the Lanternfish project.\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 4058,
+     "eval_count": 677,
+     "done_reason": "stop",
+     "load_duration": 4054100000,
+     "prompt_eval_duration": 1992868000,
+     "eval_duration": 16114355000,
+     "total_duration": 22200351700
+    },
+    "prompt_words": 3165,
+    "full_prompt_tokens": 4058
+   },
+   {
+    "id": "long_M_r2_d63",
+    "category": "long",
+    "seconds": 28.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"programming_languages\",\n      \"proposed_value\": \"Elixir\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"If I ever had a free summer I might look at Elixir, but honestly that is not going to happen.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"text_editors\",\n      \"proposed_value\": \"Notepad++\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Is a plain editor ever enough for a real project? For small scripts, yes. Once a project has many files, search across files, refactoring and a debugger start to matter more than how fast the editor opens.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"What makes a good sequence diagram?\",\n      \"signals_found\": [\"Keep one diagram per scenario\", \"Put the actor who starts it on the left\", \"Label every arrow with the message rather than the method name\", \"Number the steps if people will discuss them in a review\"],\n      \"raw_quote\": \"Keep one diagram per scenario, put the actor who starts it on the left, and label every arrow with the message rather than the method name. Number the steps if people will discuss them in a review.\"\n    },\n    {\n      \"decision_text\": \"My main project this term is Lanternfish, a budgeting app for student hostels. How should I name the tables for shared expenses?\",\n      \"signals_found\": [\"Plain nouns that match what people say out loud work best\", \"Avoid abbreviations and keep one naming style for every table\"],\n      \"raw_quote\": \"Plain nouns that match what people say out loud work best: expense, share, member, settlement. Avoid abbreviations and keep one naming style for every table.\"\n    },\n    {\n      \"decision_text\": \"My cousin's main project is Pebblebox, a recipe-sharing app, and he asked me how to store ingredients. Is a separate table the right call?\",\n      \"signals_found\": [\"Usually yes: an ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes\"],\n      \"raw_quote\": \"Usually yes: an ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"various\",\n    \"open_problems\": [\n      \"How to structure tables for shared expenses in a budgeting app\",\n      \"How to store ingredients in a recipe-sharing app\",\n      \"What makes a good commit message\",\n      \"How database normalization works and its practical implications\",\n      \"How to name tables for a budgeting app\",\n      \"What makes a good sequence diagram\",\n      \"What makes a good diagram tool\",\n      \"What makes a good diagram for a thesis\",\n      \"How to choose between TCP and UDP\",\n      \"What makes a good sequence diagram\",\n      \"What makes a race condition\",\n      \"How garbage collection works\",\n      \"What are the trade-offs between REST and GraphQL\",\n      \"What is Elixir good at\",\n      \"How DNS works\"\n    ],\n    \"last_decisions\": [\n      \"Choose a diagram tool based on readability and consistency\",\n      \"Name tables using plain nouns and avoiding abbreviations\",\n      \"Store ingredients in separate tables with a join table for quantities and units\"\n    ],\n    \"suggested_next_step\": \"Discuss the implications of using Elixir for the Lanternfish project\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "programming_languages",
+      "Elixir",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 4058,
+     "eval_count": 872,
+     "done_reason": "stop",
+     "load_duration": 4041665300,
+     "prompt_eval_duration": 2006305000,
+     "eval_duration": 20700851000,
+     "total_duration": 26787150100
+    },
+    "prompt_words": 3165,
+    "full_prompt_tokens": 4058
+   },
+   {
+    "id": "long_L_r0_d7",
+    "category": "long",
+    "seconds": 19.6,
+    "error": null,
+    "raw_text": "{\n\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"exam\",\n      \"proposed_value\": \"AWS Solutions Architect Associate\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"One more thing about me: I want to pass the AWS Solutions Architect Associate exam by March.\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"exam\",\n      \"proposed_value\": \"Azure Fundamentals\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend wants to pass the Azure Fundamentals exam by March.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\",\n      \"signals_found\": [\"entry-level exam\", \"two months of steady study\"],\n      \"raw_quote\": \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\"\n    },\n    {\n      \"decision_text\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\",\n      \"signals_found\": [\"spaced practice\", \"short sessions several times a week\", \"practice test every two weeks\", \"last fortnight on weak areas only\"],\n      \"raw_quote\": \"Spaced practice beats cramming: short sessions several times a week, a practice test every two weeks, and the last fortnight on weak areas only.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"revision and exam preparation\",\n    \"open_problems\": [\n      \"friend's exam preparation\",\n      \"null pointer error from the Android build\"\n    ],\n    \"last_decisions\": [\n      \"two months of steady study is usually plenty for an entry-level exam, especially with the free practice questions.\"\n    ],\n    \"suggested_next_step\": \"Review friend's exam materials and focus on weak areas.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "topic_interests",
+      "exam",
+      "AWS Solutions Architect Associate",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "topic_interests",
+      "exam",
+      "Azure Fundamentals",
+      "EVIDENCE_SUFFICIENT",
+      "TIER_2_REQUIRED",
+      "pending"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "topic_interests",
+      "text": "1 exam 1 2026-10-18t04:43:16z active",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "topic_interests",
+      "text": "exam azure fundamentals",
+      "label": "TRAP"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": true,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2050,
+     "eval_count": 489,
+     "done_reason": "stop",
+     "load_duration": 4041224100,
+     "prompt_eval_duration": 1045770000,
+     "eval_duration": 12358964000,
+     "total_duration": 17503544000
+    },
+    "prompt_words": 5274,
+    "full_prompt_tokens": 6506
+   },
+   {
+    "id": "long_L_r0_d21",
+    "category": "long",
+    "seconds": 15.6,
+    "error": null,
+    "raw_text": "{ \"memory_candidates\": [ { \"target_table\": \"preference_memory\", \"field_name\": \"revision_plan\", \"proposed_value\": \"Start studying daily for 1 hour, review every two weeks, and focus on weak areas in the last two weeks before the exam.\",\"label\": \"explicit\",\"evidence_count\": 1,\"evidence_text\": \"Spaced practice is a proven method for effective learning, where short sessions are more beneficial than cramming. This involves studying daily for 1 hour, taking a practice test every two weeks, and focusing on weak areas in the last two weeks.\" } ],\"decision_candidates\": [ { \"decision_text\": \"Two months is sufficient for passing the Azure Fundamentals exam if studied consistently.\",\"signals_found\": [\"entry-level exam\", \"free practice questions\"],\"raw_quote\": \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\" } ],\"session_snapshot\": { \"topic\": \"Preparing for exams\", \"open_problems\": [\"Explain the mechanism of load balancing\", \"Address the null pointer error\"], \"last_decisions\": [\"Two months is sufficient for passing the Azure Fundamentals exam if studied consistently.\", \"Two months is enough for an entry-level cloud exam.\"], \"suggested_next_step\": \"Continue with spaced revision and practice tests for the Azure Fundamentals exam.\" } }",
+    "raw_candidates": 1,
+    "funnel": [],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2050,
+     "eval_count": 318,
+     "done_reason": "stop",
+     "load_duration": 4038596200,
+     "prompt_eval_duration": 1034598000,
+     "eval_duration": 8408282999,
+     "total_duration": 13540658400
+    },
+    "prompt_words": 5274,
+    "full_prompt_tokens": 6506
+   },
+   {
+    "id": "long_L_r0_d63",
+    "category": "long",
+    "seconds": 15.5,
+    "error": null,
+    "raw_text": "{ \"memory_candidates\": [ { \"target_table\": \"skill_memory\", \"field_name\": \"exam_name\", \"proposed_value\": \"AWS Solutions Architect Associate\", \"label\": \"explicit\", \"evidence_count\": 1, \"evidence_text\": \"The candidate wants to pass the AWS Solutions Architect Associate exam by March.\" }, { \"target_table\": \"skill_memory\", \"field_name\": \"exam_name\", \"proposed_value\": \"Azure Fundamentals\", \"label\": \"explicit\", \"evidence_count\": 1, \"evidence_text\": \"The candidate's friend wants to pass the Azure Fundamentals exam by March.\" } ], \"decision_candidates\": [ { \"decision_text\": \"The friend should consider a structured, spaced practice approach to prepare for the Azure Fundamentals exam within two months.\", \"signals_found\": [ \"entry-level exam\", \"two months\" ], \"raw_quote\": \"For an entry-level exam, two months of steady study is usually plenty, especially with the free practice questions.\" } ], \"session_snapshot\": { \"topic\": \"Revision strategy for passing exams\", \"open_problems\": [ \"Null pointer error in Android code\" ], \"last_decisions\": [ \"The code is written in Kotlin, which the author does not use, so they should seek help or documentation to understand the error.\" ], \"suggested_next_step\": \"The candidate should review the load balancer strategies mentioned to understand how they work, as this could be relevant for their friend's preparation.\" } }",
+    "raw_candidates": 2,
+    "funnel": [],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2050,
+     "eval_count": 348,
+     "done_reason": "stop",
+     "load_duration": 3293710400,
+     "prompt_eval_duration": 1013662000,
+     "eval_duration": 9060173000,
+     "total_duration": 13418239100
+    },
+    "prompt_words": 5274,
+    "full_prompt_tokens": 6506
+   },
+   {
+    "id": "long_L_r1_d7",
+    "category": "long",
+    "seconds": 25.2,
+    "error": null,
+    "raw_text": "{ \"memory_candidates\": [ { \"target_table\": \"topic_interests\", \"field_name\": \"tool_preferences\", \"proposed_value\": \"Excalidraw\",\"label\": \"explicit\",\"evidence_count\": 2,\"evidence_text\": \"1. The user mentioned using Excalidraw for all diagrams recently. 2. The user asked about the qualities of a good sequence diagram using Excalidraw.\" }, { \"target_table\": \"topic_interests\", \"field_name\": \"tool_preferences\", \"proposed_value\": \"Notepad++\", \"label\": \"explicit\", \"evidence_count\": 1, \"evidence_text\": \"1. The user mentioned that their flatmate swears by Notepad++ for everything.\" }, { \"target_table\": \"topic_interests\", \"field_name\": \"tool_preferences\", \"proposed_value\": \"Lucidchart\", \"label\": \"explicit\", \"evidence_count\": 1, \"evidence_text\": \"1. The user mentioned that their supervisor uses Lucidchart and won't touch anything else.\" } ],\"decision_candidates\": [ { \"decision_text\": \"For small projects or scripts, a plain editor like Notepad++ might be sufficient, but for larger projects, specialized tools for managing files, search, refactoring, and debugging can be beneficial.\", \"signals_found\": [ \"The user mentioned that their flatmate swears by Notepad++ for everything and keeps telling them to switch.\", \"The user asked about whether a plain editor is ever enough for a real project.\" ],\"raw_quote\": \"For small scripts, yes. Once a project has many files, search across files, refactoring and a debugger start to matter more than how fast the editor opens.\" }, { \"decision_text\": \"Load balancers use various strategies to distribute requests, such as round-robin, least connections, and hash-based methods, to ensure balanced load and reliability.\", \"signals_found\": [ \"The user asked about how a load balancer decides where to send each request.\", \"The user provided details on different load balancing strategies.\" ],\"raw_quote\": \"A load balancer sits in front of several servers and spreads incoming requests across them, so that no single server is overwhelmed and one can fail without taking the service down. The simplest strategy is round robin, sending each request to the next server in turn. Least connections sends each request to the server currently handling the fewest, which copes better when requests vary a lot in cost. Hash-based strategies send requests with the same key, such as the same client address or session, to the same server, which helps when servers keep per-user state in memory. Weights let a more powerful server take a larger share.\" } ],\"session_snapshot\": { \"topic\": \"Tools and Strategies\", \"open_problems\": [ \"Choosing the right tools for a project based on its size and needs.\", \"Understanding the benefits and limitations of different diagramming tools.\", \"Determining the best strategy for a load balancer based on the project requirements.\" ],\"last_decisions\": [ \"Notepad++ is sufficient for small scripts but might not be enough for larger projects.\", \"Excalidraw is a good choice for diagrams, while Lucidchart is preferred by the supervisor.\", \"Load balancers use various strategies to distribute requests efficiently and ensure reliability.\" ],\"suggested_next_step\": \"Discuss with the supervisor and team to align on the best tools and strategies for the project.\" } }",
+    "raw_candidates": 3,
+    "funnel": [],
+    "decisions": [
+     "pending",
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2050,
+     "eval_count": 764,
+     "done_reason": "stop",
+     "load_duration": 3340034200,
+     "prompt_eval_duration": 1017944000,
+     "eval_duration": 18743390000,
+     "total_duration": 23159623700
+    },
+    "prompt_words": 5274,
+    "full_prompt_tokens": 6506
+   },
+   {
+    "id": "long_L_r1_d21",
+    "category": "long",
+    "seconds": 20.2,
+    "error": null,
+    "raw_text": "{\n\n\"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"editor\",\n      \"proposed_value\": \"Excalidraw\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"You mentioned using Excalidraw for all your diagrams.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"diagram_tool\",\n      \"proposed_value\": \"Lucidchart\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Your supervisor prefers using Lucidchart for diagrams.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"text_editor\",\n      \"proposed_value\": \"Notepad++\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Your flatmate swears by Notepad++ for everything.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Use Excalidraw for diagrams.\",\n      \"signals_found\": [\"excalidraw_usage\"],\n      \"raw_quote\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\"\n    },\n    {\n      \"decision_text\": \"Follow supervisor's preference for Lucidchart.\",\n      \"signals_found\": [\"lucidchart_preference\"],\n      \"raw_quote\": \"My supervisor does all her diagrams in Lucidchart and won't touch anything else.\"\n    },\n    {\n      \"decision_text\": \"Use Notepad++ for text editing.\",\n      \"signals_found\": [\"notepad_preference\"],\n      \"raw_quote\": \"My flatmate swears by Notepad++ for everything and keeps telling me to switch.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Diagram and Text Editor Tools\",\n    \"open_problems\": [\"Tool Selection\"],\n    \"last_decisions\": [\n      \"For diagrams, consider using Lucidchart as per your supervisor's preference.\",\n      \"For text editing, consider using Notepad++ as per your flatmate's preference.\"\n    ],\n    \"suggested_next_step\": \"Evaluate the suitability of Lucidchart and Notepad++ for your specific needs, while ensuring the diagrams remain readable and consistent.\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [],
+    "decisions": [
+     "pending",
+     "pending",
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2050,
+     "eval_count": 562,
+     "done_reason": "stop",
+     "load_duration": 3059952700,
+     "prompt_eval_duration": 1020763000,
+     "eval_duration": 14044530000,
+     "total_duration": 18179331200
+    },
+    "prompt_words": 5274,
+    "full_prompt_tokens": 6506
+   },
+   {
+    "id": "long_L_r1_d63",
+    "category": "long",
+    "seconds": 19.3,
+    "error": null,
+    "raw_text": "{ \"memory_candidates\": [ { \"target_table\": \"preference_memory\", \"field_name\": \"tool_preferred\", \"proposed_value\": \"Excalidraw\",\"label\": \"explicit\",\"evidence_count\": 1,\"evidence_text\": \"I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open.\" }, { \"target_table\": \"preference_memory\", \"field_name\": \"tool_preferred\", \"proposed_value\": \"Notepad++\", \"label\": \"explicit\", \"evidence_count\": 1, \"evidence_text\": \"My flatmate swears by Notepad++ for everything and keeps telling me to switch.\" }, { \"target_table\": \"preference_memory\", \"field_name\": \"tool_preferred\", \"proposed_value\": \"Lucidchart\", \"label\": \"explicit\", \"evidence_count\": 1, \"evidence_text\": \"My supervisor does all her diagrams in Lucidchart and won't touch anything else.\" } ],\"decision_candidates\": [ { \"decision_text\": \"For small scripts and initial stages of a project, a plain editor like Notepad++ can be sufficient.\", \"signals_found\": [ \"How does a load balancer decide where to send each request?\", \"Examiners care that a diagram is readable and consistent, and any tool that exports clean vector images is fine.\" ], \"raw_quote\": \"For small scripts, yes. Once a project has many files, search across files, refactoring and a debugger start to matter more than how fast the editor opens.\" } ],\"session_snapshot\": { \"topic\": \"Tools and Practices\", \"open_problems\": [ \"What makes a good sequence diagram?\", \"Do diagram tools matter much for a thesis?\", \"Is a plain editor ever enough for a real project?\", \"How does a load balancer decide where to send each request?\" ], \"last_decisions\": [ \"For small scripts and initial stages of a project, a plain editor like Notepad++ can be sufficient.\" ], \"suggested_next_step\": \"Discuss specific project needs and constraints with your supervisor and flatmate to align on the best tools and practices.\" } }",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "preference_memory",
+      "tool_preferred",
+      "Excalidraw",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "tool_preferred",
+      "Notepad++",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "tool_preferred",
+      "Lucidchart",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2050,
+     "eval_count": 506,
+     "done_reason": "stop",
+     "load_duration": 3316066500,
+     "prompt_eval_duration": 1029462000,
+     "eval_duration": 12794185000,
+     "total_duration": 17206476000
+    },
+    "prompt_words": 5274,
+    "full_prompt_tokens": 6506
+   },
+   {
+    "id": "long_L_r2_d7",
+    "category": "long",
+    "seconds": 18.2,
+    "error": null,
+    "raw_text": "{ \"memory_candidates\": [ { \"target_table\": \"skill_memory\", \"field_name\": \"technical_debt\", \"proposed_value\": \"The future cost of a shortcut taken now. Technical debt is like financial debt, not always bad, but can become dangerous when it is invisible or never repaid, compounding the interest until small changes take significant effort.\",\"label\": \"explicit\", \"evidence_count\": 3, \"evidence_text\": \"1. Shipping a quick version to learn whether anyone wants a feature can be the right call, as long as the shortcut is known and paid back later. 2. The interest is the extra effort every later change costs because of the shortcut, such as duplicated logic, missing tests, or a design that no longer fits what the system does. 3. Debt becomes dangerous when it is invisible or never repaid, because the interest compounds until small changes take days.\" } ],\"decision_candidates\": [ { \"decision_text\": \"For Pebblebox, a recipe-sharing app, store ingredients in a separate table with a join table for recipes and ingredients, to maintain normalization and avoid redundancy.\", \"signals_found\": [\"separate table\", \"join table\", \"quantity and unit\"], \"raw_quote\": \"An ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes.\" } ],\"session_snapshot\": { \"topic\": \"Elixir\", \"open_problems\": [\"When might I have a free summer to explore Elixir?\",\"What are its main strengths?\"],\"last_decisions\": [ \"Exploring Elixir in a free summer might be interesting, but it's not a priority right now. Elixir is great for long-running services with many concurrent connections, running on the Erlang VM, with cheap and isolated processes.\", \"Elixir excels in building highly scalable and fault-tolerant applications, particularly for systems that require handling a large number of concurrent connections and long-running tasks.\" ],\"suggested_next_step\": \"Explore Elixir's documentation or tutorials in your free time to understand its strengths better, even if it's not a priority for your current project.\" } }",
+    "raw_candidates": 1,
+    "funnel": [],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2050,
+     "eval_count": 472,
+     "done_reason": "stop",
+     "load_duration": 3315313400,
+     "prompt_eval_duration": 1012695000,
+     "eval_duration": 11818120000,
+     "total_duration": 16203044100
+    },
+    "prompt_words": 5274,
+    "full_prompt_tokens": 6506
+   },
+   {
+    "id": "long_L_r2_d21",
+    "category": "long",
+    "seconds": 17.5,
+    "error": null,
+    "raw_text": "{ \"memory_candidates\": [ { \"target_table\": \"skill_memory\", \"field_name\": \"language\", \"proposed_value\": \"Elixir\",\"label\": \"explicit\", \"evidence_count\": 1, \"evidence_text\": \"Elixir runs on the Erlang VM and excels at handling many concurrent connections, making it suitable for long-running services and distributed systems.\" }, { \"target_table\": \"skill_memory\", \"field_name\": \"language\", \"proposed_value\": \"Ruby\", \"label\": \"explicit\", \"evidence_count\": 1, \"evidence_text\": \"Ruby is a popular choice for web applications and has strong community support, though it may not be as efficient for handling many concurrent connections.\" }, { \"target_table\": \"skill_memory\", \"field_name\": \"language\", \"proposed_value\": \"Python\", \"label\": \"explicit\", \"evidence_count\": 1, \"evidence_text\": \"Python is versatile and has strong libraries for web development and data processing, but may not perform as well for high-concurrency services.\" } ], \"decision_candidates\": [ { \"decision_text\": \"Elixir is well-suited for the main project because it excels at handling many concurrent connections and running long-running services, making it ideal for a budgeting app that might need to handle many simultaneous users.\",\"signals_found\": [\"long-running services\", \"many concurrent connections\"], \"raw_quote\": \"Elixir runs on the Erlang virtual machine and its processes are cheap and isolated, making it great for long-running services with many concurrent connections.\" } ], \"session_snapshot\": { \"topic\": \"Elixir\", \"open_problems\": [\"Understanding the specific requirements of the budgeting app\"], \"last_decisions\": [\"Elixir is a good choice if the budgeting app needs to handle many concurrent connections\"], \"suggested_next_step\": \"Analyze the specific requirements of the budgeting app to determine if Elixir's strengths align with the project goals.\" } }",
+    "raw_candidates": 3,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2050,
+     "eval_count": 443,
+     "done_reason": "stop",
+     "load_duration": 3307430400,
+     "prompt_eval_duration": 1019530000,
+     "eval_duration": 10986984000,
+     "total_duration": 15378947800
+    },
+    "prompt_words": 5274,
+    "full_prompt_tokens": 6506
+   },
+   {
+    "id": "long_L_r2_d63",
+    "category": "long",
+    "seconds": 14.3,
+    "error": null,
+    "raw_text": "{ \"memory_candidates\": [ { \"target_table\": \"skill_memory\", \"field_name\": \"lanternfish_budgeting\", \"proposed_value\": \"budgeting_app\",\"label\": \"explicit\",\"evidence_count\": 2,\"evidence_text\": \"The main project is a budgeting app for student hostels. This term, the project is focused on Lanternfish.\" } ],\"decision_candidates\": [ { \"decision_text\": \"Use separate tables for ingredients in Pebblebox.\", \"signals_found\": [\"separate tables\", \"quantity\", \"unit\", \"join table\"], \"raw_quote\": \"An ingredient table plus a join table holding the quantity and unit, so the same ingredient can appear in many recipes.\" } ],\"session_snapshot\": { \"topic\": \"Lanternfish budgeting app and Pebblebox recipe app\", \"open_problems\": [ \"How to store shared expenses in Lanternfish?\", \"How to store ingredients in Pebblebox?\" ], \"last_decisions\": [ \"Name tables for shared expenses using plain nouns like expense, share, member, settlement.\", \"Use separate tables for ingredients with a join table for quantity and unit in Pebblebox.\" ], \"suggested_next_step\": \"Define the schema for the ingredient table in Pebblebox, including the relationships with recipes and quantities.\" } }",
+    "raw_candidates": 1,
+    "funnel": [],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "excalidraw"
+      ],
+      "learned": [],
+      "position": "middle",
+      "kind": "fact",
+      "id": "F1"
+     },
+     {
+      "keywords": [
+       "lanternfish"
+      ],
+      "learned": [],
+      "position": "end",
+      "kind": "fact",
+      "id": "F2"
+     },
+     {
+      "keywords": [
+       "solutions architect"
+      ],
+      "learned": [],
+      "position": "start",
+      "kind": "fact",
+      "id": "F3"
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "lucidchart"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "near_miss",
+      "id": "N1"
+     },
+     {
+      "keywords": [
+       "notepad"
+      ],
+      "hit": false,
+      "position": "middle",
+      "kind": "trap",
+      "id": "T1"
+     },
+     {
+      "keywords": [
+       "pebblebox"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "near_miss",
+      "id": "N2"
+     },
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false,
+      "position": "end",
+      "kind": "trap",
+      "id": "T2"
+     },
+     {
+      "keywords": [
+       "azure"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "near_miss",
+      "id": "N3"
+     },
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "hit": false,
+      "position": "start",
+      "kind": "trap",
+      "id": "T3"
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 2050,
+     "eval_count": 306,
+     "done_reason": "stop",
+     "load_duration": 3034789900,
+     "prompt_eval_duration": 1002872000,
+     "eval_duration": 8096844000,
+     "total_duration": 12196984400
+    },
+    "prompt_words": 5274,
+    "full_prompt_tokens": 6506
+   }
+  ]
+ ]
+}

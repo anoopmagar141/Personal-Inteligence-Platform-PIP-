@@ -180,6 +180,12 @@ with the real model (§7.14): 88–90% of learned memories true, the one false
 memory being sarcasm; recall 30–39%, mostly lost at the gate. The gate alone
 (`scripts/eval_evidence_gate.py`): 0 false accepts on 40 tuned and 25
 held-out cases. The wording above predates both.
+**Re-measured (2026-10-18, V-2, §7.55):** on a fresh qwen2.5:7b recording on Ollama 0.40.3, traps 0 of 75
+and 36 of 36 learned rows true; on llama3.1:8b, traps 0 of 75. On 27 long made-up chats (1,400-4,800
+words), 1 of 162 trick statements and near-misses reached the confirmation queue (D-33: a friend's exam
+goal accepted by the gate as the user's interest), and 0 of 81 true facts were learned where their labels
+look: the gate's support language rejected ordinary wordings ("I do all my diagrams in X", "my main
+project this term is X") whatever the chat's length.
 
 ### Promise 5 — Observer runs only on authorized local providers
 **Wording (decided 2026-09-28):**
@@ -3561,6 +3567,73 @@ both came from the same system.
   the stamp records only as "not sent". V-2's window probe measures it.
 - **Result files from before this card** carry no stamp; they stay as they are.
 
+### 7.55 V-2: the validity baseline - the trust numbers on a new Ollama, a second model and long chats (run 2026-10-17/18, report only)
+
+The final plan's step 2 (BLUEPRINT V-2, issue #22): every headline learning and trust number (39 of 39
+true, 0 of 75 traps, 37 of 69 learned) came from 37 chats of 12-60 words, one model, Ollama 0.32.14. No
+code in `backend/` changed. Rules: `docs/eval/v2_2026-10-17/PROTOCOL.md`, committed before each run
+(1ca8dd4 for b, c, d; 4744eda for a). Every run from a clean worktree of the rules' commit, Ollama 0.40.3
+started as `ollama serve`, nothing else running; every result carries the S-1 stamp. Results:
+`RESULTS_b_c_d.md` and `RESULTS_a.md` in that folder. A first attempt at b and c was killed when the
+machine slept and kept nothing; the reported runs are the rerun with the machine held awake.
+
+- **(b) qwen2.5:7b on Ollama 0.40.3: HOLDS.** Today's code on the 2026-10-12 recording reproduces 39/39,
+  0/75, 37/69 exactly. A new 3-run recording (same digest, same Observer prompt hash; the first outputs
+  today's gate, tuned on the old recording by A-1, had not seen): traps 0 of 75 (at most about 4%), no
+  learned row TRAP, 36 of 36 true, 35 of 69 stated facts learned. Its replay reproduces it, 111 of 111
+  cases, timestamps aside.
+- **(c) llama3.1:8b: SUPPORTED** - worded as fixed in advance, "the guard's accept and reject rules hold on a
+  second model's phrasings". Traps 0 of 75, no TRAP row, 33 of 69 learned (bar: at least 17, half of
+  qwen's), 0 of 111 errored, from 174 proposed candidates against qwen's 110. Not a paired comparison.
+- **(d) the window as shipped:** with no `num_ctx` sent, Ollama gives qwen 4096 tokens on this GPU (its own
+  log: "vram-based default context ... 4096") and cuts a longer prompt from the FRONT to about half the
+  window: 2,050 of 10,639 tokens read, the first line lost. With 16384 the whole prompt is read, for about
+  0.7 GB more GPU memory (4.75 against 5.47 GB). Tokens per word: 1.41 prose, 1.86 the Observer's
+  instructions, which come first in its prompt.
+- **(a) long chats: TRUST DOES NOT CARRY OVER, by the rule.** 27 made-up chats of about 1,400, 2,700 and
+  4,800 words, each with the same three true facts, three trick statements and three near-misses (a fact's
+  sentence shape, someone else's entity), rotated over start, middle and end, on profiles 1, 3 and 9 weeks
+  old. 0 errored.
+  - 1 of 162 trick statements and near-misses reached a belief table: "My friend wants to pass the Azure
+    Fundamentals exam by March", in the longest chat on a week-1 profile, passed the evidence gate as the
+    user's `topic_interests` and was queued as a question to the user (the Constitution required
+    confirmation), not written. The harness counts a queued row, as it did for 0 of 75. **D-33.**
+    Trick statements proper: 0 of 81.
+  - 0 of 81 true facts learned in the tables their labels name, at every length, position and age. The
+    model did propose them (Excalidraw 12 times, Lanternfish 13, the exam goal 10), mostly correctly; the
+    evidence gate rejected most as having no "support language" (F1 11 of 12, F2 11 of 13). The same
+    candidates get the same verdicts with or without the chat around them: the cause is wording ("I do all
+    my diagrams in Excalidraw", "my main project this term is Lanternfish"), not length. 4 true facts were
+    written to tables their labels do not name (the exam goal as two topics and a preference, Lanternfish
+    as a preference); 3 more passed the gate and were discarded on week-3 and week-9 profiles, by design.
+  - The window: the 1,400- and 2,700-word chats were read whole (2,572 and 4,058 tokens; the second 38 under
+    the window, so it overflows while the model writes); the 4,800-word chat was cut to 2,050 of 6,506
+    tokens (32%), the Observer's instructions lost, and the model still answered in the required JSON.
+    The Observer took 10-30 s per chat (load apart).
+- **Beside the rules, on every model and set:** the decision path (issue #3; decisions skip the gate) logged
+  remarks from trick-statement chats as decisions (2 on qwen, 6 on llama in the short set: "I'll pass",
+  "will not use Emacs", the Elixir hypothetical), a tentative "not convinced we should move to Java" 2 and 3
+  times, and on long chats the assistant's study advice as the user's decision. On llama, "my sister loves
+  Java" once left `java` in `topic_interests`, a table that chat's labels do not name.
+
+**What it means for the thesis numbers:** 0 of 75 and 36-39 of 36-39 true hold on the current Ollama, on
+fresh samples and on a second model, for short chats. On long chats a third person's goal got through the
+gate once (D-33), and recall measured by the labels fell from about half to 0 of 81, because the gate's
+support language is the A-1 list tuned on the short set and does not cover ordinary phrasings (the baseline
+#19 is measured against). Nothing was tuned on these sets.
+
+**Found beside it, not fixed (D-33, A, medium):** the evidence gate passes a third person's statement as
+the user's own `topic_interests` ("My friend wants to pass the Azure Fundamentals exam by March" is
+EVIDENCE_SUFFICIENT run through `adjudicate` alone, outside any chat). The short set's third-party traps
+(a sister, a manager, a professor) were stopped; this wording and this table were not. The Constitution's
+confirmation step stopped the write; the user would have been asked. No code change in V-2.
+
+**Not covered (still open):**
+- One run per long chat, one model on the long set; the long set's planted wordings are the author's, so
+  0 of 81 is a statement about these wordings, not about all phrasing.
+- What Ollama drops when the output overflows the window (the 2,700-word chat) is not visible in its counts.
+- `pip-work/v2-runs` (a detached worktree at 4744eda) was left in place for later runs.
+
 ---
 
 ## 8. Status
@@ -3627,6 +3700,8 @@ both came from the same system.
 | D-31 a question about the user sent to the web | Fixed 2026-10-17 (§7.52) | A, low: with web search consented, a message with a news word was filed as news before Stage 1 asked whether it was about the user or a project, so "what is my current project?" sent its first 12 words to the search provider. Stage 1 now asks that first (no words added). 12 tests (7 failed first), 2 break-it mutations; the 14 §7.5 phrasings send 1 query instead of 4. Open: a phrasing Stage 1 does not recognise as about the user is still sent |
 | D-32 a deleted chat kept reaching later prompts | Fixed 2026-10-17 (§7.53) | A, medium: deleting a chat removed its messages only. Its "where we left off" note kept reaching every new chat's first prompt; the app's own order (delete the open chat, then leave it) ran the session-end pass on the deleted chat and wrote the note back; and a transcript queued for the next start was learned from and kept. The delete now removes the chat's queued transcripts (new `pending_observer.conversation_id`) and clears the note, and the pass skips a chat that is gone. 8 tests (7 failed first), 6 break-it mutations. Open: the note is cleared whichever chat wrote it; what was already learned stays |
 | S-1 a run stamp on every evaluation result | Built 2026-10-17 (§7.54) | Method: one of five evaluation scripts stamped its results, and only with --save-raw. `scripts/_stamp.py` now records, at the start of every run, the commit and a dirty flag, the Constitution's version and hash and, for a model run, Ollama's version, the model's digest and the options sent (a model run that cannot read them refuses to start); every result file and report carries it, one per start for a resumed run. 23 tests (10 script tests failed first), 8 break-it mutations. The two model-calling retrieval harnesses were not run |
+| V-2 validity baseline (b, c, d, a) | Run 2026-10-17/18 (§7.55), report only | qwen2.5:7b on Ollama 0.40.3: traps 0 of 75, 36 of 36 true, 35 of 69 learned (HOLDS); llama3.1:8b: traps 0 of 75, 33 of 69 learned (SUPPORTED). As shipped the window is 4096 and a longer prompt is cut from the front (2,050 of 10,639 tokens read). 27 long chats: 1 of 162 trick statements or near-misses reached the queue (D-33) and 0 of 81 true facts were learned where labelled, lost to the gate's wording rules, not to length (TRUST DOES NOT CARRY OVER, by the rule) |
+| D-33 a third person's goal accepted as the user's interest | Found 2026-10-18 (§7.55), open | A, medium: "My friend wants to pass the Azure Fundamentals exam by March" is EVIDENCE_SUFFICIENT for the user's `topic_interests`; on a long chat it reached the confirmation queue (asked, not written). Not fixed |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
