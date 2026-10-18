@@ -187,7 +187,8 @@ and 36 of 36 learned rows true; on llama3.1:8b, traps 0 of 75. On 27 long made-u
 words), 1 of 162 trick statements and near-misses reached the confirmation queue (D-33: a friend's exam
 goal accepted by the gate as the user's interest), and 0 of 81 true facts were learned where their labels
 look: the gate's support language rejected ordinary wordings ("I do all my diagrams in X", "my main
-project this term is X") whatever the chat's length.
+project this term is X") whatever the chat's length. D-33 is fixed (§7.61): a topic is the user's only when
+they ask about it or say it in the first person.
 
 ### Promise 5 — Observer runs only on authorized local providers
 **Wording (decided 2026-09-28):**
@@ -3628,7 +3629,7 @@ support language is the A-1 list tuned on the short set and does not cover ordin
 the user's own `topic_interests` ("My friend wants to pass the Azure Fundamentals exam by March" is
 EVIDENCE_SUFFICIENT run through `adjudicate` alone, outside any chat). The short set's third-party traps
 (a sister, a manager, a professor) were stopped; this wording and this table were not. The Constitution's
-confirmation step stopped the write; the user would have been asked. No code change in V-2.
+confirmation step stopped the write; the user would have been asked. No code change in V-2; fixed in §7.61.
 
 **Not covered (still open):**
 - One run per long chat, one model on the long set; the long set's planted wordings are the author's, so
@@ -3976,6 +3977,57 @@ the code, not the promise wording.
   does not carry an immutable field's name; only the Constitution's own names are refused.
 - **A decision made by hand** (`/decide`) does not pass through the gate, as the card says.
 
+### 7.61 D-33: a statement about someone else is not the user's topic (authorized 2026-10-18)
+
+The fifth item of the final plan's step 4 (BLUEPRINT card D-33, written 2026-10-18 at the owner's request), found by
+V-2 (§7.55). No owner decision needed; the owner's rule applies: no new word lists, and tests in wording no list
+was written for.
+
+- **Defect (D-33, A, medium):** in V-2's longest chat, "My friend wants to pass the Azure Fundamentals exam by
+  March" passed the evidence gate as the user's `topic_interests` (field "exam") and was queued as a question to
+  the user. Every other table's support contract needs first-person language ("I prefer", "I'm learning"), and
+  that is what stops "My sister is learning Rust"; `topic_interests` needs none ("a question is as good as an
+  assertion for 'this came up'"), so a sentence about someone else passed as the user's own interest.
+- **Promise:** 4 (stored memory is supported by the user's words: here, words about themselves).
+- **Mechanism:** for a topic, the gate reads only what raises it as the USER's: the questions they asked (a quote
+  cut short of its sentence's question mark counts as that question) and the statements they made in the first
+  person. A statement about someone else is context. The one word read is the pronoun "I" (whose sentence it is,
+  not what it means), so no list of phrasings is added; the sentence splitting is the gate's own, moved into
+  `_sentence_pieces` and shared with `_declarative_text`, whose behaviour is unchanged. A refusal says why
+  ("names 'exam' only in a statement about someone else, neither asked about nor said in the first person").
+- **Tests:** `backend/tests/test_topic_raised_by_the_user.py`, 11: the recorded candidate and three third-person
+  wordings no list holds ("My cousin is studying for the CKA exam", "Priya wants to learn Haskell before summer",
+  "Our neighbour runs a Kubernetes cluster at home") are refused; still accepted: the corpus's two questions, a
+  quote cut short of its question mark, two first-person statements in no list ("I'm curious about CRDTs lately",
+  "I've been reading about vector clocks all week"), and the user's own question about a friend's plan; and the
+  recorded candidate through the real session-end path is neither written nor queued, with a stage-11 audit row.
+  - **Seen failing first:** 5 of 11 on 2aa731b (the four refusals and the session-end test); the six accepts
+    passed there, as they must.
+- **Break-it:** 5 mutations, each alone, restored byte for byte, each caught: a topic read from the whole quote
+  again (5 tests); a first-person statement no longer raising a topic (2); a question no longer raising one (3); a
+  quote cut short of its question mark read as a statement (1); the letter i anywhere counted as the pronoun (5).
+- **Gate evaluation:** `scripts/eval_evidence_gate.py` gives the same output on 69252d9 (2aa731b's code) and with
+  D-33, apart from the run stamp: 0 false accepts on both sets, the corpus's topic accepts unchanged.
+- **Replays, no model:** all seven recordings (the six G-4 replayed, and G-4's own long-chat run) through 69252d9
+  and through D-33. **No row was added anywhere; 2 learned rows were lost, both statements about someone else:**
+  the V-2 near-miss itself (queued, TRAP) and "My sister is a nurse and she loves Java, she keeps telling me to
+  learn it" written as the user's topic "Java" (llama; the short set's labels do not list topic_interests for
+  that trap, so the harness had it unlabelled). Four more topic verdicts moved on candidates the Constitution
+  discarded anyway: the same sister sentence again, and three of the user's own elliptical answers with no "I"
+  ("A payments service.", "a scheduling app for sailing clubs", "our sync is broken"): the cost of the rule,
+  nothing learned lost.
+- **Suites:** Backend 1753 passed, 0 failed (18 min 28 s), on the working tree at 2aa731b plus this change (with
+  other sessions' uncommitted `httpx2` requirement and its test), nothing else of mine running; the changed files
+  were compared byte for byte with copies taken before the run. No Flutter file changed.
+
+**Not covered (still open):**
+- **An elliptical answer raises no topic:** "A payments service." in reply to "What are you working on?" carries no
+  "I" and is not a question, so it is refused as a topic (3 such candidates in the replays, all discarded by the
+  Constitution anyway). A false reject, the safe direction.
+- **"We" is not read as the user:** "We're moving everything to Kubernetes" raises no topic.
+- **A question about someone else's plans still raises its topic**, as the card says (the user asked it); with the
+  gate's one-shared-word anchor, a multi-word topic can still be anchored by one word of that question.
+
 ---
 
 ## 8. Status
@@ -4043,7 +4095,7 @@ the code, not the promise wording.
 | D-32 a deleted chat kept reaching later prompts | Fixed 2026-10-17 (§7.53) | A, medium: deleting a chat removed its messages only. Its "where we left off" note kept reaching every new chat's first prompt; the app's own order (delete the open chat, then leave it) ran the session-end pass on the deleted chat and wrote the note back; and a transcript queued for the next start was learned from and kept. The delete now removes the chat's queued transcripts (new `pending_observer.conversation_id`) and clears the note, and the pass skips a chat that is gone. 8 tests (7 failed first), 6 break-it mutations. Open: the note is cleared whichever chat wrote it; what was already learned stays |
 | S-1 a run stamp on every evaluation result | Built 2026-10-17 (§7.54) | Method: one of five evaluation scripts stamped its results, and only with --save-raw. `scripts/_stamp.py` now records, at the start of every run, the commit and a dirty flag, the Constitution's version and hash and, for a model run, Ollama's version, the model's digest and the options sent (a model run that cannot read them refuses to start); every result file and report carries it, one per start for a resumed run. 23 tests (10 script tests failed first), 8 break-it mutations. The two model-calling retrieval harnesses were not run |
 | V-2 validity baseline (b, c, d, a) | Run 2026-10-17/18 (§7.55), report only | qwen2.5:7b on Ollama 0.40.3: traps 0 of 75, 36 of 36 true, 35 of 69 learned (HOLDS); llama3.1:8b: traps 0 of 75, 33 of 69 learned (SUPPORTED). As shipped the window is 4096 and a longer prompt is cut from the front (2,050 of 10,639 tokens read). 27 long chats: 1 of 162 trick statements or near-misses reached the queue (D-33) and 0 of 81 true facts were learned where labelled, lost to the gate's wording rules, not to length (TRUST DOES NOT CARRY OVER, by the rule) |
-| D-33 a third person's goal accepted as the user's interest | Found 2026-10-18 (§7.55), open | A, medium: "My friend wants to pass the Azure Fundamentals exam by March" is EVIDENCE_SUFFICIENT for the user's `topic_interests`; on a long chat it reached the confirmation queue (asked, not written). Not fixed |
+| D-33 a third person's goal accepted as the user's interest | Fixed 2026-10-18 (§7.61) | A, medium: "My friend wants to pass the Azure Fundamentals exam by March" was EVIDENCE_SUFFICIENT for the user's `topic_interests` and reached the confirmation queue on a long chat. A topic is now the user's only when they ask about it or say it in the first person (the pronoun "I"; no list of phrasings). 11 tests, 5 break-it mutations; replays: nothing added, 2 rows lost, both about someone else. Cost: an elliptical answer with no "I" ("A payments service.") raises no topic |
 | W-1 one settings block: 16k window, qwen2.5:7b, temperature 0.0 | Built and measured 2026-10-18 (§7.56) | A, medium: Ollama's default 4096 window cut long prompts from the front and the default model was llama3.1:8b in code. Every request now asks for 16384 (all 27 long prompts read in full; fully on the GPU, 6.6-6.8 of 8 GB in use with a browser open); qwen2.5:7b is the one default; temperature 0.0 chosen by a fixed rule. 13 tests, 7 break-it mutations. Its long-chat bar 2 is NOT met: 2 near-misses (1 before) reached the decision log, which skips the gate (G-4) |
 | D-34 a learned decision saved with no project | Fixed 2026-10-18 (§7.57) | A, medium: the Observer was called without the chat's project and a queued decision had no project column, so every learned decision was saved with none and a project's own lookup never found it. The project is now read from the chat's row on every path (end of chat, shutdown queue, crash recovery), and logged and queued decisions keep the project and the chat's id. 7 tests (7 failed first), 5 break-it mutations |
 | D-35 the Constitution edited after it was locked, its version never checked | Fixed 2026-10-18 (§7.58) | A, low: constitutional.json said 1.0 and was edited twice with no bump; every profile stored the literal 1.0 and nothing compared it. Now 1.1 with a changelog, each version registered with its text's fingerprint, and a sign-in check that warns (log, trace, /status) and keeps running (DEC-6). 8 tests, 5 break-it mutations. The app does not show the warning yet |

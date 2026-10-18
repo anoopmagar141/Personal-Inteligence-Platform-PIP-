@@ -254,6 +254,13 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   only when a value is stored, because a preference is shown to the model as
   "name: value" beside identity's own fields. Stage 4 keeps such a row stored
   before G-4 out of prompts; the memory screen still lists it for deletion.
+- **A topic is the user's only when they ask about it or say it in the first
+  person** (D-33). `topic_interests` takes no support language (asking is as
+  good as asserting for "this came up"), so for a topic the gate reads only the
+  user's questions and their sentences with the pronoun "I": "My friend wants to
+  pass the Azure exam" is context, not the user's interest. The one word read
+  is "I", not a list of phrasings. Cost: an elliptical answer ("A payments
+  service.") raises no topic.
 - **Role headers in a transcript are a security boundary, not formatting.**
   `format_transcript()` indents any content line beginning `User:` or
   `Assistant:`, because `EvidenceLedger` parses those headers back out to

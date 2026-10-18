@@ -566,6 +566,14 @@ def _declarative_text(quote: str) -> str:
     read exactly what they read before. A trailing piece with no final mark is a
     statement: nothing says it is anything else.
     """
+    pieces = _sentence_pieces(quote)
+    if not any(is_question for _, is_question in pieces):
+        return quote
+    return " ".join(text.strip() for text, is_question in pieces if not is_question)
+
+
+def _sentence_pieces(quote: str) -> list[tuple[str, bool]]:
+    """A quote's sentences, each with whether it is a question (see _SENTENCE_END_RE)."""
     pieces: list[tuple[str, bool]] = []
     start = 0
     for end in _SENTENCE_END_RE.finditer(quote):
@@ -575,9 +583,33 @@ def _declarative_text(quote: str) -> str:
         start = end.end()
     if quote[start:].strip():
         pieces.append((quote[start:], False))
-    if not any(is_question for _, is_question in pieces):
-        return quote
-    return " ".join(text.strip() for text, is_question in pieces if not is_question)
+    return pieces
+
+
+def _topic_raising_text(quote: str, user_sources: list[EvidenceTurn]) -> str:
+    """
+    What in a quote raises a topic as the USER's (D-33): the questions they
+    asked, and what they said in the first person.
+
+    topic_interests takes no support language, because asking about something
+    is as good as asserting it for "this came up". That also let a sentence
+    about another person through: "My friend wants to pass the Azure
+    Fundamentals exam by March" was queued as the user's own interest (FREEZE_
+    LIST §7.55), where every other table's contract stops "My sister is
+    learning Rust" for having no first-person support. A statement about
+    someone else is context, not the user's interest; the user's question
+    about it still is (they asked).
+
+    The one word read is the pronoun "I" - whose sentence it is, not what it
+    means - so this adds no list of phrasings. A quote cut short of its
+    sentence's question mark is still that question (see _only_ever_asked).
+    """
+    pieces = _sentence_pieces(quote)
+    if pieces and not pieces[-1][1] and _only_ever_asked(quote, user_sources):
+        pieces[-1] = (pieces[-1][0], True)
+    return " ".join(
+        text.strip() for text, is_question in pieces if is_question or "i" in _TOKEN_RE.findall(text)
+    )
 
 
 # Words that, left OUT of a quote but present in the turn it was cut from,
@@ -949,9 +981,19 @@ def adjudicate(candidate: MemoryCandidate, ledger: EvidenceLedger) -> EvidenceVe
                 EvidenceState.EVIDENCE_NOT_ENTAILING,
                 "the complete user turn marks this claim as sarcasm",
             )
+    else:
+        # A topic has to be raised by the user as theirs: asked about, or
+        # said in the first person (D-33, see _topic_raising_text).
+        asserted = _topic_raising_text(quote, user_sources)
 
     # 6. Does the evidence support THIS claim?
     if anchor_value is not None and not _anchored(anchor_value, asserted):
+        if target_table == "topic_interests" and _anchored(anchor_value, quote):
+            return EvidenceVerdict(
+                EvidenceState.EVIDENCE_NOT_ENTAILING,
+                f"the cited evidence names {str(anchor_value)[:60]!r} only in a statement about someone else, "
+                "neither asked about nor said in the first person",
+            )
         if _anchored(anchor_value, quote):
             return EvidenceVerdict(
                 EvidenceState.EVIDENCE_NOT_ENTAILING,
