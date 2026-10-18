@@ -94,6 +94,14 @@ def test_the_temperature_is_sent_only_once_it_has_been_chosen(ollama, monkeypatc
     assert ollama.bodies[-1]["options"]["temperature"] == 0.3
 
 
+def test_the_temperature_is_the_one_the_measurement_chose():
+    # W-1's measurement (docs/eval/w1_2026-10-18, FREEZE_LIST 7.56), rule fixed
+    # before the run: not sent, 0.3 and 0.0 all let no trap through on the 37
+    # short chats and learned 35, 36 and 36 of 69 facts - a tie, which goes to
+    # the lower temperature. Changing it needs a new measurement, not an edit.
+    assert _llm()["temperature"] == 0.0
+
+
 def test_the_window_is_one_number_for_chat_and_the_observer(ollama):
     # A different num_ctx reloads the model (seconds each time), so the
     # Observer must not ask for its own.

@@ -189,9 +189,9 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   W-1): the default model is `qwen2.5:7b`, the model every measured number is
   on (`pipeline.DEFAULT_MODEL_NAME` and `OllamaProvider`'s default both read
   it); every Ollama request, chat and Observer alike, asks for the same
-  `num_ctx` window, 16384 tokens (a different window would reload the model);
-  the temperature is not sent until one is chosen by measurement, so the
-  model's own default applies. PIP budgets in words; `tokens_per_word` (2.0) is
+  `num_ctx` window, 16384 tokens (a different window would reload the model;
+  observed fully on the GPU, FREEZE_LIST §7.56); the temperature is 0.0, chosen
+  by a measurement whose rule was fixed first (§7.56). PIP budgets in words; `tokens_per_word` (2.0) is
   a safe ratio above every one measured on this tokenizer (1.41 prose, 1.86 the
   Observer's instructions), and the Observer's transcript cap is derived from
   it so instructions, transcript and reply fit the window. Before this, Ollama
