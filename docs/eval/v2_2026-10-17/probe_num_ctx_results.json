@@ -1,0 +1,102 @@
+{
+ "stamp": {
+  "stamp_version": 1,
+  "date": "2026-10-17T16:35:41+00:00",
+  "git": {
+   "commit": "1ca8dd4055494b01ffcf59bbbb7f9ac44b7d0b2b",
+   "dirty": true,
+   "changed": [
+    "docs/FREEZE_LIST.md",
+    "docs/LOG.md",
+    "requirements.txt"
+   ]
+  },
+  "constitution": {
+   "version": "1.0",
+   "sha256": "3908bd8df7125990198086b6b0d9c09dc47d38c7ddcb383b28b31184a8328733"
+  },
+  "ollama": {
+   "host": "http://127.0.0.1:11434",
+   "version": "0.40.3"
+  },
+  "model": {
+   "tag": "qwen2.5:7b",
+   "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+   "parameters": null
+  },
+  "options_sent": {
+   "temperature": 0,
+   "seed": 1,
+   "num_ctx": "per call: none, 16384, 16384 (runs[].num_ctx_sent)"
+  },
+  "note": "options_sent lists what the harness put in Ollama's request options. A key whose value is null was not sent, so Ollama's or the model's own default applied (the model's own defaults are under model.parameters)."
+ },
+ "ollama_version": "0.40.3",
+ "model": "qwen2.5:7b",
+ "run_date": "2026-10-17 22:20:41",
+ "long_prompt_words": 7562,
+ "runs": [
+  {
+   "label": "A_default_window_as_shipped",
+   "num_ctx_sent": null,
+   "words_sent": 7562,
+   "prompt_eval_count": 2050,
+   "eval_count": 2,
+   "answer": "else",
+   "error": null,
+   "wall_seconds": 5.1,
+   "load_seconds": 4.0,
+   "prompt_eval_seconds": 1.0,
+   "loaded_model": [
+    {
+     "name": "qwen2.5:7b",
+     "context_length": 4096,
+     "size": 4748056984,
+     "size_vram": 4748056984
+    }
+   ]
+  },
+  {
+   "label": "B_num_ctx_16384",
+   "num_ctx_sent": 16384,
+   "words_sent": 7562,
+   "prompt_eval_count": 10639,
+   "eval_count": 4,
+   "answer": "PINEAPPLE",
+   "error": null,
+   "wall_seconds": 17.6,
+   "load_seconds": 4.4,
+   "prompt_eval_seconds": 5.19,
+   "loaded_model": [
+    {
+     "name": "qwen2.5:7b",
+     "context_length": 16384,
+     "size": 5465282968,
+     "size_vram": 5465282968
+    }
+   ]
+  },
+  {
+   "label": "C_observer_prompt_tokens_per_word",
+   "num_ctx_sent": 16384,
+   "words_sent": 488,
+   "prompt_eval_count": 908,
+   "eval_count": 1,
+   "answer": "{\n",
+   "error": null,
+   "wall_seconds": 0.7,
+   "load_seconds": 0.0,
+   "prompt_eval_seconds": 0.39,
+   "loaded_model": [
+    {
+     "name": "qwen2.5:7b",
+     "context_length": 16384,
+     "size": 5465282968,
+     "size_vram": 5465282968
+    }
+   ]
+  }
+ ],
+ "observer_tokens_per_word": 1.86,
+ "filler_tokens_per_word": 1.41
+}

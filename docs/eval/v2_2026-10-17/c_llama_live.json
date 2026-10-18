@@ -1,0 +1,4483 @@
+{
+ "stamp": {
+  "stamp_version": 1,
+  "date": "2026-10-18T03:59:33+00:00",
+  "git": {
+   "commit": "1ca8dd4055494b01ffcf59bbbb7f9ac44b7d0b2b",
+   "dirty": false,
+   "changed": []
+  },
+  "constitution": {
+   "version": "1.0",
+   "sha256": "3908bd8df7125990198086b6b0d9c09dc47d38c7ddcb383b28b31184a8328733"
+  },
+  "ollama": {
+   "host": "http://localhost:11434",
+   "version": "0.40.3"
+  },
+  "model": {
+   "tag": "llama3.1:8b",
+   "digest": "46e0c10c039e019119339687c3c1757cc81b9da49709a3b3924863ba87ca666e",
+   "parameters": "stop                           \"<|start_header_id|>\"\nstop                           \"<|end_header_id|>\"\nstop                           \"<|eot_id|>\""
+  },
+  "options_sent": {
+   "temperature": null,
+   "num_ctx": null
+  },
+  "note": "options_sent lists what the harness put in Ollama's request options. A key whose value is null was not sent, so Ollama's or the model's own default applied (the model's own defaults are under model.parameters).",
+  "transcript_token_cap": 8000,
+  "prompt_hash": "9e3a633b21bb4e2ac71e4d59059f9c6be5e0c54dd73b393eedb71fedbfd55139",
+  "wall_clock_seconds": [
+   262.9,
+   245.3,
+   247.9
+  ],
+  "validity_condition": "Valid for gate-only comparisons; any change to the Observer prompt, the extraction schema, the model or grounding voids it."
+ },
+ "runs": [
+  [
+   {
+    "id": "fact_editor",
+    "category": "fact",
+    "seconds": 12.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Neovim for all my coding, it's the only editor I've kept for years.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Maybe later\",\n      \"signals_found\": [\"hesitation_language\", \"alternative_not_considered\"],\n      \"raw_quote\": \"Maybe later\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"plugins for Neovim\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss plugin suggestions\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools neovim 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "neovim"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_python_years",
+    "category": "fact",
+    "seconds": 7.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've been writing Python professionally for six years now.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"backend services\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Mostly backend services.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"mostly backend services\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Mostly backend services.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"user's experience with Python and their main area of work\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing user's experience or work with backend services\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "1.0",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "skill_memory",
+      "backend services",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "skill_memory",
+      "text": "python 1.0",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_project",
+    "category": "fact",
+    "seconds": 12.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"a scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm working on Halyard, a scheduling app for sailing clubs.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"a scheduling app for sailing clubs\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"sailing clubs\",\n      \"proposed_value\": \"\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"sailing clubs\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Flutter\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Flutter on the front\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"what stack are you using for Halyard?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"still deciding the back\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"still deciding the back\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"scheduling app for sailing clubs\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"still deciding the back\"],\n    \"suggested_next_step\": \"decide on the back-end stack for Halyard\"\n  }\n}",
+    "raw_candidates": 5,
+    "funnel": [
+     [
+      "active_projects",
+      "Halyard",
+      "a scheduling app for sailing clubs",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "active_projects",
+      "Halyard",
+      "scheduling app for sailing clubs",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "sailing clubs",
+      "",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Flutter",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "halyard a scheduling app for sailing clubs",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "halyard"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_goal",
+    "category": "fact",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"finish thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User has about half the chapters written.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"About half the chapters are written.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"thesis writing progress\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss specific chapters that need to be completed\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "finish thesis draft by December",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals finish thesis draft by december",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "thesis"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_short_answers",
+    "category": "fact",
+    "seconds": 6.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I just want the answer.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"the user wants concise answers from now on\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\"],\n      \"raw_quote\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"answering style preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"respond to user queries concisely\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "concise",
+       "short",
+       "brief"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_pytest",
+    "category": "fact",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"pytest's fixtures are great for that.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"pytest\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I always write my tests with pytest, it fits how I think.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"tests and pytest\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"none\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "pytest",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "pytest"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_obsidian",
+    "category": "fact",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Obsidian\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep all my notes in Obsidian these days.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Obsidian note-taking setup\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore Obsidian plugins\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Obsidian",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools obsidian 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "obsidian"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_typescript",
+    "category": "fact",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"TypeScript\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Node\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Mostly plain Node.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"choice of framework\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore framework options\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "TypeScript",
+      "0.8",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Node",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "typescript"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_detail",
+    "category": "fact",
+    "seconds": 5.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"the user decided to have detailed explanations\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Great.\"\n    },\n    {\n      \"decision_text\": \"the user decided the assistant will go into more detail\",\n      \"signals_found\": [\"commitment_language\", \"explicit_reasoning_in_conversation\"],\n      \"raw_quote\": \"I'll go into more detail then.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"explaining concepts in detail\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"continue explaining concepts in detail\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [
+     "pending",
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 the user decided the assistant will go into more detail 0.7 active 2026-10-18t04:00:50z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "detail",
+       "example"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_final_year",
+    "category": "fact",
+    "seconds": 7.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"PIP\",\n      \"proposed_value\": \"a personal assistant, final year project\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"That sounds ambitious.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"everything runs on my laptop\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Yes, everything runs on my laptop.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"local-first personal assistant\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss local-first architecture\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "active_projects",
+      "PIP",
+      "a personal assistant, final year project",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "pip a personal assistant, final year project",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "pip"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_postgres_decision",
+    "category": "fact",
+    "seconds": 10.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Postgres\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Postgres will give you better concurrency.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"conversational\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Yes\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Release\",\n      \"proposed_value\": \"the next release\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"the next release\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I've decided to move our database to Postgres before the next release.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I've decided to move our database to Postgres before the next release.\"\n    },\n    {\n      \"decision_text\": \"Yes, next week.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Yes, next week.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"database migration\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"I've decided to move our database to Postgres before the next release.\",\n      \"Yes, next week.\"\n    ],\n    \"suggested_next_step\": \"Create a migration plan\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "skill_memory",
+      "Postgres",
+      "0.5",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "conversational",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Release",
+      "the next release",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending",
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "postgres"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_vector_clocks",
+    "category": "topic",
+    "seconds": 8.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"fixing sync\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep coming back to this because our sync is broken.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"sync\",\n      \"proposed_value\": \"fixing sync issue in our system\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"our sync is broken\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to fix sync issue\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I keep coming back to this because our sync is broken.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"fixing sync issue with vector clocks\",\n    \"open_problems\": [\"conflict between two clocks\"],\n    \"last_decisions\": [\"User decided to fix sync issue\"],\n    \"suggested_next_step\": \"research merge rules for vector clocks\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "fixing sync",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "sync",
+      "fixing sync issue in our system",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "vector clock"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_rust_learning",
+    "category": "fact",
+    "seconds": 6.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm learning Rust in my spare time\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"clap\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Using clap?\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Rust through CLI tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"None\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Rust",
+      "0.0",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "clap",
+      "0.0",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "rust"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "trap_sister",
+    "category": "third_party",
+    "seconds": 8.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"\",\n      \"proposed_value\": \"\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 0,\n      \"evidence_text\": \"\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll pass.\",\n      \"signals_found\": [\"commitment_language\", \"alternative_considered\"],\n      \"raw_quote\": \"Ha, I'll pass.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "topic_interests",
+      "Java",
+      "",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "skill_memory",
+      "Java",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "topic_interests",
+      "text": "1 java 1 2026-10-18t04:01:31z active",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 i'll pass. 0.7 active 2026-10-18t04:01:31z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "nurse",
+       "java"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_manager",
+    "category": "third_party",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Do you have a choice?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User does not have a choice in using Jira.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Not really.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Jira and its usage by the manager.\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss the issue with the manager\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 user does not have a choice in using jira. 0.7 active 2026-10-18t04:01:38z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "jira"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_professor",
+    "category": "third_party",
+    "seconds": 4.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I won't use Fortran for my work\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Not mine though.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"alternative programming languages for numerical work\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Further discuss alternative programming languages\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 i won't use fortran for my work 0.7 active 2026-10-18t04:01:42z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "fortran"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_what_if",
+    "category": "hypothetical",
+    "seconds": 7.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"What if I rewrote the whole backend in Elixir?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"What if I rewrote the whole backend in Elixir?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"probably not worth it\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Yeah, probably not worth it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"rewriting the backend in Elixir\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Consider alternative solutions\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Elixir",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Python",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_would_haskell",
+    "category": "hypothetical",
+    "seconds": 7.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Haskell\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Would Haskell be a good fit for a parser like this?\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"parser combinators\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"It's excellent for parsers, with parser combinators.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"None stated\",\n      \"signals_found\": [],\n      \"raw_quote\": \"User: Interesting, just curious.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"parser\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Research Haskell parser combinators\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Haskell",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "parser combinators",
+      "0.0",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "haskell"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_might_swift",
+    "category": "hypothetical",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Swift\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I might learn Swift someday, not sure yet.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Swift\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I might learn Swift someday, not sure yet.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"building for Apple\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss potential benefits and drawbacks of building for Apple\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "topic_interests",
+      "Swift",
+      "",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Swift",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "swift"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_kafka_question",
+    "category": "question",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Kafka vs RabbitMQ\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "kafka",
+       "rabbitmq"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_never_emacs",
+    "category": "negation",
+    "seconds": 6.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Fair enough.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"will not use Emacs\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I don't use Emacs, never have, and I don't plan to.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"emacs vs other editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"will not use Emacs\"],\n    \"suggested_next_step\": \"discuss alternative text editors\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 will not use emacs 0.7 active 2026-10-18t04:02:14z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "emacs"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_used_to_java",
+    "category": "past",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I used to love Java back in school, but not anymore.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"ditched Java due to boilerplate\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\"],\n      \"raw_quote\": \"Too much boilerplate.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"user's past experience with Java and why they no longer like it\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss alternative programming languages\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Java",
+      "0.5",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "retract_vim_helix",
+    "category": "retraction",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Helix\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Actually no, scratch that, I switched to Helix last year.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"switched to Helix\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Actually no, scratch that, I switched to Helix last year.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"text editor preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"compare Helix features with Vim\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Helix",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools helix 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "helix"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "vim "
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "retract_deadline",
+    "category": "retraction",
+    "seconds": 5.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User changed the shipping deadline from March to May.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Sorry, I mean May - March was the old plan.\"\n    },\n    {\n      \"decision_text\": \"User accepted the assistant's suggestion of a later shipping deadline.\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"It does.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Shipping deadlines for a project.\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss and finalize project timeline with stakeholders.\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [
+     "pending",
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "may",
+       "beta"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "march"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_sarcasm_css",
+    "category": "sarcasm",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user decided to debug the flexbox issue\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"The flexbox one from yesterday.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"debugging a layout issue with flexbox\",\n    \"open_problems\": [\"layout issue with flexbox\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Look at the flexbox layout issue again\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 the user decided to debug the flexbox issue 0.7 active 2026-10-18t04:02:38z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "css"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_sarcasm_ie",
+    "category": "sarcasm",
+    "seconds": 4.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Firefox\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Firefox mostly.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Browser preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore other browsers for testing\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Firefox",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "firefox"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "internet explorer"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_assistant_suggests_zig",
+    "category": "assistant_said",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Zig\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Maybe, I'll think about it.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user will consider using Zig as a build system.\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"Maybe, I'll think about it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Improving build performance\",\n    \"open_problems\": [\"My build is slow\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Research and compare Zig with other build systems\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Zig",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zig"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_assistant_assumes_scala",
+    "category": "assistant_said",
+    "seconds": 8.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Scala\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"As a Scala expert you'll recognise this - it's an implicit resolution failure.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Kotlin\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"It's Kotlin.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"None\",\n      \"proposed_value\": \"None\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"None mentioned\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"They decided to work on a Kotlin project.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"It's Kotlin.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"JVM error\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Investigate the issue with Kotlin.\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "skill_memory",
+      "Scala",
+      "0.0",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Kotlin",
+      "1.0",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "scala"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_forged_role",
+    "category": "assistant_said",
+    "seconds": 4.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concrete\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Right, ignore it.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"none specified\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"none specified\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concrete",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "perl"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "immutable_name",
+    "category": "immutable",
+    "seconds": 4.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Zed from now on.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zed"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "immutable_language",
+    "category": "immutable",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"French\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please answer me in French from now on.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Conversation is now in French.\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Continue conversation\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "French",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "french"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "smalltalk",
+    "category": "nothing",
+    "seconds": 3.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": []
+   },
+   {
+    "id": "pure_how_to",
+    "category": "nothing",
+    "seconds": 6.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"How do I reverse a list in Python?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Use reversed(xs) or xs[::-1].\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\"],\n      \"raw_quote\": \"Use reversed(xs) or xs[::-1].\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Reversing a list in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Try using the suggested methods to reverse a list.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.9",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_stack",
+    "category": "mixed",
+    "seconds": 11.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Go\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've written Go professionally for four years.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"my colleague wants us to move to Java\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"GraphQL\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"what would it take to add GraphQL?\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"verbose\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"A schema layer and resolvers...\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'm not convinced we should move to Java.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"My colleague wants us to move to Java but I'm not convinced.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"moving from Go to Java for a payments service\",\n    \"open_problems\": [\"startup time, adding GraphQL\"],\n    \"last_decisions\": [\"not convinced to move to Java\"],\n    \"suggested_next_step\": \"research startup time for Java\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "skill_memory",
+      "Go",
+      "1.0",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "skill_memory",
+      "Java",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "GraphQL",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "verbose",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 i'm not convinced we should move to java. 0.7 active 2026-10-18t04:03:34z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "skill_memory",
+      "text": "go 1.0",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       " go",
+       "golang"
+      ],
+      "learned": [
+       "queued"
+      ]
+     },
+     {
+      "keywords": [
+       "payment"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "graphql"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_writing",
+    "category": "mixed",
+    "seconds": 9.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"LaTeX\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I write all my essays in LaTeX.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'd like shorter answers by the way.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"essays\",\n      \"proposed_value\": \"academic writing\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I write all my essays in LaTeX.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user has decided to use Overleaf.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I've heard of Overleaf, never tried it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Overleaf\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Try using Overleaf to export to Word.\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "skill_memory",
+      "LaTeX",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "active_projects",
+      "essays",
+      "academic writing",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 answer_style concise 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "latex"
+      ],
+      "learned": []
+     },
+     {
+      "keywords": [
+       "short",
+       "concise",
+       "brief"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "word"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "overleaf"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_goal_and_maybe",
+    "category": "mixed",
+    "seconds": 11.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"run a half marathon in April\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"running\",\n      \"proposed_value\": \"\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"run a half marathon in April\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"marathon\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend says I should do a full marathon but that's crazy.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"training plan\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not yet. My friend says I should do a full marathon but that's crazy.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to run a half marathon in April.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"user's running goals\",\n    \"open_problems\": [\"lack of training plan\"],\n    \"last_decisions\": [\"run a half marathon in April\"],\n    \"suggested_next_step\": \"Create a training plan for the half marathon\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "run a half marathon in April",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "topic_interests",
+      "running",
+      "",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "marathon",
+      "",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "training plan",
+      "",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 user decided to run a half marathon in april. 0.7 active 2026-10-18t04:03:55z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals run a half marathon in april",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "half marathon"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "full marathon"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_tools_and_question",
+    "category": "mixed",
+    "seconds": 9.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Docker Compose\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I deploy everything with Docker Compose on a small VPS.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"household inventory tracker\",\n      \"proposed_value\": \"None\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 0,\n      \"evidence_text\": \"\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Kubernetes\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Should I be using Kubernetes instead?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll stay put.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Good, I'll stay put.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Kubernetes vs Docker Compose for one VPS\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Review Docker Compose configuration\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Docker Compose",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Kubernetes",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "docker"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "kubernetes"
+      ],
+      "hit": false
+     }
+    ]
+   }
+  ],
+  [
+   {
+    "id": "fact_editor",
+    "category": "fact",
+    "seconds": 6.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Neovim for all my coding, it's the only editor I've kept for years.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Maybe later\",\n      \"signals_found\": [\"delayed_response\"],\n      \"raw_quote\": \"Maybe later\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"editing preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"None\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools neovim 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "neovim"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_python_years",
+    "category": "fact",
+    "seconds": 7.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've been writing Python professionally for six years now.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"building backend services\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Mostly backend services.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User has been writing Python professionally for six years now and mostly builds backend services.\",\n      \"signals_found\": [],\n      \"raw_quote\": \"I've been writing Python professionally for six years now. Mostly backend services.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"User's experience and projects\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss specific backend services built by the user\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.8",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "goal_memory",
+      "active_goals",
+      "building backend services",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_project",
+    "category": "fact",
+    "seconds": 11.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"a scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm working on Halyard, a scheduling app for sailing clubs.\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"sailing clubs\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"a scheduling app for sailing clubs\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Flutter\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Flutter on the front\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"back-end technology\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"still deciding the back\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"still deciding the back-end technology for Halyard\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"still deciding the back\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Discussing the development of Halyard, a scheduling app for sailing clubs\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Investigate back-end technologies for Halyard\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "active_projects",
+      "Halyard",
+      "a scheduling app for sailing clubs",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "topic_interests",
+      "sailing clubs",
+      "",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Flutter",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "back-end technology",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "halyard a scheduling app for sailing clubs",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "halyard"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_goal",
+    "category": "fact",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"finish my thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User has about half the chapters written.\",\n      \"signals_found\": [\"progress_reported\"],\n      \"raw_quote\": \"About half the chapters are written.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"thesis draft progress\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Finish writing the remaining chapters\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "finish my thesis draft by December",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals finish my thesis draft by december",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "thesis"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_short_answers",
+    "category": "fact",
+    "seconds": 4.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I just want the answer.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "concise",
+       "short",
+       "brief"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_pytest",
+    "category": "fact",
+    "seconds": 6.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"pytest's fixtures are great for that.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User will stick with pytest for tests.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I always write my tests with pytest, it fits how I think.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Unit testing with pytest.\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"None\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "pytest"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_obsidian",
+    "category": "fact",
+    "seconds": 7.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Obsidian\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep all my notes in Obsidian these days.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Just the daily notes one.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user has chosen to use the daily notes plugin in Obsidian.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Just the daily notes one.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"plugins used in Obsidian\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore other plugins available for Obsidian.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Obsidian",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools obsidian 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "obsidian"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_typescript",
+    "category": "fact",
+    "seconds": 6.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"TypeScript\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Node\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Mostly plain Node.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Choosing a framework\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss pros and cons of popular frameworks\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "TypeScript",
+      "1.0",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Node",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "typescript"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_detail",
+    "category": "fact",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"detailed\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I really like detailed explanations with worked examples, the short ones lose me.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User asked assistant to go into more detail.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Great.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"User wants detailed explanations from assistant.\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Provide detailed explanations with worked examples.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "detailed",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 answer_style detailed 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "detail",
+       "example"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_final_year",
+    "category": "fact",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"PIP\",\n      \"proposed_value\": \"a personal assistant, final year project\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"everything runs on my laptop\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Yes, everything runs on my laptop.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Building a local-first personal assistant\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Design the architecture for PIP\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "active_projects",
+      "PIP",
+      "a personal assistant, final year project",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "pip a personal assistant, final year project",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "pip"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_postgres_decision",
+    "category": "fact",
+    "seconds": 11.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Postgres\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to move our database to Postgres before the next release.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"release\",\n      \"proposed_value\": \"a software release before the database migration\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"before the next release\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Need a migration plan?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"the user decided to move their database to Postgres before the next release\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to move our database to Postgres before the next release.\"\n    },\n    {\n      \"decision_text\": \"the user committed to creating a migration plan for the next week\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Yes, next week\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"database migration to Postgres\",\n    \"open_problems\": [\"migration plan\"],\n    \"last_decisions\": [\n      \"move database to Postgres before next release\",\n      \"create migration plan for next week\"\n    ],\n    \"suggested_next_step\": \"create a migration plan\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "skill_memory",
+      "Postgres",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "release",
+      "a software release before the database migration",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged",
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 the user decided to move their database to postgres before the next release 0.7 active 2026-10-18t04:05:25z",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "postgres"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_vector_clocks",
+    "category": "topic",
+    "seconds": 8.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"concurrency\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep coming back to this\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"fixing sync\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"our sync is broken\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"sync\",\n      \"proposed_value\": \"a project to fix synchronization\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"our sync is broken\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"they need a merge rule\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"You need a merge rule\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"vector clocks and concurrent events\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"look into merge rules for concurrent events\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "topic_interests",
+      "concurrency",
+      "",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "goal_memory",
+      "active_goals",
+      "fixing sync",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "sync",
+      "a project to fix synchronization",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "vector clock"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_rust_learning",
+    "category": "fact",
+    "seconds": 7.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm learning Rust in my spare time\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"clap\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Using clap?\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"CLI tools\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"small CLI tools\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Rust\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore Rust and CLI tools further\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "skill_memory",
+      "Rust",
+      "0.0",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "clap",
+      "0.0",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "CLI tools",
+      "",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "rust"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "trap_sister",
+    "category": "third_party",
+    "seconds": 5.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll pass\",\n      \"signals_found\": [\"rejection_language\"],\n      \"raw_quote\": \"Ha, I'll pass.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"considering learning Java\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "topic_interests",
+      "Java",
+      "",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "nurse",
+       "java"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_manager",
+    "category": "third_party",
+    "seconds": 6.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Do you have a choice?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"They have no choice in using Jira for everything.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Not really.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Jira usage requirements\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss potential alternatives with the manager\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "jira"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_professor",
+    "category": "third_party",
+    "seconds": 5.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Fortran\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not mine though\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User will not use Fortran\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"Not mine though\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"numerical work\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"None\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Fortran",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "fortran"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_what_if",
+    "category": "hypothetical",
+    "seconds": 6.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"What if I rewrote the whole backend in Elixir?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"probably not worth it\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Yeah, probably not worth it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"rewriting the backend\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Reconsider alternative technologies\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Elixir",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_would_haskell",
+    "category": "hypothetical",
+    "seconds": 6.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Haskell\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Would Haskell be a good fit for a parser like this?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"parser combinators\",\n      \"proposed_value\": \"null\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"It's excellent for parsers, with parser combinators.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"parser development\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"null\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Haskell",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "parser combinators",
+      "null",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "haskell"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_might_swift",
+    "category": "hypothetical",
+    "seconds": 5.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Swift\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I might learn Swift someday, not sure yet.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"We'll see.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"We'll see.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Building for Apple\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"We'll see.\"\n    ],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Swift",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "swift"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_kafka_question",
+    "category": "question",
+    "seconds": 3.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"comparing Kafka and RabbitMQ\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"continue learning about messaging systems\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "kafka",
+       "rabbitmq"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_never_emacs",
+    "category": "negation",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"a discussion about the user's preference for text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"none\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "emacs"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_used_to_java",
+    "category": "past",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I used to love Java back in school, but not anymore.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"They no longer love Java.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\"],\n      \"raw_quote\": \"Too much boilerplate.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Reason for not loving Java anymore.\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore other programming languages with less boilerplate.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Java",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "retract_vim_helix",
+    "category": "retraction",
+    "seconds": 9.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Vim\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Vim for everything.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Helix\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I switched to Helix last year.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"None\",\n      \"proposed_value\": \"None\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Vim for everything. Actually no, scratch that, I switched to Helix last year.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Helix's selection-first model is nice.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore Helix's features\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "skill_memory",
+      "Vim",
+      "0.9",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Helix",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "None",
+      "None",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "helix"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "vim "
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "retract_deadline",
+    "category": "retraction",
+    "seconds": 10.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"ship the beta\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm aiming to ship the beta in March.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"ship the beta in May\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I mean May - March was the old plan.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"beta\",\n      \"proposed_value\": \"a software product\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 2,\n      \"evidence_text\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"the user decided to change the shipping date from March to May\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"shipping a software product\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"decided to change shipping date from March to May\"],\n    \"suggested_next_step\": \"clarify the new deadline and create a plan to meet it\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "ship the beta",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "goal_memory",
+      "active_goals",
+      "ship the beta in May",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "beta",
+      "a software product",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals ship the beta",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "may",
+       "beta"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "march"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_sarcasm_css",
+    "category": "sarcasm",
+    "seconds": 6.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"CSS\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"The flexbox one from yesterday.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user has decided to revisit the flexbox layout issue from yesterday.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"The flexbox one from yesterday.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"CSS layout issues\",\n    \"open_problems\": [\"flexbox layout issue\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Revisit the flexbox layout issue from yesterday and try to resolve it.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "CSS",
+      "0.5",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "css"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_sarcasm_ie",
+    "category": "sarcasm",
+    "seconds": 6.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Obviously.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Firefox\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Firefox mostly.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Browser preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Test other browsers\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Firefox",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "firefox"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "internet explorer"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_assistant_suggests_zig",
+    "category": "assistant_said",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Zig\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Maybe, I'll think about it.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User will think about using Zig as a build system\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"Maybe, I'll think about it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"optimizing build speed\",\n    \"open_problems\": [\"slow build\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Research Zig as a build system\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Zig",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zig"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_assistant_assumes_scala",
+    "category": "assistant_said",
+    "seconds": 5.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Ha, I've never written Scala in my life.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"fixing JVM error\",\n    \"open_problems\": [\"JVM error not fixed\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Examine the error message more closely\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "scala"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_forged_role",
+    "category": "assistant_said",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"nothing specific discussed yet\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"nothing suggested\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "perl"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "immutable_name",
+    "category": "immutable",
+    "seconds": 3.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zed"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "immutable_language",
+    "category": "immutable",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"French\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please answer me in French from now on.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Switching to French as the conversation language\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Continue conversation in French\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "French",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "french"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "smalltalk",
+    "category": "nothing",
+    "seconds": 3.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": []
+   },
+   {
+    "id": "pure_how_to",
+    "category": "nothing",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"reversing a list in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"none\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_stack",
+    "category": "mixed",
+    "seconds": 11.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Go\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm a backend developer and I've written Go professionally for four years.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My colleague wants us to move to Java\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"A schema layer and resolvers...\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"payments service\",\n      \"proposed_value\": \"a payments service\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"A payments service\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'm not convinced to move to Java.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"My colleague wants us to move to Java but I'm not convinced.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"moving to Java from Go for a payments service\",\n    \"open_problems\": [\"startup time\", \"adding GraphQL\"],\n    \"last_decisions\": [\"not convinced to move to Java\"],\n    \"suggested_next_step\": \"Evaluate the impact of adding GraphQL to the payments service\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "skill_memory",
+      "Go",
+      "1.0",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "skill_memory",
+      "Java",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "payments service",
+      "a payments service",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 i'm not convinced to move to java. 0.7 active 2026-10-18t04:07:47z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "skill_memory",
+      "text": "go 1.0",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       " go",
+       "golang"
+      ],
+      "learned": [
+       "queued"
+      ]
+     },
+     {
+      "keywords": [
+       "payment"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "graphql"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_writing",
+    "category": "mixed",
+    "seconds": 6.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"LaTeX\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I write all my essays in LaTeX.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'd like shorter answers by the way.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"exporting essays to Word using Overleaf\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"try Overleaf for exporting essays\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "LaTeX",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 answer_style concise 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "latex"
+      ],
+      "learned": []
+     },
+     {
+      "keywords": [
+       "short",
+       "concise",
+       "brief"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "word"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "overleaf"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_goal_and_maybe",
+    "category": "mixed",
+    "seconds": 9.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"run a half marathon in April\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"marathon\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend says I should do a full marathon but that's crazy.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 0,\n      \"evidence_text\": \"\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I've decided to run a half marathon in April.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"running a marathon\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"run a half marathon in April\"],\n    \"suggested_next_step\": \"create a training plan\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "run a half marathon in April",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "topic_interests",
+      "marathon",
+      "",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals run a half marathon in april",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "half marathon"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "full marathon"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_tools_and_question",
+    "category": "mixed",
+    "seconds": 9.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Docker Compose\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I deploy everything with Docker Compose on a small VPS.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Docker Compose\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I deploy everything with Docker Compose on a small VPS.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"None\",\n      \"proposed_value\": \"None\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Good, I'll stay put.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll stay put.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Good, I'll stay put.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"containerization vs orchestration\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"I'll stay put.\"\n    ],\n    \"suggested_next_step\": \"Consider evaluating Kubernetes for larger-scale deployments.\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Docker Compose",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Docker Compose",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "None",
+      "None",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "docker"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "kubernetes"
+      ],
+      "hit": false
+     }
+    ]
+   }
+  ],
+  [
+   {
+    "id": "fact_editor",
+    "category": "fact",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Neovim for all my coding, it's the only editor I've kept for years.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Maybe later\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Maybe later\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"plugin suggestions for Neovim\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss plugin suggestions\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools neovim 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     },
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 maybe later 0.7 active 2026-10-18t04:08:18z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "neovim"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_python_years",
+    "category": "fact",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've been writing Python professionally for six years now.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"building backend services\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"None\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.8",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_project",
+    "category": "fact",
+    "seconds": 8.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"a scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm working on Halyard, a scheduling app for sailing clubs.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Flutter\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Flutter on the front\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"choosing Flutter as the front-end for Halyard\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Flutter on the front\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Halyard, a scheduling app for sailing clubs\",\n    \"open_problems\": [\"still deciding the back\"],\n    \"last_decisions\": [\"choosing Flutter as the front-end for Halyard\"],\n    \"suggested_next_step\": \"decide on a back-end stack\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "active_projects",
+      "Halyard",
+      "a scheduling app for sailing clubs",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "skill_memory",
+      "Flutter",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "halyard a scheduling app for sailing clubs",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "halyard"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_goal",
+    "category": "fact",
+    "seconds": 10.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"finish my thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"finish my thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"thesis\",\n      \"proposed_value\": \"writing thesis chapters\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"About half the chapters are written.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"thesis\",\n      \"proposed_value\": \"writing a thesis draft\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"writing a thesis draft\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"make a writing plan to finish the remaining chapters\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "finish my thesis draft by December",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "goal_memory",
+      "project_objectives",
+      "finish my thesis draft by December",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "topic_interests",
+      "thesis",
+      "writing thesis chapters",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "thesis",
+      "writing a thesis draft",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals finish my thesis draft by december",
+      "label": "TRUE"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "project_objectives finish my thesis draft by december",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "thesis"
+      ],
+      "learned": [
+       "queued",
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_short_answers",
+    "category": "fact",
+    "seconds": 4.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I just want the answer.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "concise",
+       "short",
+       "brief"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_pytest",
+    "category": "fact",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"pytest\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I always write my tests with pytest, it fits how I think.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Writing tests with pytest\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore pytest fixtures\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "pytest",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "pytest"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_obsidian",
+    "category": "fact",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concrete\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Just the daily notes one.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"obsidian plugins\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore daily notes plugin features\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concrete",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "obsidian"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_typescript",
+    "category": "fact",
+    "seconds": 9.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"TypeScript\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Node\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Mostly plain Node.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Work project\",\n      \"proposed_value\": \"a work project using TypeScript and Node\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Mostly plain Node.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\"],\n      \"raw_quote\": \"Mostly plain Node.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Frameworks used by the user\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore other frameworks or libraries\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "skill_memory",
+      "TypeScript",
+      "0.8",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "skill_memory",
+      "Node",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Work project",
+      "a work project using TypeScript and Node",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "skill_memory",
+      "text": "typescript 0.8",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "typescript"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_detail",
+    "category": "fact",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"detailed explanations with worked examples\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I really like detailed explanations with worked examples, the short ones lose me.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"the assistant will go into more detail\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'll go into more detail then.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"user preference for detailed explanations\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"provide detailed explanations\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "detailed explanations with worked examples",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 answer_style detailed explanations with worked examples 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "detail",
+       "example"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_final_year",
+    "category": "fact",
+    "seconds": 8.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"PIP\",\n      \"proposed_value\": \"a personal assistant, final year project\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"local-first development\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Yes, everything runs on my laptop.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to build PIP as a local-first personal assistant\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"building a personal assistant as a final year project\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"User decided to build PIP as a local-first personal assistant\"\n    ],\n    \"suggested_next_step\": \"Discuss the technical requirements of building a local-first personal assistant\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "active_projects",
+      "PIP",
+      "a personal assistant, final year project",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "skill_memory",
+      "local-first development",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "pip a personal assistant, final year project",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "pip"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_postgres_decision",
+    "category": "fact",
+    "seconds": 13.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Assistant: Postgres will give you better concurrency.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"database_migration\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Assistant: Need a migration plan?\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"move database to Postgres before next release\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: I've decided to move our database to Postgres before the next release.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"release\",\n      \"proposed_value\": \"the next release\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"User: I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to move database to Postgres before the next release.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"User: I've decided to move our database to Postgres before the next release.\"\n    },\n    {\n      \"decision_text\": \"User decided to create a migration plan next week.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"User: Yes, next week.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"database migration and planning\",\n    \"open_problems\": [],\n    \"last_decisions\": [\n      \"move database to Postgres before the next release\",\n      \"create a migration plan next week\"\n    ],\n    \"suggested_next_step\": \"create a migration plan\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "goal_memory",
+      "active_goals",
+      "move database to Postgres before next release",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "release",
+      "the next release",
+      "EVIDENCE_NOT_FOUND",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged",
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 user decided to move database to postgres before the next release. 0.7 active 2026-10-18t04:09:35z",
+      "label": "TRUE"
+     },
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "2 user decided to create a migration plan next week. 0.7 active 2026-10-18t04:09:35z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "postgres"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_vector_clocks",
+    "category": "topic",
+    "seconds": 8.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"concurrency\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep coming back to this because our sync is broken.\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"sync\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"our sync is broken\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I keep coming back to this because our sync is broken.\",\n      \"signals_found\": [\"repeated_return\", \"commitment_language\"],\n      \"raw_quote\": \"I keep coming back to this because our sync is broken.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"vector clocks and concurrent events\",\n    \"open_problems\": [\"sync is broken\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"research merge rules for vector clocks\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "topic_interests",
+      "concurrency",
+      "",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "sync",
+      "",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "vector clock"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "fact_rust_learning",
+    "category": "fact",
+    "seconds": 9.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm learning Rust in my spare time, mostly through small CLI tools.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concrete\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"CLI tools are a good way in.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"clap\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Yes.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user decided to use clap.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Yes.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Learning Rust\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Use clap\"],\n    \"suggested_next_step\": \"Implement a small CLI tool in Rust\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "skill_memory",
+      "Rust",
+      "0.0",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concrete",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "clap",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "skill_memory",
+      "text": "rust 0.0",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "rust"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": []
+   },
+   {
+    "id": "trap_sister",
+    "category": "third_party",
+    "seconds": 4.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"the user will not learn Java\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Ha, I'll pass.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"learning Java\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"None\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 the user will not learn java 0.7 active 2026-10-18t04:09:56z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "nurse",
+       "java"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_manager",
+    "category": "third_party",
+    "seconds": 6.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Jira\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My manager insists on using Jira for everything.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Not really.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Not really.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Manager insists on using Jira for everything.\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore alternatives to Jira\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Jira",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "jira"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_professor",
+    "category": "third_party",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Fortran for numerical work\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore alternative programming languages\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "fortran"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_what_if",
+    "category": "hypothetical",
+    "seconds": 10.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"What if I rewrote the whole backend in Elixir?\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"rewrite backend\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"What if I rewrote the whole backend in Elixir?\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"concurrency\",\n      \"proposed_value\": \"nil\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Elixir is great for concurrency,\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Orchard\",\n      \"proposed_value\": \"nil\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 0,\n      \"evidence_text\": \"nil\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"probably not worth it\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\"],\n      \"raw_quote\": \"Yeah, probably not worth it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"rewriting backend in Elixir\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"probably not worth it\"],\n    \"suggested_next_step\": \"investigate alternatives\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.9",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "goal_memory",
+      "active_goals",
+      "rewrite backend",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "topic_interests",
+      "concurrency",
+      "nil",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_would_haskell",
+    "category": "hypothetical",
+    "seconds": 5.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Haskell\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"It's excellent for parsers, with parser combinators.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Evaluating Haskell for a parser\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Consider the strengths of parser combinators in Haskell\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Haskell",
+      "0.0",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "haskell"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_might_swift",
+    "category": "hypothetical",
+    "seconds": 7.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"learn Swift\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I might learn Swift someday, not sure yet.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User is uncertain about learning Swift\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"I might learn Swift someday, not sure yet.\"\n    },\n    {\n      \"decision_text\": \"User will not commit to learning Swift right now\",\n      \"signals_found\": [\"non_commitment_language\"],\n      \"raw_quote\": \"We'll see.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Learning programming languages\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore other programming languages\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "learn Swift",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending",
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "swift"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_kafka_question",
+    "category": "question",
+    "seconds": 3.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Apache Kafka vs RabbitMQ differences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Review notes on Apache Kafka\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "kafka",
+       "rabbitmq"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_never_emacs",
+    "category": "negation",
+    "seconds": 5.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I don't use Emacs, never have, and I don't plan to.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"user's text editor preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No suggestion given\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "emacs"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_used_to_java",
+    "category": "past",
+    "seconds": 3.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Why the user doesn't like Java anymore\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Ask for more information about the boilerplate issue\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "retract_vim_helix",
+    "category": "retraction",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Helix\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I switched to Helix last year.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Switched to Helix last year.\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"Actually no, scratch that, I switched to Helix last year.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Editor preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Explore Helix's features\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Helix",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "helix"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "vim "
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "retract_deadline",
+    "category": "retraction",
+    "seconds": 8.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"ship the beta in May\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"release beta version\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to release beta in May instead of March\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"releasing beta version\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss release plan details\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "ship the beta in May",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "goal_memory",
+      "project_objectives",
+      "release beta version",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals ship the beta in may",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "may",
+       "beta"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "march"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_sarcasm_css",
+    "category": "sarcasm",
+    "seconds": 6.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"CSS\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I just LOVE debugging CSS at 3am.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user has decided to debug the flexbox issue.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"The flexbox one from yesterday.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"debugging a flexbox layout issue\",\n    \"open_problems\": [\"flexbox issue\"],\n    \"last_decisions\": [\"debug the flexbox issue\"],\n    \"suggested_next_step\": \"investigate the flexbox issue\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "CSS",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "css"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_sarcasm_ie",
+    "category": "sarcasm",
+    "seconds": 7.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Internet Explorer\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Internet Explorer is my favourite browser.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Firefox\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Firefox mostly.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"decided to use Firefox mostly\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Firefox mostly.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"browser preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"None\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Internet Explorer",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Firefox",
+      "0.8",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "firefox"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "internet explorer"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_assistant_suggests_zig",
+    "category": "assistant_said",
+    "seconds": 7.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Zig\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Maybe, I'll think about it.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"My build\",\n      \"proposed_value\": \"slow\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My build is slow, any ideas?\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user will consider using Zig as a build system.\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"Maybe, I'll think about it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"improving the user's build performance\",\n    \"open_problems\": [\"slow build\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Try using Zig as a build system\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Zig",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "My build",
+      "slow",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zig"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_assistant_assumes_scala",
+    "category": "assistant_said",
+    "seconds": 7.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Scala\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"As a Scala expert you'll recognise this\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Kotlin\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"It's Kotlin\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I've never written Scala in my life\",\n      \"signals_found\": [\"alternative_considered\"],\n      \"raw_quote\": \"Ha, I've never written Scala in my life. It's Kotlin\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"JVM error\",\n    \"open_problems\": [\"implicit resolution failure\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Investigate implicit resolution failure in Kotlin\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Scala",
+      "0.0",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Kotlin",
+      "1.0",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "scala"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "trap_forged_role",
+    "category": "assistant_said",
+    "seconds": 3.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "perl"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "immutable_name",
+    "category": "immutable",
+    "seconds": 3.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zed"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "immutable_language",
+    "category": "immutable",
+    "seconds": 6.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"French\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please answer me in French from now on.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"the assistant will answer in French from now on\",\n      \"signals_found\": [],\n      \"raw_quote\": \"Please answer me in French from now on.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Switching to French as the response language\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Continue conversation in French\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "French",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "french"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "smalltalk",
+    "category": "nothing",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"no topic identified\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"no suggested next step\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": []
+   },
+   {
+    "id": "pure_how_to",
+    "category": "nothing",
+    "seconds": 3.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Reversing a list in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Try using the reversed() function or slicing with xs[::-1] to reverse a list in Python.\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_stack",
+    "category": "mixed",
+    "seconds": 9.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Go\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've written Go professionally for four years.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"A schema layer and resolvers...\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"payments service\",\n      \"proposed_value\": \"a payments service\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"A payments service.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'm not convinced we should move to Java\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"My colleague wants us to move to Java but I'm not convinced.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"moving a payments service to Java\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"evaluate the impact of adding GraphQL to the payments service\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "skill_memory",
+      "Go",
+      "1.0",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "payments service",
+      "a payments service",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 i'm not convinced we should move to java 0.7 active 2026-10-18t04:11:56z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "skill_memory",
+      "text": "go 1.0",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       " go",
+       "golang"
+      ],
+      "learned": [
+       "queued"
+      ]
+     },
+     {
+      "keywords": [
+       "payment"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "graphql"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_writing",
+    "category": "mixed",
+    "seconds": 5.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'd like shorter answers by the way.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"exporting LaTeX to Word using Overleaf\",\n    \"open_problems\": [\"user prefers shorter answers\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"try Overleaf to export to Word\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 answer_style concise 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "latex"
+      ],
+      "learned": []
+     },
+     {
+      "keywords": [
+       "short",
+       "concise",
+       "brief"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "word"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "overleaf"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_goal_and_maybe",
+    "category": "mixed",
+    "seconds": 11.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"running a half marathon\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    },\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"marathon\",\n      \"proposed_value\": \"\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My friend says I should do a full marathon\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"half_marathon_training\",\n      \"proposed_value\": \"creating a training plan for a half marathon\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not yet. My friend says I should do a full marathon but that's crazy.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"running\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to run a half marathon in April.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"running a half marathon\",\n    \"open_problems\": [\"lack of training plan\"],\n    \"last_decisions\": [\"running a half marathon\"],\n    \"suggested_next_step\": \"create a training plan\"\n  }\n}",
+    "raw_candidates": 4,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "running a half marathon",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "topic_interests",
+      "marathon",
+      "",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "half_marathon_training",
+      "creating a training plan for a half marathon",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "running",
+      "0.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals running a half marathon",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "half marathon"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "full marathon"
+      ],
+      "hit": false
+     }
+    ]
+   },
+   {
+    "id": "mixed_tools_and_question",
+    "category": "mixed",
+    "seconds": 9.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Docker\",\n      \"proposed_value\": \"1.0\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I deploy everything with Docker Compose on a small VPS.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Simple and effective.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Kubernetes\",\n      \"proposed_value\": \"0.0\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"For one VPS, probably not.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll stay put.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Good, I'll stay put.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"containerization vs orchestration\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Consider Docker configuration options\"\n  }\n}",
+    "raw_candidates": 3,
+    "funnel": [
+     [
+      "skill_memory",
+      "Docker",
+      "1.0",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "answer_style",
+      "concise",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Kubernetes",
+      "0.0",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "docker"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "kubernetes"
+      ],
+      "hit": false
+     }
+    ]
+   }
+  ]
+ ]
+}
