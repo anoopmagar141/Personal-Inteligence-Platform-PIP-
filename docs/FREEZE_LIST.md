@@ -148,15 +148,17 @@ proof. A valid candidate must still be written; rejecting everything
 proves the wrong property.
 **Evidence (2026-09-28):** holds for memory candidates -
 `backend/tests/test_observer_governance.py`, break-its seen failing (§7.13).
-Decision candidates and the snapshot take separate gates (§7.13 finding 1).
+Decision candidates have gone through the evidence gate too since G-4 (§7.60); the snapshot keeps
+its own grounding gate (§7.13 finding 1).
 
 ### Promise 2 — Observer cannot write immutable fields
 **Claim:** name, language, timezone change only by the user directly.
 **Must prove:** a grounded, gate-passing candidate for these fields cannot
 reach a DB write — tested on DB state, not on the enforcer's return value.
 **Evidence (2026-09-28):** holds - the identity row never changes, three
-independent layers (§7.13). A same-named preference can still be learned and
-shown beside it (§7.13 finding 2).
+independent layers (§7.13). Since G-4 a preference under an immutable field's
+name is refused, and one stored before is kept out of prompts (§7.60); a
+differently named one ("language") is not caught.
 
 ### Promise 3 — Gated fields require confirmation
 **Claim:** a gated field is not persisted without prior user confirmation.
@@ -3880,6 +3882,92 @@ The third card of the final plan's step 4 (BLUEPRINT G-7, A-3; issue #20). Owner
 - **No view of the log in the app or the API**; it is read through `summary()` and `history()`.
 - **Rows from before G-7 do not exist**: the log starts empty on every profile.
 
+### 7.60 G-4: the Observer's decisions go through the evidence gate, and an immutable name is not a preference, D-37 (authorized 2026-10-17, DEC-7 = A; built 2026-10-18)
+
+The fourth card of the final plan's step 4 (BLUEPRINT G-4; issue #3). Owner decision DEC-7 = A (2026-10-17): fix
+the code, not the promise wording.
+
+- **Defect (D-37, A, medium):** the two findings §7.13 left open on 2026-09-28.
+  - **Decisions skipped the evidence gate** (finding 1). A decision candidate was checked for grounding only (its
+    quote somewhere in the transcript, the assistant's turns included) and then logged or queued on the signals the
+    model claimed for itself. §7.14 found four tentative remarks logged as decisions ("I'm not convinced" about
+    Java twice, "probably not worth it" as "decided against rewriting in Elixir", "to stay with Go"); W-1's long
+    chats (§7.56) logged a friend's exam goal and a line the assistant said, which is why W-1's bar 2 failed.
+  - **An immutable field's name could be stored as a preference** (finding 2). The Constitution refused name,
+    language_preference and timezone only when the candidate's own table already held a value, and
+    preference_memory never does, so "I prefer French, please answer me in French from now on" wrote
+    `preference_memory.language_preference = French`, and every prompt then carried two language preferences.
+- **Promise:** 1 (every Observer write goes through governance) and 2 (the immutable fields).
+- **Mechanism:**
+  - **Decisions:** `run_session_end` asks the gate about each decision before `route_observer_decision`, under a
+    new `decision_log` contract: commitment language (goal_memory's list, reused, so no new words), the user's own
+    turn, not a question, a hypothetical or sarcasm, no meaning-changing omission, and a calibrator: the decision
+    has to share a word with what the user committed to once the commitment phrase is taken out (so "User decided
+    to rewrite the backend in Elixir" is not anchored to "I've decided to go to bed early tonight" by "decided").
+    The plain anchor and the contradiction check are not used: the decision text is the model's sentence, and a
+    decision to move away from something is stated in the words the contradiction check reads as one. A refused
+    decision gets its G-7 row (stage 11, the gate's state as the reason). The gate can only remove a decision; one
+    it passes is logged or queued on the same signals as before. A decision made by hand (`/decide`) is unchanged.
+  - **The shadowing:** the Constitution's rule 1 refuses an immutable field's name as a `preference_memory` field
+    whatever is stored, names compared by letters and digits only ("Time Zone" is timezone). Stage 4 leaves such a
+    preference stored before G-4 out of the prompt; `get_profile` (the memory screen) still lists it, so the user
+    can see it and delete it.
+- **Tests:** `backend/tests/test_observer_decisions_through_the_gate.py`, 16, through the real session-end path
+  with a stand-in model giving the recorded quotes and decision texts: the four §7.14 overstatements are neither
+  logged nor queued, each leaving a stage-11 audit row; W-1's two near-misses (a friend's goal, the assistant's
+  advice) are not logged; a decision text sharing only "decided" with its quote is not logged; three decisions the
+  user stated (Postgres, the half marathon, "Good, I'll stay put") are still logged and a one-signal one still
+  queued; the three immutable names and "Time Zone" are neither stored nor queued as preferences (the gate passed
+  them; the Constitution refuses, stage 12, `immutable_field`); a shadow preference stored before G-4 is not in
+  Stage 4's rows and is still in `get_profile`.
+  - **Seen failing first:** 12 of 16 on 934cf04; the four "still logged or queued" checks passed there, as they
+    must.
+  - **Existing tests changed:** fixtures in three files whose decisions the gate now refuses, each now quoting a
+    first-person statement, since those tests are about routing, the audit log and the project, not phrasing:
+    `test_stage_11_observer.py` ("I'm going with FastAPI for the backend, what do you think?" and "I'll probably use
+    Redis for caching, does that sound right?" are questions to the gate), `test_governance_audit_log.py` and
+    `test_learned_decisions_keep_their_project.py` ("We decided to use Postgres...", see below).
+- **Break-it:** 7 mutations, each alone, restored byte for byte, each caught: decisions skipping the gate (7 tests);
+  a decision needing no commitment language (4); the decision anchored on the commitment phrase too (1); a refused
+  decision leaving no audit row (4); the immutable rule in preferences only when a value is stored (4); field names
+  compared exactly (1); a stored shadow preference reaching the prompt (1).
+- **Gate evaluation:** `scripts/eval_evidence_gate.py` gives the same output on 934cf04 and with G-4, apart from the
+  run stamp (0 false accepts on both sets; the one held-out false reject unchanged): the new contract is used only
+  by decisions.
+- **Replays (the card's "done when"), no model:** every recording replayed through 934cf04 and through G-4
+  (`scripts/eval_observer_end_to_end.py --replay`): the 2026-10-12 recording (3 runs x 37 chats), V-2's qwen and
+  llama recordings (3 x 37 each) and long chats (27), W-1's long (27) and short temperature-0.0 (3 x 37)
+  recordings. The rule is the card's: no trap newly reaching a belief table, the 4 cases not logged, dropped true
+  decisions counted.
+  - **No row was added anywhere.** The only rows removed are decisions: of 197 that reached routing (74 logged,
+    123 queued on 934cf04), the gate removed 154 (48 logged, 106 queued) and kept 43 (26 logged, 17 queued).
+  - W-1's two TRAP rows (both decisions) are gone on W-1's own recording.
+  - **Every removed decision read by hand, with its chat:** 124 right to remove (79 tentative, a question, a
+    fragment or no decision at all; 24 the assistant's words; 17 a preference, which the memory path handles; 4
+    someone else's). **Real decisions removed: 9 on a strict reading** (5 "Good, I'll stay put" and 1 Postgres
+    decision whose quote carried the "User:" label, 1 AWS-exam goal the same, 2 AWS-exam goals whose quote ends in
+    the question the user asked next); **30 on a lenient one**, adding the borderline calls §7.14's review counted
+    as decisions (8 Excalidraw and 2 pytest habits, 4 "I'll pass" about learning Java, 3 the corrected beta
+    deadline, 3 "Yes, next week" for a migration plan, 1 "I don't plan to" use Emacs). The harness's own keyword
+    labels on the removed logged rows: 2 TRAP, 1 TRUE, 45 unlabelled.
+- **Suites:** Backend 1742 passed, 0 failed (18 min 29 s), on the working tree at 934cf04 plus this change (with
+  other sessions' uncommitted `httpx2` requirement and its test), nothing else of mine running; the changed files
+  were compared byte for byte with copies taken before the run. No Flutter file changed.
+
+**Not covered (still open):**
+- **D-38, found here: the gate refuses a quote that carries its turn's "User:" label.** The ledger holds each turn
+  without its role label, so "User: Good, I'll stay put." is not found though the user said exactly that: 7 of the
+  9 strict losses. The same step judges memory candidates, so it costs them too. A false reject (the safe
+  direction). Not fixed: outside the card.
+- **Decision wording the commitment list does not hold is lost:** "we decided", "I'm going with", "let's go with".
+  Widening the list would be a new word list, which the owner ruled out (2026-10-17); not done. Three test
+  fixtures had used such wording.
+- **A differently named shadow is not caught:** `preference_memory.language = French` (§7.13 saw "language" too)
+  does not carry an immutable field's name; only the Constitution's own names are refused.
+- **W-1's run 1 with the model**, the card's last step, is not re-run here: it needs Ollama and about 20 minutes.
+  The replay above uses W-1's recording of it.
+- **A decision made by hand** (`/decide`) does not pass through the gate, as the card says.
+
 ---
 
 ## 8. Status
@@ -3952,6 +4040,8 @@ The third card of the final plan's step 4 (BLUEPRINT G-7, A-3; issue #20). Owner
 | D-34 a learned decision saved with no project | Fixed 2026-10-18 (§7.57) | A, medium: the Observer was called without the chat's project and a queued decision had no project column, so every learned decision was saved with none and a project's own lookup never found it. The project is now read from the chat's row on every path (end of chat, shutdown queue, crash recovery), and logged and queued decisions keep the project and the chat's id. 7 tests (7 failed first), 5 break-it mutations |
 | D-35 the Constitution edited after it was locked, its version never checked | Fixed 2026-10-18 (§7.58) | A, low: constitutional.json said 1.0 and was edited twice with no bump; every profile stored the literal 1.0 and nothing compared it. Now 1.1 with a changelog, each version registered with its text's fingerprint, and a sign-in check that warns (log, trace, /status) and keeps running (DEC-6). 8 tests, 5 break-it mutations. The app does not show the warning yet |
 | D-36 a refused candidate left no lasting record | Fixed 2026-10-18 (§7.59) | A, medium for the thesis: a candidate the guard refused left a logger line only, and trace_log is purged after 90 days. Now an append-only `governance_audit_log` (triggers abort UPDATE and DELETE) holds one row for every terminal outcome of an Observer memory or decision candidate and for every user answer to a queued question, with an HMAC fingerprint and never the text, through one writer that refuses an unknown reason (DEC-5). 52 tests, 12 break-it mutations. Append-only within the trust boundary, not tamper-evident; decisions made by hand are not audited; no view in the app |
+| D-37 the Observer's decisions skipped the evidence gate; an immutable name could be a preference | Fixed 2026-10-18 (§7.60) | A, medium (§7.13 findings 1-2, DEC-7 = A): decisions were logged on grounding and the model's own signals, so tentative remarks, a friend's goal and the assistant's words became the user's decisions; `preference_memory.language_preference = French` sat in every prompt beside identity's English. Decisions now pass the gate (goal_memory's commitment language reused, the user's own words); the Constitution refuses an immutable name as a preference and Stage 4 keeps an old one out of prompts. 16 tests, 7 break-it mutations. Replays: nothing added; 154 of 197 decisions removed, 124 rightly, 9 real ones lost (30 lenient). W-1's live re-run not done |
+| D-38 the gate refuses a quote carrying its turn's "User:" label | Found 2026-10-18 (§7.60), open | A, low: the ledger holds turns without their role label, so a quote the user said word for word but cited with "User: " is EVIDENCE_NOT_FOUND; 7 of G-4's 9 strict decision losses, and memory candidates are judged by the same step. A false reject. Not fixed |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

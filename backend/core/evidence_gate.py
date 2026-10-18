@@ -765,6 +765,26 @@ _CONTRACTS: dict[str, _Contract] = {
     # assertion for "this came up". It still has to be the user who raised it,
     # and the topic still has to appear in their own words.
     "topic_interests": {"markers": None, "anchor": "field_name", "calibrate": None},
+    # A decision the Observer proposes (G-4; owner decision DEC-7 = A). Until
+    # G-4 these skipped this gate entirely: a quote found anywhere in the
+    # transcript, the assistant's turns included, plus the signals the model
+    # claimed for itself, put a sentence into the decision log, which Stage 3
+    # puts into prompts. FREEZE_LIST §7.14 found tentative remarks logged that
+    # way ("I'm not convinced", "probably not worth it" as "decided against
+    # rewriting in Elixir"), and W-1's long chats a friend's exam goal and a
+    # line the assistant said (§7.56).
+    #
+    # A decision is a commitment, so its support language is the commitment
+    # language goals already use - the same list, not a new one. Two parts of
+    # the gate are deliberately not used:
+    #   - the anchor: the decision text is the model's sentence, and its
+    #     boilerplate ("decided", "user") would anchor it to any quote that
+    #     says "I've decided"; the calibrator anchors it on what the user
+    #     committed TO instead;
+    #   - step 5's contradiction check: a decision to move away from something
+    #     is stated with exactly the words it reads as contradiction ("I hate
+    #     Flask, I've decided to move to FastAPI").
+    "decision_log": {"markers": _GOAL_MARKERS, "anchor": "none", "calibrate": "decision"},
 }
 
 
@@ -1111,6 +1131,27 @@ def _adjudicate_partial_quote(
     )
 
 
+def _adjudicate_decision(
+    decision_text: Any, quote: str, user_sources: list[EvidenceTurn]
+) -> Optional[EvidenceVerdict]:
+    """
+    Whether the decision text is about what the user committed to.
+
+    The plain anchor would accept "User decided to rewrite the backend in
+    Elixir" from "I've decided to go to bed early tonight": the two share
+    "decided", and that word is in the commitment phrase, not in the thing
+    decided. So the quote's statements are read with their commitment phrases
+    taken out, and the decision has to share a word with what is left.
+    """
+    committed_to = _GOAL_MARKERS.sub(" ", _declarative_text(quote))
+    if _anchored(decision_text, committed_to):
+        return None
+    return EvidenceVerdict(
+        EvidenceState.EVIDENCE_NOT_ENTAILING,
+        "the cited evidence shares nothing with the decision beyond its commitment phrase",
+    )
+
+
 # Named rather than referenced directly in _CONTRACTS so the contract table
 # stays a plain data literal that can be read top to bottom without jumping
 # forward to function definitions that do not exist yet at that point in the
@@ -1118,5 +1159,6 @@ def _adjudicate_partial_quote(
 _CALIBRATORS = {
     "skill_level": _adjudicate_skill_level,
     "style": _adjudicate_style,
+    "decision": _adjudicate_decision,
     None: None,
 }

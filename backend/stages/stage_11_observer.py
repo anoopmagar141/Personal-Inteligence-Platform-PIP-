@@ -1167,6 +1167,29 @@ def run_session_end(
         # Same isolation, same reason: one unroutable decision must not take
         # the rest of the session's decisions down with it.
         try:
+            # The evidence gate first, as for memory (G-4, DEC-7 = A): Promise
+            # 1 says every write goes through governance, and decisions were
+            # the one Observer write that did not. Grounding above only proved
+            # the quote is somewhere in the transcript, the assistant's turns
+            # included; the gate asks whether the USER said it and whether it
+            # commits to the decision (see the decision_log contract). It can
+            # only remove a decision: one it passes is routed exactly as
+            # before, on the same signals and threshold.
+            verdict = evidence_gate.adjudicate(
+                {"target_table": "decision_log", "field_name": None, "proposed_value": dc["decision_text"],
+                 "evidence_text": dc["raw_quote"]},
+                ledger,
+            )
+            if not verdict.sufficient:
+                logger.info(
+                    f"Observer: evidence gate rejected decision {dc['decision_text']!r} "
+                    f"as {verdict.state}: {verdict.detail}"
+                )
+                _audit_drop(conn, verdict.state, candidate_id=dc["candidate_id"], target_table="decision_log",
+                            value=dc["decision_text"], conversation_id=conversation_id)
+                decision_results.append({"status": "rejected", "evidence_state": verdict.state,
+                                         "decision_text": dc["decision_text"]})
+                continue
             result = decision_log.route_observer_decision(
                 conn,
                 text=dc["decision_text"],

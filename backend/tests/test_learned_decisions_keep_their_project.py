@@ -28,7 +28,10 @@ from backend.memory import conversation_store, decision_log, profile_store
 from backend.memory.profile_store import get_connection, initialize_schema
 from backend.providers.base_provider import BaseLLMProvider
 
-QUOTE = "We decided to use Postgres for the Lanternfish database because SQLite could not handle concurrent writes"
+# First person on purpose: since G-4 an Observer decision goes through the
+# evidence gate, whose commitment language is first-person ("I've decided",
+# "I'll"); a "we decided" is not logged (FREEZE_LIST §7.60).
+QUOTE = "I've decided to use Postgres for the Lanternfish database because SQLite could not handle concurrent writes"
 CHAT = [
     {"role": "user", "content": QUOTE + ", and we looked at MySQL too."},
     {"role": "assistant", "content": "Postgres it is, then."},

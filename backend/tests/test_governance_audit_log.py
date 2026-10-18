@@ -224,12 +224,15 @@ def test_the_month_2_threshold_names_which_rule_refused(conn):
     assert low_confidence.reason == "threshold_violation_month_2_plus_confidence"
 
 
+# First person on purpose: since G-4 an Observer decision goes through the
+# evidence gate, whose commitment language is first-person ("I've decided",
+# "I'll"); a "we decided" is not logged (FREEZE_LIST §7.60).
 TRANSCRIPT = (
     "User: I use Neovim for all my coding.\n"
     "Assistant: Nice. Since you love Emacs too, want config tips?\n"
-    "User: We decided to use Postgres for the database because SQLite could not take the writes.\n"
+    "User: I've decided to use Postgres for the database because SQLite could not take the writes.\n"
 )
-POSTGRES_QUOTE = "We decided to use Postgres for the database because SQLite could not take the writes"
+POSTGRES_QUOTE = "I've decided to use Postgres for the database because SQLite could not take the writes"
 
 
 class _Model(BaseLLMProvider):
@@ -275,7 +278,7 @@ def _seeded_session(conn):
             {"decision_text": "Use Redis", "signals_found": ["commitment_language"],
              "raw_quote": "we will use Redis everywhere"},                                    # quote not said
             {"decision_text": "Since you love Emacs too, want config tips?", "signals_found": [],
-             "raw_quote": "We decided to use Postgres for the database"},                     # assistant echo
+             "raw_quote": "I've decided to use Postgres for the database"},                     # assistant echo
             {"signals_found": []},                                                            # malformed
         ],
     )

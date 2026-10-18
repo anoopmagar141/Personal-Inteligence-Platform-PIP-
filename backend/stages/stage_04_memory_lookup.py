@@ -9,6 +9,7 @@
 
 import logging
 
+from backend.core.constitution_enforcer import immutable_field_names, names_an_immutable_field
 from backend.memory import profile_store
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,18 @@ def run(conn, category: str, retrieval_hint: str = "") -> list[dict]:
     try:
         relevant_tables = tables_for_category(category)
         full_profile = profile_store.get_profile(conn)
-        return [row for row in full_profile if row["table"] in relevant_tables]
+        # A preference stored under an immutable field's name is left out of
+        # the prompt (G-4; FREEZE_LIST §7.13 finding 2): the Constitution now
+        # refuses one, but a profile from before that can already hold
+        # preference_memory.language_preference = French, which the model
+        # would read beside identity's own language. It stays in get_profile,
+        # so the memory screen still shows it and the user can delete it.
+        immutable = immutable_field_names()
+        return [
+            row for row in full_profile
+            if row["table"] in relevant_tables
+            and not (row["table"] == "preference_memory" and names_an_immutable_field(row["field"], immutable))
+        ]
     except Exception as e:
         logger.error(f"Stage 4 memory lookup failed, returning empty: {e}")
         return []

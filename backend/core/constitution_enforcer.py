@@ -1,8 +1,30 @@
 import json
+import re
 from datetime import datetime, timezone
 from fnmatch import fnmatch
+from pathlib import Path
 from typing import Any
 from backend.core.types import MemoryCandidate, ValidationResult
+
+CONSTITUTION_PATH = Path(__file__).parent / "constitutional.json"
+
+
+def _field_key(name: Any) -> str:
+    # Letters and digits only: the model names the field itself, and "Time
+    # Zone", "time_zone" and "timezone" are the same field to anyone reading
+    # the prompt.
+    return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+
+
+def names_an_immutable_field(field_name: Any, immutable_fields: list[str]) -> bool:
+    key = _field_key(field_name)
+    return bool(key) and any(key == _field_key(f) for f in immutable_fields)
+
+
+def immutable_field_names() -> list[str]:
+    """The Constitution's immutable fields, read from the file in force."""
+    with open(CONSTITUTION_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)["immutable_fields"]["fields"]
 
 # Which column a candidate's proposed_value actually writes, per table.
 #
@@ -85,8 +107,18 @@ class ConstitutionEnforcer:
         target_table = candidate.get("target_table")
 
         # 1. Immutable field violation
-        if field in self.rules["immutable_fields"]["fields"]:
-            if self._field_value(existing_field, "current_value") is not None:
+        if names_an_immutable_field(field, self.rules["immutable_fields"]["fields"]):
+            # In preference_memory always, whatever is stored there (G-4;
+            # owner decision DEC-7 = A; FREEZE_LIST §7.13 finding 2). The rule
+            # used to fire only when the candidate's own table already held a
+            # value, and preference_memory never holds one under these names,
+            # so "I prefer French, please answer me in French" wrote
+            # preference_memory.language_preference = French. A preference is
+            # shown to the model as "name: value" beside identity's own fields,
+            # so every prompt then carried two language preferences for the
+            # field Promise 2 calls immutable. identity itself was never at
+            # risk (it is not Observer-writable and has no write branch).
+            if target_table == "preference_memory" or self._field_value(existing_field, "current_value") is not None:
                 return ValidationResult.HARD_REJECT("immutable_field")
 
         # 2. Observer write allowlist is table-level, not field-level

@@ -238,6 +238,22 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   *accepts* — beliefs written into the profile that the user never expressed.
   Measured cost on a held-out set: 1 false reject in 15 supported statements,
   0 false accepts. `scripts/eval_evidence_gate.py` prints the numbers.
+- **The Observer's decisions go through the same gate** (G-4; DEC-7 = A),
+  before `decision_log.route_observer_decision`, under a `decision_log`
+  contract: the user's own words, `commitment` language (goal_memory's list,
+  no new one), not a question or a hypothetical, and the decision has to name
+  something the user committed to beyond the commitment phrase. The gate can
+  only remove a decision; one it passes is logged or queued on the same
+  signals as before. A decision made by hand (`/decide`) does not pass through
+  it. Cost on the recordings: of 197 decisions that reached routing, 154 were
+  removed, 124 rightly; 9 plain decisions were lost (30 counting borderline
+  ones), mostly because the model's quote carried the `User:` label (D-38).
+- **An immutable field's name is not a preference** (G-4). The Constitution
+  refuses `name`, `language_preference` and `timezone` as a `preference_memory`
+  field outright (compared by letters and digits, so "Time Zone" counts), not
+  only when a value is stored, because a preference is shown to the model as
+  "name: value" beside identity's own fields. Stage 4 keeps such a row stored
+  before G-4 out of prompts; the memory screen still lists it for deletion.
 - **Role headers in a transcript are a security boundary, not formatting.**
   `format_transcript()` indents any content line beginning `User:` or
   `Assistant:`, because `EvidenceLedger` parses those headers back out to

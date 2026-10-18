@@ -56,7 +56,7 @@ VALID_RESPONSE = {
         {
             "decision_text": "Chose FastAPI over Flask for async support",
             "signals_found": ["alternative_considered", "commitment_language"],
-            "raw_quote": "I'm going with FastAPI",
+            "raw_quote": "I've decided to go with FastAPI",
         }
     ],
     "session_snapshot": {
@@ -77,8 +77,13 @@ VALID_RESPONSE = {
 # missing for the same reason the raw_quote line was missing before it: nothing
 # checked memory candidates, so nothing forced the fixture to be realistic
 # about them. Grounding them exposed it immediately.
+#
+# The decision line is a first-person statement, not "I'm going with FastAPI
+# for the backend, what do you think?": since G-4 an Observer decision goes
+# through the evidence gate, which reads that sentence as a question and has
+# no "going with" in its commitment language (FREEZE_LIST §7.60).
 VALID_TRANSCRIPT = (
-    "User: I'm going with FastAPI for the backend, what do you think?\n"
+    "User: I've decided to go with FastAPI for the backend. What do you think?\n"
     "Assistant: FastAPI is a solid choice for async workloads.\n"
     "User: Also I switched to Neovim last month and I'm not going back.\n"
     "Assistant: Noted.\n"
@@ -248,15 +253,17 @@ def test_run_session_end_single_signal_decision_goes_to_pending(db_conn):
         "memory_candidates": [],
         "decision_candidates": [
             {
-                "decision_text": "Maybe use Redis for caching",
+                "decision_text": "Use Redis for caching",
                 "signals_found": ["commitment_language"],
-                "raw_quote": "I'll probably use Redis",
+                "raw_quote": "I'll use Redis for caching",
             }
         ],
         "session_snapshot": {},
     }
     provider = FakeProvider(response_text=json.dumps(response))
-    transcript = "User: I'll probably use Redis for caching, does that sound right?\n"
+    # A plain commitment: since G-4 the gate drops "I'll probably use Redis for
+    # caching, does that sound right?" as a question before it can be queued.
+    transcript = "User: I'll use Redis for caching in front of the API.\n"
     result = observer.run_session_end(db_conn, transcript, provider)
 
     assert result["decision_results"][0]["status"] == "pending"
