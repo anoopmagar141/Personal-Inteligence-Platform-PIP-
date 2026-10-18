@@ -1,0 +1,182 @@
+=== r1012
+  r0 fact_editor: pending -> rejected | 'Maybe later.' | quote 'Maybe later.'
+  r0 fact_short_answers: pending -> rejected | 'Answer future questions concisely' | quote 'Please keep your answers short from now on, I just want the answer.'
+  r0 fact_rust_learning: pending -> rejected | 'Using clap for CLI tools' | quote 'Yes.'
+  r0 trap_sister: pending -> rejected | "I won't learn Java." | quote "Ha, I'll pass."
+  r0 trap_manager: pending -> rejected | "The user is committed to using Jira due to manager's insistence." | quote 'Not really.'
+  r0 trap_what_if: logged -> rejected | 'Decide against rewriting the backend in Elixir.' | quote 'Yeah, probably not worth it.'
+  r1 fact_short_answers: pending -> rejected | 'The user wants short answers from the assistant.' | quote 'Please keep your answers short from now on, I just want the answer.'
+  r1 fact_pytest: pending -> rejected | 'no explicit decision made' | quote 'Exactly.'
+  r1 fact_detail: logged -> rejected | 'to provide more detailed explanations and worked examples' | quote "I'll go into more detail then."
+  r1 trap_what_if: pending -> rejected | 'Decide not to rewrite the backend in Elixir.' | quote 'Yeah, probably not worth it.'
+  r1 immutable_language: pending -> rejected | 'User wants the assistant to answer in French.' | quote 'Please answer me in French from now on.'
+  r1 mixed_stack: logged -> rejected | 'not yet decided on moving to Java' | quote "My colleague wants us to move to Java but I'm not convinced."
+  r2 fact_editor: pending -> rejected | 'to wait for plugin suggestions later' | quote 'Maybe later.'
+  r2 fact_short_answers: pending -> rejected | 'The user wants concise answers from the assistant.' | quote 'Please keep your answers short from now on, I just want the answer.'
+  r2 trap_what_if: logged -> rejected | 'Decided not to rewrite the backend in Elixir.' | quote 'Yeah, probably not worth it.'
+  r2 retract_vim_helix: logged -> rejected | 'Scratched the decision to use Neovim for everything.' | quote 'I use Vim for everything. Actually no, scratch that, I switched to Helix last year.'
+  r2 mixed_stack: logged -> rejected | 'Decide whether to stay with Go or consider Java for the payments servi' | quote "My colleague wants us to move to Java but I'm not convinced."
+=== v2qwen
+  r0 fact_editor: pending -> rejected | 'Not seeking plugin suggestions at the moment.' | quote 'Maybe later.'
+  r0 fact_short_answers: pending -> rejected | 'The user wants short answers from now on.' | quote 'Please keep your answers short from now on, I just want the answer.'
+  r0 fact_detail: logged -> rejected | 'Increase the detail level of explanations.' | quote "I'll go into more detail then."
+  r0 trap_sister: pending -> rejected | 'User decides not to learn Java.' | quote "I'll pass."
+  r0 trap_what_if: pending -> rejected | 'Decided not to rewrite the backend in Elixir.' | quote 'Yeah, probably not worth it.'
+  r0 trap_kafka_question: pending -> rejected | 'User decided to understand the difference between Kafka and RabbitMQ.' | quote "What's the difference between Kafka and RabbitMQ?"
+  r0 mixed_stack: logged -> rejected | 'Not convinced to move to Java' | quote "I'm not convinced."
+  r0 mixed_writing: pending -> rejected | "I'd like shorter answers" | quote "I'd like shorter answers by the way."
+  r0 mixed_tools_and_question: pending -> rejected | 'Stay with Docker Compose on a small VPS' | quote "User: Good, I'll stay put."
+  r1 fact_pytest: logged -> rejected | 'User prefers using pytest for testing.' | quote 'I always write my tests with pytest, it fits how I think.'
+  r1 trap_sister: pending -> rejected | 'User decided not to learn Java.' | quote "Ha, I'll pass."
+  r1 trap_what_if: logged -> rejected | 'Decided not to rewrite the backend in Elixir.' | quote 'Yeah, probably not worth it.'
+  r1 immutable_language: pending -> rejected | 'User wants the assistant to answer in French.' | quote 'Please answer me in French from now on.'
+  r1 mixed_stack: pending -> rejected | "I'm not convinced to move to Java." | quote "My colleague wants us to move to Java but I'm not convinced."
+  r1 mixed_writing: pending -> rejected | "I'd like shorter answers" | quote "I'd like shorter answers by the way."
+  r2 fact_editor: pending -> rejected | 'to wait for plugin suggestions later' | quote 'Maybe later.'
+  r2 fact_detail: logged -> rejected | 'to provide more detailed explanations and include worked examples' | quote "I'll go into more detail then."
+  r2 fact_vector_clocks: logged -> rejected | 'User wants to understand vector clocks for sync issues.' | quote 'Right, I keep coming back to this because our sync is broken.'
+  r2 trap_manager: pending -> rejected | 'Use Jira despite preference for other tools.' | quote 'Not really.'
+  r2 trap_what_if: logged -> rejected | 'Not pursuing rewriting the backend in Elixir.' | quote 'Yeah, probably not worth it.'
+  r2 immutable_language: pending -> rejected | 'User wants answers in French' | quote 'Please answer me in French from now on.'
+  r2 mixed_stack: logged -> rejected | 'The user is deciding whether to move to Java or stay with Go for the p' | quote "My colleague wants us to move to Java but I'm not convinced."
+  r2 mixed_tools_and_question: pending -> rejected | 'Stay with Docker Compose.' | quote "User: Good, I'll stay put."
+=== v2llama
+  r0 fact_editor: pending -> rejected | 'Maybe later' | quote 'Maybe later'
+  r0 fact_python_years: pending -> rejected | 'mostly backend services' | quote 'Mostly backend services.'
+  r0 fact_project: pending -> rejected | 'still deciding the back' | quote 'still deciding the back'
+  r0 fact_goal: pending -> rejected | 'User has about half the chapters written.' | quote 'About half the chapters are written.'
+  r0 fact_short_answers: pending -> rejected | 'the user wants concise answers from now on' | quote 'Please keep your answers short from now on, I just want the answer.'
+  r0 fact_detail: pending -> rejected | 'the user decided to have detailed explanations' | quote 'Great.'
+  r0 fact_detail: logged -> rejected | 'the user decided the assistant will go into more detail' | quote "I'll go into more detail then."
+  r0 fact_final_year: pending -> rejected | 'everything runs on my laptop' | quote 'Yes, everything runs on my laptop.'
+  r0 fact_postgres_decision: pending -> rejected | 'Yes, next week.' | quote 'Yes, next week.'
+  r0 fact_vector_clocks: pending -> rejected | 'User decided to fix sync issue' | quote 'I keep coming back to this because our sync is broken.'
+  r0 trap_manager: logged -> rejected | 'User does not have a choice in using Jira.' | quote 'Not really.'
+  r0 trap_professor: logged -> rejected | "I won't use Fortran for my work" | quote 'Not mine though.'
+  r0 trap_what_if: pending -> rejected | 'probably not worth it' | quote 'Yeah, probably not worth it.'
+  r0 trap_would_haskell: pending -> rejected | 'None stated' | quote 'User: Interesting, just curious.'
+  r0 trap_never_emacs: logged -> rejected | 'will not use Emacs' | quote "I don't use Emacs, never have, and I don't plan to."
+  r0 trap_used_to_java: pending -> rejected | 'ditched Java due to boilerplate' | quote 'Too much boilerplate.'
+  r0 retract_vim_helix: pending -> rejected | 'switched to Helix' | quote 'Actually no, scratch that, I switched to Helix last year.'
+  r0 retract_deadline: pending -> rejected | 'User changed the shipping deadline from March to May.' | quote 'Sorry, I mean May - March was the old plan.'
+  r0 retract_deadline: pending -> rejected | "User accepted the assistant's suggestion of a later shipping deadline." | quote 'It does.'
+  r0 trap_sarcasm_css: logged -> rejected | 'The user decided to debug the flexbox issue' | quote 'The flexbox one from yesterday.'
+  r0 trap_assistant_suggests_zig: pending -> rejected | 'The user will consider using Zig as a build system.' | quote "Maybe, I'll think about it."
+  r0 trap_assistant_assumes_scala: pending -> rejected | 'They decided to work on a Kotlin project.' | quote "It's Kotlin."
+  r0 mixed_stack: logged -> rejected | "I'm not convinced we should move to Java." | quote "My colleague wants us to move to Java but I'm not convinced."
+  r0 mixed_writing: pending -> rejected | 'The user has decided to use Overleaf.' | quote "I've heard of Overleaf, never tried it."
+  r1 fact_editor: pending -> rejected | 'Maybe later' | quote 'Maybe later'
+  r1 fact_project: pending -> rejected | 'still deciding the back-end technology for Halyard' | quote 'still deciding the back'
+  r1 fact_goal: pending -> rejected | 'User has about half the chapters written.' | quote 'About half the chapters are written.'
+  r1 fact_pytest: pending -> rejected | 'User will stick with pytest for tests.' | quote 'I always write my tests with pytest, it fits how I think.'
+  r1 fact_obsidian: pending -> rejected | 'The user has chosen to use the daily notes plugin in Obsidian.' | quote 'Just the daily notes one.'
+  r1 fact_detail: pending -> rejected | 'User asked assistant to go into more detail.' | quote 'Great.'
+  r1 fact_final_year: pending -> rejected | 'everything runs on my laptop' | quote 'Yes, everything runs on my laptop.'
+  r1 fact_postgres_decision: pending -> rejected | 'the user committed to creating a migration plan for the next week' | quote 'Yes, next week'
+  r1 fact_vector_clocks: pending -> rejected | 'they need a merge rule' | quote 'You need a merge rule'
+  r1 trap_manager: pending -> rejected | 'They have no choice in using Jira for everything.' | quote 'Not really.'
+  r1 trap_professor: pending -> rejected | 'User will not use Fortran' | quote 'Not mine though'
+  r1 trap_what_if: pending -> rejected | 'probably not worth it' | quote 'Yeah, probably not worth it.'
+  r1 trap_might_swift: pending -> rejected | "We'll see." | quote "We'll see."
+  r1 trap_used_to_java: pending -> rejected | 'They no longer love Java.' | quote 'Too much boilerplate.'
+  r1 retract_deadline: pending -> rejected | 'the user decided to change the shipping date from March to May' | quote 'Sorry, I mean May - March was the old plan.'
+  r1 trap_sarcasm_css: pending -> rejected | 'The user has decided to revisit the flexbox layout issue from yesterda' | quote 'The flexbox one from yesterday.'
+  r1 trap_assistant_suggests_zig: pending -> rejected | 'User will think about using Zig as a build system' | quote "Maybe, I'll think about it."
+  r1 mixed_stack: logged -> rejected | "I'm not convinced to move to Java." | quote "My colleague wants us to move to Java but I'm not convinced."
+  r2 fact_editor: logged -> rejected | 'Maybe later' | quote 'Maybe later'
+  r2 fact_project: pending -> rejected | 'choosing Flutter as the front-end for Halyard' | quote 'Flutter on the front'
+  r2 fact_typescript: pending -> rejected | 'Mostly plain Node.' | quote 'Mostly plain Node.'
+  r2 fact_detail: pending -> rejected | 'the assistant will go into more detail' | quote "I'll go into more detail then."
+  r2 fact_postgres_decision: logged -> rejected | 'User decided to move database to Postgres before the next release.' | quote "User: I've decided to move our database to Postgres before the next release."
+  r2 fact_postgres_decision: logged -> rejected | 'User decided to create a migration plan next week.' | quote 'User: Yes, next week.'
+  r2 fact_vector_clocks: pending -> rejected | 'I keep coming back to this because our sync is broken.' | quote 'I keep coming back to this because our sync is broken.'
+  r2 fact_rust_learning: pending -> rejected | 'The user decided to use clap.' | quote 'Yes.'
+  r2 trap_sister: logged -> rejected | 'the user will not learn Java' | quote "Ha, I'll pass."
+  r2 trap_manager: pending -> rejected | 'Not really.' | quote 'Not really.'
+  r2 trap_what_if: pending -> rejected | 'probably not worth it' | quote 'Yeah, probably not worth it.'
+  r2 trap_might_swift: pending -> rejected | 'User is uncertain about learning Swift' | quote 'I might learn Swift someday, not sure yet.'
+  r2 trap_might_swift: pending -> rejected | 'User will not commit to learning Swift right now' | quote "We'll see."
+  r2 retract_vim_helix: pending -> rejected | 'Switched to Helix last year.' | quote 'Actually no, scratch that, I switched to Helix last year.'
+  r2 retract_deadline: pending -> rejected | 'User decided to release beta in May instead of March' | quote 'Sorry, I mean May - March was the old plan.'
+  r2 trap_sarcasm_css: pending -> rejected | 'The user has decided to debug the flexbox issue.' | quote 'The flexbox one from yesterday.'
+  r2 trap_sarcasm_ie: pending -> rejected | 'decided to use Firefox mostly' | quote 'Firefox mostly.'
+  r2 trap_assistant_suggests_zig: pending -> rejected | 'The user will consider using Zig as a build system.' | quote "Maybe, I'll think about it."
+  r2 trap_assistant_assumes_scala: pending -> rejected | "I've never written Scala in my life" | quote "Ha, I've never written Scala in my life. It's Kotlin"
+  r2 immutable_language: pending -> rejected | 'the assistant will answer in French from now on' | quote 'Please answer me in French from now on.'
+  r2 mixed_stack: logged -> rejected | "I'm not convinced we should move to Java" | quote "My colleague wants us to move to Java but I'm not convinced."
+=== v2long
+  r0 long_S_r0_d63: logged -> rejected | 'Pass the AWS Solutions Architect Associate exam by March' | quote 'One more thing about me: I want to pass the AWS Solutions Architect Associate exam by Marc'
+  r0 long_S_r1_d7: logged -> rejected | 'To pass the AWS Solutions Architect Associate exam by March, the user ' | quote 'Spaced practice beats cramming: short sessions several times a week, a practice test every'
+  r0 long_S_r1_d21: logged -> rejected | 'A sensible way to space out revision is short sessions several times a' | quote 'Spaced practice beats cramming: short sessions several times a week, a practice test every'
+  r0 long_S_r1_d63: logged -> rejected | 'Use Excalidraw for all diagrams due to personal preference and efficie' | quote "Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's "
+  r0 long_S_r2_d7: logged -> rejected | 'Pass AWS Solutions Architect Associate exam by March' | quote 'User: One more thing about me: I want to pass the AWS Solutions Architect Associate exam b'
+  r0 long_M_r1_d7: pending -> rejected | 'Pass the AWS Solutions Architect Associate exam by March' | quote 'Spaced practice beats cramming: short sessions several times a week, a practice test every'
+  r0 long_M_r1_d7: pending -> rejected | 'Pass the Azure Fundamentals exam by March' | quote 'For an entry-level exam, two months of steady study is usually plenty, especially with the'
+  r0 long_M_r1_d7: pending -> rejected | 'Use Excalidraw for diagrams' | quote "I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open."
+  r0 long_M_r1_d7: pending -> rejected | 'Use Notepad++ for text editing' | quote 'My flatmate swears by Notepad++ for everything and keeps telling me to switch. Is a plain '
+  r0 long_M_r1_d21: pending -> rejected | 'Sensible way to space out revision for AWS Solutions Architect Associa' | quote 'Spaced practice beats cramming: short sessions several times a week, a practice test every'
+  r0 long_M_r1_d21: pending -> rejected | 'If two months is enough for Azure Fundamentals exam' | quote 'For an entry-level exam, two months of steady study is usually plenty, especially with the'
+  r0 long_L_r0_d21: pending -> rejected | 'Two months is sufficient for passing the Azure Fundamentals exam if st' | quote 'For an entry-level exam, two months of steady study is usually plenty, especially with the'
+  r0 long_L_r0_d63: pending -> rejected | 'The friend should consider a structured, spaced practice approach to p' | quote 'For an entry-level exam, two months of steady study is usually plenty, especially with the'
+  r0 long_L_r1_d7: pending -> rejected | 'For small projects or scripts, a plain editor like Notepad++ might be ' | quote 'For small scripts, yes. Once a project has many files, search across files, refactoring an'
+  r0 long_L_r1_d7: pending -> rejected | 'Load balancers use various strategies to distribute requests, such as ' | quote 'A load balancer sits in front of several servers and spreads incoming requests across them'
+  r0 long_L_r1_d21: pending -> rejected | 'Use Excalidraw for diagrams.' | quote "I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open."
+  r0 long_L_r1_d21: pending -> rejected | "Follow supervisor's preference for Lucidchart." | quote "My supervisor does all her diagrams in Lucidchart and won't touch anything else."
+  r0 long_L_r1_d21: pending -> rejected | 'Use Notepad++ for text editing.' | quote 'My flatmate swears by Notepad++ for everything and keeps telling me to switch.'
+  r0 long_L_r1_d63: pending -> rejected | 'For small scripts and initial stages of a project, a plain editor like' | quote 'For small scripts, yes. Once a project has many files, search across files, refactoring an'
+  r0 long_L_r2_d7: pending -> rejected | 'For Pebblebox, a recipe-sharing app, store ingredients in a separate t' | quote 'An ingredient table plus a join table holding the quantity and unit, so the same ingredien'
+  r0 long_L_r2_d63: pending -> rejected | 'Use separate tables for ingredients in Pebblebox.' | quote 'An ingredient table plus a join table holding the quantity and unit, so the same ingredien'
+=== w1long
+  r0 long_S_r0_d7: logged -> rejected | 'To prepare for the AWS Solutions Architect Associate exam, I should re' | quote 'Spaced practice beats cramming: short sessions several times a week, a practice test every'
+  r0 long_S_r0_d21: logged -> rejected | 'Use Excalidraw for diagrams' | quote "I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open."
+  r0 long_S_r1_d7: logged -> rejected | 'pass the Azure Fundamentals exam by March' | quote 'my friend wants to pass the Azure Fundamentals exam by March.'
+  r0 long_S_r1_d63: pending -> rejected | 'Use Excalidraw for diagrams.' | quote "I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open."
+  r0 long_S_r2_d21: logged -> rejected | 'Use Excalidraw for diagrams' | quote "I do all my diagrams in Excalidraw these days, it's the only drawing tool I actually open."
+  r0 long_S_r2_d63: logged -> rejected | 'Name tables for shared expenses in Lanternfish with plain nouns.' | quote 'Plain nouns that match what people say out loud work best: expense, share, member, settlem'
+  r0 long_S_r2_d63: logged -> rejected | 'Store ingredients in a separate table with a join table in Pebblebox.' | quote 'Usually yes: an ingredient table plus a join table holding the quantity and unit, so the s'
+  r0 long_M_r0_d21: logged -> rejected | 'I want to pass the AWS Solutions Architect Associate exam by March.' | quote 'One more thing about me: I want to pass the AWS Solutions Architect Associate exam by Marc'
+  r0 long_M_r2_d7: logged -> rejected | 'Use Excalidraw for diagramming.' | quote "Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's "
+  r0 long_L_r0_d21: logged -> rejected | 'Sensible way to space out revision is short sessions several times a w' | quote 'Spaced practice beats cramming: short sessions several times a week, a practice test every'
+  r0 long_L_r0_d63: logged -> rejected | 'To space out revision for the AWS Solutions Architect Associate exam b' | quote 'Spaced practice beats cramming: short sessions several times a week, a practice test every'
+  r0 long_L_r2_d7: logged -> rejected | 'User decides to use Excalidraw for all diagrams' | quote "Quick aside before the next question: I do all my diagrams in Excalidraw these days, it's "
+=== w1short
+  r0 fact_editor: pending -> rejected | 'Maybe later.' | quote 'Maybe later.'
+  r0 fact_short_answers: pending -> rejected | 'The user wants short answers.' | quote 'Please keep your answers short from now on, I just want the answer.'
+  r0 trap_what_if: logged -> rejected | 'Not worth rewriting the backend in Elixir.' | quote 'Yeah, probably not worth it.'
+  r0 mixed_stack: logged -> rejected | 'Not convinced to move to Java' | quote "My colleague wants us to move to Java but I'm not convinced."
+  r0 mixed_writing: pending -> rejected | "I'd like shorter answers by the way." | quote "I'd like shorter answers by the way."
+  r0 mixed_tools_and_question: pending -> rejected | 'Stay with Docker Compose on a small VPS.' | quote "User: Good, I'll stay put."
+  r1 fact_editor: pending -> rejected | 'Maybe later.' | quote 'Maybe later.'
+  r1 fact_short_answers: pending -> rejected | 'The user wants short answers.' | quote 'Please keep your answers short from now on, I just want the answer.'
+  r1 trap_what_if: logged -> rejected | 'Not worth rewriting the backend in Elixir.' | quote 'Yeah, probably not worth it.'
+  r1 mixed_stack: logged -> rejected | 'Not convinced to move to Java' | quote "My colleague wants us to move to Java but I'm not convinced."
+  r1 mixed_writing: pending -> rejected | "I'd like shorter answers by the way." | quote "I'd like shorter answers by the way."
+  r1 mixed_tools_and_question: pending -> rejected | 'Stay with Docker Compose on a small VPS.' | quote "User: Good, I'll stay put."
+  r2 fact_editor: pending -> rejected | 'Maybe later.' | quote 'Maybe later.'
+  r2 fact_short_answers: pending -> rejected | 'The user wants short answers.' | quote 'Please keep your answers short from now on, I just want the answer.'
+  r2 trap_what_if: logged -> rejected | 'Not worth rewriting the backend in Elixir.' | quote 'Yeah, probably not worth it.'
+  r2 mixed_stack: logged -> rejected | 'Not convinced to move to Java' | quote "My colleague wants us to move to Java but I'm not convinced."
+  r2 mixed_writing: pending -> rejected | "I'd like shorter answers by the way." | quote "I'd like shorter answers by the way."
+  r2 mixed_tools_and_question: pending -> rejected | 'Stay with Docker Compose on a small VPS.' | quote "User: Good, I'll stay put."
+=== totals (recording, HEAD status, G-4 status)
+  ('r1012', 'logged', 'logged') 5
+  ('r1012', 'logged', 'rejected') 6
+  ('r1012', 'pending', 'pending') 4
+  ('r1012', 'pending', 'rejected') 11
+  ('v2llama', 'logged', 'logged') 3
+  ('v2llama', 'logged', 'rejected') 12
+  ('v2llama', 'pending', 'pending') 8
+  ('v2llama', 'pending', 'rejected') 51
+  ('v2long', 'logged', 'rejected') 5
+  ('v2long', 'pending', 'rejected') 16
+  ('v2qwen', 'logged', 'logged') 8
+  ('v2qwen', 'logged', 'rejected') 8
+  ('v2qwen', 'pending', 'pending') 2
+  ('v2qwen', 'pending', 'rejected') 15
+  ('w1long', 'logged', 'logged') 1
+  ('w1long', 'logged', 'rejected') 11
+  ('w1long', 'pending', 'rejected') 1
+  ('w1short', 'logged', 'logged') 9
+  ('w1short', 'logged', 'rejected') 6
+  ('w1short', 'pending', 'pending') 3
+  ('w1short', 'pending', 'rejected') 12

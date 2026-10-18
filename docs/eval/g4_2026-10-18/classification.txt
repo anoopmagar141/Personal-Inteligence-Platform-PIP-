@@ -1,0 +1,51 @@
+removed decisions: 154
+    8  REAL lenient: Excalidraw (a habit)
+    3  REAL lenient: beta in May
+    2  REAL lenient: keep using pytest (a habit)
+    3  REAL lenient: migration plan next week
+    1  REAL lenient: will not use Emacs
+    4  REAL lenient: won't learn Java
+    1  REAL strict: AWS exam goal (quote carries 'User:')
+    2  REAL strict: AWS exam goal (quote ends in a question)
+    1  REAL strict: Postgres (quote carries 'User:')
+    5  REAL strict: stay with Docker Compose (quote carries 'User:')
+   17  ok: a preference, not a decision
+    4  ok: someone else's
+   79  ok: tentative, a question, a fragment or no decision
+   24  ok: the assistant's words
+real decisions removed: strict 9, lenient 30; right to remove: 124
+tentative bucket, for reading:
+    2   (About half the chapters are written.')
+    2   (Actually no, scratch that, I switched to Helix last year.')
+    1   (Exactly.')
+    1   (Firefox mostly.')
+    1   (Flutter on the front')
+    2   (Great.')
+    1   (Ha, I've never written Scala in my life. It's Kotlin")
+    2   (I keep coming back to this because our sync is broken.')
+    1   (I might learn Swift someday, not sure yet.')
+    1   (I use Vim for everything. Actually no, scratch that, I switc)
+    1   (I'm not convinced.")
+    1   (I've heard of Overleaf, never tried it.")
+    1   (It does.')
+    1   (It's Kotlin.")
+    1   (Just the daily notes one.')
+    3   (Maybe later')
+    7   (Maybe later.')
+    3   (Maybe, I'll think about it.")
+    1   (Mostly backend services.')
+    1   (Mostly plain Node.')
+   10   (My colleague wants us to move to Java but I'm not convinced.)
+    1   (Not mine though')
+    1   (Not mine though.')
+    5   (Not really.')
+    1   (Right, I keep coming back to this because our sync is broken)
+    3   (The flexbox one from yesterday.')
+    2   (Too much boilerplate.')
+    1   (User: Interesting, just curious.')
+    2   (We'll see.")
+    1   (What's the difference between Kafka and RabbitMQ?")
+   12   (Yeah, probably not worth it.')
+    2   (Yes, everything runs on my laptop.')
+    2   (Yes.')
+    2   (still deciding the back')
