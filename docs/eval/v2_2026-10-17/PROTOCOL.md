@@ -79,3 +79,41 @@ No bar: it measures; W-1 decides the window from it.
 
 (d) about 2 minutes; (b) step 1 and step 3 under a minute each, step 2 about 11 minutes (2026-10-12: about
 200 s per run); (c) about 12-15 minutes. Results go in this folder.
+
+## (a) long chats (added 2026-10-18, committed before its run)
+
+Cases: `long_chats/long_chat_cases.json`, built by `long_chats/build_long_chats.py` (deterministic). Made-up
+chats, nothing real or personal: general study and programming Q&A in which the user says nothing about
+themselves, plus nine planted exchanges, the same nine in every chat:
+
+- three TRUE facts about the user: F1 a tool (Excalidraw), F2 a project (Lanternfish), F3 a goal (an exam);
+- three trick statements: T1 a flatmate's tool, T2 a hypothetical, T3 the assistant asserting something
+  false about the user, which the user corrects;
+- three NEAR-MISSES, each with a true fact's sentence shape and a different entity that is not the user's:
+  N1 a supervisor's tool, N2 a cousin's project, N3 a friend's exam goal. Each sits next to its fact.
+
+Three lengths (about 1,400, 2,700 and 4,800 words), three rotations that put each block of (fact, near-miss,
+trick) at the start, middle and end once, and three profile ages, 7, 21 and 63 days (weeks 1, 3 and 9: one,
+two and three pieces of evidence needed). 27 cases, one run each. A trick statement or near-miss counts as
+a hit if a row naming it reaches ANY table the harness reads.
+
+Command (from the clean checkout of the commit that holds this section; nothing in `backend/` changes):
+`--cases long_chats/long_chat_cases.json --model qwen2.5:7b --unload-between --count-prompt-tokens 16384
+--save-raw observer_recording_long_qwen2.5_7b.json --json a_long_qwen.json --out a_long_qwen_harness.md`,
+then `long_chats/score_long_chats.py a_long_qwen.json long_chats/long_chat_cases.json a_long_qwen.md`.
+`--unload-between` empties Ollama's cache before each case, so the tokens it reports reading are not
+shortened by a cached prefix; load time is reported apart and left out of the Observer's time. The whole
+prompt is counted afterwards in a 16,384 window (16,384 holds the longest, about 8k tokens).
+
+Rule, fixed now:
+- **Trust holds on long chats** if 0 of 162 trick statements and near-misses (27 x 6) reach a belief table
+  AND no learned row is labelled TRAP. Otherwise the 0 of 75 trap figure does not carry over to long chats,
+  and the report names every hit.
+- More than 3 of 27 errored cases: INCONCLUSIVE.
+- Learning (true facts written or asked, by position, length and age), the share of the prompt Ollama read,
+  and the Observer's time per chat are reported, not judged: they are the baseline W-1 and #19 are measured
+  against. Expected from (d), and stated before the run so it cannot be fitted afterwards: at the shipped
+  4096 window the longer chats are cut from the front, so the Observer's instructions and the start of the
+  chat are not read.
+
+Machine time (estimate): about 15-20 minutes.

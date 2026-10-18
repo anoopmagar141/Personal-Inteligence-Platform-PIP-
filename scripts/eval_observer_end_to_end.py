@@ -111,23 +111,110 @@ def replay_stamp(recorded) -> dict:
     stamp["replayed_from"] = recorded
     return stamp
 
+_OLLAMA_COUNTS = ("prompt_eval_count", "eval_count", "done_reason", "load_duration",
+                  "prompt_eval_duration", "eval_duration", "total_duration")
+
+
+class _CountingResponse:
+    """
+    Ollama's streamed response, passed through line for line, keeping the counts
+    from its final line (V-2 part a). prompt_eval_count is how many prompt
+    tokens the model actually read: when a prompt is longer than the window,
+    Ollama cuts it silently and this is the only place the cut shows.
+    """
+
+    def __init__(self, response, sink: dict):
+        self._response = response
+        self._sink = sink
+
+    def __enter__(self):
+        self._response.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._response.__exit__(*exc)
+
+    def __iter__(self):
+        for line in self._response:
+            if line:
+                try:
+                    chunk = json.loads(line.decode("utf-8"))
+                except ValueError:
+                    chunk = {}
+                if chunk.get("done"):
+                    self._sink.update({k: chunk.get(k) for k in _OLLAMA_COUNTS})
+            yield line
+
+
 class RecordingProvider(OllamaProvider):
-    """The real Ollama provider, keeping the raw extraction for the funnel."""
+    """
+    The real Ollama provider, keeping the raw extraction for the funnel, and
+    Ollama's own counts for the call. The request itself is the app's, unchanged:
+    the counts are read by wrapping the response, not by building a second
+    payload that could drift from OllamaProvider.chat's.
+    """
 
     def __init__(self, model_name, replay_text=None):
         super().__init__(model_name=model_name)
         self.raw = replay_text or ""
         self._is_replay = replay_text is not None
+        self.counts: dict = {}
+        self.messages: list = []
 
-    def chat(self, *args, **kwargs):
+    def chat(self, messages, *args, **kwargs):
         if self._is_replay:
             yield self.raw
             return
+        self.messages = messages
+        module = sys.modules[OllamaProvider.__module__]
+        real_urlopen = module.urllib.request.urlopen
+        module.urllib.request.urlopen = lambda req, *a, **k: _CountingResponse(real_urlopen(req, *a, **k), self.counts)
         parts = []
-        for token in super().chat(*args, **kwargs):
-            parts.append(token)
-            yield token
+        try:
+            for token in super().chat(messages, *args, **kwargs):
+                parts.append(token)
+                yield token
+        finally:
+            module.urllib.request.urlopen = real_urlopen
         self.raw = "".join(parts)
+
+
+def _ollama_post(host: str, path: str, payload: dict, timeout: int = 600) -> dict:
+    import urllib.request
+    request = urllib.request.Request(host + path, data=json.dumps(payload).encode("utf-8"),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def unload_model(host: str, model: str) -> None:
+    """
+    Unloads the model so the next case starts with an empty cache. Ollama reuses
+    the cached start of a previous prompt and then counts only the new tokens,
+    which would make prompt_eval_count look like a cut when nothing was cut.
+    Costs one model load per case, reported apart (load_duration). The reply
+    is read and not parsed: nothing in it is needed.
+    """
+    import urllib.request
+    request = urllib.request.Request(host + "/api/generate",
+                                     data=json.dumps({"model": model, "keep_alive": 0}).encode("utf-8"),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(request, timeout=120) as response:
+        response.read()
+
+
+def count_prompt_tokens(host: str, model: str, messages: list, num_ctx: int) -> int | None:
+    """
+    How many tokens the WHOLE prompt is: the same messages, in a window big
+    enough to hold them, one output token, and the model unloaded afterwards so
+    the next count starts from an empty cache. Compared with the
+    prompt_eval_count the shipped call reported, it shows how much was cut.
+    """
+    reply = _ollama_post(host, "/api/chat", {
+        "model": model, "messages": messages, "stream": False, "keep_alive": 0,
+        "options": {"num_ctx": num_ctx, "num_predict": 1, "temperature": 0},
+    })
+    return reply.get("prompt_eval_count")
 
 
 def _rows(conn) -> dict[str, set[tuple]]:
@@ -158,6 +245,25 @@ def _matches(spec, item) -> bool:
     return item["table"] in spec["tables"] and any(k in f" {item['text']} " for k in spec["keywords"])
 
 
+def _set_profile_age(conn, days: int) -> None:
+    """
+    Makes the profile `days` old as the Constitution reads it
+    (stage_12_validation_layer._get_profile_age_weeks: first_session_date).
+    Every case used to run on a profile in its first two weeks, where one
+    explicit statement is enough; from week 3 two are needed, after week 4 three.
+    """
+    import datetime
+    first = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    conn.execute("UPDATE profile_meta SET first_session_date = ? WHERE id = 1",
+                 (first.strftime("%Y-%m-%dT%H:%M:%SZ"),))
+    conn.commit()
+
+
+def _spec_tags(spec) -> dict:
+    """Where a planted statement sits and what it is, carried into the results (long-chat cases)."""
+    return {k: spec[k] for k in ("position", "kind", "id") if k in spec}
+
+
 def run_case(case, model, replay_text=None) -> dict:
     db = Path(tempfile.mkdtemp(dir=_ISOLATED)) / "pip.db"
     conn = get_connection(str(db), None)
@@ -165,6 +271,8 @@ def run_case(case, model, replay_text=None) -> dict:
         initialize_schema(conn)
         profile_store.complete_onboarding(conn, name="Asha Rai", language_preference="English",
                                           timezone="Asia/Kathmandu")
+        if case.get("profile_age_days"):
+            _set_profile_age(conn, case["profile_age_days"])
         before = _rows(conn)
         provider = RecordingProvider(model, replay_text=replay_text)
         started = time.monotonic()
@@ -189,9 +297,11 @@ def run_case(case, model, replay_text=None) -> dict:
         trap = any(_matches(s, item) for s in case["avoid"])
         item["label"] = "TRUE" if true else "TRAP" if trap else "UNLABELLED"
 
-    facts = [{"keywords": s["keywords"], "learned": [i["kind"] for i in learned if _matches(s, i)]}
+    facts = [{"keywords": s["keywords"], "learned": [i["kind"] for i in learned if _matches(s, i)], **_spec_tags(s)}
              for s in case["learn"]]
-    traps = [{"keywords": s["keywords"], "hit": any(_matches(s, i) for i in learned)} for s in case["avoid"]]
+    traps = [{"keywords": s["keywords"], "hit": any(_matches(s, i) for i in learned), **_spec_tags(s)}
+             for s in case["avoid"]]
+    prompt_words = sum(len(m.get("content", "").split()) for m in provider.messages)
 
     return {
         "id": case["id"], "category": case["category"], "seconds": round(seconds, 1), "error": error, "raw_text": provider.raw,
@@ -201,6 +311,8 @@ def run_case(case, model, replay_text=None) -> dict:
                     r["outcome"]) for r in outcome["memory_results"]],
         "decisions": [d.get("status") for d in outcome["decision_results"]],
         "learned": learned, "facts": facts, "traps": traps,
+        "ollama": dict(provider.counts), "prompt_words": prompt_words or None,
+        "_messages": provider.messages,
     }
 
 
@@ -285,9 +397,23 @@ def main(argv=None) -> int:
     parser.add_argument("--json", help="write the raw results here")
     parser.add_argument("--save-raw", help="save raw model outputs to this file")
     parser.add_argument("--replay", help="replay raw model outputs from this file")
+    # V-2 part (a): the long chats, and what Ollama read of them.
+    parser.add_argument("--cases", help="a JSON list of cases to use instead of backend/tests/observer_cases.py")
+    parser.add_argument("--unload-between", action="store_true",
+                        help="unload the model before each live case, so prompt_eval_count is not shortened by "
+                             "Ollama's cache of the previous prompt")
+    parser.add_argument("--count-prompt-tokens", type=int, metavar="NUM_CTX",
+                        help="after the runs, count each distinct prompt's full length in a window this big")
     args = parser.parse_args(argv)
 
-    cases = [c for c in CASES if not args.only or c["id"] in args.only]
+    if args.cases:
+        try:
+            all_cases = json.loads(Path(args.cases).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            parser.error(f"invalid cases file: {exc}")
+    else:
+        all_cases = CASES
+    cases = [c for c in all_cases if not args.only or c["id"] in args.only]
     runs = []
     
     replay_data = None
@@ -340,7 +466,9 @@ def main(argv=None) -> int:
             
         for case in cases:
             replay_text = replay_run[case["id"]] if replay_run is not None else None
-                        
+            if args.unload_between and replay_text is None:
+                unload_model(OllamaProvider().host, args.model)
+
             result = run_case(case, args.model, replay_text)
             results.append(result)
             wall_clock += result["seconds"]
@@ -364,6 +492,29 @@ def main(argv=None) -> int:
         }
         with open(args.save_raw, "w", encoding="utf-8") as f:
             json.dump(out_data, f, indent=1)
+
+    # One count per distinct prompt (the same transcript at three profile ages
+    # is one prompt), after every run, so switching the window - which reloads
+    # the model - never happens between the measured calls.
+    full_prompt_tokens = {}
+    if args.count_prompt_tokens and replay_data is None:
+        by_prompt = {}
+        for results in runs:
+            for result in results:
+                if result["_messages"]:
+                    key = hashlib.sha256(json.dumps(result["_messages"], sort_keys=True).encode("utf-8")).hexdigest()
+                    by_prompt.setdefault(key, (result["_messages"], []))[1].append(result["id"])
+        for key, (messages, ids) in by_prompt.items():
+            tokens = count_prompt_tokens(OllamaProvider().host, args.model, messages, args.count_prompt_tokens)
+            for case_id in ids:
+                full_prompt_tokens[case_id] = tokens
+            print(f"full prompt {key[:10]}: {tokens} tokens ({len(ids)} case runs)", flush=True)
+        stamp["count_prompt_tokens_num_ctx"] = args.count_prompt_tokens
+    for results in runs:
+        for result in results:
+            result.pop("_messages", None)
+            if result["id"] in full_prompt_tokens:
+                result["full_prompt_tokens"] = full_prompt_tokens[result["id"]]
 
     text = _stamp.markdown(stamp) + "\n" + report(args.model, runs)
     print("\n" + text)
