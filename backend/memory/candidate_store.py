@@ -11,13 +11,16 @@ def create_decision_candidate(
     signals_found: list[str],
     raw_quote: str,
     confidence: float,
+    project_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> int:
     cur = conn.execute(
         """
         INSERT INTO decision_candidates_pending (
-            decision_text, signals_found, raw_quote, confidence, state, created_at
+            decision_text, signals_found, raw_quote, confidence, state, created_at,
+            project_id, conversation_id
         )
-        VALUES (?, ?, ?, ?, 'pending', ?)
+        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
         """,
         (
             decision_text,
@@ -25,6 +28,8 @@ def create_decision_candidate(
             raw_quote,
             confidence,
             now_utc(),
+            project_id,
+            conversation_id,
         ),
     )
     conn.commit()

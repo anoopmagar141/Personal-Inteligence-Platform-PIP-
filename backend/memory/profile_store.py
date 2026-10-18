@@ -153,6 +153,13 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # say which chat it was, and guessing from its text could take the wrong
     # chat's learning with a delete. NULL rows are drained as they always were.
     ("pending_observer", "conversation_id", "TEXT"),
+    # See schema.sql: the chat an Observer-learned decision came from, and for a
+    # queued one its project too (C-14). Deliberately no backfill - an old row
+    # cannot say which chat or project it came from, and it keeps behaving as it
+    # did: no project, no chat.
+    ("decision_log", "conversation_id", "TEXT"),
+    ("decision_candidates_pending", "project_id", "TEXT"),
+    ("decision_candidates_pending", "conversation_id", "TEXT"),
 )
 
 # Run once, immediately after the named column is first added, to give existing

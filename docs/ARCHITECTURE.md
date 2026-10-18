@@ -92,7 +92,10 @@ session queues the next behind it rather than standing in for it. A queued
 transcript names its chat (`pending_observer.conversation_id`); deleting a chat
 removes its queued transcripts and clears the "where we left off" note
 (`session_snapshot`, one row per profile), and the session-end pass does not run
-for a chat that no longer exists.
+for a chat that no longer exists. A decision the pass learns, logged or queued
+to ask the user, carries the chat's project (read from the chat's
+`conversations` row) and the chat's id (`decision_log.conversation_id`), so the
+project's own decision lookup finds it (BLUEPRINT C-14).
 
 Each memory candidate then passes **two independent gates, in this order**:
 

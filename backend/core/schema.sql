@@ -170,6 +170,13 @@ CREATE TABLE IF NOT EXISTS active_projects (
 );
 
 -- 11. decision_log Table
+-- decision_log.conversation_id: which chat an Observer-learned decision came
+-- from (BLUEPRINT C-14), the link one record per chat (#13) needs. NULL for a
+-- decision made by hand, and for any logged before the column existed. No
+-- foreign key: one cannot be added to an existing table, and a deleted chat's
+-- decisions are #13's question. (Comments stay outside the table body: SQLite
+-- rewrites that text when a column is dropped, and a comment next to the
+-- dropped column breaks the rewrite.)
 CREATE TABLE IF NOT EXISTS decision_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     decision_text TEXT NOT NULL,
@@ -187,11 +194,16 @@ CREATE TABLE IF NOT EXISTS decision_log (
     -- and for any retracted before this column existed.
     state_reason TEXT,
     created_at TEXT NOT NULL,
+    conversation_id TEXT,
     FOREIGN KEY (project_id) REFERENCES active_projects(project_id) ON DELETE SET NULL,
     FOREIGN KEY (superseded_by) REFERENCES decision_log(id) ON DELETE SET NULL
 );
 
 -- 12. decision_candidates_pending Table
+-- decision_candidates_pending.project_id / .conversation_id: the chat's project
+-- and the chat, kept so that a decision promoted from here lands in the project
+-- it was said in (C-14). Promotion used to write project_id NULL because this
+-- table had nowhere to keep it.
 CREATE TABLE IF NOT EXISTS decision_candidates_pending (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     decision_text TEXT NOT NULL,
@@ -200,7 +212,9 @@ CREATE TABLE IF NOT EXISTS decision_candidates_pending (
     confidence REAL NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
     state TEXT DEFAULT 'pending' CHECK (state IN ('pending', 'promoted', 'dismissed')),
     dismissed_at TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    project_id TEXT,
+    conversation_id TEXT
 );
 
 -- 13. memory_candidates_pending Table

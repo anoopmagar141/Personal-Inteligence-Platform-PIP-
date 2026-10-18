@@ -112,6 +112,20 @@ def list_unobserved(conn) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def project_of(conn, conversation_id: Optional[str]) -> Optional[str]:
+    """
+    The project a chat belongs to, or None (no chat, a chat with no project,
+    or one that no longer exists). The one source for "the chat's project"
+    when the Observer learns from a chat (BLUEPRINT C-14): the row is created
+    with the project the app sends, so every path that knows the chat's id -
+    the end of a chat, the shutdown queue, crash recovery - reads the same.
+    """
+    if not conversation_id:
+        return None
+    row = conn.execute("SELECT project_id FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+    return row["project_id"] if row else None
+
+
 def conversation_exists(conn, conversation_id: str) -> bool:
     row = conn.execute("SELECT 1 FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
     return row is not None

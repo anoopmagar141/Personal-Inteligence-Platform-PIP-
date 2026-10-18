@@ -117,6 +117,7 @@ def route_observer_decision(
     signals_found: list[str],
     raw_quote: str,
     project_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Routes an Observer-sourced decision candidate using log_threshold_observer
@@ -151,12 +152,16 @@ def route_observer_decision(
         }
 
     if confidence < threshold:
+        # The chat's project and the chat go with it (C-14), so promoting it
+        # later puts it where it was said.
         candidate_id = candidate_store.create_decision_candidate(
             conn,
             decision_text=text,
             signals_found=signals,
             raw_quote=raw_quote,
             confidence=confidence,
+            project_id=project_id,
+            conversation_id=conversation_id,
         )
         return {"status": "pending", "candidate_id": candidate_id, "confidence": confidence, "signals": signals}
 
@@ -167,6 +172,7 @@ def route_observer_decision(
         alternatives=None,
         project_id=project_id,
         confidence=confidence,
+        conversation_id=conversation_id,
     )
     return {"status": "logged", "decision_id": decision_id, "confidence": confidence, "signals": signals}
 
@@ -179,6 +185,7 @@ def insert_decision(
     alternatives: str | None = None,
     project_id: str | None = None,
     confidence: float = 0.4,
+    conversation_id: str | None = None,
 ) -> int:
     # Every write path lands here (create_decision, route_observer_decision,
     # promote_pending), so this is the one place a duplicate can be stopped
@@ -201,11 +208,11 @@ def insert_decision(
         """
         INSERT INTO decision_log (
             decision_text, reasoning, alternatives_considered,
-            project_id, confidence, state, created_at
+            project_id, confidence, state, created_at, conversation_id
         )
-        VALUES (?, ?, ?, ?, ?, 'active', ?)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
         """,
-        (text, reasoning, alternatives, project_id, confidence, now_utc()),
+        (text, reasoning, alternatives, project_id, confidence, now_utc(), conversation_id),
     )
     decision_id = int(cur.lastrowid)
     _sync_decision_fts(conn, decision_id, text, reasoning, alternatives)
@@ -276,13 +283,17 @@ def promote_pending(conn, candidate_id: int) -> dict[str, Any]:
     if candidate is None or candidate["state"] != "pending":
         raise ValueError("pending decision candidate not found")
 
+    # The project and chat it was queued with (C-14); this wrote project_id
+    # NULL whatever chat the decision came from. A row queued before the
+    # columns existed has neither, and promotes as it always did.
     decision_id = insert_decision(
         conn,
         text=candidate["decision_text"],
         reasoning=candidate["raw_quote"],
         alternatives=None,
-        project_id=None,
+        project_id=candidate.get("project_id"),
         confidence=max(candidate["confidence"], get_settings()["decision_log"]["log_threshold_manual"]),
+        conversation_id=candidate.get("conversation_id"),
     )
     candidate_store.mark_decision_candidate_promoted(conn, candidate_id)
     return {"status": "promoted", "decision_id": decision_id}

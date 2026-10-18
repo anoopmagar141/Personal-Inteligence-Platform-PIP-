@@ -924,6 +924,7 @@ def run_session_end(
     project_id: Optional[str] = None,
     *,
     unobserved_transcript: Optional[str] = None,
+    conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Full Observer session-end flow: extract -> write snapshot immediately -> reinforce
@@ -1077,6 +1078,7 @@ def run_session_end(
                 signals_found=dc["signals_found"],
                 raw_quote=dc["raw_quote"],
                 project_id=project_id,
+                conversation_id=conversation_id,
             )
         except Exception as e:
             logger.error(f"Observer: decision candidate failed, dropping it and continuing: {e}")

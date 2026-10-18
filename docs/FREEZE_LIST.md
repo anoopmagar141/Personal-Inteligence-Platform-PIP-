@@ -3686,6 +3686,53 @@ The final plan's step 3 (BLUEPRINT W-1; issues #4, #6 and the 16k half of #5).
   CPU-only machine was not tried (E-4).
 - One run per long chat; the near-miss count moves between runs (1, then 2 of 162).
 
+### 7.57 C-14: a learned decision keeps its chat's project and its chat, D-34 (authorized 2026-10-18)
+
+The first card of the final plan's step 4 (BLUEPRINT C-14, issue #14; its card was written when reached).
+
+- **Defect (D-34, A, medium):** the Observer was called without the chat's project: the idle and disconnect
+  triggers passed only the chat's id, and the startup queue and crash recovery passed neither, so
+  `route_observer_decision` logged every learned decision with `project_id` NULL. A decision queued to ask the
+  user (`decision_candidates_pending`) had no project column, so promoting it wrote NULL too. Stage 3 searches a
+  project chat's decisions with `project_id = ?`, so a project never found a decision learned in its own chats.
+  Nothing recorded which chat a decision came from, which one record per chat (#13) needs.
+  - **Seen on `HEAD` (0ae28db)** through the real Observer path (Stage 11 to `decision_log`) with a provider
+    answering in the model's shape: a decision learned at the end of a chat in project Lanternfish was not in
+    the prompt of the next Lanternfish chat ("what did we decide about the database").
+- **Promise:** 9 (answers reflect the current record).
+- **Mechanism:** one source for "the chat's project": the chat's `conversations` row, created with the project the
+  app sends (`conversation_store.project_of`). `run_observer_now` reads it from the chat's id when no project is
+  given, which is what the triggers pass; the startup queue's drain now hands its runner the row's chat id (opt-in,
+  `with_conversation_id`, so other runners are unchanged), and the runner reads the project the same way; crash
+  recovery queues the chat id (P-2), so it follows. `run_session_end` and `route_observer_decision` carry
+  `project_id` and `conversation_id`; a logged decision stores both (`decision_log.conversation_id`, new); a
+  queued one stores both (`decision_candidates_pending.project_id`, `.conversation_id`, new) and promotion keeps
+  them. The three columns are nullable and added to an existing database with no backfill: an old row cannot
+  say where it came from and keeps behaving as before (no project, no chat). The schema comments sit outside the
+  table bodies: SQLite rewrites that text when a column is dropped, and a comment beside the dropped column
+  broke the rewrite (found by the upgrade test's own setup).
+- **Tests:** `backend/tests/test_learned_decisions_keep_their_project.py`, 7: the end of a project chat logs its
+  project and chat; the next chat in that project is shown the decision; a chat with no project logs none; a
+  queued decision keeps both when promoted; the same through the shutdown queue and through crash recovery; an
+  upgraded database keeps and promotes an old queued row as before.
+  - **Seen failing first (7 of 7 on `HEAD`):** six on the missing chat column (nothing recorded the chat at
+    all), and the one that shows the project bug as a user meets it: the next chat in the project was not shown
+    the decision.
+  - **One existing test file changed:** P-2's stand-ins for the Observer now accept the `conversation_id` it is
+    passed.
+- **Break-it:** 5 mutations, one per path, each alone, restored byte for byte, each caught: the end of a chat not
+  looking up the project (3 tests); a logged decision without its chat (4); a queued decision without its
+  project (1); promotion dropping the project (1); the startup queue without the chat id (2).
+- **Suites:** Backend 1666 passed, 0 failed (17 min 59 s), on the main checkout's working tree at 0ae28db plus
+  this change (with other sessions' uncommitted `httpx2` requirement and its test), nothing else running; the
+  changed files were compared byte for byte with copies taken before the run. No Flutter file changed.
+
+**Not covered (still open):**
+- **Memory candidates** (preferences, skills) are not per project and were not changed.
+- **A deleted chat's decisions** keep its id, pointing at nothing; what they should do is #13's question.
+- **A chat moved to another project afterwards:** the decision keeps the project the chat had when the Observer
+  ran.
+
 ---
 
 ## 8. Status
@@ -3755,6 +3802,7 @@ The final plan's step 3 (BLUEPRINT W-1; issues #4, #6 and the 16k half of #5).
 | V-2 validity baseline (b, c, d, a) | Run 2026-10-17/18 (§7.55), report only | qwen2.5:7b on Ollama 0.40.3: traps 0 of 75, 36 of 36 true, 35 of 69 learned (HOLDS); llama3.1:8b: traps 0 of 75, 33 of 69 learned (SUPPORTED). As shipped the window is 4096 and a longer prompt is cut from the front (2,050 of 10,639 tokens read). 27 long chats: 1 of 162 trick statements or near-misses reached the queue (D-33) and 0 of 81 true facts were learned where labelled, lost to the gate's wording rules, not to length (TRUST DOES NOT CARRY OVER, by the rule) |
 | D-33 a third person's goal accepted as the user's interest | Found 2026-10-18 (§7.55), open | A, medium: "My friend wants to pass the Azure Fundamentals exam by March" is EVIDENCE_SUFFICIENT for the user's `topic_interests`; on a long chat it reached the confirmation queue (asked, not written). Not fixed |
 | W-1 one settings block: 16k window, qwen2.5:7b, temperature 0.0 | Built and measured 2026-10-18 (§7.56) | A, medium: Ollama's default 4096 window cut long prompts from the front and the default model was llama3.1:8b in code. Every request now asks for 16384 (all 27 long prompts read in full; fully on the GPU, 6.6-6.8 of 8 GB in use with a browser open); qwen2.5:7b is the one default; temperature 0.0 chosen by a fixed rule. 13 tests, 7 break-it mutations. Its long-chat bar 2 is NOT met: 2 near-misses (1 before) reached the decision log, which skips the gate (G-4) |
+| D-34 a learned decision saved with no project | Fixed 2026-10-18 (§7.57) | A, medium: the Observer was called without the chat's project and a queued decision had no project column, so every learned decision was saved with none and a project's own lookup never found it. The project is now read from the chat's row on every path (end of chat, shutdown queue, crash recovery), and logged and queued decisions keep the project and the chat's id. 7 tests (7 failed first), 5 break-it mutations |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

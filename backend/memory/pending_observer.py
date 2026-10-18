@@ -115,10 +115,15 @@ def mark_failed(conn, entry_id: int, error_detail: str) -> None:
     conn.commit()
 
 
-def drain(conn, observer_runner: Callable[[str], None]) -> dict[str, list]:
+def drain(conn, observer_runner: Callable[..., None], *, with_conversation_id: bool = False) -> dict[str, list]:
     """
     Runs observer_runner(session_transcript) for every pending/stuck-processing entry.
     observer_runner must raise on failure, return anything (or nothing) on success.
+
+    with_conversation_id: call observer_runner(session_transcript, conversation_id)
+    instead, so the runner can find the chat's project (BLUEPRINT C-14). Off by
+    default, so a runner that takes only the transcript is unchanged. NULL for a
+    row queued before the column existed.
 
     Three outcomes, not two:
 
@@ -144,7 +149,10 @@ def drain(conn, observer_runner: Callable[[str], None]) -> dict[str, list]:
     for entry in _list_for_drain(conn):
         mark_processing(conn, entry["id"])
         try:
-            observer_runner(entry["session_transcript"])
+            if with_conversation_id:
+                observer_runner(entry["session_transcript"], entry.get("conversation_id"))
+            else:
+                observer_runner(entry["session_transcript"])
         except RetryableError as e:
             # Deliberately no status write: 'processing' is already the state
             # _list_for_drain() picks back up, and it is the honest description

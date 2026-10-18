@@ -83,7 +83,8 @@ def observer_calls(monkeypatch):
     """
     calls: list[str] = []
 
-    def fake_run_session_end(conn, transcript, provider, project_id=None, unobserved_transcript=None):
+    def fake_run_session_end(conn, transcript, provider, project_id=None, unobserved_transcript=None,
+                         conversation_id=None):
         calls.append(transcript)
         session_snapshot.write_snapshot(conn, NOTE)
         return {"memory_results": [], "decision_results": []}
@@ -172,7 +173,8 @@ async def test_a_chat_deleted_while_its_pass_runs_leaves_no_note(executor_conn, 
     loop = asyncio.get_event_loop()
     cid = await loop.run_in_executor(executor, _seed_chat, conn)
 
-    def pass_that_outlives_its_chat(conn, transcript, provider, project_id=None, unobserved_transcript=None):
+    def pass_that_outlives_its_chat(conn, transcript, provider, project_id=None, unobserved_transcript=None,
+                         conversation_id=None):
         # The delete arrives during the pass, before the pass writes the note.
         server.api_delete_conversation(conn, cid)
         session_snapshot.write_snapshot(conn, NOTE)

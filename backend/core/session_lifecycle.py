@@ -202,8 +202,14 @@ async def run_observer_now(
             f"session-end run starting, {len(conversation_history)} messages",
         )
         try:
+            # The chat's project, from the chat itself when the caller has only
+            # its id - the idle and disconnect triggers pass exactly that - so a
+            # decision learned here is found by its project (C-14). It used to be
+            # logged with no project, which a project's lookup never sees.
+            chat_project = project_id if project_id is not None else conversation_store.project_of(conn, conversation_id)
             outcome = observer.run_session_end(
-                conn, transcript, provider, project_id, unobserved_transcript=unobserved
+                conn, transcript, provider, chat_project, unobserved_transcript=unobserved,
+                conversation_id=conversation_id,
             )
         except Exception as e:
             trace.stage_log(
@@ -332,9 +338,15 @@ def drain_pending_on_startup(conn, provider: BaseLLMProvider) -> dict[str, list]
     of losing that session's learning outright.
     """
 
-    def observer_runner(transcript: str) -> None:
+    def observer_runner(transcript: str, conversation_id: Optional[str] = None) -> None:
         try:
-            observer.run_session_end(conn, transcript, provider)
+            # The chat's project and id, read from the queue row's chat (C-14);
+            # a row queued before P-2 has no chat id and is learned with no
+            # project, as it always was.
+            observer.run_session_end(
+                conn, transcript, provider, conversation_store.project_of(conn, conversation_id),
+                conversation_id=conversation_id,
+            )
         except (observer.ObserverUnavailableError, observer.ObserverLocalProviderError) as e:
             # The queue owns retry semantics and deliberately knows nothing
             # about Stage 11 (see pending_observer's module note), so the
@@ -352,4 +364,4 @@ def drain_pending_on_startup(conn, provider: BaseLLMProvider) -> dict[str, list]
             # configured (FREEZE_LIST §7.2 finding 1).
             raise pending_observer.RetryableError(str(e)) from e
 
-    return pending_observer.drain(conn, observer_runner)
+    return pending_observer.drain(conn, observer_runner, with_conversation_id=True)
