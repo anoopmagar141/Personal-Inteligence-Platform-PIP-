@@ -96,10 +96,13 @@ def get_stamp(model: str) -> dict:
     """
     The stamp of a live run (BLUEPRINT S-1): the shared one from _stamp, which
     refuses a model whose digest or Ollama version it cannot read, plus the
-    Observer's own fields. The app's OllamaProvider, which this harness uses,
-    sends neither a temperature nor num_ctx, so both are recorded as not sent.
+    Observer's own fields. The options are the app's own OllamaProvider's
+    (BLUEPRINT W-1: the window from the settings block, the temperature only
+    once one is chosen), read from it rather than restated here.
     """
-    stamp = _stamp.run_stamp(model, options_sent={"temperature": None, "num_ctx": None})
+    sent = OllamaProvider(model_name=model).request_options(observer.OBSERVER_MAX_TOKENS)
+    stamp = _stamp.run_stamp(model, options_sent={
+        "num_predict": sent["num_predict"], "num_ctx": sent.get("num_ctx"), "temperature": sent.get("temperature")})
     stamp.update(_observer_fields())
     return stamp
 

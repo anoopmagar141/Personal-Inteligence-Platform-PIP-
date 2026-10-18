@@ -212,7 +212,8 @@ def test_recording_stamp_does_not_call_transcript_cap_model_context(monkeypatch)
 
     stamp = eval_script.get_stamp("qwen2.5:7b")
 
-    # PIP sends no num_ctx, so the context window is recorded as not sent,
-    # and the transcript cap is kept apart from it rather than passed off as it.
-    assert stamp["options_sent"]["num_ctx"] is None
+    # The window recorded is the one the app's provider sends (W-1: the settings
+    # block), and the transcript cap is kept apart from it rather than passed off as it.
+    from backend.config.settings import get_settings
+    assert stamp["options_sent"]["num_ctx"] == get_settings()["llm"]["num_ctx"]
     assert stamp["transcript_token_cap"] == 8000

@@ -1,7 +1,12 @@
 {
+  "llm": {
+    "default_model": "qwen2.5:7b",
+    "num_ctx": 16384,
+    "temperature": null,
+    "tokens_per_word": 2.0
+  },
   "observer": {
     "idle_timeout_minutes": 10,
-    "model": "llama3.1:8b",
     "max_session_tokens": 8000
   },
   "rag": {

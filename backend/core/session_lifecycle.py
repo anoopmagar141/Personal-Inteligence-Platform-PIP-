@@ -24,6 +24,7 @@ from typing import Any, Optional
 from backend.core import trace
 from backend.memory import conversation_store, pending_observer, session_snapshot
 from backend.providers.base_provider import BaseLLMProvider
+from backend.providers.ollama_provider import window_detail
 from backend.stages import stage_11_observer as observer
 
 logger = logging.getLogger(__name__)
@@ -226,7 +227,8 @@ async def run_observer_now(
         trace.stage_log(
             conn, trace_id, "stage_11_observer", "ok",
             f"{len(outcome['memory_results'])} memory candidates, "
-            f"{len(outcome['decision_results'])} decision candidates",
+            f"{len(outcome['decision_results'])} decision candidates"
+            f"{window_detail(provider)}",
         )
         return outcome
 

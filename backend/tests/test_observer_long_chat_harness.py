@@ -82,7 +82,8 @@ def test_the_counted_request_is_the_app_s_request_and_its_counts_are_kept(ollama
     recorder_tokens = list(recorder.chat(messages, max_tokens=2000, timeout_seconds=30))
 
     assert ollama.bodies[0] == ollama.bodies[1], "the harness changed what is sent"
-    assert "num_ctx" not in ollama.bodies[1][1]["options"], "the shipped call sends no window"
+    from backend.config.settings import get_settings
+    assert ollama.bodies[1][1]["options"]["num_ctx"] == get_settings()["llm"]["num_ctx"], "the shipped window"
     assert recorder_tokens == app_tokens and "".join(recorder_tokens) == "{}"
     assert recorder.counts["prompt_eval_count"] == 2050
     assert recorder.counts["done_reason"] == "stop"

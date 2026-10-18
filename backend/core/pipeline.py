@@ -43,7 +43,7 @@ from backend.core import response_cache, trace
 from backend.memory import llm_endpoint_store, profile_store
 from backend.memory import session_snapshot
 from backend.providers.base_provider import BaseLLMProvider
-from backend.providers.ollama_provider import OllamaProvider
+from backend.providers.ollama_provider import OllamaProvider, default_model_name, window_detail
 from backend.providers.openai_compatible_provider import OpenAICompatibleProvider
 from backend.stages import stage_00_gap_detector as stage_00
 from backend.stages import stage_01_intent_classifier as stage_01
@@ -81,7 +81,10 @@ def _stage_event(stage: str, label: str, detail: str, status: str = "ok") -> Sta
 
 
 _DEFAULT_PROVIDER_ID = "ollama"
-DEFAULT_MODEL_NAME = "llama3.1:8b"
+# From the settings block, like OllamaProvider's own default: qwen2.5:7b, the
+# model every measured number is on (DEC-17, BLUEPRINT W-1). It was a literal
+# "llama3.1:8b" here, one of three places that could each drift.
+DEFAULT_MODEL_NAME = default_model_name()
 
 
 def get_active_model_name(conn) -> str:
@@ -590,7 +593,7 @@ def run(
     trace.stage_log(
         conn, trace_id, "stage_09_llm_streaming",
         "error" if status == "error" else "ok",
-        f"status={status}{ttft_detail}",
+        f"status={status}{ttft_detail}{window_detail(gated_providers)}",
         error_detail=aggregate["error"] or "",
         duration_ms=dur_9,
     )

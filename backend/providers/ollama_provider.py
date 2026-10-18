@@ -1,10 +1,62 @@
 import json
+import logging
 import re
 import urllib.request
 import urllib.error
 from typing import Iterator, Optional, List, Dict, Any
 
+from backend.config.settings import get_settings
 from backend.providers.base_provider import BaseLLMProvider, ProviderUnavailableError, ProviderExecutionError
+
+
+logger = logging.getLogger(__name__)
+
+
+def _llm_settings() -> Dict[str, Any]:
+    """
+    The one settings block for the local model (settings.json "llm"; BLUEPRINT
+    W-1): the default model, the window every request asks for, the
+    temperature once one has been chosen by measurement, and the safe
+    tokens-per-word ratio PIP's word budgets are checked against.
+
+    One block, read by chat and the Observer alike, because the window is a
+    property of the loaded model: a request asking for a different num_ctx
+    makes Ollama reload the model, which costs seconds every time the two
+    alternate.
+    """
+    return get_settings()["llm"]
+
+
+def default_model_name() -> str:
+    """qwen2.5:7b (DEC-17): every thesis number was measured on it."""
+    return _llm_settings()["default_model"]
+
+
+def window_detail(providers) -> str:
+    """
+    What Ollama reported reading on the last call, for a trace line: the prompt
+    tokens it evaluated, the window, and whether PIP's own estimate said the
+    prompt would not fit (BLUEPRINT W-1). Before this a prompt cut by the window
+    left no trace anywhere; V-2 found the Observer's instructions cut on long
+    chats (FREEZE_LIST 7.55). A count right after a model load is the whole
+    prompt; a later one can read low, because a cached prefix is not evaluated
+    again. Takes one provider or several (chat's fallback chain): the first one
+    that got an answer is the one reported.
+    """
+    if not isinstance(providers, (list, tuple)):
+        providers = [providers]
+    for provider in providers:
+        counts = getattr(provider, "last_counts", None)
+        if counts and counts.get("prompt_eval_count") is not None:
+            loaded = ", just loaded" if counts.get("load_seconds") else ""
+            full = ", WINDOW FULL" if counts.get("window_full") else ""
+            return (f", prompt_tokens_read={counts['prompt_eval_count']}, window={counts.get('num_ctx')}"
+                    f"{loaded}{full}")
+    return ""
+
+
+def _words(messages: List[Dict[str, str]]) -> int:
+    return sum(len(str(m.get("content", "")).split()) for m in messages)
 
 
 # The whole word "cloud" at the very end of a model name: after a hyphen
@@ -34,9 +86,30 @@ def is_cloud_model(name: str) -> bool:
 
 
 class OllamaProvider(BaseLLMProvider):
-    def __init__(self, model_name: str = "llama3.1:8b", host: str = "http://localhost:11434"):
-        self.model_name = model_name
+    def __init__(self, model_name: Optional[str] = None, host: str = "http://localhost:11434"):
+        # The default used to be the literal "llama3.1:8b" here, in
+        # pipeline.DEFAULT_MODEL_NAME and in an observer.model setting nothing
+        # read - three places free to disagree, while every measured number is
+        # on qwen2.5:7b. All of them now read the settings block.
+        self.model_name = model_name or default_model_name()
         self.host = host
+        # Ollama's own report of the last call, for the trace (see chat()).
+        self.last_counts: Dict[str, Any] = {}
+
+    def request_options(self, max_tokens: int) -> Dict[str, Any]:
+        """
+        What every request puts in Ollama's options. num_ctx is always sent:
+        without it Ollama picks its own window - 4096 tokens on an 8 GB GPU,
+        measured in V-2 (FREEZE_LIST 7.55) - and cuts a longer prompt from the
+        FRONT, silently; the Observer's instructions are at the front. The
+        temperature is sent only once one has been chosen by measurement
+        (W-1); until then the model's own default applies, as it always has.
+        """
+        llm = _llm_settings()
+        options: Dict[str, Any] = {"num_predict": max_tokens, "num_ctx": llm["num_ctx"]}
+        if llm.get("temperature") is not None:
+            options["temperature"] = llm["temperature"]
+        return options
 
     def chat(
         self,
@@ -49,13 +122,27 @@ class OllamaProvider(BaseLLMProvider):
         if context:
             messages = [{"role": "system", "content": context}] + messages
 
+        options = self.request_options(max_tokens)
+        # Checked before sending, from words at the safe ratio: Ollama's own
+        # count arrives only after the cut has happened, and a cached prompt
+        # prefix makes it read low (it counts only what it had to evaluate).
+        estimated = _words(messages) * _llm_settings()["tokens_per_word"]
+        self.last_counts = {
+            "num_ctx": options["num_ctx"],
+            "estimated_prompt_tokens": int(estimated),
+            "window_full": estimated + max_tokens > options["num_ctx"],
+        }
+        if self.last_counts["window_full"]:
+            logger.warning(
+                f"Ollama: a prompt of about {int(estimated)} tokens plus {max_tokens} for the reply may not fit "
+                f"the {options['num_ctx']}-token window; Ollama would cut it from the front"
+            )
+
         payload = {
             "model": self.model_name,
             "messages": messages,
             "stream": True,
-            "options": {
-                "num_predict": max_tokens
-            }
+            "options": options,
         }
 
         # Ollama's structured-output field: given a JSON Schema it constrains
@@ -82,6 +169,16 @@ class OllamaProvider(BaseLLMProvider):
                 for line in response:
                     if line:
                         chunk = json.loads(line.decode('utf-8'))
+                        if chunk.get("done"):
+                            # How many prompt tokens the model read, and whether
+                            # it had to load first (a fresh load has no cached
+                            # prefix, so its count is the whole prompt).
+                            self.last_counts.update({
+                                "prompt_eval_count": chunk.get("prompt_eval_count"),
+                                "eval_count": chunk.get("eval_count"),
+                                "load_seconds": round((chunk.get("load_duration") or 0) / 1e9, 1),
+                                "done_reason": chunk.get("done_reason"),
+                            })
                         if 'message' in chunk and 'content' in chunk['message']:
                             yield chunk['message']['content']
         except urllib.error.HTTPError as e:

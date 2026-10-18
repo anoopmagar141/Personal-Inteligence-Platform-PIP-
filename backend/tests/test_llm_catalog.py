@@ -429,12 +429,14 @@ def test_a_model_being_downloaded_cannot_be_deleted(conn, monkeypatch):
         ollama_provider, "delete_model",
         lambda *a, **k: pytest.fail("a downloading model was deleted"),
     )
-    server.api_start_pull({"model_name": "qwen2.5:7b"})
+    # Not qwen2.5:7b: that is the default model since W-1, and deleting the
+    # model in use is refused by an earlier rule than the one this test is for.
+    server.api_start_pull({"model_name": "mistral:7b"})
     assert _wait_until(lambda: server.api_pull_status()["status"] == "pulling")
 
     try:
         with pytest.raises(ValueError, match="downloading right now"):
-            server.api_delete_model(conn, {"model_name": "qwen2.5:7b"})
+            server.api_delete_model(conn, {"model_name": "mistral:7b"})
     finally:
         release.set()
 

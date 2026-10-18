@@ -185,6 +185,20 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   model is refused at pull and at selection, and the provider reports itself
   not local for one already stored, so Stage 8 and the Observer's own check
   refuse it too (FREEZE_LIST §7.48).
+- **One settings block for the local model** (`settings.json` `llm`, BLUEPRINT
+  W-1): the default model is `qwen2.5:7b`, the model every measured number is
+  on (`pipeline.DEFAULT_MODEL_NAME` and `OllamaProvider`'s default both read
+  it); every Ollama request, chat and Observer alike, asks for the same
+  `num_ctx` window, 16384 tokens (a different window would reload the model);
+  the temperature is not sent until one is chosen by measurement, so the
+  model's own default applies. PIP budgets in words; `tokens_per_word` (2.0) is
+  a safe ratio above every one measured on this tokenizer (1.41 prose, 1.86 the
+  Observer's instructions), and the Observer's transcript cap is derived from
+  it so instructions, transcript and reply fit the window. Before this, Ollama
+  used its own default window, 4096 tokens on an 8 GB GPU, and cut a longer
+  prompt from the front - the Observer's instructions first (FREEZE_LIST
+  §7.55). The chat (Stage 9) and Observer trace lines record the prompt tokens
+  Ollama read, the window, and whether PIP's estimate said it would not fit.
 - **The evidence gate is an allowlist, and fails toward rejection.** Entailment
   is decided by requiring the user's own words to carry a recognised support
   construction for the kind of claim being made — the three the constitution

@@ -7,8 +7,10 @@
 #           NOT enforced by this module - there is no process-lifecycle context here.
 #           The caller (Phase 8) is responsible for only invoking run_session_end()
 #           when a session has actually ended.
-#   Rule 4: Uses llama3.1:8b, same model as generation (ADR-033). MUST be pinned to a
-#           LOCAL provider - enforced below, not assumed.
+#   Rule 4: Uses the same model as generation (ADR-033), which is now the settings
+#           block's default, qwen2.5:7b (DEC-17; this line said llama3.1:8b, the
+#           ADR's model, after the measured model had changed - BLUEPRINT W-1).
+#           MUST be pinned to a LOCAL provider - enforced below, not assumed.
 #   Rule 5: Does NOT detect document-decision conflicts. That is Stage 5's job.
 #
 # Every memory_candidate below carries evidence_count=1, and correctly so - a
@@ -703,6 +705,32 @@ _EXTRACTION_PROMPT_PREFIX = _EXTRACTION_PROMPT_TEMPLATE.replace(
 )
 
 
+# The Observer's reply, in tokens: the num_predict it asks for.
+OBSERVER_MAX_TOKENS = 2000
+# Room for the chat template's own tokens (role markers and the like), which
+# the word count does not see.
+_TEMPLATE_MARGIN_TOKENS = 256
+
+
+def _transcript_word_cap() -> int:
+    """
+    The most transcript words the Observer sends: observer.max_session_tokens,
+    or less if that would not fit the window with the instructions and the
+    reply (BLUEPRINT W-1).
+
+    The cap used to be 8,000 words checked against nothing, while Ollama gave
+    the model 4,096 tokens: V-2 (FREEZE_LIST 7.55) watched a 4,800-word chat
+    cut to its last third, the instructions at the top lost. The window is now
+    asked for (settings "llm".num_ctx), and this keeps instructions + transcript
+    + reply inside it at the safe tokens-per-word ratio, which is above every
+    ratio measured on this tokenizer (1.41 prose, 1.86 these instructions).
+    """
+    llm = get_settings()["llm"]
+    room = llm["num_ctx"] - OBSERVER_MAX_TOKENS - _TEMPLATE_MARGIN_TOKENS
+    fits = int(room / llm["tokens_per_word"]) - len(_EXTRACTION_PROMPT_PREFIX.split())
+    return max(0, min(get_settings()["observer"]["max_session_tokens"], fits))
+
+
 def _cap_transcript(transcript: str) -> str:
     """
     Bounds the transcript at observer.max_session_tokens (settings.json, 8000).
@@ -724,7 +752,7 @@ def _cap_transcript(transcript: str) -> str:
     quote against turns the model never saw would accept a "quote" it could only
     have invented.
     """
-    max_tokens = get_settings()["observer"]["max_session_tokens"]
+    max_tokens = _transcript_word_cap()
     if len(transcript.split()) <= max_tokens:
         return transcript
 
@@ -739,7 +767,7 @@ def _cap_transcript(transcript: str) -> str:
         used += cost
     kept.reverse()
     logger.warning(
-        f"Observer transcript exceeded max_session_tokens ({max_tokens}); "
+        f"Observer transcript exceeded its cap ({max_tokens} words, see _transcript_word_cap); "
         f"kept the last {len(kept)} of {len(lines)} lines."
     )
     return "\n".join(kept)
@@ -791,7 +819,7 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
     # bug behind a plausible-looking fallback. base_provider documents
     # response_format as optional for implementers, so a provider that never
     # adopted it still works - unconstrained, exactly as this ran until now.
-    kwargs: dict[str, Any] = {"max_tokens": 2000, "timeout_seconds": 180}
+    kwargs: dict[str, Any] = {"max_tokens": OBSERVER_MAX_TOKENS, "timeout_seconds": 180}
     if _accepts_response_format(provider):
         kwargs["response_format"] = _EXTRACTION_SCHEMA
     else:
