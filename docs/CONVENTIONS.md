@@ -119,6 +119,13 @@ than a winner picked.
   `constitution_version.KNOWN_VERSIONS`. A sign-in warns (and keeps running) on
   an edit without a bump, and on a profile that last ran other rules (G-5).
   → `backend/core/constitution_version.py`
+- **A new governance outcome needs an audit row and a reason code.** A branch
+  that ends a memory or decision candidate's life (or resolves a pending one)
+  calls `governance_audit.record` (or `record_user_resolution`) exactly once,
+  with a reason in `KNOWN_REASON_CODES`; the writer refuses any other, and a
+  test holds every INSERT to that one module (G-7). The caller logs a row it
+  cannot write instead of raising, since the outcome has already taken effect.
+  → `backend/memory/governance_audit.py`
 - **Inconsistent / dead config:** `settings.json` contains keys nothing reads —
   the whole `performance_targets` and `database` blocks.
   `database.kdf_iterations` is duplicated as a constant in

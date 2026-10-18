@@ -37,6 +37,13 @@ _EXCLUDED = {
     "sqlite_sequence": (
         "SQLite internal AUTOINCREMENT bookkeeping - not a user table."
     ),
+    "governance_audit_log": (
+        "The append-only record of governance decisions (G-7); never read into a prompt, and its "
+        "triggers forbid the UPDATE/DELETE a record_version trigger would need to watch."
+    ),
+    "governance_audit_salt": (
+        "The audit log's HMAC salt; never read into a prompt."
+    ),
     # ── FTS virtual table and its shadow tables ────────────────────────────
     # decision_fts is a VIRTUAL TABLE (FTS5). SQLite creates up to six
     # shadow tables automatically (_data, _idx, _content, _config,

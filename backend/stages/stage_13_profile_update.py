@@ -4,7 +4,7 @@ from typing import Any
 from backend.core import evidence_gate
 from backend.core.constitution_enforcer import is_contradicting_inferred_observation
 from backend.core.types import MemoryCandidate, ValidationResult
-from backend.memory import candidate_store, profile_store, verification
+from backend.memory import candidate_store, governance_audit, profile_store, verification
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,56 @@ def _maybe_log_behavioral_contradiction(conn, candidate: MemoryCandidate) -> Non
     log_contradiction(conn, row["id"], candidate.get("evidence_text", ""))
 
 
+def _audit(conn, candidate: MemoryCandidate, validation_result: ValidationResult, result: str,
+           *, already_queued: bool = False) -> None:
+    """
+    The candidate's one row in the governance audit log (G-7), written at the
+    outcome run() returns. Every candidate the Observer does not drop earlier
+    ends here, so this is where "the guard refused it" stops being a log line.
+
+    The stage is the one whose verdict decided the outcome: 11 for an evidence
+    gate rejection (the gate runs in Stage 11 and arrives here as a
+    ValidationResult), 12 for a Constitution verdict, 13 for the write itself.
+
+    A row that cannot be written is logged, not raised. Raising here came
+    after the outcome had already taken effect (a memory written, a question
+    queued), and Stage 11's per-candidate isolation then recorded the
+    candidate as rejected (candidate_error): a row saying the opposite of what
+    happened. No row, with the failure in the log, is the honest gap.
+    """
+    status, reason = validation_result.status, validation_result.reason
+    if result == "written":
+        stage, outcome, code = 13, "accepted", "written"
+    elif result == "failed":
+        stage, outcome, code = 13, "rejected", "write_failed"
+    elif result == "pending" and already_queued:
+        stage, outcome, code = 13, "deferred", "already_queued"
+    elif result == "pending":
+        if reason in governance_audit.CONSTITUTION_REASONS:
+            stage, outcome, code = 12, "deferred", reason
+        else:
+            stage, outcome, code = 13, "deferred", "queued"
+    else:
+        stage = 11 if reason in evidence_gate.REJECTION_STATES else 12
+        outcome, code = "rejected", reason
+    try:
+        governance_audit.record(
+            conn,
+            candidate_id=candidate.get("candidate_id") or governance_audit.new_candidate_id(),
+            actor="system",
+            stage=stage,
+            outcome=outcome,
+            reason_code=code,
+            target_table=candidate.get("target_table"),
+            field_name=candidate.get("field_name"),
+            value=candidate.get("proposed_value"),
+            evidence_count=candidate.get("evidence_count"),
+            conversation_id=candidate.get("conversation_id"),
+        )
+    except Exception as e:
+        logger.error(f"Stage 13: could not record the candidate's outcome ({code}) in the audit log: {e}")
+
+
 def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -> str:
     """
     Routes a Stage 12 ValidationResult to its write path.
@@ -80,6 +130,10 @@ def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -
 
     Returns one of: "written", "pending", "rejected", "failed".
     """
+    if not candidate.get("candidate_id"):
+        # One id for both the queue row and the audit row (G-7); Stage 11 gives
+        # every Observer candidate one, other callers may not.
+        candidate = {**candidate, "candidate_id": governance_audit.new_candidate_id()}
     status = validation_result.status
 
     if status == "APPROVED":
@@ -91,7 +145,9 @@ def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -
                 profile_store.write_approved_candidate(conn, candidate)
             except Exception as e2:
                 logger.error(f"Stage 13 write failed twice, discarding candidate: {e2}")
+                _audit(conn, candidate, validation_result, "failed")
                 return "failed"
+        _audit(conn, candidate, validation_result, "written")
         return "written"
 
     if status in PENDING_STATUSES:
@@ -119,6 +175,7 @@ def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -
                 f"Candidate {status} already queued as #{duplicate['id']} "
                 f"({candidate.get('target_table')}.{candidate.get('field_name')}); not re-asking."
             )
+            _audit(conn, candidate, validation_result, "pending", already_queued=True)
             return "pending"
 
         candidate_store.create_memory_candidate(
@@ -130,7 +187,9 @@ def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -
             evidence_count=candidate.get("evidence_count"),
             evidence_text=candidate.get("evidence_text"),
             validation_status=status,
+            candidate_id=candidate.get("candidate_id"),
         )
+        _audit(conn, candidate, validation_result, "pending")
         return "pending"
 
     if status in ("HARD_REJECT", "DISCARD"):
@@ -151,6 +210,7 @@ def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -
         # is exactly the kind of data point this counter exists to accumulate.
         if validation_result.reason not in evidence_gate.REJECTION_STATES:
             _maybe_log_behavioral_contradiction(conn, candidate)
+        _audit(conn, candidate, validation_result, "rejected")
         return "rejected"
 
     raise ValueError(f"Unknown ValidationResult status: {status}")
@@ -232,6 +292,11 @@ def resolve_pending(conn, candidate_id: int) -> dict[str, Any]:
 
     profile_store.apply_verified_correction(conn, memory_candidate, validation_result)
     candidate_store.mark_memory_candidate_resolved(conn, candidate_id)
+    governance_audit.record_user_resolution(
+        conn, pending_table="memory_candidates_pending", row=candidate, outcome="accepted",
+        reason_code="user_confirmed", target_table=candidate["target_table"],
+        field_name=candidate["field_name"], value=candidate["proposed_value"],
+    )
     logger.info(
         f"Pending memory candidate {candidate_id} confirmed by user: "
         f"{candidate['target_table']}.{candidate['field_name']}"
@@ -283,4 +348,10 @@ def dismiss_pending(conn, candidate_id: int) -> dict[str, Any]:
         )
 
     candidate_store.dismiss_memory_candidate(conn, candidate_id)
+    governance_audit.record_user_resolution(
+        conn, pending_table="memory_candidates_pending", row=candidate, outcome="dismissed",
+        reason_code="user_retired_field" if retired else "user_dismissed",
+        target_table=candidate["target_table"], field_name=candidate["field_name"],
+        value=candidate["proposed_value"],
+    )
     return {"status": "dismissed", "candidate_id": candidate_id, "retired": retired}

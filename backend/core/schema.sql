@@ -214,7 +214,8 @@ CREATE TABLE IF NOT EXISTS decision_candidates_pending (
     dismissed_at TEXT,
     created_at TEXT NOT NULL,
     project_id TEXT,
-    conversation_id TEXT
+    conversation_id TEXT,
+    candidate_id TEXT
 );
 
 -- 13. memory_candidates_pending Table
@@ -238,7 +239,8 @@ CREATE TABLE IF NOT EXISTS memory_candidates_pending (
     origin TEXT DEFAULT 'observer',
     state TEXT DEFAULT 'pending' CHECK (state IN ('pending', 'resolved', 'dismissed')),
     resolved_at TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    candidate_id TEXT
 );
 
 -- 14. provider_consent Table
@@ -617,3 +619,84 @@ CREATE TABLE IF NOT EXISTS record_version (
     version INTEGER NOT NULL DEFAULT 0
 );
 INSERT OR IGNORE INTO record_version (id, version) VALUES (1, 0);
+
+-- governance_audit_log (BLUEPRINT G-7, A-3; issue #20; owner decision DEC-5).
+-- One row for every terminal outcome of a memory or decision candidate the
+-- Observer proposed, and one for every user resolution of a pending question,
+-- so "what did the guard decide, and why" survives the 90-day trace purge.
+-- A rejected candidate used to leave a logger line and nothing else.
+--   candidate_id    carried from Stage 11 into the pending row it may create;
+--                   "legacy:<table>:<rowid>" for a pending row older than this.
+--   candidate_hmac  HMAC-SHA256 of table, field and value under this profile's
+--                   salt (governance_audit_salt): a correlation key, not
+--                   secrecy - whoever can read this table holds the profile
+--                   key already. The candidate's text is never stored.
+--   session_no      the session the decision was taken in (0 before onboarding).
+--   stage           11, 12 or 13; NULL for anything that is not a pipeline
+--                   stage, which every user action is.
+--   conversation_id the chat it came from (C-14), so a deleted chat's rows stay
+--                   (fingerprint, outcome, reason; no text) and point at a chat
+--                   that no longer exists.
+-- Append-only by trigger, within the trust boundary. NOT tamper-evident:
+-- someone holding the profile key can drop the triggers, and a hash chain kept
+-- in the same database could be recomputed; that needs an anchor outside the
+-- database, which PIP does not have. reason_code is checked by the one writer
+-- (backend/memory/governance_audit.py) against its known set, not by a CHECK,
+-- so the set can grow without a migration. Comments stay outside table bodies
+-- (see decision_log above).
+CREATE TABLE IF NOT EXISTS governance_audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id TEXT NOT NULL,
+    candidate_hmac TEXT NOT NULL,
+    session_no INTEGER NOT NULL,
+    stage INTEGER,
+    actor TEXT NOT NULL CHECK (actor IN ('system', 'user')),
+    outcome TEXT NOT NULL CHECK (outcome IN ('accepted', 'rejected', 'deferred', 'dismissed')),
+    reason_code TEXT NOT NULL,
+    target_table TEXT,
+    field_name TEXT,
+    evidence_count INTEGER,
+    confidence REAL,
+    conversation_id TEXT,
+    decided_at TEXT NOT NULL,
+    CHECK (stage IS NULL OR stage IN (11, 12, 13)),
+    CHECK (actor = 'system' OR stage IS NULL)
+);
+
+CREATE INDEX IF NOT EXISTS idx_governance_audit_log_candidate ON governance_audit_log(candidate_id);
+
+CREATE TRIGGER IF NOT EXISTS governance_audit_log_no_update
+BEFORE UPDATE ON governance_audit_log
+BEGIN
+    SELECT RAISE(ABORT, 'governance_audit_log is append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS governance_audit_log_no_delete
+BEFORE DELETE ON governance_audit_log
+BEGIN
+    SELECT RAISE(ABORT, 'governance_audit_log is append-only');
+END;
+
+-- governance_audit_salt: the per-profile key for candidate_hmac, random bytes
+-- made once and never changed. Its own one-row table rather than a column on
+-- profile_meta (A-3's sketch): profile_meta does not exist until onboarding,
+-- and an Observer pass or a test can run before that. Not derived from the
+-- database key: a password change re-keys the database, and a key-derived
+-- HMAC would stop matching its own earlier rows.
+CREATE TABLE IF NOT EXISTS governance_audit_salt (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    salt TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS governance_audit_salt_no_update
+BEFORE UPDATE ON governance_audit_salt
+BEGIN
+    SELECT RAISE(ABORT, 'the audit salt is never changed or removed');
+END;
+
+CREATE TRIGGER IF NOT EXISTS governance_audit_salt_no_delete
+BEFORE DELETE ON governance_audit_salt
+BEGIN
+    SELECT RAISE(ABORT, 'the audit salt is never changed or removed');
+END;

@@ -1,5 +1,5 @@
 import datetime
-from typing import TypedDict, Optional, Literal
+from typing import NotRequired, TypedDict, Optional, Literal
 
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -14,6 +14,12 @@ class MemoryCandidate(TypedDict):
     label: Literal["explicit", "inferred", "user_verified", "user_correction"]
     evidence_count: int
     evidence_text: str
+    # Given at Stage 11 and carried to the end of the candidate's life, so the
+    # governance audit log can join the system's decision to the user's later
+    # answer (G-7); and the chat it came from (C-14). Optional: a candidate
+    # built outside the Observer has neither.
+    candidate_id: NotRequired[str]
+    conversation_id: NotRequired[Optional[str]]
 
 class ValidationResult:
     def __init__(self, status: Literal["APPROVED", "DISCARD", "REQUIRES_CONFIRMATION", "PROMPT_RECONCILIATION", "TIER_2_REQUIRED", "HARD_REJECT"], reason: Optional[str] = None):

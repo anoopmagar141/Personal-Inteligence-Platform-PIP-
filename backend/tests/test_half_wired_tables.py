@@ -69,8 +69,10 @@ def test_discarded_skill_contradiction_is_recorded(conn):
     _stated_skill(conn)
     from backend.core.types import ValidationResult
 
+    # A real Constitution reason: since G-7 every outcome is written to the governance audit
+    # log, whose writer accepts only the reason codes the code base actually produces.
     outcome = stage_13.run(
-        conn, _contradicting_skill_candidate(), ValidationResult.DISCARD("threshold_violation")
+        conn, _contradicting_skill_candidate(), ValidationResult.DISCARD("threshold_violation_week_3_4")
     )
 
     assert outcome == "rejected"

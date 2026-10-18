@@ -171,6 +171,12 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("decision_log", "conversation_id", "TEXT"),
     ("decision_candidates_pending", "project_id", "TEXT"),
     ("decision_candidates_pending", "conversation_id", "TEXT"),
+    # See schema.sql governance_audit_log (G-7): the id a candidate carries from
+    # Stage 11 into the queue, so the user's answer joins the system's decision
+    # in the audit log. No backfill: an older row resolves under its own
+    # "legacy:<table>:<rowid>" id, distinct per row.
+    ("memory_candidates_pending", "candidate_id", "TEXT"),
+    ("decision_candidates_pending", "candidate_id", "TEXT"),
 )
 
 # Run once, immediately after the named column is first added, to give existing

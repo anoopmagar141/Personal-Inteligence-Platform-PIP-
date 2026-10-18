@@ -210,6 +210,23 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   and, on an edit without a bump or a changed version, warns loudly (log,
   trace, `/status` `constitution`) and keeps running (owner decision DEC-6),
   then records the version now in force.
+- **Every governance decision leaves one row in `governance_audit_log`** (G-7,
+  A-3; DEC-5). Each memory or decision candidate the Observer proposes gets a
+  `candidate_id` at Stage 11, carried into the pending row it may become; its
+  terminal outcome is recorded once: Stage 11 for drops (grounding, malformed,
+  re-read in a resumed chat), errors and decisions; Stage 13 for everything
+  that reaches it, credited to the stage whose verdict decided (11 the evidence
+  gate, 12 the Constitution, 13 the write). The user's later answer (confirm,
+  dismiss, retire, promote, dismiss a decision) is a second row, actor `user`,
+  under the same id and fingerprint. One writer, `memory/governance_audit.py`,
+  checks the reason against a known set. A row stores an HMAC of table, field
+  and value under a per-profile random salt (`governance_audit_salt`), never the
+  text. Triggers forbid UPDATE and DELETE on both tables: append-only within the
+  trust boundary, NOT tamper-evident (whoever holds the profile key can drop
+  them). Rows survive a backup and restore and a password change (the salt is
+  not derived from the key), and outlive a deleted chat. A row that cannot be
+  written is logged, not raised: the outcome stands, and no row ever says the
+  opposite of what happened.
 - **The evidence gate is an allowlist, and fails toward rejection.** Entailment
   is decided by requiring the user's own words to carry a recognised support
   construction for the kind of claim being made — the three the constitution

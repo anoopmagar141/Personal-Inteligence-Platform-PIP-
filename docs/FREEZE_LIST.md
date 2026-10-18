@@ -3778,6 +3778,108 @@ warn loudly and keep running.
 - **A version is registered by hand:** forgetting to register a new version makes the next sign-in warn "not a
   registered version", which is the intended reminder.
 
+### 7.59 G-7: the governance audit log, D-36 (authorized 2026-10-18, DEC-5 confirmed)
+
+The third card of the final plan's step 4 (BLUEPRINT G-7, A-3; issue #20). Owner decision DEC-5, confirmed
+2026-10-18: the thesis keeps the word "auditable". Built in the card's four parts, each test first.
+
+- **Gap (D-36, A, medium for the thesis):** a candidate the guard refused left a `logger.info` line and nothing
+  else; `trace_log` is diagnostic and purged after 90 days. Candidates had no id, Stage 13 returned a bare
+  string, Stage 11's drops were log-only, a queued question kept no reason, and one Constitution reason
+  (`threshold_violation_month_2_plus`) covered two different rules. So "an auditable enforcement mechanism" could
+  not show, a month later, what the guard decided about a candidate or why.
+- **Promise:** 1 says every write goes through governance; the thesis's "auditable enforcement" needs a lasting
+  record of what governance decided, for the candidates it refused as much as for those it wrote.
+- **Mechanism:**
+  - **Part 1, the table:** `governance_audit_log` (candidate_id, candidate_hmac, session_no, stage, actor,
+    outcome, reason_code, target_table, field_name, evidence_count, confidence, conversation_id, decided_at),
+    with CHECKs on actor, outcome and stage (`stage` NULL for anything that is not a pipeline stage; a user action
+    never has one), and BEFORE UPDATE / BEFORE DELETE triggers that abort. The HMAC salt is random, made once, in
+    its own one-row table `governance_audit_salt` with the same triggers: not a column on `profile_meta` (A-3's
+    sketch), because that row does not exist before onboarding and a pass can run before it; not derived from
+    the database key, which a password change replaces. `candidate_id` columns on both pending tables (nullable,
+    no backfill). `conversation_id` was added to A-3's design so a deleted chat's rows still name the chat
+    (C-14 now carries it). One writer, `backend/memory/governance_audit.py`, which refuses an unknown reason,
+    outcome or actor, and a user action with a stage.
+  - **Part 2, every terminal outcome:** every candidate gets an id when Stage 11 sanitises it, carried into the
+    pending row it may become. Stage 11 records its drops (malformed, label not allowed, skill level not a
+    number, evidence not in the transcript, evidence only in already-observed turns), its per-candidate errors
+    (only if Stage 13 had not already written the row), and each decision candidate (malformed, assistant echo,
+    quote not in the transcript or only in earlier turns, logged, queued, duplicate, failed). Stage 13 records
+    each of its outcomes (written, write failed, queued, already queued, rejected), crediting the stage whose
+    verdict decided it: 11 for an evidence-gate rejection, 12 for a Constitution verdict, 13 for the write.
+    `threshold_violation_month_2_plus` is now `..._evidence` and `..._confidence`.
+  - **Part 3, the user's answers:** confirm, dismiss, "no" to a check-in question (which retires the stored
+    value), promote a decision, dismiss a decision: one row each, actor `user`, no stage, after the action has
+    taken effect, under the queued row's candidate id (so it joins the system's row: same id, same
+    fingerprint, same chat) or `legacy:<table>:<rowid>` for a row queued before ids existed.
+  - **Part 4, reading it back:** `summary()` (rows, per outcome, per reason, per actor) and `history(candidate_id)`
+    (the system's decision, then the user's answer).
+- **Tests:** `backend/tests/test_governance_audit_log.py`, 52, all through the real code (Stage 11 with a provider
+  answering in the model's shape, Stage 13, the resolution functions, the real export script, the in-app restore,
+  `session_key.change_password`):
+  - part 1 (15): the tables exist; a row holds a fingerprint and no text; UPDATE and DELETE abort on both
+    tables; the salt is made once; the fingerprint is stable per profile and differs between profiles; the
+    writer refuses what the log does not define; the session is recorded (0 before onboarding); an old database
+    gains the id columns; legacy ids are distinct per row;
+  - part 2 (24): every ValidationResult status (8 cases) and every evidence-gate rejection state (6) through
+    Stage 13, one row each with the right stage and reason; already queued; a write that fails twice; the month-2
+    split; every Observer drop and decision route in one session; a queued and a duplicate decision; a candidate
+    that raises; a resumed chat; only the writer inserts (no other module inserts, updates or deletes); every
+    stored reason is known; a candidate that fails after its row was written gets no second row;
+  - part 3 (6): confirm (joins the system's row and its chat), dismiss, retire, promote and dismiss a decision,
+    legacy ids, a failed answer leaves no row;
+  - part 4 (5): the reader's counts for a seeded session; one candidate's history; a deleted chat's rows stay and
+    hold no text; a backup and restore keep every row, the four triggers and the salt (and a DELETE still
+    aborts); a password change keeps the salt and the same fingerprint;
+  - found while recording (2): a candidate Stage 13 saved whose audit row could not be written is not recorded
+    as rejected (it was: Stage 13 raised after the write, and Stage 11's per-candidate isolation recorded
+    `candidate_error`, a row saying the opposite of what happened; Stage 13 now logs a row it cannot write, like
+    every other audit call); every reason the Constitution enforcer can give is in the known set, so a new one
+    cannot cost its rows quietly.
+  - **Seen failing first:** each part's tests against the code before that part (parts 1-3 all failing; part 4's
+    two reader tests failing). The round-trip, password and no-second-row tests check behaviour already in place
+    once parts 1 and 2 existed, so they passed when written; the last is held by a break-it below. Of the two
+    found while recording, the first failed before its fix (the saved candidate had a `candidate_error` row);
+    the second passed when written and is held by a break-it.
+  - **Existing tests changed:** seven tests that send a rejection through Stage 13 (six in
+    `test_stage_13_profile_update.py`, one in `test_half_wired_tables.py`, which the first full run caught) used
+    made-up reasons ("threshold_violation", "below_threshold") that no code produces; they now use real
+    Constitution reasons, since the writer accepts only real ones. A queued question with an unknown reason is
+    still recorded (as `queued`, stage 13), so three pending tests with made-up reasons are unchanged. The schema
+    test and the record-version coverage list name the two new tables (excluded from `RECORD_TABLES`: never read
+    into a prompt).
+- **Break-it:** 12 mutations, each alone, restored byte for byte, each caught: the UPDATE trigger removed (2
+  tests); the salt made on every call (5); an unknown reason accepted (1); a Stage 13 rejection unrecorded (10);
+  a grounding drop unrecorded (2); the error path ignoring an existing row (1); a queued row losing its id (5);
+  a user's confirm unrecorded (1); every legacy row sharing one id (2); a decision's outcome unrecorded (3);
+  Stage 13 raising when its row fails (1); a Constitution reason the log does not know (1).
+- **Terminal branches, all writing:** `stage_11_observer.run` (memory: sanitise None, not grounded; decision:
+  sanitise None, assistant echo, not grounded), `run_session_end` (the resumed-chat filter, the per-candidate
+  except, every decision route), `stage_13_profile_update.run` (written, failed, pending new and already queued,
+  rejected), `resolve_pending`, `dismiss_pending`, `decision_log.promote_pending`, `decision_log.dismiss_pending`.
+  An unparseable model answer has no candidates and so no rows.
+- **Migration harness:** no change needed. Its fixed list is of launcher scripts, and G-7 adds none; each
+  installation is built from `git archive`, so the new module travels with `backend/`.
+- **Suites:** Backend 1726 passed, 0 failed (18 min 3 s), on the working tree at 4e9adf7 plus this change (with
+  other sessions' uncommitted `httpx2` requirement and its test), nothing else of mine running; the changed files
+  were compared byte for byte with copies taken before the run. Two earlier full runs: the first (1723 passed, 1
+  failed) found the seventh test with a made-up reason, the second was stopped to fix the Stage 13 false row above.
+  No Flutter file changed.
+
+**Not covered (still open):**
+- **Thesis wording, stated:** append-only within the trust boundary, logged, not tamper-evident. Whoever holds
+  the profile key can drop the triggers; a hash chain in the same database could be recomputed. The salt lives in
+  the same database, so someone with the key could guess short values from their fingerprints; that person can
+  already read the whole profile.
+- **Not audited:** a decision made by hand (`/decide`, `create_decision`), and the creation of a check-in question
+  by the verification loop (its answer is audited). Neither is an Observer candidate.
+- **A failed audit write is logged, not raised** (Stage 13 outcomes, Stage 11 drops, decisions, user answers):
+  the action stands, and an error must not cost the session's other candidates, record a saved candidate as
+  rejected, or tell the user an answer failed when it did not. Such a candidate then has no row.
+- **No view of the log in the app or the API**; it is read through `summary()` and `history()`.
+- **Rows from before G-7 do not exist**: the log starts empty on every profile.
+
 ---
 
 ## 8. Status
@@ -3849,6 +3951,7 @@ warn loudly and keep running.
 | W-1 one settings block: 16k window, qwen2.5:7b, temperature 0.0 | Built and measured 2026-10-18 (§7.56) | A, medium: Ollama's default 4096 window cut long prompts from the front and the default model was llama3.1:8b in code. Every request now asks for 16384 (all 27 long prompts read in full; fully on the GPU, 6.6-6.8 of 8 GB in use with a browser open); qwen2.5:7b is the one default; temperature 0.0 chosen by a fixed rule. 13 tests, 7 break-it mutations. Its long-chat bar 2 is NOT met: 2 near-misses (1 before) reached the decision log, which skips the gate (G-4) |
 | D-34 a learned decision saved with no project | Fixed 2026-10-18 (§7.57) | A, medium: the Observer was called without the chat's project and a queued decision had no project column, so every learned decision was saved with none and a project's own lookup never found it. The project is now read from the chat's row on every path (end of chat, shutdown queue, crash recovery), and logged and queued decisions keep the project and the chat's id. 7 tests (7 failed first), 5 break-it mutations |
 | D-35 the Constitution edited after it was locked, its version never checked | Fixed 2026-10-18 (§7.58) | A, low: constitutional.json said 1.0 and was edited twice with no bump; every profile stored the literal 1.0 and nothing compared it. Now 1.1 with a changelog, each version registered with its text's fingerprint, and a sign-in check that warns (log, trace, /status) and keeps running (DEC-6). 8 tests, 5 break-it mutations. The app does not show the warning yet |
+| D-36 a refused candidate left no lasting record | Fixed 2026-10-18 (§7.59) | A, medium for the thesis: a candidate the guard refused left a logger line only, and trace_log is purged after 90 days. Now an append-only `governance_audit_log` (triggers abort UPDATE and DELETE) holds one row for every terminal outcome of an Observer memory or decision candidate and for every user answer to a queued question, with an HMAC fingerprint and never the text, through one writer that refuses an unknown reason (DEC-5). 52 tests, 12 break-it mutations. Append-only within the trust boundary, not tamper-evident; decisions made by hand are not audited; no view in the app |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

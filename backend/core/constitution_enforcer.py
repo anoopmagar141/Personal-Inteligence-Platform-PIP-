@@ -116,10 +116,13 @@ class ConstitutionEnforcer:
         else:
             # Month 2+: evidence >= 3, confidence >= 0.7
             rule = thresholds["month_2_plus"]
+            # Two codes, not one (G-7, A-3): the audit log has to say which
+            # rule refused a candidate, and "not enough evidence" and "not
+            # confident enough" are different answers to the user.
             if evidence_count < rule["evidence"]:
-                return ValidationResult.DISCARD("threshold_violation_month_2_plus")
+                return ValidationResult.DISCARD("threshold_violation_month_2_plus_evidence")
             if target_table != "goal_memory" and confidence < rule["confidence"]:
-                return ValidationResult.DISCARD("threshold_violation_month_2_plus")
+                return ValidationResult.DISCARD("threshold_violation_month_2_plus_confidence")
 
         # 5. Gated fields check
         if self._matches_gated_field(candidate):

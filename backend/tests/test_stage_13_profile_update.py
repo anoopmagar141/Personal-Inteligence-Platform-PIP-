@@ -81,7 +81,9 @@ def test_pending_statuses_persist_to_memory_candidates_pending(db_conn, status_f
 
 @pytest.mark.parametrize("status_factory", [
     lambda: ValidationResult.HARD_REJECT("immutable_field"),
-    lambda: ValidationResult.DISCARD("below_threshold"),
+    # Real Constitution reasons: since G-7 every outcome is written to the governance audit
+    # log, whose writer accepts only the reason codes the code base actually produces.
+    lambda: ValidationResult.DISCARD("threshold_violation_week_1_2"),
 ])
 def test_rejected_statuses_write_nothing(db_conn, status_factory):
     candidate: MemoryCandidate = {
@@ -143,7 +145,7 @@ def test_discard_of_contradicting_inferred_candidate_logs_contradiction(db_conn)
         "evidence_count": 1,
         "evidence_text": "Observed using emacs",
     }
-    outcome = stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    outcome = stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation_week_3_4"))
     assert outcome == "rejected"
 
     rows = db_conn.execute(
@@ -167,7 +169,7 @@ def test_discard_does_not_log_when_value_matches_existing(db_conn):
         "evidence_count": 1,
         "evidence_text": "Still using vim",
     }
-    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation_week_3_4"))
     count = db_conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0]
     assert count == 0
 
@@ -186,7 +188,7 @@ def test_discard_does_not_log_when_label_is_not_inferred(db_conn):
         "evidence_count": 1,
         "evidence_text": "Said switched to emacs",
     }
-    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation_week_3_4"))
     count = db_conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0]
     assert count == 0
 
@@ -205,7 +207,7 @@ def test_discard_does_not_log_when_existing_source_is_itself_inferred(db_conn):
         "evidence_count": 1,
         "evidence_text": "Observed using emacs",
     }
-    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation_week_3_4"))
     count = db_conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0]
     assert count == 0
 
@@ -219,7 +221,7 @@ def test_discard_does_not_log_when_no_existing_preference(db_conn):
         "evidence_count": 1,
         "evidence_text": "Observed using emacs",
     }
-    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation"))
+    stage_13.run(db_conn, candidate, ValidationResult.DISCARD("threshold_violation_week_3_4"))
     count = db_conn.execute("SELECT COUNT(*) FROM preference_contradiction_log").fetchone()[0]
     assert count == 0
 

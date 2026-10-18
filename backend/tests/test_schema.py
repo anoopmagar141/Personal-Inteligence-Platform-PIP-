@@ -49,7 +49,8 @@ def test_schema_execution():
         
         expected_tables = [
             "profile_meta", "identity", "skill_memory", "preference_memory",
-            "goal_memory", "interaction_style", "active_projects", "decision_log"
+            "goal_memory", "interaction_style", "active_projects", "decision_log",
+            "governance_audit_log", "governance_audit_salt",
         ]
         for table in expected_tables:
             assert table in tables

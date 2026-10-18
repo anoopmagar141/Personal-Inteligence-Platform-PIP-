@@ -46,7 +46,7 @@ from backend.config.settings import get_settings
 from backend.core import evidence_gate
 from backend.core.constitution_enforcer import ConstitutionEnforcer
 from backend.core.types import now_utc
-from backend.memory import decision_log, session_snapshot
+from backend.memory import decision_log, governance_audit, session_snapshot
 from backend.providers.base_provider import (
     BaseLLMProvider,
     ProviderExecutionError,
@@ -457,7 +457,39 @@ def _sanitize_memory_candidate(raw: Any) -> Optional[dict[str, Any]]:
         "label": label,
         "evidence_count": 1,
         "evidence_text": str(raw.get("evidence_text", "")),
+        # Carried to the end of the candidate's life: the audit row, and the
+        # pending row it may become (G-7).
+        "candidate_id": governance_audit.new_candidate_id(),
     }
+
+
+def _memory_drop_reason(raw: Any) -> str:
+    """Why _sanitize_memory_candidate returned None, as an audit reason code (G-7)."""
+    if not isinstance(raw, dict) or not all(k in raw for k in ("target_table", "field_name", "proposed_value")):
+        return "malformed_candidate"
+    if raw.get("label") not in _VALID_LABELS:
+        return "label_not_allowed"
+    return "skill_level_not_a_number"
+
+
+def _audit_drop(conn, reason: str, *, candidate_id: Optional[str] = None, target_table: Any = None,
+                field_name: Any = None, value: Any = None, conversation_id: Optional[str] = None) -> None:
+    """
+    A Stage 11 drop's row in the governance audit log (G-7): these candidates
+    never reach Stage 13, so this is the only place their refusal is recorded.
+    A failed audit write is logged, not raised: it must not cost the session's
+    other candidates.
+    """
+    try:
+        governance_audit.record(
+            conn, candidate_id=candidate_id or governance_audit.new_candidate_id(), actor="system", stage=11,
+            outcome="rejected", reason_code=reason,
+            target_table=None if target_table is None else str(target_table),
+            field_name=None if field_name is None else str(field_name),
+            value=value, conversation_id=conversation_id,
+        )
+    except Exception as e:
+        logger.error(f"Observer: could not record a dropped candidate in the audit log ({reason}): {e}")
 
 
 def _sanitize_decision_candidate(raw: Any) -> Optional[dict[str, Any]]:
@@ -468,6 +500,7 @@ def _sanitize_decision_candidate(raw: Any) -> Optional[dict[str, Any]]:
         "decision_text": raw["decision_text"],
         "signals_found": signals if isinstance(signals, list) else [],
         "raw_quote": str(raw.get("raw_quote", "")),
+        "candidate_id": governance_audit.new_candidate_id(),
     }
 
 
@@ -773,7 +806,7 @@ def _cap_transcript(transcript: str) -> str:
     return "\n".join(kept)
 
 
-def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
+def run(transcript: str, provider: BaseLLMProvider, conn, conversation_id: Optional[str] = None) -> ObserverOutput:
     """
     Single-pass extraction over a full session transcript, capped at
     observer.max_session_tokens - see _cap_transcript().
@@ -858,6 +891,10 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
         for m in raw_memory:
             candidate = _sanitize_memory_candidate(m)
             if candidate is None:
+                raw_m = m if isinstance(m, dict) else {}
+                _audit_drop(conn, _memory_drop_reason(m), target_table=raw_m.get("target_table"),
+                            field_name=raw_m.get("field_name"), value=raw_m.get("proposed_value"),
+                            conversation_id=conversation_id)
                 continue
             # Memory candidates previously bypassed grounding entirely, while
             # decisions had been given two checks - so an invented preference
@@ -880,6 +917,9 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
                     f"transcript (placeholder or confabulated): "
                     f"{candidate['target_table']}.{candidate['field_name']}={candidate['proposed_value']!r}"
                 )
+                _audit_drop(conn, "evidence_not_in_transcript", candidate_id=candidate["candidate_id"],
+                            target_table=candidate["target_table"], field_name=candidate["field_name"],
+                            value=candidate["proposed_value"], conversation_id=conversation_id)
                 continue
             memory_candidates.append(candidate)
 
@@ -889,18 +929,27 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
         for d in raw_decisions:
             candidate = _sanitize_decision_candidate(d)
             if candidate is None:
+                _audit_drop(conn, "decision_malformed", target_table="decision_log",
+                            value=d.get("decision_text") if isinstance(d, dict) else None,
+                            conversation_id=conversation_id)
                 continue
             if _looks_like_assistant_echo(candidate["decision_text"], assistant_lines):
                 logger.info(
                     f"Observer: dropping decision candidate that looks like an assistant echo: "
                     f"{candidate['decision_text']!r}"
                 )
+                _audit_drop(conn, "decision_assistant_echo", candidate_id=candidate["candidate_id"],
+                            target_table="decision_log", value=candidate["decision_text"],
+                            conversation_id=conversation_id)
                 continue
             if not _quote_is_grounded(candidate["raw_quote"], transcript_lower):
                 logger.info(
                     f"Observer: dropping decision candidate with an unverifiable raw_quote "
                     f"(likely confabulated): {candidate['decision_text']!r}"
                 )
+                _audit_drop(conn, "decision_quote_not_in_transcript", candidate_id=candidate["candidate_id"],
+                            target_table="decision_log", value=candidate["decision_text"],
+                            conversation_id=conversation_id)
                 continue
             decision_candidates.append(candidate)
 
@@ -915,6 +964,28 @@ def run(transcript: str, provider: BaseLLMProvider, conn) -> ObserverOutput:
         "decision_candidates": decision_candidates,
         "session_snapshot": snapshot,
     }
+
+
+# How each route_observer_decision status is recorded (G-7).
+_DECISION_OUTCOMES = {
+    "logged": ("accepted", "decision_logged"),
+    "pending": ("deferred", "decision_queued"),
+    "duplicate": ("rejected", "decision_duplicate"),
+    "failed": ("rejected", "decision_failed"),
+}
+
+
+def _audit_decision(conn, dc: dict[str, Any], result: dict[str, Any], conversation_id: Optional[str]) -> None:
+    """A routed decision candidate's row in the governance audit log; logged, not raised, on failure."""
+    outcome, code = _DECISION_OUTCOMES.get(result.get("status"), ("rejected", "decision_failed"))
+    try:
+        governance_audit.record(
+            conn, candidate_id=dc["candidate_id"], actor="system", stage=11, outcome=outcome, reason_code=code,
+            target_table="decision_log", value=dc.get("decision_text"), confidence=result.get("confidence"),
+            conversation_id=conversation_id,
+        )
+    except Exception as e:
+        logger.error(f"Observer: could not record a decision candidate in the audit log: {e}")
 
 
 def run_session_end(
@@ -947,13 +1018,27 @@ def run_session_end(
     for a fresh conversation and for the startup drain, and leaves every
     existing caller behaving exactly as before.
     """
-    output = run(transcript, provider, conn)
+    output = run(transcript, provider, conn, conversation_id=conversation_id)
 
     # Before the snapshot gate below, not after: that gate asks whether this
     # session arrived somewhere, and a pass that produced nothing but re-reads
     # has not.
     if unobserved_transcript is not None:
+        before = output
         output = _only_candidates_stated_this_session(output, unobserved_transcript)
+        # What the filter dropped gets its audit row here (G-7); the filter
+        # itself stays a pure function of the output.
+        kept = {c["candidate_id"] for c in output["memory_candidates"] + output["decision_candidates"]}
+        for c in before["memory_candidates"]:
+            if c["candidate_id"] not in kept:
+                _audit_drop(conn, "evidence_only_in_earlier_turns", candidate_id=c["candidate_id"],
+                            target_table=c["target_table"], field_name=c["field_name"],
+                            value=c["proposed_value"], conversation_id=conversation_id)
+        for c in before["decision_candidates"]:
+            if c["candidate_id"] not in kept:
+                _audit_drop(conn, "decision_quote_only_in_earlier_turns", candidate_id=c["candidate_id"],
+                            target_table="decision_log", value=c["decision_text"],
+                            conversation_id=conversation_id)
 
     # An empty-topic snapshot means run() withheld it as ungrounded (no
     # substantive user turn to summarize) - persisting it anyway would
@@ -994,6 +1079,7 @@ def run_session_end(
 
     memory_results = []
     for candidate in output["memory_candidates"]:
+        candidate = {**candidate, "conversation_id": conversation_id}
         # Per-candidate isolation, and the reason is not hypothetical. A None
         # confidence reaching the enforcer's conflict check raised TypeError
         # here, and with nothing between that raise and the caller it escaped
@@ -1055,6 +1141,15 @@ def run_session_end(
                 f"{candidate.get('field_name')} failed, dropping it and continuing: {e}"
             )
             status, outcome, evidence_state = "ERROR", "failed", "ERROR"
+            # One row per candidate: only if Stage 13 had not already written
+            # its own before the failure (G-7).
+            try:
+                if not governance_audit.has_row(conn, candidate["candidate_id"]):
+                    _audit_drop(conn, "candidate_error", candidate_id=candidate["candidate_id"],
+                                target_table=candidate.get("target_table"), field_name=candidate.get("field_name"),
+                                value=candidate.get("proposed_value"), conversation_id=conversation_id)
+            except Exception as audit_error:
+                logger.error(f"Observer: could not record the failed candidate in the audit log: {audit_error}")
         memory_results.append({
             "candidate": candidate,
             # Reported alongside validation_status rather than folded into it:
@@ -1079,10 +1174,12 @@ def run_session_end(
                 raw_quote=dc["raw_quote"],
                 project_id=project_id,
                 conversation_id=conversation_id,
+                candidate_id=dc["candidate_id"],
             )
         except Exception as e:
             logger.error(f"Observer: decision candidate failed, dropping it and continuing: {e}")
             result = {"status": "failed", "error": str(e), "decision_text": dc.get("decision_text")}
+        _audit_decision(conn, dc, result, conversation_id)
         decision_results.append(result)
 
     return {

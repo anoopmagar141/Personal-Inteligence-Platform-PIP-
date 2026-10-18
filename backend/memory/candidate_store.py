@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 from backend.core.types import now_utc
+from backend.memory import governance_audit
 
 
 def create_decision_candidate(
@@ -13,14 +14,18 @@ def create_decision_candidate(
     confidence: float,
     project_id: str | None = None,
     conversation_id: str | None = None,
+    candidate_id: str | None = None,
 ) -> int:
+    # Every queued row gets an id the audit log can join on (G-7); one made
+    # here for a candidate that did not come through Stage 11 with its own.
+    candidate_id = candidate_id or governance_audit.new_candidate_id()
     cur = conn.execute(
         """
         INSERT INTO decision_candidates_pending (
             decision_text, signals_found, raw_quote, confidence, state, created_at,
-            project_id, conversation_id
+            project_id, conversation_id, candidate_id
         )
-        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
+        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
         """,
         (
             decision_text,
@@ -30,6 +35,7 @@ def create_decision_candidate(
             now_utc(),
             project_id,
             conversation_id,
+            candidate_id,
         ),
     )
     conn.commit()
@@ -94,14 +100,16 @@ def create_memory_candidate(
     evidence_text: str,
     validation_status: str,
     origin: str = "observer",
+    candidate_id: str | None = None,
 ) -> int:
+    candidate_id = candidate_id or governance_audit.new_candidate_id()  # see create_decision_candidate
     cur = conn.execute(
         """
         INSERT INTO memory_candidates_pending (
             target_table, field_name, proposed_value, label,
-            evidence_count, evidence_text, validation_status, origin, state, created_at
+            evidence_count, evidence_text, validation_status, origin, state, created_at, candidate_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
         """,
         (
             target_table,
@@ -113,6 +121,7 @@ def create_memory_candidate(
             validation_status,
             origin,
             now_utc(),
+            candidate_id,
         ),
     )
     conn.commit()

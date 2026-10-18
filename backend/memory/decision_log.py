@@ -3,7 +3,7 @@ from typing import Any
 
 from backend.config.settings import get_settings
 from backend.core.types import now_utc
-from backend.memory import candidate_store
+from backend.memory import candidate_store, governance_audit
 
 
 KNOWN_DECISION_SIGNALS = {
@@ -118,6 +118,7 @@ def route_observer_decision(
     raw_quote: str,
     project_id: str | None = None,
     conversation_id: str | None = None,
+    candidate_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Routes an Observer-sourced decision candidate using log_threshold_observer
@@ -162,6 +163,7 @@ def route_observer_decision(
             confidence=confidence,
             project_id=project_id,
             conversation_id=conversation_id,
+            candidate_id=candidate_id,
         )
         return {"status": "pending", "candidate_id": candidate_id, "confidence": confidence, "signals": signals}
 
@@ -296,6 +298,11 @@ def promote_pending(conn, candidate_id: int) -> dict[str, Any]:
         conversation_id=candidate.get("conversation_id"),
     )
     candidate_store.mark_decision_candidate_promoted(conn, candidate_id)
+    governance_audit.record_user_resolution(
+        conn, pending_table="decision_candidates_pending", row=candidate, outcome="accepted",
+        reason_code="user_promoted_decision", target_table="decision_log", field_name=None,
+        value=candidate["decision_text"],
+    )
     return {"status": "promoted", "decision_id": decision_id}
 
 
@@ -304,6 +311,11 @@ def dismiss_pending(conn, candidate_id: int) -> dict[str, Any]:
     if candidate is None or candidate["state"] != "pending":
         raise ValueError("pending decision candidate not found")
     candidate_store.dismiss_decision_candidate(conn, candidate_id)
+    governance_audit.record_user_resolution(
+        conn, pending_table="decision_candidates_pending", row=candidate, outcome="dismissed",
+        reason_code="user_dismissed_decision", target_table="decision_log", field_name=None,
+        value=candidate["decision_text"],
+    )
     return {"status": "dismissed", "candidate_id": candidate_id}
 
 
