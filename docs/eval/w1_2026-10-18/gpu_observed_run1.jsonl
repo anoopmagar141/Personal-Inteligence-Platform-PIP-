@@ -1,0 +1,53 @@
+{"time": "2026-10-18T11:17:36", "ps": [], "gpu_mib_used": 1227, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:17:51", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6569, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:18:07", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6641, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:18:22", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6636, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:18:37", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6608, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:18:52", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6642, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:19:08", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6646, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:19:23", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6627, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:19:38", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6630, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:19:53", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6665, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:20:09", "ps": [], "gpu_mib_used": 6618, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:20:24", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6652, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:20:39", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6668, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:20:54", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6681, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:21:10", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6650, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:21:25", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6653, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:21:40", "ps": [], "gpu_mib_used": 1356, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:21:55", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6695, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:22:11", "ps": [], "gpu_mib_used": 1371, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:22:26", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6676, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:22:41", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6710, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:22:56", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6704, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:23:12", "ps": [], "gpu_mib_used": 5605, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:23:27", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6676, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:23:42", "ps": [], "gpu_mib_used": 5567, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:23:57", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6649, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:24:13", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6636, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:24:28", "ps": [], "gpu_mib_used": 1385, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:24:43", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6753, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:24:59", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6700, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:25:14", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6686, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:25:29", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6679, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:25:44", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6678, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:26:00", "ps": [], "gpu_mib_used": 5604, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:26:15", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6678, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:26:30", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6677, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:26:45", "ps": [], "gpu_mib_used": 1351, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:27:01", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6678, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:27:16", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6677, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:27:31", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6677, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:27:46", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6678, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:28:02", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6678, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:28:17", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6678, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:28:32", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6677, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:28:47", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6678, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:29:03", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6678, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:29:18", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6677, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:29:33", "ps": [], "gpu_mib_used": 6667, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:29:48", "ps": [], "gpu_mib_used": 1427, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:30:04", "ps": [], "gpu_mib_used": 1456, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:30:19", "ps": [], "gpu_mib_used": 1381, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:30:34", "ps": [], "gpu_mib_used": 1430, "gpu_mib_total": 8188, "browser_processes": 10}
+{"time": "2026-10-18T11:30:50", "ps": [{"name": "qwen2.5:7b", "size": 5465282968, "size_vram": 5465282968, "context_length": 16384}], "gpu_mib_used": 6768, "gpu_mib_total": 8188, "browser_processes": 10}

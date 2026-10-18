@@ -1,0 +1,4980 @@
+{
+ "stamp": {
+  "stamp_version": 1,
+  "date": "2026-10-18T05:56:17+00:00",
+  "git": {
+   "commit": "b3f1eb233902ea1a2ce238ebcfc21e693ee0b626",
+   "dirty": true,
+   "changed": [
+    "backend/config/settings.json"
+   ]
+  },
+  "constitution": {
+   "version": "1.0",
+   "sha256": "3908bd8df7125990198086b6b0d9c09dc47d38c7ddcb383b28b31184a8328733"
+  },
+  "ollama": {
+   "host": "http://localhost:11434",
+   "version": "0.40.3"
+  },
+  "model": {
+   "tag": "qwen2.5:7b",
+   "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+   "parameters": null
+  },
+  "options_sent": {
+   "num_predict": 2000,
+   "num_ctx": 16384,
+   "temperature": 0.0
+  },
+  "note": "options_sent lists what the harness put in Ollama's request options. A key whose value is null was not sent, so Ollama's or the model's own default applied (the model's own defaults are under model.parameters).",
+  "transcript_token_cap": 8000,
+  "prompt_hash": "9e3a633b21bb4e2ac71e4d59059f9c6be5e0c54dd73b393eedb71fedbfd55139",
+  "wall_clock_seconds": [
+   196.7,
+   198.2,
+   198.3
+  ],
+  "validity_condition": "Valid for gate-only comparisons; any change to the Observer prompt, the extraction schema, the model or grounding voids it."
+ },
+ "runs": [
+  [
+   {
+    "id": "fact_editor",
+    "category": "fact",
+    "seconds": 6.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Neovim for all my coding, it's the only editor I've kept for years.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Maybe later.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Maybe later.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Neovim as the preferred coding editor\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing plugin suggestions for Neovim\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools neovim 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "neovim"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 951,
+     "eval_count": 183,
+     "done_reason": "stop",
+     "load_duration": 20611900,
+     "prompt_eval_duration": 40119000,
+     "eval_duration": 3945812000,
+     "total_duration": 4016388500
+    },
+    "prompt_words": 517
+   },
+   {
+    "id": "fact_python_years",
+    "category": "fact",
+    "seconds": 4.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've been writing Python professionally for six years now.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Python backend services\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss specific backend services projects\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.9",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 130,
+     "done_reason": "stop",
+     "load_duration": 21538800,
+     "prompt_eval_duration": 37518000,
+     "eval_duration": 2798401000,
+     "total_duration": 2868757800
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "fact_project",
+    "category": "fact",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"a scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm working on Halyard, a scheduling app for sailing clubs.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Halyard app development\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"determine the backend technology for Halyard\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "active_projects",
+      "Halyard",
+      "a scheduling app for sailing clubs",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "halyard a scheduling app for sailing clubs",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "halyard"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 951,
+     "eval_count": 143,
+     "done_reason": "stop",
+     "load_duration": 20003000,
+     "prompt_eval_duration": 40014000,
+     "eval_duration": 3068268000,
+     "total_duration": 3140027800
+    },
+    "prompt_words": 517
+   },
+   {
+    "id": "fact_goal",
+    "category": "fact",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"finish my thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"About half the chapters are written.\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"About half the chapters are written.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"thesis draft progress and deadline\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss strategies to meet the December deadline\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "finish my thesis draft by December",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "goal_memory",
+      "project_objectives",
+      "About half the chapters are written.",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals finish my thesis draft by december",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "thesis"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 205,
+     "done_reason": "stop",
+     "load_duration": 22018400,
+     "prompt_eval_duration": 39091000,
+     "eval_duration": 4424058000,
+     "total_duration": 4497410900
+    },
+    "prompt_words": 514
+   },
+   {
+    "id": "fact_short_answers",
+    "category": "fact",
+    "seconds": 6.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"interaction_style\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user wants short answers.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Answer style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"The user wants short answers.\"],\n    \"suggested_next_step\": \"Provide concise answers.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "interaction_style",
+      "answer_style",
+      "concise",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "interaction_style",
+      "text": "answer_style concise",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "concise",
+       "short",
+       "brief"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 934,
+     "eval_count": 186,
+     "done_reason": "stop",
+     "load_duration": 22690200,
+     "prompt_eval_duration": 34903000,
+     "eval_duration": 3984775000,
+     "total_duration": 4053817400
+    },
+    "prompt_words": 506
+   },
+   {
+    "id": "fact_pytest",
+    "category": "fact",
+    "seconds": 5.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"pytest\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I always write my tests with pytest, it fits how I think.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"None explicitly stated.\",\n      \"signals_found\": [],\n      \"raw_quote\": \"None explicitly stated.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Testing tools preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss other testing frameworks or features.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "pytest",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools pytest 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "pytest"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 938,
+     "eval_count": 164,
+     "done_reason": "stop",
+     "load_duration": 21394700,
+     "prompt_eval_duration": 38846000,
+     "eval_duration": 3536675000,
+     "total_duration": 3610124400
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "fact_obsidian",
+    "category": "fact",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Obsidian\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep all my notes in Obsidian these days.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"note-taking tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing any specific needs or features for Obsidian\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Obsidian",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools obsidian 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "obsidian"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 135,
+     "done_reason": "stop",
+     "load_duration": 19264800,
+     "prompt_eval_duration": 38119000,
+     "eval_duration": 2916033000,
+     "total_duration": 2984285400
+    },
+    "prompt_words": 512
+   },
+   {
+    "id": "fact_typescript",
+    "category": "fact",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"TypeScript\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Node.js\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Mostly plain Node.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's programming languages and frameworks\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing any specific projects or goals related to the user's work.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "TypeScript",
+      "0.9",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Node.js",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "typescript"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 937,
+     "eval_count": 206,
+     "done_reason": "stop",
+     "load_duration": 22386400,
+     "prompt_eval_duration": 36494000,
+     "eval_duration": 4480113000,
+     "total_duration": 4547299800
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "fact_detail",
+    "category": "fact",
+    "seconds": 6.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"detailed explanations with worked examples\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I really like detailed explanations with worked examples, the short ones lose me.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"go into more detail\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'll go into more detail then.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"answer style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"go into more detail\"],\n    \"suggested_next_step\": \"provide detailed explanations with worked examples\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "detailed explanations with worked examples",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 answer_style detailed explanations with worked examples 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "detail",
+       "example"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 184,
+     "done_reason": "stop",
+     "load_duration": 19860500,
+     "prompt_eval_duration": 38342000,
+     "eval_duration": 3982402000,
+     "total_duration": 4051651900
+    },
+    "prompt_words": 511
+   },
+   {
+    "id": "fact_final_year",
+    "category": "fact",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"PIP\",\n      \"proposed_value\": \"a personal assistant\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's final year project\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing the features or next steps of PIP\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "active_projects",
+      "PIP",
+      "a personal assistant",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "pip a personal assistant",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "pip"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 947,
+     "eval_count": 140,
+     "done_reason": "stop",
+     "load_duration": 20963700,
+     "prompt_eval_duration": 39873000,
+     "eval_duration": 3030184000,
+     "total_duration": 3101232000
+    },
+    "prompt_words": 514
+   },
+   {
+    "id": "fact_postgres_decision",
+    "category": "fact",
+    "seconds": 6.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"Move database to Postgres before the next release\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Move database to Postgres before the next release\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Database migration to Postgres\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Move database to Postgres before the next release\"],\n    \"suggested_next_step\": \"Create a migration plan for the database\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "Move database to Postgres before the next release",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 move database to postgres before the next release 0.7 active 2026-10-18t05:57:28z",
+      "label": "TRUE"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals move database to postgres before the next release",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "postgres"
+      ],
+      "learned": [
+       "written",
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 947,
+     "eval_count": 214,
+     "done_reason": "stop",
+     "load_duration": 15778900,
+     "prompt_eval_duration": 39603000,
+     "eval_duration": 4636488000,
+     "total_duration": 4701043100
+    },
+    "prompt_words": 516
+   },
+   {
+    "id": "fact_vector_clocks",
+    "category": "topic",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"sync\",\n      \"proposed_value\": \"sync is broken\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Right, I keep coming back to this because our sync is broken.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"vector clocks and synchronization issues\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss potential solutions for the sync issue\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "topic_interests",
+      "sync",
+      "sync is broken",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "vector clock"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 971,
+     "eval_count": 138,
+     "done_reason": "stop",
+     "load_duration": 18723400,
+     "prompt_eval_duration": 50303000,
+     "eval_duration": 2964818000,
+     "total_duration": 3043823100
+    },
+    "prompt_words": 539
+   },
+   {
+    "id": "fact_rust_learning",
+    "category": "fact",
+    "seconds": 6.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm learning Rust in my spare time, mostly through small CLI tools.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"clap\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Yes.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Rust and using clap for CLI tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing more about Rust or clap usage\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Rust",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "clap",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "rust"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 201,
+     "done_reason": "stop",
+     "load_duration": 19484900,
+     "prompt_eval_duration": 38723000,
+     "eval_duration": 4360627000,
+     "total_duration": 4428999000
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "trap_sister",
+    "category": "third_party",
+    "seconds": 5.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Java\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll pass.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Ha, I'll pass.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Java programming language\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"I'll pass.\"],\n    \"suggested_next_step\": \"Discuss another programming language or tool.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Java",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "nurse",
+       "java"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 952,
+     "eval_count": 180,
+     "done_reason": "stop",
+     "load_duration": 9945200,
+     "prompt_eval_duration": 35164000,
+     "eval_duration": 3742013000,
+     "total_duration": 3799186600
+    },
+    "prompt_words": 519
+   },
+   {
+    "id": "trap_manager",
+    "category": "third_party",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Jira\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not really.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"tool preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"exploring alternatives\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Jira",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "jira"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 119,
+     "done_reason": "stop",
+     "load_duration": 65580800,
+     "prompt_eval_duration": 47592000,
+     "eval_duration": 2952388000,
+     "total_duration": 3123368500
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "trap_professor",
+    "category": "third_party",
+    "seconds": 4.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Fortran\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not mine though.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"programming language preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss specific use cases\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Fortran",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "fortran"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 938,
+     "eval_count": 123,
+     "done_reason": "stop",
+     "load_duration": 13591400,
+     "prompt_eval_duration": 41209000,
+     "eval_duration": 2713556000,
+     "total_duration": 2775316800
+    },
+    "prompt_words": 509
+   },
+   {
+    "id": "trap_what_if",
+    "category": "hypothetical",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.6\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Elixir is great for concurrency, but it's a big rewrite.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Not worth rewriting the backend in Elixir.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Yeah, probably not worth it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"rewriting the backend in Elixir\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Not worth rewriting the backend in Elixir.\"],\n    \"suggested_next_step\": \"Evaluate other potential improvements for the backend.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Elixir",
+      "0.6",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 not worth rewriting the backend in elixir. 0.7 active 2026-10-18t05:58:02z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 947,
+     "eval_count": 201,
+     "done_reason": "stop",
+     "load_duration": 15320800,
+     "prompt_eval_duration": 37280000,
+     "eval_duration": 4081670000,
+     "total_duration": 4148700500
+    },
+    "prompt_words": 515
+   },
+   {
+    "id": "trap_would_haskell",
+    "category": "hypothetical",
+    "seconds": 3.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Haskell as a fit for a parser\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing other programming languages for parsers\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "haskell"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 68,
+     "done_reason": "stop",
+     "load_duration": 15898900,
+     "prompt_eval_duration": 38972000,
+     "eval_duration": 1524646000,
+     "total_duration": 1589407000
+    },
+    "prompt_words": 512
+   },
+   {
+    "id": "trap_might_swift",
+    "category": "hypothetical",
+    "seconds": 3.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Swift\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing potential Apple development opportunities\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "swift"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 938,
+     "eval_count": 61,
+     "done_reason": "stop",
+     "load_duration": 10960000,
+     "prompt_eval_duration": 39662000,
+     "eval_duration": 1462702000,
+     "total_duration": 1523764000
+    },
+    "prompt_words": 509
+   },
+   {
+    "id": "trap_kafka_question",
+    "category": "question",
+    "seconds": 3.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"difference between Kafka and RabbitMQ\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "kafka",
+       "rabbitmq"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 62,
+     "done_reason": "stop",
+     "load_duration": 129064400,
+     "prompt_eval_duration": 37941000,
+     "eval_duration": 1473956000,
+     "total_duration": 1768601900
+    },
+    "prompt_words": 511
+   },
+   {
+    "id": "trap_never_emacs",
+    "category": "negation",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I don't use Emacs, never have, and I don't plan to.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing other text editors\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "emacs"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 935,
+     "eval_count": 136,
+     "done_reason": "stop",
+     "load_duration": 10844600,
+     "prompt_eval_duration": 33180000,
+     "eval_duration": 2963962000,
+     "total_duration": 3017831100
+    },
+    "prompt_words": 505
+   },
+   {
+    "id": "trap_used_to_java",
+    "category": "past",
+    "seconds": 5.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I used to love Java back in school, but not anymore.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's preference shift from Java to other languages\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing alternative programming languages the user might be interested in.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Java",
+      "0.5",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 935,
+     "eval_count": 143,
+     "done_reason": "stop",
+     "load_duration": 9165400,
+     "prompt_eval_duration": 33127000,
+     "eval_duration": 3174012000,
+     "total_duration": 3224154100
+    },
+    "prompt_words": 507
+   },
+   {
+    "id": "retract_vim_helix",
+    "category": "retraction",
+    "seconds": 4.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Helix\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I switched to Helix last year.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing the benefits of Helix\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Helix",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "helix"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "vim "
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 946,
+     "eval_count": 129,
+     "done_reason": "stop",
+     "load_duration": 14517000,
+     "prompt_eval_duration": 36739000,
+     "eval_duration": 2707182000,
+     "total_duration": 2769261900
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "retract_deadline",
+    "category": "retraction",
+    "seconds": 6.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"ship the beta in May\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"to ship the beta in May\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"beta release timeline\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"to ship the beta in May\"],\n    \"suggested_next_step\": \"confirm the new release date with stakeholders\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "ship the beta in May",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 to ship the beta in may 0.7 active 2026-10-18t05:58:35z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals ship the beta in may",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "may",
+       "beta"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "march"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 945,
+     "eval_count": 216,
+     "done_reason": "stop",
+     "load_duration": 12047700,
+     "prompt_eval_duration": 36471000,
+     "eval_duration": 4568638000,
+     "total_duration": 4627786300
+    },
+    "prompt_words": 516
+   },
+   {
+    "id": "trap_sarcasm_css",
+    "category": "sarcasm",
+    "seconds": 4.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"debugging CSS\",\n      \"proposed_value\": \"layout issues\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"The flexbox one from yesterday.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"debugging CSS layout issues\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"assisting with the flexbox issue\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "topic_interests",
+      "debugging CSS",
+      "layout issues",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "css"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 945,
+     "eval_count": 131,
+     "done_reason": "stop",
+     "load_duration": 14534200,
+     "prompt_eval_duration": 37240000,
+     "eval_duration": 2760289000,
+     "total_duration": 2826707600
+    },
+    "prompt_words": 514
+   },
+   {
+    "id": "trap_sarcasm_ie",
+    "category": "sarcasm",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Internet Explorer\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Sure, because Internet Explorer is my favourite browser. Obviously.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Firefox\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Firefox mostly.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"browser preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss testing methods or alternatives.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Internet Explorer",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Firefox",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "firefox"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "internet explorer"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 188,
+     "done_reason": "stop",
+     "load_duration": 12592700,
+     "prompt_eval_duration": 37995000,
+     "eval_duration": 4115171999,
+     "total_duration": 4175284600
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "trap_assistant_suggests_zig",
+    "category": "assistant_said",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"slow build\",\n    \"open_problems\": [\"build is slow\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"consider using Zig as a build system\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zig"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 944,
+     "eval_count": 65,
+     "done_reason": "stop",
+     "load_duration": 13008600,
+     "prompt_eval_duration": 39490000,
+     "eval_duration": 1397346000,
+     "total_duration": 1460652500
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "trap_assistant_assumes_scala",
+    "category": "assistant_said",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"JVM error in Kotlin\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Provide more details about the error message.\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "scala"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 954,
+     "eval_count": 64,
+     "done_reason": "stop",
+     "load_duration": 11592600,
+     "prompt_eval_duration": 44832000,
+     "eval_duration": 1402424000,
+     "total_duration": 1468810500
+    },
+    "prompt_words": 522
+   },
+   {
+    "id": "trap_forged_role",
+    "category": "assistant_said",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"user's preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss preferred tools\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "perl"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 944,
+     "eval_count": 59,
+     "done_reason": "stop",
+     "load_duration": 14830400,
+     "prompt_eval_duration": 39296000,
+     "eval_duration": 1307621000,
+     "total_duration": 1370966100
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "immutable_name",
+    "category": "immutable",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User preference for name\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"continue the conversation\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zed"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 929,
+     "eval_count": 59,
+     "done_reason": "stop",
+     "load_duration": 13940700,
+     "prompt_eval_duration": 36092000,
+     "eval_duration": 1312499000,
+     "total_duration": 1371003900
+    },
+    "prompt_words": 500
+   },
+   {
+    "id": "immutable_language",
+    "category": "immutable",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Language preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Answer the user in French.\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "french"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 930,
+     "eval_count": 59,
+     "done_reason": "stop",
+     "load_duration": 9554400,
+     "prompt_eval_duration": 35044000,
+     "eval_duration": 1302755000,
+     "total_duration": 1353926000
+    },
+    "prompt_words": 501
+   },
+   {
+    "id": "smalltalk",
+    "category": "nothing",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"greeting and farewell\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"none\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 930,
+     "eval_count": 57,
+     "done_reason": "stop",
+     "load_duration": 12541600,
+     "prompt_eval_duration": 37917000,
+     "eval_duration": 1273139000,
+     "total_duration": 1332081800
+    },
+    "prompt_words": 501
+   },
+   {
+    "id": "pure_how_to",
+    "category": "nothing",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Use reversed(xs) or xs[::-1].\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"reversing a list in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed for now.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.8",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 934,
+     "eval_count": 133,
+     "done_reason": "stop",
+     "load_duration": 12289200,
+     "prompt_eval_duration": 37002000,
+     "eval_duration": 2999147000,
+     "total_duration": 3057966300
+    },
+    "prompt_words": 504
+   },
+   {
+    "id": "mixed_stack",
+    "category": "mixed",
+    "seconds": 8.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Go\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've written Go professionally for four years.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Payments service\",\n      \"proposed_value\": \"a backend service for a payments system\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"A payments service.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Not convinced to move to Java\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"My colleague wants us to move to Java but I'm not convinced.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Decision on moving from Go to Java for a payments service\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss startup time and GraphQL implementation with the colleague\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Go",
+      "0.9",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Payments service",
+      "a backend service for a payments system",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 not convinced to move to java 0.7 active 2026-10-18t05:59:21z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       " go",
+       "golang"
+      ],
+      "learned": []
+     },
+     {
+      "keywords": [
+       "payment"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "graphql"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 991,
+     "eval_count": 260,
+     "done_reason": "stop",
+     "load_duration": 10776600,
+     "prompt_eval_duration": 56826000,
+     "eval_duration": 5818042000,
+     "total_duration": 5894554100
+    },
+    "prompt_words": 548
+   },
+   {
+    "id": "mixed_writing",
+    "category": "mixed",
+    "seconds": 7.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"LaTeX\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I write all my essays in LaTeX.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Word\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My supervisor prefers Word though, which is annoying.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'd like shorter answers by the way.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'd like shorter answers by the way.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"essay writing tools and preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Suggest a way to make answers shorter.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "LaTeX",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Word",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools latex 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "latex"
+      ],
+      "learned": [
+       "written"
+      ]
+     },
+     {
+      "keywords": [
+       "short",
+       "concise",
+       "brief"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "word"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "overleaf"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 974,
+     "eval_count": 243,
+     "done_reason": "stop",
+     "load_duration": 26296200,
+     "prompt_eval_duration": 51718000,
+     "eval_duration": 5461246000,
+     "total_duration": 5550898800
+    },
+    "prompt_words": 536
+   },
+   {
+    "id": "mixed_goal_and_maybe",
+    "category": "mixed",
+    "seconds": 6.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"run a half marathon in April\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to run a half marathon in April.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"planning for a half marathon\",\n    \"open_problems\": [\"lack of training plan\"],\n    \"last_decisions\": [\"run a half marathon in April\"],\n    \"suggested_next_step\": \"create a training plan\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "run a half marathon in April",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 user decided to run a half marathon in april. 0.7 active 2026-10-18t05:59:35z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals run a half marathon in april",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "half marathon"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "full marathon"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 974,
+     "eval_count": 204,
+     "done_reason": "stop",
+     "load_duration": 20305800,
+     "prompt_eval_duration": 50764000,
+     "eval_duration": 4544315000,
+     "total_duration": 4623870900
+    },
+    "prompt_words": 539
+   },
+   {
+    "id": "mixed_tools_and_question",
+    "category": "mixed",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Assistant: Simple and effective.\\nUser: Good, I'll stay put.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Stay with Docker Compose on a small VPS.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"User: Good, I'll stay put.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Deployment tools for a small VPS\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Stay with Docker Compose on a small VPS.\"],\n    \"suggested_next_step\": \"Continue using Docker Compose for deployment.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "docker"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "kubernetes"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 957,
+     "eval_count": 201,
+     "done_reason": "stop",
+     "load_duration": 21786900,
+     "prompt_eval_duration": 45977000,
+     "eval_duration": 4487087000,
+     "total_duration": 4569984100
+    },
+    "prompt_words": 521
+   }
+  ],
+  [
+   {
+    "id": "fact_editor",
+    "category": "fact",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Neovim for all my coding, it's the only editor I've kept for years.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Maybe later.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Maybe later.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Neovim as the preferred coding editor\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing plugin suggestions for Neovim\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools neovim 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "neovim"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 951,
+     "eval_count": 183,
+     "done_reason": "stop",
+     "load_duration": 21523000,
+     "prompt_eval_duration": 42514000,
+     "eval_duration": 4070064000,
+     "total_duration": 4142614800
+    },
+    "prompt_words": 517
+   },
+   {
+    "id": "fact_python_years",
+    "category": "fact",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've been writing Python professionally for six years now.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Python backend services\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss specific backend services projects\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.9",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 130,
+     "done_reason": "stop",
+     "load_duration": 24071600,
+     "prompt_eval_duration": 38801000,
+     "eval_duration": 2891544000,
+     "total_duration": 2966907800
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "fact_project",
+    "category": "fact",
+    "seconds": 5.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"a scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm working on Halyard, a scheduling app for sailing clubs.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Halyard app development\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"determine the backend technology for Halyard\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "active_projects",
+      "Halyard",
+      "a scheduling app for sailing clubs",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "halyard a scheduling app for sailing clubs",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "halyard"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 951,
+     "eval_count": 143,
+     "done_reason": "stop",
+     "load_duration": 25679200,
+     "prompt_eval_duration": 40368000,
+     "eval_duration": 3163054000,
+     "total_duration": 3241060300
+    },
+    "prompt_words": 517
+   },
+   {
+    "id": "fact_goal",
+    "category": "fact",
+    "seconds": 6.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"finish my thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"About half the chapters are written.\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"About half the chapters are written.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"thesis draft progress and deadline\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss strategies to meet the December deadline\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "finish my thesis draft by December",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "goal_memory",
+      "project_objectives",
+      "About half the chapters are written.",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals finish my thesis draft by december",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "thesis"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 205,
+     "done_reason": "stop",
+     "load_duration": 23488600,
+     "prompt_eval_duration": 39044000,
+     "eval_duration": 4545740000,
+     "total_duration": 4617441000
+    },
+    "prompt_words": 514
+   },
+   {
+    "id": "fact_short_answers",
+    "category": "fact",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"interaction_style\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user wants short answers.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Answer style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"The user wants short answers.\"],\n    \"suggested_next_step\": \"Provide concise answers.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "interaction_style",
+      "answer_style",
+      "concise",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "interaction_style",
+      "text": "answer_style concise",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "concise",
+       "short",
+       "brief"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 934,
+     "eval_count": 186,
+     "done_reason": "stop",
+     "load_duration": 24923200,
+     "prompt_eval_duration": 36352000,
+     "eval_duration": 4126254000,
+     "total_duration": 4197357100
+    },
+    "prompt_words": 506
+   },
+   {
+    "id": "fact_pytest",
+    "category": "fact",
+    "seconds": 5.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"pytest\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I always write my tests with pytest, it fits how I think.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"None explicitly stated.\",\n      \"signals_found\": [],\n      \"raw_quote\": \"None explicitly stated.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Testing tools preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss other testing frameworks or features.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "pytest",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools pytest 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "pytest"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 938,
+     "eval_count": 164,
+     "done_reason": "stop",
+     "load_duration": 18541300,
+     "prompt_eval_duration": 38432000,
+     "eval_duration": 3637896000,
+     "total_duration": 3703691300
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "fact_obsidian",
+    "category": "fact",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Obsidian\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep all my notes in Obsidian these days.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"note-taking tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing any specific needs or features for Obsidian\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Obsidian",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools obsidian 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "obsidian"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 135,
+     "done_reason": "stop",
+     "load_duration": 25320900,
+     "prompt_eval_duration": 38464000,
+     "eval_duration": 2992620000,
+     "total_duration": 3067039700
+    },
+    "prompt_words": 512
+   },
+   {
+    "id": "fact_typescript",
+    "category": "fact",
+    "seconds": 6.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"TypeScript\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Node.js\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Mostly plain Node.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's programming languages and frameworks\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing any specific projects or goals related to the user's work.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "TypeScript",
+      "0.9",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Node.js",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "typescript"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 937,
+     "eval_count": 206,
+     "done_reason": "stop",
+     "load_duration": 6565900,
+     "prompt_eval_duration": 33341000,
+     "eval_duration": 4626508000,
+     "total_duration": 4672018300
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "fact_detail",
+    "category": "fact",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"detailed explanations with worked examples\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I really like detailed explanations with worked examples, the short ones lose me.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"go into more detail\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'll go into more detail then.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"answer style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"go into more detail\"],\n    \"suggested_next_step\": \"provide detailed explanations with worked examples\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "detailed explanations with worked examples",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 answer_style detailed explanations with worked examples 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "detail",
+       "example"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 184,
+     "done_reason": "stop",
+     "load_duration": 8630500,
+     "prompt_eval_duration": 37477000,
+     "eval_duration": 4078536000,
+     "total_duration": 4132364200
+    },
+    "prompt_words": 511
+   },
+   {
+    "id": "fact_final_year",
+    "category": "fact",
+    "seconds": 5.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"PIP\",\n      \"proposed_value\": \"a personal assistant\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's final year project\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing the features or next steps of PIP\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "active_projects",
+      "PIP",
+      "a personal assistant",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "pip a personal assistant",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "pip"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 947,
+     "eval_count": 140,
+     "done_reason": "stop",
+     "load_duration": 24418900,
+     "prompt_eval_duration": 40073000,
+     "eval_duration": 3145278000,
+     "total_duration": 3221420900
+    },
+    "prompt_words": 514
+   },
+   {
+    "id": "fact_postgres_decision",
+    "category": "fact",
+    "seconds": 6.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"Move database to Postgres before the next release\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Move database to Postgres before the next release\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Database migration to Postgres\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Move database to Postgres before the next release\"],\n    \"suggested_next_step\": \"Create a migration plan for the database\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "Move database to Postgres before the next release",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 move database to postgres before the next release 0.7 active 2026-10-18t06:00:48z",
+      "label": "TRUE"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals move database to postgres before the next release",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "postgres"
+      ],
+      "learned": [
+       "written",
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 947,
+     "eval_count": 214,
+     "done_reason": "stop",
+     "load_duration": 14534600,
+     "prompt_eval_duration": 40272000,
+     "eval_duration": 4718050000,
+     "total_duration": 4781512500
+    },
+    "prompt_words": 516
+   },
+   {
+    "id": "fact_vector_clocks",
+    "category": "topic",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"sync\",\n      \"proposed_value\": \"sync is broken\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Right, I keep coming back to this because our sync is broken.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"vector clocks and synchronization issues\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss potential solutions for the sync issue\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "topic_interests",
+      "sync",
+      "sync is broken",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "vector clock"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 971,
+     "eval_count": 138,
+     "done_reason": "stop",
+     "load_duration": 12977300,
+     "prompt_eval_duration": 50664000,
+     "eval_duration": 3092781000,
+     "total_duration": 3163914500
+    },
+    "prompt_words": 539
+   },
+   {
+    "id": "fact_rust_learning",
+    "category": "fact",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm learning Rust in my spare time, mostly through small CLI tools.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"clap\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Yes.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Rust and using clap for CLI tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing more about Rust or clap usage\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Rust",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "clap",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "rust"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 201,
+     "done_reason": "stop",
+     "load_duration": 22573800,
+     "prompt_eval_duration": 39870000,
+     "eval_duration": 4462434000,
+     "total_duration": 4535339700
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "trap_sister",
+    "category": "third_party",
+    "seconds": 6.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Java\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll pass.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Ha, I'll pass.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Java programming language\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"I'll pass.\"],\n    \"suggested_next_step\": \"Discuss another programming language or tool.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Java",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "nurse",
+       "java"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 952,
+     "eval_count": 180,
+     "done_reason": "stop",
+     "load_duration": 20090200,
+     "prompt_eval_duration": 40067000,
+     "eval_duration": 4001675000,
+     "total_duration": 4070057000
+    },
+    "prompt_words": 519
+   },
+   {
+    "id": "trap_manager",
+    "category": "third_party",
+    "seconds": 4.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Jira\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not really.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"tool preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"exploring alternatives\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Jira",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "jira"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 119,
+     "done_reason": "stop",
+     "load_duration": 12924000,
+     "prompt_eval_duration": 37785000,
+     "eval_duration": 2647982000,
+     "total_duration": 2705968400
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "trap_professor",
+    "category": "third_party",
+    "seconds": 4.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Fortran\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not mine though.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"programming language preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss specific use cases\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Fortran",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "fortran"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 938,
+     "eval_count": 123,
+     "done_reason": "stop",
+     "load_duration": 9180000,
+     "prompt_eval_duration": 38495000,
+     "eval_duration": 2723512000,
+     "total_duration": 2778831400
+    },
+    "prompt_words": 509
+   },
+   {
+    "id": "trap_what_if",
+    "category": "hypothetical",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.6\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Elixir is great for concurrency, but it's a big rewrite.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Not worth rewriting the backend in Elixir.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Yeah, probably not worth it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"rewriting the backend in Elixir\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Not worth rewriting the backend in Elixir.\"],\n    \"suggested_next_step\": \"Evaluate other potential improvements for the backend.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Elixir",
+      "0.6",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 not worth rewriting the backend in elixir. 0.7 active 2026-10-18t06:01:22z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 947,
+     "eval_count": 201,
+     "done_reason": "stop",
+     "load_duration": 10622100,
+     "prompt_eval_duration": 40790000,
+     "eval_duration": 4491247000,
+     "total_duration": 4551345100
+    },
+    "prompt_words": 515
+   },
+   {
+    "id": "trap_would_haskell",
+    "category": "hypothetical",
+    "seconds": 3.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Haskell as a fit for a parser\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing other programming languages for parsers\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "haskell"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 68,
+     "done_reason": "stop",
+     "load_duration": 25305900,
+     "prompt_eval_duration": 38717000,
+     "eval_duration": 1501003000,
+     "total_duration": 1575127500
+    },
+    "prompt_words": 512
+   },
+   {
+    "id": "trap_might_swift",
+    "category": "hypothetical",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Swift\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing potential Apple development opportunities\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "swift"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 938,
+     "eval_count": 61,
+     "done_reason": "stop",
+     "load_duration": 21626500,
+     "prompt_eval_duration": 38366000,
+     "eval_duration": 1413960000,
+     "total_duration": 1483658300
+    },
+    "prompt_words": 509
+   },
+   {
+    "id": "trap_kafka_question",
+    "category": "question",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"difference between Kafka and RabbitMQ\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "kafka",
+       "rabbitmq"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 62,
+     "done_reason": "stop",
+     "load_duration": 20992800,
+     "prompt_eval_duration": 40287000,
+     "eval_duration": 1364660000,
+     "total_duration": 1435254200
+    },
+    "prompt_words": 511
+   },
+   {
+    "id": "trap_never_emacs",
+    "category": "negation",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I don't use Emacs, never have, and I don't plan to.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing other text editors\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "emacs"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 935,
+     "eval_count": 136,
+     "done_reason": "stop",
+     "load_duration": 16435400,
+     "prompt_eval_duration": 35806000,
+     "eval_duration": 3022223000,
+     "total_duration": 3082426900
+    },
+    "prompt_words": 505
+   },
+   {
+    "id": "trap_used_to_java",
+    "category": "past",
+    "seconds": 5.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I used to love Java back in school, but not anymore.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's preference shift from Java to other languages\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing alternative programming languages the user might be interested in.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Java",
+      "0.5",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 935,
+     "eval_count": 143,
+     "done_reason": "stop",
+     "load_duration": 15484500,
+     "prompt_eval_duration": 35657000,
+     "eval_duration": 3222554000,
+     "total_duration": 3282122300
+    },
+    "prompt_words": 507
+   },
+   {
+    "id": "retract_vim_helix",
+    "category": "retraction",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Helix\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I switched to Helix last year.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing the benefits of Helix\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Helix",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "helix"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "vim "
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 946,
+     "eval_count": 129,
+     "done_reason": "stop",
+     "load_duration": 8704700,
+     "prompt_eval_duration": 39375000,
+     "eval_duration": 2839335000,
+     "total_duration": 2894788500
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "retract_deadline",
+    "category": "retraction",
+    "seconds": 6.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"ship the beta in May\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"to ship the beta in May\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"beta release timeline\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"to ship the beta in May\"],\n    \"suggested_next_step\": \"confirm the new release date with stakeholders\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "ship the beta in May",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 to ship the beta in may 0.7 active 2026-10-18t06:01:56z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals ship the beta in may",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "may",
+       "beta"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "march"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 945,
+     "eval_count": 216,
+     "done_reason": "stop",
+     "load_duration": 14921000,
+     "prompt_eval_duration": 39068000,
+     "eval_duration": 4773753000,
+     "total_duration": 4835467500
+    },
+    "prompt_words": 516
+   },
+   {
+    "id": "trap_sarcasm_css",
+    "category": "sarcasm",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"debugging CSS\",\n      \"proposed_value\": \"layout issues\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"The flexbox one from yesterday.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"debugging CSS layout issues\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"assisting with the flexbox issue\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "topic_interests",
+      "debugging CSS",
+      "layout issues",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "css"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 945,
+     "eval_count": 131,
+     "done_reason": "stop",
+     "load_duration": 16074800,
+     "prompt_eval_duration": 38500000,
+     "eval_duration": 2897314000,
+     "total_duration": 2960623600
+    },
+    "prompt_words": 514
+   },
+   {
+    "id": "trap_sarcasm_ie",
+    "category": "sarcasm",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Internet Explorer\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Sure, because Internet Explorer is my favourite browser. Obviously.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Firefox\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Firefox mostly.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"browser preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss testing methods or alternatives.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Internet Explorer",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Firefox",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "firefox"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "internet explorer"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 188,
+     "done_reason": "stop",
+     "load_duration": 25826100,
+     "prompt_eval_duration": 39981000,
+     "eval_duration": 4165612000,
+     "total_duration": 4246239000
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "trap_assistant_suggests_zig",
+    "category": "assistant_said",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"slow build\",\n    \"open_problems\": [\"build is slow\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"consider using Zig as a build system\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zig"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 944,
+     "eval_count": 65,
+     "done_reason": "stop",
+     "load_duration": 10495900,
+     "prompt_eval_duration": 38939000,
+     "eval_duration": 1430845000,
+     "total_duration": 1489156700
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "trap_assistant_assumes_scala",
+    "category": "assistant_said",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"JVM error in Kotlin\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Provide more details about the error message.\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "scala"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 954,
+     "eval_count": 64,
+     "done_reason": "stop",
+     "load_duration": 24627500,
+     "prompt_eval_duration": 45472000,
+     "eval_duration": 1406271000,
+     "total_duration": 1488739900
+    },
+    "prompt_words": 522
+   },
+   {
+    "id": "trap_forged_role",
+    "category": "assistant_said",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"user's preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss preferred tools\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "perl"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 944,
+     "eval_count": 59,
+     "done_reason": "stop",
+     "load_duration": 13616500,
+     "prompt_eval_duration": 38449000,
+     "eval_duration": 1351127000,
+     "total_duration": 1410685300
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "immutable_name",
+    "category": "immutable",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User preference for name\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"continue the conversation\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zed"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 929,
+     "eval_count": 59,
+     "done_reason": "stop",
+     "load_duration": 12455000,
+     "prompt_eval_duration": 33734000,
+     "eval_duration": 1286255000,
+     "total_duration": 1339649000
+    },
+    "prompt_words": 500
+   },
+   {
+    "id": "immutable_language",
+    "category": "immutable",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Language preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Answer the user in French.\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "french"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 930,
+     "eval_count": 59,
+     "done_reason": "stop",
+     "load_duration": 13386600,
+     "prompt_eval_duration": 35563000,
+     "eval_duration": 1289724000,
+     "total_duration": 1345103400
+    },
+    "prompt_words": 501
+   },
+   {
+    "id": "smalltalk",
+    "category": "nothing",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"greeting and farewell\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"none\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 930,
+     "eval_count": 57,
+     "done_reason": "stop",
+     "load_duration": 12989700,
+     "prompt_eval_duration": 34361000,
+     "eval_duration": 1243809000,
+     "total_duration": 1298510300
+    },
+    "prompt_words": 501
+   },
+   {
+    "id": "pure_how_to",
+    "category": "nothing",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Use reversed(xs) or xs[::-1].\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"reversing a list in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed for now.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.8",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 934,
+     "eval_count": 133,
+     "done_reason": "stop",
+     "load_duration": 13608500,
+     "prompt_eval_duration": 35907000,
+     "eval_duration": 2923447000,
+     "total_duration": 2980074300
+    },
+    "prompt_words": 504
+   },
+   {
+    "id": "mixed_stack",
+    "category": "mixed",
+    "seconds": 7.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Go\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've written Go professionally for four years.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Payments service\",\n      \"proposed_value\": \"a backend service for a payments system\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"A payments service.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Not convinced to move to Java\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"My colleague wants us to move to Java but I'm not convinced.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Decision on moving from Go to Java for a payments service\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss startup time and GraphQL implementation with the colleague\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Go",
+      "0.9",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Payments service",
+      "a backend service for a payments system",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 not convinced to move to java 0.7 active 2026-10-18t06:02:41z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       " go",
+       "golang"
+      ],
+      "learned": []
+     },
+     {
+      "keywords": [
+       "payment"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "graphql"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 991,
+     "eval_count": 260,
+     "done_reason": "stop",
+     "load_duration": 8959600,
+     "prompt_eval_duration": 56222000,
+     "eval_duration": 5726080000,
+     "total_duration": 5799183000
+    },
+    "prompt_words": 548
+   },
+   {
+    "id": "mixed_writing",
+    "category": "mixed",
+    "seconds": 7.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"LaTeX\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I write all my essays in LaTeX.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Word\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My supervisor prefers Word though, which is annoying.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'd like shorter answers by the way.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'd like shorter answers by the way.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"essay writing tools and preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Suggest a way to make answers shorter.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "LaTeX",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Word",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools latex 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "latex"
+      ],
+      "learned": [
+       "written"
+      ]
+     },
+     {
+      "keywords": [
+       "short",
+       "concise",
+       "brief"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "word"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "overleaf"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 974,
+     "eval_count": 243,
+     "done_reason": "stop",
+     "load_duration": 15855300,
+     "prompt_eval_duration": 50323000,
+     "eval_duration": 5373333000,
+     "total_duration": 5449481200
+    },
+    "prompt_words": 536
+   },
+   {
+    "id": "mixed_goal_and_maybe",
+    "category": "mixed",
+    "seconds": 6.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"run a half marathon in April\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to run a half marathon in April.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"planning for a half marathon\",\n    \"open_problems\": [\"lack of training plan\"],\n    \"last_decisions\": [\"run a half marathon in April\"],\n    \"suggested_next_step\": \"create a training plan\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "run a half marathon in April",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 user decided to run a half marathon in april. 0.7 active 2026-10-18t06:02:56z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals run a half marathon in april",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "half marathon"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "full marathon"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 974,
+     "eval_count": 204,
+     "done_reason": "stop",
+     "load_duration": 14610100,
+     "prompt_eval_duration": 50124000,
+     "eval_duration": 4496446000,
+     "total_duration": 4568292900
+    },
+    "prompt_words": 539
+   },
+   {
+    "id": "mixed_tools_and_question",
+    "category": "mixed",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Assistant: Simple and effective.\\nUser: Good, I'll stay put.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Stay with Docker Compose on a small VPS.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"User: Good, I'll stay put.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Deployment tools for a small VPS\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Stay with Docker Compose on a small VPS.\"],\n    \"suggested_next_step\": \"Continue using Docker Compose for deployment.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "docker"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "kubernetes"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 957,
+     "eval_count": 201,
+     "done_reason": "stop",
+     "load_duration": 9232200,
+     "prompt_eval_duration": 44461000,
+     "eval_duration": 4423884000,
+     "total_duration": 4484330300
+    },
+    "prompt_words": 521
+   }
+  ],
+  [
+   {
+    "id": "fact_editor",
+    "category": "fact",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I use Neovim for all my coding, it's the only editor I've kept for years.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Maybe later.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Maybe later.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Neovim as the preferred coding editor\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing plugin suggestions for Neovim\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools neovim 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "neovim"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 951,
+     "eval_count": 183,
+     "done_reason": "stop",
+     "load_duration": 14296900,
+     "prompt_eval_duration": 39961000,
+     "eval_duration": 4018308000,
+     "total_duration": 4079455800
+    },
+    "prompt_words": 517
+   },
+   {
+    "id": "fact_python_years",
+    "category": "fact",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've been writing Python professionally for six years now.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Python backend services\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss specific backend services projects\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.9",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 130,
+     "done_reason": "stop",
+     "load_duration": 12979700,
+     "prompt_eval_duration": 38545000,
+     "eval_duration": 2854468000,
+     "total_duration": 2913067100
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "fact_project",
+    "category": "fact",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Halyard\",\n      \"proposed_value\": \"a scheduling app for sailing clubs\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm working on Halyard, a scheduling app for sailing clubs.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Halyard app development\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"determine the backend technology for Halyard\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "active_projects",
+      "Halyard",
+      "a scheduling app for sailing clubs",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "halyard a scheduling app for sailing clubs",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "halyard"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 951,
+     "eval_count": 143,
+     "done_reason": "stop",
+     "load_duration": 17836100,
+     "prompt_eval_duration": 39757000,
+     "eval_duration": 3144669000,
+     "total_duration": 3209968800
+    },
+    "prompt_words": 517
+   },
+   {
+    "id": "fact_goal",
+    "category": "fact",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"finish my thesis draft by December\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My goal is to finish my thesis draft by December.\"\n    },\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"project_objectives\",\n      \"proposed_value\": \"About half the chapters are written.\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"About half the chapters are written.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"thesis draft progress and deadline\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss strategies to meet the December deadline\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "finish my thesis draft by December",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ],
+     [
+      "goal_memory",
+      "project_objectives",
+      "About half the chapters are written.",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals finish my thesis draft by december",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "thesis"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 205,
+     "done_reason": "stop",
+     "load_duration": 13674500,
+     "prompt_eval_duration": 39180000,
+     "eval_duration": 4519745000,
+     "total_duration": 4579883900
+    },
+    "prompt_words": 514
+   },
+   {
+    "id": "fact_short_answers",
+    "category": "fact",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"interaction_style\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"The user wants short answers.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Please keep your answers short from now on, I just want the answer.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Answer style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"The user wants short answers.\"],\n    \"suggested_next_step\": \"Provide concise answers.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "interaction_style",
+      "answer_style",
+      "concise",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "interaction_style",
+      "text": "answer_style concise",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "concise",
+       "short",
+       "brief"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 934,
+     "eval_count": 186,
+     "done_reason": "stop",
+     "load_duration": 15134800,
+     "prompt_eval_duration": 36607000,
+     "eval_duration": 4099194999,
+     "total_duration": 4158390200
+    },
+    "prompt_words": 506
+   },
+   {
+    "id": "fact_pytest",
+    "category": "fact",
+    "seconds": 5.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"pytest\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I always write my tests with pytest, it fits how I think.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"None explicitly stated.\",\n      \"signals_found\": [],\n      \"raw_quote\": \"None explicitly stated.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Testing tools preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss other testing frameworks or features.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "pytest",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools pytest 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "pytest"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 938,
+     "eval_count": 164,
+     "done_reason": "stop",
+     "load_duration": 14083800,
+     "prompt_eval_duration": 39087000,
+     "eval_duration": 3618234000,
+     "total_duration": 3679679600
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "fact_obsidian",
+    "category": "fact",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Obsidian\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I keep all my notes in Obsidian these days.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"note-taking tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing any specific needs or features for Obsidian\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Obsidian",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools obsidian 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "obsidian"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 135,
+     "done_reason": "stop",
+     "load_duration": 15186500,
+     "prompt_eval_duration": 38168000,
+     "eval_duration": 2969519000,
+     "total_duration": 3030756100
+    },
+    "prompt_words": 512
+   },
+   {
+    "id": "fact_typescript",
+    "category": "fact",
+    "seconds": 6.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"TypeScript\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I work mostly in TypeScript these days, at work and at home.\"\n    },\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Node.js\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Mostly plain Node.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's programming languages and frameworks\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing any specific projects or goals related to the user's work.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "TypeScript",
+      "0.9",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "skill_memory",
+      "Node.js",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "typescript"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 937,
+     "eval_count": 206,
+     "done_reason": "stop",
+     "load_duration": 14022300,
+     "prompt_eval_duration": 35707000,
+     "eval_duration": 4550161000,
+     "total_duration": 4607421900
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "fact_detail",
+    "category": "fact",
+    "seconds": 6.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"detailed explanations with worked examples\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I really like detailed explanations with worked examples, the short ones lose me.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"go into more detail\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'll go into more detail then.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"answer style preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"go into more detail\"],\n    \"suggested_next_step\": \"provide detailed explanations with worked examples\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "answer_style",
+      "detailed explanations with worked examples",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 answer_style detailed explanations with worked examples 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "detail",
+       "example"
+      ],
+      "learned": [
+       "written"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 184,
+     "done_reason": "stop",
+     "load_duration": 9282600,
+     "prompt_eval_duration": 37517000,
+     "eval_duration": 4073250000,
+     "total_duration": 4127012000
+    },
+    "prompt_words": 511
+   },
+   {
+    "id": "fact_final_year",
+    "category": "fact",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"PIP\",\n      \"proposed_value\": \"a personal assistant\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm building PIP, a personal assistant, as my final year project.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's final year project\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing the features or next steps of PIP\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "active_projects",
+      "PIP",
+      "a personal assistant",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [],
+    "learned": [
+     {
+      "kind": "queued",
+      "table": "active_projects",
+      "text": "pip a personal assistant",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "pip"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 947,
+     "eval_count": 140,
+     "done_reason": "stop",
+     "load_duration": 14322200,
+     "prompt_eval_duration": 40112000,
+     "eval_duration": 3081168000,
+     "total_duration": 3142268400
+    },
+    "prompt_words": 514
+   },
+   {
+    "id": "fact_postgres_decision",
+    "category": "fact",
+    "seconds": 6.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"Move database to Postgres before the next release\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Move database to Postgres before the next release\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to move our database to Postgres before the next release.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Database migration to Postgres\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Move database to Postgres before the next release\"],\n    \"suggested_next_step\": \"Create a migration plan for the database\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "Move database to Postgres before the next release",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 move database to postgres before the next release 0.7 active 2026-10-18t06:04:08z",
+      "label": "TRUE"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals move database to postgres before the next release",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "postgres"
+      ],
+      "learned": [
+       "written",
+       "queued"
+      ]
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 947,
+     "eval_count": 214,
+     "done_reason": "stop",
+     "load_duration": 13883500,
+     "prompt_eval_duration": 41472000,
+     "eval_duration": 4721479000,
+     "total_duration": 4784422900
+    },
+    "prompt_words": 516
+   },
+   {
+    "id": "fact_vector_clocks",
+    "category": "topic",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"sync\",\n      \"proposed_value\": \"sync is broken\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Right, I keep coming back to this because our sync is broken.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"vector clocks and synchronization issues\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss potential solutions for the sync issue\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "topic_interests",
+      "sync",
+      "sync is broken",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "vector clock"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 971,
+     "eval_count": 138,
+     "done_reason": "stop",
+     "load_duration": 12733300,
+     "prompt_eval_duration": 49166000,
+     "eval_duration": 3042275000,
+     "total_duration": 3111122900
+    },
+    "prompt_words": 539
+   },
+   {
+    "id": "fact_rust_learning",
+    "category": "fact",
+    "seconds": 6.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Rust\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm learning Rust in my spare time, mostly through small CLI tools.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"clap\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Yes.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Rust and using clap for CLI tools\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing more about Rust or clap usage\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Rust",
+      "0.8",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "clap",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "rust"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 201,
+     "done_reason": "stop",
+     "load_duration": 9928000,
+     "prompt_eval_duration": 37856000,
+     "eval_duration": 4432082000,
+     "total_duration": 4486056200
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "trap_sister",
+    "category": "third_party",
+    "seconds": 6.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Java\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My sister is a nurse and she loves Java, she keeps telling me to learn it.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'll pass.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"Ha, I'll pass.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Java programming language\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"I'll pass.\"],\n    \"suggested_next_step\": \"Discuss another programming language or tool.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Java",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "nurse",
+       "java"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 952,
+     "eval_count": 180,
+     "done_reason": "stop",
+     "load_duration": 17490400,
+     "prompt_eval_duration": 40226000,
+     "eval_duration": 3973012000,
+     "total_duration": 4039849100
+    },
+    "prompt_words": 519
+   },
+   {
+    "id": "trap_manager",
+    "category": "third_party",
+    "seconds": 4.8,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Jira\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not really.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"tool preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"exploring alternatives\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Jira",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "jira"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 119,
+     "done_reason": "stop",
+     "load_duration": 20212300,
+     "prompt_eval_duration": 37929000,
+     "eval_duration": 2628002000,
+     "total_duration": 2695113800
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "trap_professor",
+    "category": "third_party",
+    "seconds": 4.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Fortran\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Not mine though.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"programming language preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss specific use cases\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Fortran",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "fortran"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 938,
+     "eval_count": 123,
+     "done_reason": "stop",
+     "load_duration": 22781200,
+     "prompt_eval_duration": 37322000,
+     "eval_duration": 2727380000,
+     "total_duration": 2801917200
+    },
+    "prompt_words": 509
+   },
+   {
+    "id": "trap_what_if",
+    "category": "hypothetical",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Elixir\",\n      \"proposed_value\": \"0.6\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Elixir is great for concurrency, but it's a big rewrite.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Not worth rewriting the backend in Elixir.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"Yeah, probably not worth it.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"rewriting the backend in Elixir\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Not worth rewriting the backend in Elixir.\"],\n    \"suggested_next_step\": \"Evaluate other potential improvements for the backend.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Elixir",
+      "0.6",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 not worth rewriting the backend in elixir. 0.7 active 2026-10-18t06:04:42z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "elixir"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 947,
+     "eval_count": 201,
+     "done_reason": "stop",
+     "load_duration": 19933300,
+     "prompt_eval_duration": 40301000,
+     "eval_duration": 4435578000,
+     "total_duration": 4502938100
+    },
+    "prompt_words": 515
+   },
+   {
+    "id": "trap_would_haskell",
+    "category": "hypothetical",
+    "seconds": 3.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Haskell as a fit for a parser\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing other programming languages for parsers\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "haskell"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 68,
+     "done_reason": "stop",
+     "load_duration": 15514700,
+     "prompt_eval_duration": 37662000,
+     "eval_duration": 1493297000,
+     "total_duration": 1555232200
+    },
+    "prompt_words": 512
+   },
+   {
+    "id": "trap_might_swift",
+    "category": "hypothetical",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"learning Swift\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing potential Apple development opportunities\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "swift"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 938,
+     "eval_count": 61,
+     "done_reason": "stop",
+     "load_duration": 16127700,
+     "prompt_eval_duration": 38709000,
+     "eval_duration": 1348469000,
+     "total_duration": 1413030700
+    },
+    "prompt_words": 509
+   },
+   {
+    "id": "trap_kafka_question",
+    "category": "question",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"difference between Kafka and RabbitMQ\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "kafka",
+       "rabbitmq"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 942,
+     "eval_count": 62,
+     "done_reason": "stop",
+     "load_duration": 21576700,
+     "prompt_eval_duration": 39912000,
+     "eval_duration": 1368982000,
+     "total_duration": 1445980600
+    },
+    "prompt_words": 511
+   },
+   {
+    "id": "trap_never_emacs",
+    "category": "negation",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Neovim\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I don't use Emacs, never have, and I don't plan to.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing other text editors\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Neovim",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "emacs"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 935,
+     "eval_count": 136,
+     "done_reason": "stop",
+     "load_duration": 11135700,
+     "prompt_eval_duration": 36979000,
+     "eval_duration": 2995516000,
+     "total_duration": 3051550100
+    },
+    "prompt_words": 505
+   },
+   {
+    "id": "trap_used_to_java",
+    "category": "past",
+    "seconds": 5.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Java\",\n      \"proposed_value\": \"0.5\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I used to love Java back in school, but not anymore.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User's preference shift from Java to other languages\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discussing alternative programming languages the user might be interested in.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Java",
+      "0.5",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 935,
+     "eval_count": 143,
+     "done_reason": "stop",
+     "load_duration": 14134500,
+     "prompt_eval_duration": 35353000,
+     "eval_duration": 3156151000,
+     "total_duration": 3213043500
+    },
+    "prompt_words": 507
+   },
+   {
+    "id": "retract_vim_helix",
+    "category": "retraction",
+    "seconds": 5.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Helix\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I switched to Helix last year.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"text editors\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discussing the benefits of Helix\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Helix",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "helix"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "vim "
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 946,
+     "eval_count": 129,
+     "done_reason": "stop",
+     "load_duration": 24885900,
+     "prompt_eval_duration": 41143000,
+     "eval_duration": 2872926000,
+     "total_duration": 2949377800
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "retract_deadline",
+    "category": "retraction",
+    "seconds": 7.0,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"ship the beta in May\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"to ship the beta in May\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I'm aiming to ship the beta in March. Sorry, I mean May - March was the old plan.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"beta release timeline\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"to ship the beta in May\"],\n    \"suggested_next_step\": \"confirm the new release date with stakeholders\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "ship the beta in May",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 to ship the beta in may 0.7 active 2026-10-18t06:05:15z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals ship the beta in may",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "may",
+       "beta"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "march"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 945,
+     "eval_count": 216,
+     "done_reason": "stop",
+     "load_duration": 23115800,
+     "prompt_eval_duration": 38787000,
+     "eval_duration": 4815604000,
+     "total_duration": 4886083700
+    },
+    "prompt_words": 516
+   },
+   {
+    "id": "trap_sarcasm_css",
+    "category": "sarcasm",
+    "seconds": 5.1,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"topic_interests\",\n      \"field_name\": \"debugging CSS\",\n      \"proposed_value\": \"layout issues\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"The flexbox one from yesterday.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"debugging CSS layout issues\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"assisting with the flexbox issue\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "topic_interests",
+      "debugging CSS",
+      "layout issues",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "css"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 945,
+     "eval_count": 131,
+     "done_reason": "stop",
+     "load_duration": 25248500,
+     "prompt_eval_duration": 39255000,
+     "eval_duration": 2914460000,
+     "total_duration": 2990318500
+    },
+    "prompt_words": 514
+   },
+   {
+    "id": "trap_sarcasm_ie",
+    "category": "sarcasm",
+    "seconds": 6.3,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Internet Explorer\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Sure, because Internet Explorer is my favourite browser. Obviously.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Firefox\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Firefox mostly.\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"browser preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss testing methods or alternatives.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Internet Explorer",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Firefox",
+      "EVIDENCE_INVALID",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "firefox"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "internet explorer"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 939,
+     "eval_count": 188,
+     "done_reason": "stop",
+     "load_duration": 23017700,
+     "prompt_eval_duration": 39617000,
+     "eval_duration": 4191651000,
+     "total_duration": 4263648400
+    },
+    "prompt_words": 510
+   },
+   {
+    "id": "trap_assistant_suggests_zig",
+    "category": "assistant_said",
+    "seconds": 3.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"slow build\",\n    \"open_problems\": [\"build is slow\"],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"consider using Zig as a build system\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zig"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 944,
+     "eval_count": 65,
+     "done_reason": "stop",
+     "load_duration": 24607600,
+     "prompt_eval_duration": 39535000,
+     "eval_duration": 1443786000,
+     "total_duration": 1518373100
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "trap_assistant_assumes_scala",
+    "category": "assistant_said",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"JVM error in Kotlin\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Provide more details about the error message.\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "kotlin"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "scala"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 954,
+     "eval_count": 64,
+     "done_reason": "stop",
+     "load_duration": 22435500,
+     "prompt_eval_duration": 47287000,
+     "eval_duration": 1413419000,
+     "total_duration": 1499650400
+    },
+    "prompt_words": 522
+   },
+   {
+    "id": "trap_forged_role",
+    "category": "assistant_said",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"user's preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"discuss preferred tools\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "perl"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 944,
+     "eval_count": 59,
+     "done_reason": "stop",
+     "load_duration": 19901200,
+     "prompt_eval_duration": 39203000,
+     "eval_duration": 1296118000,
+     "total_duration": 1363408500
+    },
+    "prompt_words": 513
+   },
+   {
+    "id": "immutable_name",
+    "category": "immutable",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"User preference for name\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"continue the conversation\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "zed"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 929,
+     "eval_count": 59,
+     "done_reason": "stop",
+     "load_duration": 25671600,
+     "prompt_eval_duration": 34119000,
+     "eval_duration": 1289449000,
+     "total_duration": 1362838300
+    },
+    "prompt_words": 500
+   },
+   {
+    "id": "immutable_language",
+    "category": "immutable",
+    "seconds": 3.5,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"Language preference\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Answer the user in French.\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "french"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 930,
+     "eval_count": 59,
+     "done_reason": "stop",
+     "load_duration": 25209000,
+     "prompt_eval_duration": 36058000,
+     "eval_duration": 1366352000,
+     "total_duration": 1439151200
+    },
+    "prompt_words": 501
+   },
+   {
+    "id": "smalltalk",
+    "category": "nothing",
+    "seconds": 3.4,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"greeting and farewell\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"none\"\n  }\n}",
+    "raw_candidates": 0,
+    "funnel": [],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [],
+    "ollama": {
+     "prompt_eval_count": 930,
+     "eval_count": 57,
+     "done_reason": "stop",
+     "load_duration": 23612700,
+     "prompt_eval_duration": 36280000,
+     "eval_duration": 1259139000,
+     "total_duration": 1329688600
+    },
+    "prompt_words": 501
+   },
+   {
+    "id": "pure_how_to",
+    "category": "nothing",
+    "seconds": 5.2,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Python\",\n      \"proposed_value\": \"0.8\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Use reversed(xs) or xs[::-1].\"\n    }\n  ],\n  \"decision_candidates\": [],\n  \"session_snapshot\": {\n    \"topic\": \"reversing a list in Python\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"No further action needed for now.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "skill_memory",
+      "Python",
+      "0.8",
+      "EVIDENCE_NOT_USER_SOURCE",
+      "HARD_REJECT",
+      "rejected"
+     ]
+    ],
+    "decisions": [],
+    "learned": [],
+    "facts": [],
+    "traps": [
+     {
+      "keywords": [
+       "python"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 934,
+     "eval_count": 133,
+     "done_reason": "stop",
+     "load_duration": 68616400,
+     "prompt_eval_duration": 36431000,
+     "eval_duration": 2950243000,
+     "total_duration": 3064114100
+    },
+    "prompt_words": 504
+   },
+   {
+    "id": "mixed_stack",
+    "category": "mixed",
+    "seconds": 7.9,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"skill_memory\",\n      \"field_name\": \"Go\",\n      \"proposed_value\": \"0.9\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've written Go professionally for four years.\"\n    },\n    {\n      \"target_table\": \"active_projects\",\n      \"field_name\": \"Payments service\",\n      \"proposed_value\": \"a backend service for a payments system\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"A payments service.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Not convinced to move to Java\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"My colleague wants us to move to Java but I'm not convinced.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Decision on moving from Go to Java for a payments service\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Discuss startup time and GraphQL implementation with the colleague\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "skill_memory",
+      "Go",
+      "0.9",
+      "EVIDENCE_SUFFICIENT",
+      "DISCARD",
+      "rejected"
+     ],
+     [
+      "active_projects",
+      "Payments service",
+      "a backend service for a payments system",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 not convinced to move to java 0.7 active 2026-10-18t06:06:01z",
+      "label": "UNLABELLED"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       " go",
+       "golang"
+      ],
+      "learned": []
+     },
+     {
+      "keywords": [
+       "payment"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "java"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "graphql"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 991,
+     "eval_count": 260,
+     "done_reason": "stop",
+     "load_duration": 9098300,
+     "prompt_eval_duration": 54830000,
+     "eval_duration": 5750076000,
+     "total_duration": 5821628900
+    },
+    "prompt_words": 548
+   },
+   {
+    "id": "mixed_writing",
+    "category": "mixed",
+    "seconds": 7.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"LaTeX\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I write all my essays in LaTeX.\"\n    },\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"preferred_tools\",\n      \"proposed_value\": \"Word\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"My supervisor prefers Word though, which is annoying.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"I'd like shorter answers by the way.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"I'd like shorter answers by the way.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"essay writing tools and preferences\",\n    \"open_problems\": [],\n    \"last_decisions\": [],\n    \"suggested_next_step\": \"Suggest a way to make answers shorter.\"\n  }\n}",
+    "raw_candidates": 2,
+    "funnel": [
+     [
+      "preference_memory",
+      "preferred_tools",
+      "LaTeX",
+      "EVIDENCE_SUFFICIENT",
+      "APPROVED",
+      "written"
+     ],
+     [
+      "preference_memory",
+      "preferred_tools",
+      "Word",
+      "EVIDENCE_NOT_ENTAILING",
+      "DISCARD",
+      "rejected"
+     ]
+    ],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "preference_memory",
+      "text": "1 preferred_tools latex 1 explicit 0 0.18 active",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "latex"
+      ],
+      "learned": [
+       "written"
+      ]
+     },
+     {
+      "keywords": [
+       "short",
+       "concise",
+       "brief"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "word"
+      ],
+      "hit": false
+     },
+     {
+      "keywords": [
+       "overleaf"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 974,
+     "eval_count": 243,
+     "done_reason": "stop",
+     "load_duration": 12623000,
+     "prompt_eval_duration": 50783000,
+     "eval_duration": 5420597000,
+     "total_duration": 5491465200
+    },
+    "prompt_words": 536
+   },
+   {
+    "id": "mixed_goal_and_maybe",
+    "category": "mixed",
+    "seconds": 6.7,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"goal_memory\",\n      \"field_name\": \"active_goals\",\n      \"proposed_value\": \"run a half marathon in April\",\n      \"label\": \"explicit\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"User decided to run a half marathon in April.\",\n      \"signals_found\": [\"explicit_reasoning_in_conversation\", \"commitment_language\"],\n      \"raw_quote\": \"I've decided to run a half marathon in April.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"planning for a half marathon\",\n    \"open_problems\": [\"lack of training plan\"],\n    \"last_decisions\": [\"run a half marathon in April\"],\n    \"suggested_next_step\": \"create a training plan\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [
+     [
+      "goal_memory",
+      "active_goals",
+      "run a half marathon in April",
+      "EVIDENCE_SUFFICIENT",
+      "REQUIRES_CONFIRMATION",
+      "pending"
+     ]
+    ],
+    "decisions": [
+     "logged"
+    ],
+    "learned": [
+     {
+      "kind": "written",
+      "table": "decision_log",
+      "text": "1 user decided to run a half marathon in april. 0.7 active 2026-10-18t06:06:16z",
+      "label": "UNLABELLED"
+     },
+     {
+      "kind": "queued",
+      "table": "goal_memory",
+      "text": "active_goals run a half marathon in april",
+      "label": "TRUE"
+     }
+    ],
+    "facts": [
+     {
+      "keywords": [
+       "half marathon"
+      ],
+      "learned": [
+       "queued"
+      ]
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "full marathon"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 974,
+     "eval_count": 204,
+     "done_reason": "stop",
+     "load_duration": 24828300,
+     "prompt_eval_duration": 52015000,
+     "eval_duration": 4553145000,
+     "total_duration": 4640940200
+    },
+    "prompt_words": 539
+   },
+   {
+    "id": "mixed_tools_and_question",
+    "category": "mixed",
+    "seconds": 6.6,
+    "error": null,
+    "raw_text": "{\n  \"memory_candidates\": [\n    {\n      \"target_table\": \"preference_memory\",\n      \"field_name\": \"answer_style\",\n      \"proposed_value\": \"concise\",\n      \"label\": \"inferred\",\n      \"evidence_count\": 1,\n      \"evidence_text\": \"Assistant: Simple and effective.\\nUser: Good, I'll stay put.\"\n    }\n  ],\n  \"decision_candidates\": [\n    {\n      \"decision_text\": \"Stay with Docker Compose on a small VPS.\",\n      \"signals_found\": [\"commitment_language\"],\n      \"raw_quote\": \"User: Good, I'll stay put.\"\n    }\n  ],\n  \"session_snapshot\": {\n    \"topic\": \"Deployment tools for a small VPS\",\n    \"open_problems\": [],\n    \"last_decisions\": [\"Stay with Docker Compose on a small VPS.\"],\n    \"suggested_next_step\": \"Continue using Docker Compose for deployment.\"\n  }\n}",
+    "raw_candidates": 1,
+    "funnel": [],
+    "decisions": [
+     "pending"
+    ],
+    "learned": [],
+    "facts": [
+     {
+      "keywords": [
+       "docker"
+      ],
+      "learned": []
+     }
+    ],
+    "traps": [
+     {
+      "keywords": [
+       "kubernetes"
+      ],
+      "hit": false
+     }
+    ],
+    "ollama": {
+     "prompt_eval_count": 957,
+     "eval_count": 201,
+     "done_reason": "stop",
+     "load_duration": 11464500,
+     "prompt_eval_duration": 45030000,
+     "eval_duration": 4499241000,
+     "total_duration": 4563791400
+    },
+    "prompt_words": 521
+   }
+  ]
+ ]
+}

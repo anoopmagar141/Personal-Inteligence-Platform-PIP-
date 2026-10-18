@@ -3634,6 +3634,58 @@ confirmation step stopped the write; the user would have been asked. No code cha
 - What Ollama drops when the output overflows the window (the 2,700-word chat) is not visible in its counts.
 - `pip-work/v2-runs` (a detached worktree at 4744eda) was left in place for later runs.
 
+### 7.56 W-1: one settings block - a 16k window, qwen2.5:7b, temperature 0.0 (authorized 2026-10-16, built and measured 2026-10-18)
+
+The final plan's step 3 (BLUEPRINT W-1; issues #4, #6 and the 16k half of #5).
+
+- **Defect (from V-2, §7.55):** `OllamaProvider.chat` sent only `num_predict`, so chat and the Observer ran in
+  Ollama's default window, 4096 tokens on this 8 GB GPU, and a longer prompt was cut silently from the front:
+  on a 4,800-word chat the Observer's instructions were never read. PIP budgets in words (1.41 tokens a word
+  of prose, 1.86 of the Observer's instructions). The default model was llama3.1:8b in
+  `pipeline.DEFAULT_MODEL_NAME` and in `OllamaProvider`, and `settings.json` named an `observer.model` nothing
+  read, while every measured number is on qwen2.5:7b (DEC-17).
+- **Mechanism (b3f1eb2):** `settings.json` `llm`: `default_model` qwen2.5:7b, `num_ctx` 16384, `temperature`,
+  `tokens_per_word` 2.0 (above every measured ratio). `pipeline.DEFAULT_MODEL_NAME` and `OllamaProvider`'s
+  default read it; `observer.model` is gone. Every request, chat and Observer alike, sends the same `num_ctx`.
+  The Observer's transcript cap follows from the window, 6,576 words (it was 8,000 checked against nothing).
+  Before sending, the provider estimates the prompt at the safe ratio and flags one that would not fit;
+  after, it keeps Ollama's `prompt_eval_count`, and the Stage 9 and Observer trace lines record it with the
+  window. The observer harness's stamp records the options really sent.
+- **Tests:** `backend/tests/test_llm_settings_block.py`, 13, through a fake `/api/chat` server that records the
+  request. 12 failed on 4744eda; the 13th, the chosen temperature, failed before the value was set. Three
+  tests changed with reason (two pinned "no `num_ctx` is sent"; one used qwen2.5:7b as "another model being
+  downloaded", now the default).
+- **Break-it:** 7 mutations, each alone, restored byte for byte, each caught: no window sent (7 tests); a
+  temperature sent before one is chosen (1); the pipeline default back to llama3.1:8b (2); the Observer cap
+  ignoring the window (1); the fit flag never set (1); the Observer trace without the window (1); an unsafe
+  tokens-per-word ratio (1).
+- **Measurement** (`docs/eval/w1_2026-10-18/`, rules committed with the code before any run; clean worktree,
+  Ollama 0.40.3 as `ollama serve`, desktop and Brave open):
+  - **Run 1, the window, on V-2's 27 long chats: NOT MET by the rule.** Bar 1, every prompt read in full: met,
+    27 of 27 (the 4,800-word chat 6,506 of 6,506 tokens; V-2 read 2,050). Bar 3, observed on the GPU: met,
+    `size_vram` equal to `size` (5.47 GB) in all 39 polls with the model loaded, `nvidia-smi` 6,569-6,768 of
+    8,188 MiB in use. Bar 2, not worse than V-2: facts by position 2 of 81 against 0 (met), but trick
+    statements and near-misses 2 of 162 against 1, and 2 TRAP rows against 1 (**not met**). Both hits are
+    near-misses in the 1,400-word chats, whose prompts were read whole in V-2 as well; in both the evidence
+    gate rejected the memory, and the near-miss reached the decision log through the Observer's decision path,
+    which skips the gate (issue #3, G-4): a friend's exam goal and advice about a cousin's project, logged as
+    the user's decisions. The model sampled differently on the same input (one run per chat); the window did
+    not change what those chats were given.
+  - **Run 2, the temperature, on the 37 short chats x 3:** not sent (V-2): 0 of 75 traps, 35 of 69 learned;
+    0.3: 0 of 75, 36 of 69; 0.0: 0 of 75, 36 of 69. A tie by the rule (within 3), which goes to the lower
+    temperature: **0.0**, set in `settings.json` and pinned by a test. At 0.0 the three runs were identical,
+    output for output, so they are one draw.
+- **Suites:** Backend 1658 passed, 0 failed, on b3f1eb2's tree; 1659 passed, 0 failed, with the temperature
+  set (the pinning test added). No Flutter file changed.
+
+**Not covered (still open):**
+- **W-1's bar 2 is not met**, by the decision path (G-4, step 4). Re-measure the long set after G-4 lands.
+- **Chat at temperature 0.0 was not measured** for answer quality; the rule was the Observer's. Greedy
+  sampling can repeat itself on long answers.
+- **Machines other than this one:** 16384 fits an 8 GB RTX 4060 with 1.4 GB to spare; a smaller GPU or a
+  CPU-only machine was not tried (E-4).
+- One run per long chat; the near-miss count moves between runs (1, then 2 of 162).
+
 ---
 
 ## 8. Status
@@ -3702,6 +3754,7 @@ confirmation step stopped the write; the user would have been asked. No code cha
 | S-1 a run stamp on every evaluation result | Built 2026-10-17 (§7.54) | Method: one of five evaluation scripts stamped its results, and only with --save-raw. `scripts/_stamp.py` now records, at the start of every run, the commit and a dirty flag, the Constitution's version and hash and, for a model run, Ollama's version, the model's digest and the options sent (a model run that cannot read them refuses to start); every result file and report carries it, one per start for a resumed run. 23 tests (10 script tests failed first), 8 break-it mutations. The two model-calling retrieval harnesses were not run |
 | V-2 validity baseline (b, c, d, a) | Run 2026-10-17/18 (§7.55), report only | qwen2.5:7b on Ollama 0.40.3: traps 0 of 75, 36 of 36 true, 35 of 69 learned (HOLDS); llama3.1:8b: traps 0 of 75, 33 of 69 learned (SUPPORTED). As shipped the window is 4096 and a longer prompt is cut from the front (2,050 of 10,639 tokens read). 27 long chats: 1 of 162 trick statements or near-misses reached the queue (D-33) and 0 of 81 true facts were learned where labelled, lost to the gate's wording rules, not to length (TRUST DOES NOT CARRY OVER, by the rule) |
 | D-33 a third person's goal accepted as the user's interest | Found 2026-10-18 (§7.55), open | A, medium: "My friend wants to pass the Azure Fundamentals exam by March" is EVIDENCE_SUFFICIENT for the user's `topic_interests`; on a long chat it reached the confirmation queue (asked, not written). Not fixed |
+| W-1 one settings block: 16k window, qwen2.5:7b, temperature 0.0 | Built and measured 2026-10-18 (§7.56) | A, medium: Ollama's default 4096 window cut long prompts from the front and the default model was llama3.1:8b in code. Every request now asks for 16384 (all 27 long prompts read in full; fully on the GPU, 6.6-6.8 of 8 GB in use with a browser open); qwen2.5:7b is the one default; temperature 0.0 chosen by a fixed rule. 13 tests, 7 break-it mutations. Its long-chat bar 2 is NOT met: 2 near-misses (1 before) reached the decision log, which skips the gate (G-4) |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
