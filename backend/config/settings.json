@@ -7,7 +7,8 @@
   },
   "observer": {
     "idle_timeout_minutes": 10,
-    "max_session_tokens": 8000
+    "max_session_tokens": 8000,
+    "max_shortfall_questions_per_chat": 2
   },
   "rag": {
     "similarity_threshold": 0.6,

@@ -1082,6 +1082,12 @@ def run_session_end(
     ledger = evidence_gate.EvidenceLedger.from_transcript(transcript)
 
     memory_results = []
+    # Asked, not dropped (#19): a genuine fact that falls short of the
+    # Constitution's count becomes a question, at most this many per chat, so
+    # a long chat cannot turn into a questionnaire. Past the cap it is dropped,
+    # as before; the next chat that mentions it can ask.
+    shortfall_cap = get_settings()["observer"]["max_shortfall_questions_per_chat"]
+    shortfall_asked = 0
     for candidate in output["memory_candidates"]:
         candidate = {**candidate, "conversation_id": conversation_id}
         # Per-candidate isolation, and the reason is not hypothetical. A None
@@ -1136,7 +1142,10 @@ def run_session_end(
             # statuses Stage 13 already routes on (HARD_REJECT / DISCARD), so
             # nothing here is a second pipeline - it is the same one, with the
             # candidate arriving already refused.
-            outcome = stage_13.run(conn, candidate, validation_result)
+            outcome = stage_13.run(conn, candidate, validation_result,
+                                   ask_on_shortfall=shortfall_asked < shortfall_cap)
+            if outcome == "pending" and validation_result.status == "DISCARD":
+                shortfall_asked += 1
             status = validation_result.status
             evidence_state = verdict.state
         except Exception as e:

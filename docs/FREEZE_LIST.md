@@ -4161,6 +4161,74 @@ approved by the owner and committed before anything was built (b03f928); grader 
 - The downstream column comes from the replays at 0c8fc7f, whose gate, Constitution and Stage 13 are those of
   b03f928.
 
+### 7.64 #19: a fact that falls short of the count is asked about, and a correction reads as an update, D-43 (authorized 2026-10-20)
+
+The last thesis item of the final plan (step 5; BLUEPRINT card #19, written first; MEMORY_BRAIN M-2). No owner
+decision needed. The plan's third part, matching a repeat by meaning, is left out on purpose (the card).
+
+- **Defect (D-43, A, medium):** after week 2 the Constitution needs the same fact in 2 chats (weeks 3-4), then 3 chats
+  and confidence 0.7 (month 2+, about 4 chats for a stated fact), counted only when the exact wording comes back; in
+  weeks 1-2 a fact the model labels "inferred" is dropped. A candidate the evidence gate had accepted - the user's
+  own words, supporting the claim - was thrown away with a log line before any "ask the user" step, and a
+  correction a month in ("I switched to Helix") was one sighting, lost the same way.
+- **Promise:** 1 and 3 unchanged (nothing is written without the Constitution or the user's yes); the thesis's
+  learning claim.
+- **Mechanism:**
+  - **Asked, not dropped:** Stage 13 turns a DISCARD whose reason is one of the four count reasons into one question
+    (`origin = 'shortfall'`, `REQUIRES_CONFIRMATION`), never a write, for the tables holding beliefs about the user
+    (preference, skill, goal, project, answer style; not topics, tools or document habits). Only the Observer's
+    session-end pass asks (`ask_on_shortfall`), at most `observer.max_shortfall_questions_per_chat` (2) per chat;
+    past the cap, and for every other caller, the candidate is dropped as before. The existing duplicate check
+    applies; the contradiction log keeps its input; the audit row says deferred with the count reason; confirming
+    writes the value as the user's (`resolve_pending`, unchanged).
+  - **A correction reads as an update:** `list_pending` carries the value already stored for that table and field
+    (`current_value`, from Stage 12's own lookup); confirming replaces it.
+  - **The app words it:** Review asks "Should I remember this?" with "PIP would normally wait to hear this more than
+    once before keeping it, so it is asking you instead", and for a correction "Update this?" with "Now: A" above
+    the new value.
+- **Tests:** `backend/tests/test_shortfall_questions.py`, 13, through the real session-end path at weeks 1, 3 and 9:
+  a supported fact seen once is asked about in week 3, week 1 (labelled inferred) and month 2, and not written;
+  confirming writes it as user-verified; at most 2 per chat, the cap per chat; the same fact in a second chat is not
+  asked twice; a topic and a gate rejection are still dropped; Stage 13 on its own still drops; a correction carries
+  the stored value, and confirming replaces it; nothing stored means no current value. `review_view_test.dart`, 2
+  new (the shortfall reason, not the gated-field one; "Update this?" with "Now: Neovim").
+  - **Seen failing first:** 10 of 13 backend (the topic, gate-rejection and Stage-13-alone controls passed, as they
+    must); both app tests.
+  - **Existing test changed:** `test_observer_long_chat_harness.py` pinned that a fact said once at nine weeks
+    is learned not at all; it is still not written, and is now asked about (`["queued"]`). The first full run found
+    it.
+  - **A race in #13's socket test, found and fixed:** `test_the_pipeline_is_told_which_chat_each_message_belongs_to`
+    (§7.62) read a fixed number of events, one short of the first turn's "done", so the second message could
+    arrive while the first turn was still being sent and the test waited for a reply that never came; it hung the
+    second full run. It now reads each turn to its end; 20 of 20 runs alone passed.
+- **Break-it:** 11 mutations, each alone, restored byte for byte, each caught: a shortfall dropped again (10 tests);
+  the Observer never asking (10); no cap (1; first written as a mutation that did not compile, re-run); the cap
+  carried across chats (8); topics asked about (1); gate rejections asked about (1); the question filed as an
+  ordinary observer question (4); the stored value not shown (1); the app giving the gated-field reason (1), not
+  showing an update (1), showing an update with nothing stored (3).
+- **Measured (the card's rule, fixed before the run), replays of the recordings, no model:**
+  - **Short set (V-2 qwen, 3 x 37): stated facts learned or asked 35 of 69 -> 41 of 69 (met)**; all six added are
+    questions labelled TRUE (Python and Go skill levels, Helix over Neovim), at most 1 per chat; written rows
+    unchanged (20); traps 0 of 75 -> 0 of 75 (met).
+  - **Long set (G-4's run, 27 chats): 0 of 81 -> 0 of 81, NOT met.** No true-fact candidate there reaches the count
+    step: the gate refuses them first for its wording ("I do all my diagrams in Excalidraw", "my main project this
+    term is Lanternfish"; M-1(a)'s false rejects, §7.63). Trick statements and near-misses 0 of 162 -> 0 of 162.
+  - One added question asks about Go at level 1.0, the level M-1(a) graded too high (D-40): asked, not written.
+- **Suites:** Backend 1799 passed, 0 failed (18 min 38 s), on the working tree at ccdbc25 plus this change (with
+  other sessions' uncommitted `httpx2` requirement and its test); the changed backend files were compared byte for
+  byte with copies taken before the run. Two earlier full runs: the first had 1 failure (the harness test above,
+  updated), the second hung on #13's socket test (the race above, fixed). Flutter 348 passed (346 + 2), the
+  generated platform files unchanged.
+
+**Not covered (still open):**
+- **The long chats' facts are still lost**, at the gate's wording, which #19 does not touch; fixing it needs either
+  more support phrases (a word list, which the owner ruled out) or a way to judge support by meaning. A decision for
+  the owner.
+- **The same fact worded differently can be asked twice** (the duplicate check is exact); the plan's meaning-matching
+  part is not built.
+- **How often users confirm** these questions is not measured (no real users).
+- **Two per chat** is a chosen number, not a measured one.
+
 ---
 
 ## 8. Status
@@ -4239,6 +4307,7 @@ approved by the owner and committed before anything was built (b03f928); grader 
 | D-40 a skill level of 1.0 accepted from "N years professionally" | Found 2026-10-20 (§7.63), open | A, low: the skill calibrator lets an expertise phrase support any level from 0.7 up; five such 1.0 claims graded unsupported in M-1(a). A skill level is asked before it is written. Not fixed |
 | D-41 reported speech with "I" passes as the user's topic | Found 2026-10-20 (§7.63), open | A, low: D-33's first-person rule reads "My friend says I should do a full marathon" as the user's; two such topics in M-1(a), both discarded by the Constitution. Not fixed |
 | D-42 "my main project" accepted as a preference | Found 2026-10-20 (§7.63), open | A, low: "my main" is a preference marker, so the owner's project sentence became preference "project_management" and was written, while the project contract refuses it. Not fixed |
+| D-43 a genuine fact short of the count dropped silently | Fixed 2026-10-20 (§7.64) | A, medium (#19): a candidate the gate accepted but the Constitution refused for a count (or an inferred label in weeks 1-2) was thrown away, so learning nearly stopped after week 2 and a correction a month in was lost. Now one question (origin shortfall), at most 2 per chat, for belief tables only; a correction shows the stored value. 13 + 2 tests, 11 break-it mutations. Short set 35 -> 41 of 69 learned or asked, traps 0 of 75; long set 0 of 81 unchanged (lost at the gate's wording) |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

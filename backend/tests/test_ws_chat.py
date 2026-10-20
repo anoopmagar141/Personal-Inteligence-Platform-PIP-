@@ -853,15 +853,20 @@ def test_the_pipeline_is_told_which_chat_each_message_belongs_to(monkeypatch, to
 
     monkeypatch.setattr(server.pipeline, "run", fake_run)
 
+    def read_turn_to_its_end(ws):
+        # Each turn is read up to its "done" before the next message goes out. Reading a fixed count stopped one
+        # event short, so "second" could arrive while the first turn was still being sent, and the test then waited
+        # for a reply that never came (it hung the full suite once, 2026-10-20).
+        while ws.receive_json()["type"] != "done":
+            pass
+
     client = TestClient(server.app)
     with client.websocket_connect(ws_url(token)) as ws:
         _expect_session_info(ws)
         ws.send_json({"message": "first"})
         created = _expect_session_info(ws)
-        for _ in range(4):
-            ws.receive_json()
+        read_turn_to_its_end(ws)
         ws.send_json({"message": "second"})
-        for _ in range(4):
-            ws.receive_json()
+        read_turn_to_its_end(ws)
 
     assert seen == [created["conversation_id"], created["conversation_id"]]

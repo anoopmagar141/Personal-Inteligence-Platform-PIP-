@@ -12,6 +12,27 @@ logger = logging.getLogger(__name__)
 # Persisted to memory_candidates_pending so they survive session close (Part 8.6).
 PENDING_STATUSES = {"REQUIRES_CONFIRMATION", "TIER_2_REQUIRED", "PROMPT_RECONCILIATION"}
 
+# A count the Constitution needs before it writes a fact on its own (BLUEPRINT
+# #19). A candidate refused for one of these only is genuine - the evidence
+# gate already found the user's own words supporting it - but has not been
+# seen often enough, or was labelled "inferred" in weeks 1-2. It was thrown
+# away with a log line, before any "ask the user" step: after week 2 a fact had
+# to come back in 2, then about 4, chats in the same words, so learning nearly
+# stopped (V-2: 0 of 81 long-chat facts), and a correction a month in ("I
+# switched to Helix") was one sighting and lost the same way.
+SHORTFALL_REASONS = frozenset({
+    "threshold_violation_week_1_2",
+    "threshold_violation_week_3_4",
+    "threshold_violation_month_2_plus_evidence",
+    "threshold_violation_month_2_plus_confidence",
+})
+# The tables that hold beliefs about the user. Topics, tools and document
+# habits record what came up; asking about each would be nagging, and a topic
+# raised inside someone else's sentence (D-41) would become a question.
+SHORTFALL_TABLES = frozenset({
+    "preference_memory", "skill_memory", "goal_memory", "active_projects", "interaction_style",
+})
+
 
 # The tables whose stated values a behavioral contradiction can be logged
 # against, and how to read the current value out of each.
@@ -111,7 +132,56 @@ def _audit(conn, candidate: MemoryCandidate, validation_result: ValidationResult
         logger.error(f"Stage 13: could not record the candidate's outcome ({code}) in the audit log: {e}")
 
 
-def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -> str:
+def _queue(conn, candidate: MemoryCandidate, validation_result: ValidationResult, *, status: str, origin: str) -> str:
+    """
+    One question in memory_candidates_pending for the user to answer.
+
+    Goals are gated by the constitution, so every session that mentions one
+    queues a confirmation for it - measured at three identical rows after three
+    sessions, and the user would have been asked the same question three times,
+    with confirming one leaving two live twins behind it. The same applies to
+    any gated field the user keeps mentioning, and to a shortfall question
+    (#19) for a fact said again before it was answered.
+
+    Returns "pending" rather than a new outcome value: the candidate's state
+    genuinely IS pending, represented by the row already sitting in the queue,
+    and adding a fifth return value would quietly narrow every existing
+    `== "pending"` check so that none of them covered this path. The dedup is
+    asserted by row count instead, which is the thing that actually matters.
+    """
+    duplicate = candidate_store.find_pending_memory_candidate(
+        conn,
+        target_table=candidate.get("target_table"),
+        field_name=candidate.get("field_name"),
+        proposed_value=candidate.get("proposed_value"),
+    )
+    if duplicate is not None:
+        logger.info(
+            f"Candidate {status} already queued as #{duplicate['id']} "
+            f"({candidate.get('target_table')}.{candidate.get('field_name')}); not re-asking."
+        )
+        _audit(conn, candidate, validation_result, "pending", already_queued=True)
+        return "pending"
+
+    candidate_store.create_memory_candidate(
+        conn,
+        target_table=candidate.get("target_table"),
+        field_name=candidate.get("field_name"),
+        proposed_value=candidate.get("proposed_value"),
+        label=candidate.get("label"),
+        evidence_count=candidate.get("evidence_count"),
+        evidence_text=candidate.get("evidence_text"),
+        validation_status=status,
+        origin=origin,
+        candidate_id=candidate.get("candidate_id"),
+    )
+    _audit(conn, candidate, validation_result, "pending")
+    return "pending"
+
+
+def run(
+    conn, candidate: MemoryCandidate, validation_result: ValidationResult, *, ask_on_shortfall: bool = False,
+) -> str:
     """
     Routes a Stage 12 ValidationResult to its write path.
 
@@ -151,46 +221,23 @@ def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -
         return "written"
 
     if status in PENDING_STATUSES:
-        # Goals are gated by the constitution, so every session that mentions
-        # one queues a confirmation for it - measured at three identical rows
-        # after three sessions, and the user would have been asked the same
-        # question three times, with confirming one leaving two live twins
-        # behind it. The same applies to any gated field the user keeps
-        # mentioning.
-        #
-        # Returns "pending" rather than a new outcome value: the candidate's
-        # state genuinely IS pending, represented by the row already sitting in
-        # the queue, and adding a fifth return value would quietly narrow every
-        # existing `== "pending"` check so that none of them covered this path.
-        # The dedup is asserted by row count instead, which is the thing that
-        # actually matters.
-        duplicate = candidate_store.find_pending_memory_candidate(
-            conn,
-            target_table=candidate.get("target_table"),
-            field_name=candidate.get("field_name"),
-            proposed_value=candidate.get("proposed_value"),
-        )
-        if duplicate is not None:
-            logger.info(
-                f"Candidate {status} already queued as #{duplicate['id']} "
-                f"({candidate.get('target_table')}.{candidate.get('field_name')}); not re-asking."
-            )
-            _audit(conn, candidate, validation_result, "pending", already_queued=True)
-            return "pending"
+        return _queue(conn, candidate, validation_result, status=status, origin="observer")
 
-        candidate_store.create_memory_candidate(
-            conn,
-            target_table=candidate.get("target_table"),
-            field_name=candidate.get("field_name"),
-            proposed_value=candidate.get("proposed_value"),
-            label=candidate.get("label"),
-            evidence_count=candidate.get("evidence_count"),
-            evidence_text=candidate.get("evidence_text"),
-            validation_status=status,
-            candidate_id=candidate.get("candidate_id"),
-        )
-        _audit(conn, candidate, validation_result, "pending")
-        return "pending"
+    if (
+        ask_on_shortfall
+        and status == "DISCARD"
+        and validation_result.reason in SHORTFALL_REASONS
+        and candidate.get("target_table") in SHORTFALL_TABLES
+    ):
+        # Asked, not dropped (#19): one question to the user, never a write.
+        # The Constitution's refusal stands - nothing is stored on this
+        # sighting - and confirming goes through resolve_pending like every
+        # other answered question, so the value is then the user's own. The
+        # contradiction log still gets the observation the DISCARD path would
+        # have given it. Only the Observer's session-end pass asks (it knows the
+        # chat and keeps the per-chat cap); every other caller is unchanged.
+        _maybe_log_behavioral_contradiction(conn, candidate)
+        return _queue(conn, candidate, validation_result, status="REQUIRES_CONFIRMATION", origin="shortfall")
 
     if status in ("HARD_REJECT", "DISCARD"):
         logger.info(f"Candidate {status.lower()}: {validation_result.reason}")
@@ -242,8 +289,20 @@ def run(conn, candidate: MemoryCandidate, validation_result: ValidationResult) -
 
 
 def list_pending(conn, *, limit: int | None = None) -> list[dict[str, Any]]:
-    """Memory candidates awaiting a user decision, oldest first."""
-    return candidate_store.list_memory_candidates(conn, limit=limit)
+    """
+    Memory candidates awaiting a user decision, oldest first, each with the
+    value already stored for its table and field (current_value, None if
+    there is none). That is what makes a correction read as an update - "now
+    Neovim, Helix?" - rather than a new fact the user has to recognise as a
+    replacement (#19).
+    """
+    from backend.stages import stage_12_validation_layer as stage_12
+
+    rows = candidate_store.list_memory_candidates(conn, limit=limit)
+    for row in rows:
+        row["current_value"] = stage_12.stored_value(
+            conn, {"target_table": row["target_table"], "field_name": row["field_name"]})
+    return rows
 
 
 def resolve_pending(conn, candidate_id: int) -> dict[str, Any]:

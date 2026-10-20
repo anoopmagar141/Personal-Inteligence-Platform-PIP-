@@ -118,7 +118,8 @@ def test_a_case_file_with_ages_and_positions_reaches_the_results(tmp_path):
     # The same recorded extraction ("I use Neovim for all my coding"), on a
     # profile in its first week and on one nine weeks old. In week 1 one
     # explicit statement is enough to write it; at nine weeks the Constitution
-    # wants three, so the same output is not written.
+    # wants three, so the same output is not written - since #19 it is asked
+    # about instead (queued), which is how the age shows in the results.
     base = next(c for c in CASES if c["id"] == "fact_editor")
     spec = {**base["learn"][0], "position": "middle", "kind": "fact", "id": "F1"}
     cases = [
@@ -135,7 +136,7 @@ def test_a_case_file_with_ages_and_positions_reaches_the_results(tmp_path):
 
     results = {r["id"]: r for r in json.loads((tmp_path / "r.json").read_text(encoding="utf-8"))["runs"][0]}
     assert results["young"]["facts"][0]["learned"] == ["written"]
-    assert results["old"]["facts"][0]["learned"] == []
+    assert results["old"]["facts"][0]["learned"] == ["queued"]
     assert {k: results["old"]["facts"][0][k] for k in ("position", "kind", "id")} == {
         "position": "middle", "kind": "fact", "id": "F1"}
     assert "_messages" not in results["young"]

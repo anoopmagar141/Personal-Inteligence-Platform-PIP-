@@ -25,7 +25,14 @@ import '../theme.dart';
 const _memoryQuestion = <String, String>{
   'verification': 'Do I still have this right?',
   'observer': 'Should I remember this?',
+  'shortfall': 'Should I remember this?',
 };
+
+// Why a "shortfall" question exists (#19): PIP heard a fact in the user's own words, but too few times for the
+// Constitution to keep it on its own, so it asks instead of dropping it. The status map's sentence ("not allowed to
+// record without asking") would be untrue here: it is allowed, after hearing it again.
+const _shortfallReason = 'PIP would normally wait to hear this more than once before keeping it, so it is asking you '
+    'instead.';
 
 const _memoryReason = <String, String>{
   'REQUIRES_CONFIRMATION': 'This is something PIP is not allowed to record without asking.',
@@ -208,7 +215,13 @@ class _ReviewViewState extends State<ReviewView> {
     final key = 'memory:$id';
     final isCheck = candidate['origin'] == 'verification';
     final label = _tableLabel[candidate['target_table']] ?? '${candidate['target_table']}';
-    final question = _memoryQuestion[candidate['origin']] ?? _memoryQuestion['observer']!;
+    // A new value for something already stored is a correction (#19), and asking "Should I remember this?" about it
+    // hides that it would replace what PIP has; the stored value is shown above the new one.
+    final current = candidate['current_value'];
+    final isUpdate = !isCheck && current != null && '$current' != '${candidate['proposed_value']}';
+    final question = isUpdate
+        ? 'Update this?'
+        : (_memoryQuestion[candidate['origin']] ?? _memoryQuestion['observer']!);
     final evidence = '${candidate['evidence_text'] ?? ''}';
 
     // evidence_text means two different things by origin, and rendering both
@@ -219,7 +232,11 @@ class _ReviewViewState extends State<ReviewView> {
     // explains itself better than the status map can: a check is
     // REQUIRES_CONFIRMATION for a different reason than a gated field is, so
     // the generic sentence read as a flat contradiction of the question above.
-    final explanation = isCheck ? evidence : (_memoryReason[candidate['validation_status']] ?? '');
+    final explanation = isCheck
+        ? evidence
+        : candidate['origin'] == 'shortfall'
+            ? _shortfallReason
+            : (_memoryReason[candidate['validation_status']] ?? '');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
@@ -229,6 +246,11 @@ class _ReviewViewState extends State<ReviewView> {
           children: [
             TagLabel(question, color: pip.textMuted, size: 11.5),
             const SizedBox(height: 6),
+            if (isUpdate)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text('Now: $current', style: TextStyle(fontSize: 13, color: pip.textMuted)),
+              ),
             RichText(
               text: TextSpan(
                 style: TextStyle(fontSize: 14.5, color: pip.text),

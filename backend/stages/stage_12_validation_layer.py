@@ -377,6 +377,17 @@ def reinforce_evidence(conn, candidate: MemoryCandidate) -> MemoryCandidate:
     reinforced["evidence_count"] = max(existing["evidence_count"] + increment, observed_sessions)
     return reinforced
 
+def stored_value(conn, candidate: MemoryCandidate) -> Any:
+    """
+    The value already stored for a candidate's table and field, or None: the
+    same lookup the Constitution's own checks use, so a question about a
+    change shows exactly what it would replace (#19: a correction reads as an
+    update, "now A", not as a new fact).
+    """
+    existing = _fetch_existing_state(conn, candidate)
+    return existing.get("current_value") if existing else None
+
+
 def run(conn, candidate: MemoryCandidate, enforcer: ConstitutionEnforcer) -> ValidationResult:
     """
     Validates a memory candidate against the constitution.

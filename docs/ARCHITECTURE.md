@@ -131,6 +131,17 @@ three sessions. Its verdict is expressed as an ordinary `ValidationResult`
 (`HARD_REJECT` for authenticity failures, `DISCARD` for entailment failures),
 so there is one write path, not two.
 
+**A fact short of the count is asked about, not dropped (#19).** When the gate
+accepted a candidate and the Constitution refuses it only for a count (one of
+the four `threshold_violation_*` reasons: too few chats yet, or an "inferred"
+label in weeks 1-2), Stage 13 queues one question (`origin = 'shortfall'`)
+instead of discarding it, for the tables that hold beliefs about the user
+(preference, skill, goal, project, answer style). Only the Observer's
+session-end pass asks (`ask_on_shortfall`), at most
+`observer.max_shortfall_questions_per_chat` per chat; nothing is written until
+the user confirms. `list_pending` carries the stored value of the same field,
+so a correction is asked as an update ("Now: A").
+
 **Trace timing:** `backend/core/trace.py` writes pipeline stage outcomes and
 elapsed `duration_ms` values to the encrypted `trace_log` table. Durations are
 rounded wall-clock milliseconds; a quick stage may therefore show `0`. The

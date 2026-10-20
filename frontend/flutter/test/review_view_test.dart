@@ -104,6 +104,8 @@ Future<FakeApi> pumpReview(
 }
 
 void main() {
+  shortfallTests();
+
   testWidgets('asks a different question depending on where a candidate came from',
       (tester) async {
     await pumpReview(tester, memory: [observerCandidate(), verificationCandidate()]);
@@ -227,5 +229,39 @@ void main() {
 
     final plain = ApiException(500, 'Internal Server Error');
     expect(plain.detail, 'Internal Server Error');
+  });
+}
+
+// #19: a fact PIP heard too few times to keep on its own is asked about instead of dropped (origin "shortfall"),
+// and a correction - a new value for something already stored - reads as an update.
+Map<String, dynamic> shortfallCandidate({String? currentValue}) => {
+      'id': 3,
+      'target_table': 'preference_memory',
+      'field_name': 'preferred_tools',
+      'proposed_value': 'Helix',
+      'label': 'explicit',
+      'evidence_count': 1,
+      'evidence_text': 'I switched to Helix last month.',
+      'validation_status': 'REQUIRES_CONFIRMATION',
+      'origin': 'shortfall',
+      'current_value': currentValue,
+    };
+
+void shortfallTests() {
+  testWidgets('a fact heard too few times is asked about with its own reason, not the gated-field one',
+      (tester) async {
+    await pumpReview(tester, memory: [shortfallCandidate()]);
+
+    expect(find.text('Should I remember this?'), findsOneWidget);
+    expect(find.textContaining('wait to hear this more than once'), findsOneWidget);
+    expect(find.textContaining('not allowed to record'), findsNothing);
+    expect(find.textContaining('Now:'), findsNothing, reason: 'nothing is stored yet, so nothing is replaced');
+  });
+
+  testWidgets('a correction shows the value it would replace', (tester) async {
+    await pumpReview(tester, memory: [shortfallCandidate(currentValue: 'Neovim')]);
+
+    expect(find.text('Update this?'), findsOneWidget);
+    expect(find.textContaining('Now: Neovim'), findsOneWidget);
   });
 }
