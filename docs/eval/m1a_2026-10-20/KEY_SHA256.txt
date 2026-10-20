@@ -1,0 +1,2 @@
+SHA-256 of key.json, the hidden key to sheet.md (the gate's verdict for each item), computed before grading:
+06f0af4e763996b640432a8ec0df4b356a2b067d20a74f51999891a273809e05
