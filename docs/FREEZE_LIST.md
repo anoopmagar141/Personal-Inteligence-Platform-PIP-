@@ -189,6 +189,10 @@ goal accepted by the gate as the user's interest), and 0 of 81 true facts were l
 look: the gate's support language rejected ordinary wordings ("I do all my diagrams in X", "my main
 project this term is X") whatever the chat's length. D-33 is fixed (§7.61): a topic is the user's only when
 they ask about it or say it in the first person.
+**Measured blind (2026-10-20, M-1(a), §7.63):** of 58 quotes the gate accepted, 8 did not support their
+claim (14%; 95% interval 7-25%): by the rule fixed in advance the wording above does NOT hold for the gate
+alone. None of the 8 was stored without asking: the Constitution asked about 4, discarded 3, and wrote 1
+(a true project filed as a preference). Of 58 sampled rejections, 20 did support their claim (34%).
 
 ### Promise 5 — Observer runs only on authorized local providers
 **Wording (decided 2026-09-28):**
@@ -4107,6 +4111,56 @@ the owner's own headline design). No owner decision needed. Built in the card's 
 - **`session_snapshot` stays in the schema**, read only to carry an older database's or backup's note over.
 - **Not checked in a real window** (V-1): the dialog is tested as widgets.
 
+### 7.63 M-1(a): Promise 4 measured blind, does a quote the gate accepts support its claim? (run 2026-10-20, report only)
+
+BLUEPRINT M-1 part (a), the last item of the final plan's step 4. Design note `docs/eval/m1a_2026-10-20/DESIGN.md`,
+approved by the owner and committed before anything was built (b03f928); grader A by the owner's choice.
+
+- **Method:** the V-2 recordings (qwen2.5:7b short 3 x 37, llama3.1:8b short 3 x 37, qwen long 27) replayed through
+  the real Stage 11 path at b03f928 (`observer.run`, then `evidence_gate.adjudicate`, no model call). Kept: memory
+  candidates whose quote is genuinely the user's (SUFFICIENT, NOT_ENTAILING, CONTRADICTORY); one item per recording
+  + chat + claim + quote: 58 accepted, 166 rejected. Graded: all 58 accepted and 58 rejected drawn by seed 20261020,
+  shuffled, the verdict, model and run hidden (`sheet.md`, built by `build_sheet.py`; every item matches a claim the
+  harness itself produced). The key's SHA-256 was committed with the sheet before grading (6bd9400) and checked when
+  scoring. One grader: a fresh Claude session that had never seen the verdicts, told to read only the sheet; it
+  answered S / D / U with a reason for each D and U (`grades.txt`). Scored by `score.py` (`RESULTS.md`).
+- **Result:**
+  - **False accepts: 8 of 58 accepted quotes did not support their claim on the strict reading (14%; 95% interval
+    7-25%), 7 of 58 on the lenient one. By the rule fixed in the design: Promise 4's wording DOES NOT HOLD** for the
+    gate alone (0 = holds, 1-3 = mostly holds, 4 or more = does not hold).
+  - The 8: five skills recorded at level 1.0 (expert) from "I've written Go professionally for four years" and
+    alike (D-40); two topics "marathon" from "My friend says I should do a full marathon but that's crazy" (D-41);
+    one project filed as a preference, "project_management" = "Lanternfish, a budgeting app..." (D-42, graded
+    UNCLEAR: true, in the wrong table).
+  - **What happened to them after the gate** (the same replays' Constitution and Stage 13 columns): 4 queued to ask
+    the user (skill levels are a gated field), 3 discarded by the week-1-2 rule, 1 written (the misfiled project). So
+    no item graded DOES NOT was stored without asking the user; the gate alone does not keep that promise, the
+    Constitution behind it did here.
+  - **False rejects: 20 of the 58 rejected quotes did support their claim (34%; 95% interval 24-47%)**, both
+    readings: 7 "my main project this term is Lanternfish" (as a project, or the project named in a preference); 5
+    short answers ("A payments service.", "Mostly backend services.", "a scheduling app for sailing clubs"); 3 a
+    problem the user is working on, as a project or goal ("our sync is broken", "My build is slow"); 2 "Please
+    answer me in French from now on" (as an answer style); and one each "I do all my diagrams in Excalidraw these
+    days", "I deploy everything with Docker Compose" and "I don't write Kotlin at all" (as level 0). Applied to the 166
+    rejected, roughly 40 to 78 supported quotes were refused: the V-2 0-of-81 finding, measured blind. Reported, not
+    judged (the design).
+- **Causes, read in the code (not fixed: a measurement card):**
+  - **D-40 (A, low):** the skill calibrator lets an expertise phrase ("years", "professionally") support any level
+    from 0.7 up, so 1.0 passes; nothing caps the level at what the words say. A skill level asks the user first.
+  - **D-41 (A, low):** D-33's rule reads a sentence as the user's when it has the pronoun "I", and "My friend says I
+    should do a full marathon" has one; reported speech defeats it. The Constitution discarded both here.
+  - **D-42 (A, low):** "my main" is a preference marker (an elliptical habit, "my main editor"), so "my main
+    project this term is Lanternfish" supports a preference about anything named in it, while the project contract
+    rejects the same sentence (its markers say "my project", not "my main project").
+
+**Not covered (still open):**
+- One grader, and a model; the owner did not check a sample (option C was not chosen). The skill-level calls are
+  the grader's reading of "roughly that level" (1.0 = more than four or six years said).
+- One author's made-up chats, English, two models; decisions were not part of the sheet (they were read one by one
+  in G-4, §7.60).
+- The downstream column comes from the replays at 0c8fc7f, whose gate, Constitution and Stage 13 are those of
+  b03f928.
+
 ---
 
 ## 8. Status
@@ -4141,7 +4195,7 @@ the owner's own headline design). No owner decision needed. Built in the card's 
 | 4b Cache safety | Returned 2026-09-27 (§7.6) | A: stale answers replayed after documents or decisions existed; one profile's answer served to another. Cross-profile fixed (§7.9), staleness fixed (§7.10) |
 | Promises 1–3 tests | Written 2026-09-28 (§7.13) | C: all three hold, each break-it seen failing; two findings (decisions skip the gate; immutable names shadowed in preferences) |
 | End-to-end Observer measurement | Run 2026-09-28 (§7.14) | 37 conversations, 3 runs, qwen2.5:7b: precision 88–90% (memory), 77–83% with decisions; recall 30–39%; sarcasm gets through. These are the old gate's figures: after the A-1 gate change the same recorded answers give 0 of 75 traps and 37 of 69 facts learned (§7.37) |
-| Promise 4 threshold measurement | Not started | — |
+| Promise 4 threshold measurement | Run 2026-10-20 (§7.63), blind | DOES NOT HOLD by the rule fixed in advance: 8 of 58 accepted quotes (14%, 95% 7-25%) did not support their claim (5 expert skill levels, 2 a friend's suggestion, 1 a project filed as a preference); the Constitution asked about 4, discarded 3, wrote 1. False rejects 20 of 58 sampled (34%, 95% 24-47%) |
 | Database census | Not run | — |
 | Cross-track synthesis | Done 2026-09-27 (§7.7) | 5 confirmed patterns; 2 candidate promises; fix order recommended |
 | End-to-end profile boundary | Run 2026-09-27 (§7.8); now `test_profile_boundary.py` | Cross-profile cache and in-flight plaintext confirmed via real routes; uploads not per-profile and plaintext on disk (A) |
@@ -4182,6 +4236,9 @@ the owner's own headline design). No owner decision needed. Built in the card's 
 | D-37 the Observer's decisions skipped the evidence gate; an immutable name could be a preference | Fixed 2026-10-18 (§7.60) | A, medium (§7.13 findings 1-2, DEC-7 = A): decisions were logged on grounding and the model's own signals, so tentative remarks, a friend's goal and the assistant's words became the user's decisions; `preference_memory.language_preference = French` sat in every prompt beside identity's English. Decisions now pass the gate (goal_memory's commitment language reused, the user's own words); the Constitution refuses an immutable name as a preference and Stage 4 keeps an old one out of prompts. 16 tests, 7 break-it mutations. Replays: nothing added; 154 of 197 decisions removed, 124 rightly, 9 real ones lost (30 lenient). W-1's run 1 re-run with the model: bar 2 met (0 of 162, W-1 had 2) |
 | D-38 the gate refuses a quote carrying its turn's "User:" label | Found 2026-10-18 (§7.60), open | A, low: the ledger holds turns without their role label, so a quote the user said word for word but cited with "User: " is EVIDENCE_NOT_FOUND; 7 of G-4's 9 strict decision losses, and memory candidates are judged by the same step. A false reject. Not fixed |
 | D-39 one "where we left off" note for every chat and project | Fixed 2026-10-20 (§7.62) | A, medium (#13): the note was one row per profile, overwritten by every chat, loaded into every project, cleared whichever chat was deleted, and invisible in the app. Now one record per chat (`chat_records`) with its project, deleted with its chat; a chat is shown its own, else its project's latest, else the newest, labelled and dated; the previous chat's unsummarised end; the record can be read, corrected and cleared in the app. 32 + 1 backend and 8 app tests, 31 break-it mutations. Documents are not linked to chats |
+| D-40 a skill level of 1.0 accepted from "N years professionally" | Found 2026-10-20 (§7.63), open | A, low: the skill calibrator lets an expertise phrase support any level from 0.7 up; five such 1.0 claims graded unsupported in M-1(a). A skill level is asked before it is written. Not fixed |
+| D-41 reported speech with "I" passes as the user's topic | Found 2026-10-20 (§7.63), open | A, low: D-33's first-person rule reads "My friend says I should do a full marathon" as the user's; two such topics in M-1(a), both discarded by the Constitution. Not fixed |
+| D-42 "my main project" accepted as a preference | Found 2026-10-20 (§7.63), open | A, low: "my main" is a preference marker, so the owner's project sentence became preference "project_management" and was written, while the project contract refuses it. Not fixed |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

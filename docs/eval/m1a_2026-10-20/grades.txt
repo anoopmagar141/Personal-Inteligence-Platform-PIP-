@@ -1,0 +1,116 @@
+1 D mentions a flexbox issue; shows no CSS skill level
+2 D says nothing about wanting concrete answers
+3 S
+4 S
+5 S
+6 S
+7 D a question about Elixir; says nothing about Python skill
+8 S
+9 S
+10 S
+11 S
+12 S
+13 S
+14 S
+15 S
+16 D user says Fortran is not theirs; the other way round
+17 D a maybe-someday plan; states no current Swift level
+18 S
+19 D about the sister's liking for Java, not the user's skill
+20 S
+21 S
+22 S
+23 S
+24 D undecided back end; no skill or level stated
+25 D uses Flutter for front end; expert level not shown
+26 S
+27 S
+28 D uses Flutter for front end; skill level not shown
+29 S
+30 S
+31 D six years professional, but expert level not stated
+32 D uses plain Node; expert level not shown
+33 D says they don't use Emacs; Neovim never mentioned
+34 S
+35 S
+36 S
+37 D four years professional, but expert level not stated
+38 D supervisor's preference for Word, not the user's
+39 S
+40 S
+41 D no project mentioned; message is about editors
+42 S
+43 S
+44 D deploys with Docker Compose; expert level not shown
+45 S
+46 S
+47 D the cousin's project, not the user's
+48 D the cousin's project, not the user's
+49 D describes what they build now, not a goal
+50 D a question about adding GraphQL; level not shown
+51 S
+52 S
+53 U Lanternfish is their project; filed as a project-management preference
+54 D past liking for Java, not a skill level
+55 S
+56 D friend's suggestion, which the user calls crazy
+57 S
+58 S
+59 D a question asking for a summary; shows no skill level
+60 S
+61 S
+62 S
+63 S
+64 S
+65 S
+66 D the cousin's project, not the user's
+67 S
+68 S
+69 S
+70 S
+71 D user raised sync; concurrency was PIP's word, not theirs
+72 D supervisor's tool, not the user's preference
+73 S
+74 S
+75 D the friend's exam, not the user's
+76 D release is not a project; migration is before release, not after
+77 D works in TypeScript; expert level not stated
+78 S
+79 S
+80 S
+81 D friend's suggestion, which the user calls crazy
+82 D the friend's exam, not the user's
+83 S
+84 S
+85 S
+86 S
+87 S
+88 D a basic question; shows no unit-testing skill
+89 S
+90 S
+91 S
+92 S
+93 S
+94 D four years professional, but expert level not stated
+95 D a never-going-to-happen maybe plus a question; no skill shown
+96 S
+97 D the flatmate's preference, not the user's
+98 S
+99 S
+100 D past liking for Java, not a skill level
+101 D user says they don't write Kotlin at all
+102 S
+103 S
+104 D a beginner question; does not show near-expert Python
+105 D four years professional, but expert level not stated
+106 D a what-if question; shows no Elixir level
+107 S
+108 D no project mentioned
+109 D message is about Excalidraw; Python never mentioned
+110 D uses plain Node; skill level not shown
+111 S
+112 D user retracted Vim; switched to Helix
+113 S
+114 S
+115 D what they build; expert level not shown
+116 S
