@@ -27,6 +27,7 @@ import '../markdown.dart';
 import '../profile_picture.dart';
 import '../theme.dart';
 import '../widgets/aurora_background.dart';
+import '../widgets/chat_record_dialog.dart';
 import '../widgets/reasoning_strip.dart';
 import '../ws_chat_client.dart';
 
@@ -372,6 +373,19 @@ class ChatViewState extends State<ChatView> {
     widget.chatClient.switchConversation(conversationId);
   }
 
+  void _showRecordDialog() {
+    final id = _activeConversationId;
+    if (id == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (_) => ChatRecordDialog(
+        load: () => widget.api.getChatRecord(id),
+        save: (fields) => widget.api.correctChatRecord(id, fields),
+        clear: () => widget.api.clearChatRecord(id),
+      ),
+    );
+  }
+
   Future<void> _delete(String conversationId) async {
     // Was unguarded, and this is the one delete with no error surface of its
     // own - the sidebar is a list of titles. A conversation that refuses to
@@ -636,6 +650,16 @@ class ChatViewState extends State<ChatView> {
                                       icon: Icons.insights_outlined,
                                       tooltip: 'How this answer was built',
                                       onTap: _showHintsDialog,
+                                    ),
+                                  // The open chat's own record (#13): what
+                                  // PIP will carry into the next chat, to
+                                  // check and put right. A chat not yet saved
+                                  // has none to show.
+                                  if (_activeConversationId != null)
+                                    _IconAction(
+                                      icon: Icons.history_edu_outlined,
+                                      tooltip: 'Where we left off',
+                                      onTap: _showRecordDialog,
                                     ),
                                   // Both icons are hidden at wide widths,
                                   // because their panels are on screen

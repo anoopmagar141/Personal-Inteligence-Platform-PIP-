@@ -218,14 +218,16 @@ async def run_observer_now(
             )
             raise
         if conversation_id and not conversation_store.conversation_exists(conn, conversation_id):
-            # Deleted while the pass ran (it can take minutes). The delete
-            # cleared the note before this pass wrote one from the deleted
-            # chat, so clear it again. What the pass learned beyond the note
-            # stays: taking that back needs one record per chat (#13).
-            session_snapshot.clear_snapshot(conn)
+            # Deleted while the pass ran (it can take minutes). The pass's
+            # record write already failed on the missing chat (its foreign
+            # key); removing that chat's record again is the explicit form, in
+            # case anything wrote one. Only this chat's record: since #13 the
+            # others are their own chats'. What the pass learned beyond the
+            # record stays.
+            session_snapshot.delete_chat_record(conn, conversation_id)
             trace.stage_log(
                 conn, trace_id, "stage_11_observer", "ok",
-                "the chat was deleted during the session-end run; its note was cleared",
+                "the chat was deleted during the session-end run; its record was removed",
             )
             return outcome
         if conversation_id:

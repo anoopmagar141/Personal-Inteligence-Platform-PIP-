@@ -76,6 +76,7 @@ def cache_key(
     record_version: Optional[int] = None,
     generation: Optional[int] = None,
     model_name: Optional[str] = None,
+    context_key: Optional[str] = None,
 ) -> str:
     # record_version is profile_store.record_version(): it moves whenever
     # anything the answer could have been built from changes, so an answer
@@ -88,9 +89,16 @@ def cache_key(
     # one, for callers with no session of their own to name.
     # model_name is the selected local model. A cached answer from a previous
     # model must not be returned after the user changes that selection.
+    # context_key names the per-chat context the answer was built from: since
+    # BLUEPRINT #13 two chats in the same project can be given different
+    # "where we left off" records, and an answer built from one must not be
+    # served in the other. record_version alone cannot tell them apart: it
+    # says the records did not change, not which one this chat was given.
     raw = _normalize(user_message) + "|" + (project_id or "") + "|" + (
         "" if record_version is None else str(record_version)
-    ) + "|" + str(_generation if generation is None else generation) + "|" + (model_name or "")
+    ) + "|" + str(_generation if generation is None else generation) + "|" + (model_name or "") + "|" + (
+        context_key or ""
+    )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -108,6 +116,7 @@ def get(
     record_version: Optional[int] = None,
     generation: Optional[int] = None,
     model_name: Optional[str] = None,
+    context_key: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """
     Returns {"response_text": str, "stage_hints": dict} for a live cache entry,
@@ -116,7 +125,7 @@ def get(
     correctness, so a broken cache must never block a response).
     """
     try:
-        key = cache_key(user_message, project_id, record_version, generation, model_name)
+        key = cache_key(user_message, project_id, record_version, generation, model_name, context_key)
         entry = _cache.get(key)
         if entry is None:
             return None
@@ -140,6 +149,7 @@ def set(
     record_version: Optional[int] = None,
     generation: Optional[int] = None,
     model_name: Optional[str] = None,
+    context_key: Optional[str] = None,
 ) -> None:
     """
     Writes a response at the category's TTL, unless the response involved a
@@ -154,7 +164,7 @@ def set(
     ttl = ttl_for_category(category)
     if ttl <= 0:
         return
-    key = cache_key(user_message, project_id, record_version, generation, model_name)
+    key = cache_key(user_message, project_id, record_version, generation, model_name, context_key)
     _cache[key] = (time.monotonic() + ttl, response_text, stage_hints)
 
 

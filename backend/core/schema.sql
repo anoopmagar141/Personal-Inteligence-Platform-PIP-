@@ -333,6 +333,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_file_path_active
 ON documents(file_path) WHERE status = 'active';
 
 -- 20. session_snapshot Table
+-- Since BLUEPRINT #13 this table is only read once, on upgrade: its row moves
+-- into chat_records (see profile_store.move_session_snapshot_into_chat_records)
+-- and nothing writes it again. Kept so an older database or backup still has
+-- a note to carry over. What it was:
 -- Observer's (Stage 11) end-of-session summary, used to warm-start future
 -- sessions (Stage 0/7). Singleton row (id=1), same pattern as profile_meta/
 -- identity/interaction_style. Previously a plain JSON file at
@@ -472,6 +476,40 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+
+-- chat_records Table (BLUEPRINT #13, the "small PIP"; added after the
+-- original numbered sequence, like conversations above).
+--
+-- One "where we left off" record per chat, replacing session_snapshot's single
+-- row. That row was overwritten by every chat that passed the Observer's
+-- substance check and read into every project's prompt, so each chat's summary
+-- replaced the last, and deleting any chat had to clear it whichever chat had
+-- written it (P-2), because the row did not say.
+--
+-- conversation_id is unique when present: a chat's later Observer pass
+-- replaces its own record and no other. NULL is a record no chat is known for:
+-- a pass that was given no chat id, or the single note a database had before
+-- this table (source 'earlier_note'). Deleting the chat deletes its record
+-- (the cascade, and api_delete_conversation says so itself); deleting the
+-- project leaves the record unfiled, as it does the chat. source says who
+-- wrote it: the Observer (the model, so it can be wrong), the user correcting
+-- it, or the note carried over on upgrade. open_problems and last_decisions
+-- are JSON text, as session_snapshot's were.
+CREATE TABLE IF NOT EXISTS chat_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT UNIQUE,
+    project_id TEXT,
+    topic TEXT NOT NULL DEFAULT '',
+    open_problems TEXT NOT NULL DEFAULT '[]',
+    last_decisions TEXT NOT NULL DEFAULT '[]',
+    suggested_next_step TEXT NOT NULL DEFAULT '',
+    record_date TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('observer', 'user', 'earlier_note')),
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES active_projects(project_id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_records_project ON chat_records(project_id, record_date);
 
 -- Note: Table 22 (decision_fts) is created at application level if FTS5 is available
 -- as virtual table:

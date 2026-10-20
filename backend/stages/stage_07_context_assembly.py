@@ -228,16 +228,48 @@ def _format_profile(
     return _truncate_to_tokens(header + "\n" + "\n\n".join(blocks), max_tokens)
 
 
+def _format_unsummarised(tail: Optional[dict[str, Any]]) -> list[str]:
+    """
+    The previous chat's end that its Observer pass has not summarised yet
+    (BLUEPRINT #13 part 3): the user's and PIP's own words, labelled as such,
+    after the record so that the budget cuts these first.
+    """
+    if not tail or not tail.get("messages"):
+        return []
+    date = str(tail.get("date") or "")[:10]
+    lines = [f"The end of {tail.get('scope', 'the previous chat')}" + (f", {date}" if date else "")
+             + ", not yet summarised:"]
+    lines.extend(f"{'User' if m['role'] == 'user' else 'PIP'}: {m['content']}" for m in tail["messages"])
+    return lines
+
+
 def _format_snapshot(snapshot: Optional[dict[str, Any]], max_tokens: int) -> str:
-    if max_tokens <= 0 or not snapshot or not snapshot.get("topic"):
+    if max_tokens <= 0 or not snapshot:
         return ""
-    lines = [f"Last session topic: {snapshot['topic']}"]
+    unsummarised = _format_unsummarised(snapshot.get("unsummarised"))
+    if not snapshot.get("topic"):
+        if not unsummarised:
+            return ""
+        return _truncate_to_tokens("SESSION SNAPSHOT:\n" + "\n".join(unsummarised), max_tokens)
+    lines = []
+    if snapshot.get("record_scope"):
+        # Which chat's record this is and when it was written (BLUEPRINT #13):
+        # since each chat has its own, a record from another chat must not
+        # read as this chat's own; and the Observer, a model, wrote it, so it
+        # is presented as its summary, not as fact. A record the user
+        # corrected says so instead.
+        by = "corrected by the user" if snapshot.get("source") == "user" else (
+            "written by PIP when that chat ended; it may be wrong")
+        date = str(snapshot.get("snapshot_date") or "")[:10]
+        lines.append(f"From the record of {snapshot['record_scope']}" + (f", {date}" if date else "") + f" ({by}).")
+    lines.append(f"Last session topic: {snapshot['topic']}")
     if snapshot.get("last_decisions"):
         lines.append("Recent decisions: " + "; ".join(snapshot["last_decisions"]))
     if snapshot.get("open_problems"):
         lines.append("Open problems: " + "; ".join(snapshot["open_problems"]))
     if snapshot.get("suggested_next_step"):
         lines.append(f"Suggested next step: {snapshot['suggested_next_step']}")
+    lines.extend(unsummarised)
     return _truncate_to_tokens("SESSION SNAPSHOT:\n" + "\n".join(lines), max_tokens)
 
 

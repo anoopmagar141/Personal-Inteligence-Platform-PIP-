@@ -232,6 +232,17 @@ def list_decisions(conn, *, state: str = "active", project_id: str | None = None
     return [dict(row) for row in conn.execute(sql, params)]
 
 
+def list_for_conversation(conn, conversation_id: str) -> list[dict[str, Any]]:
+    """
+    The decisions a chat produced, in any state (BLUEPRINT #13 part 4: a chat's
+    record links to them). decision_log.conversation_id is set for a decision
+    the Observer learned from that chat (C-14); a decision made by hand has
+    none, so it is not listed here.
+    """
+    return [dict(row) for row in conn.execute(
+        "SELECT * FROM decision_log WHERE conversation_id = ? ORDER BY created_at, id", (conversation_id,))]
+
+
 def search_decisions(
     conn,
     *,

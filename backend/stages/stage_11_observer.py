@@ -1062,7 +1062,11 @@ def run_session_end(
         transcript if unobserved_transcript is None else unobserved_transcript, output
     ):
         try:
-            session_snapshot.write_snapshot(conn, output["session_snapshot"])
+            # This chat's own record (BLUEPRINT #13), not the profile's one
+            # note: a later pass of the same chat replaces it, nothing else does.
+            session_snapshot.write_snapshot(
+                conn, output["session_snapshot"], conversation_id=conversation_id, project_id=project_id,
+            )
         except Exception as e:
             logger.error(f"Observer: session snapshot write failed, continuing with candidates: {e}")
 

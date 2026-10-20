@@ -181,6 +181,17 @@ def summary(conn) -> dict[str, Any]:
     }
 
 
+def outcomes_for_conversation(conn, conversation_id: str) -> dict[str, int]:
+    """
+    How many of one chat's candidates were accepted, rejected, deferred or
+    dismissed (BLUEPRINT #13 part 4: a chat's record shows what came of it).
+    Counts only: the rows hold no text to show, by design.
+    """
+    return {r[0]: r[1] for r in conn.execute(
+        "SELECT outcome, COUNT(*) FROM governance_audit_log WHERE conversation_id = ? GROUP BY outcome "
+        "ORDER BY outcome", (conversation_id,))}
+
+
 def history(conn, candidate_id: str) -> list[dict[str, Any]]:
     """Every row for one candidate, oldest first: the system's decision, then the user's answer."""
     return [dict(r) for r in conn.execute(

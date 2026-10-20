@@ -31,6 +31,7 @@ from backend.memory import (
     avatar_store,
     conversation_store,
     decision_log,
+    governance_audit,
     llm_endpoint_store,
     pending_observer,
     profile_store,
@@ -736,6 +737,43 @@ def api_create_conversation(conn, payload: dict[str, Any]) -> dict[str, Any]:
     return {"id": conversation_id, "title": "New chat"}
 
 
+def api_get_chat_record(conn, conversation_id: str) -> dict[str, Any]:
+    """
+    A chat's own "where we left off" record and what the chat produced
+    (BLUEPRINT #13 part 4): the decisions learned from it and how its
+    candidates came out (counts; the audit rows hold no text). record is None
+    for a chat that has none yet.
+    """
+    if not conversation_store.conversation_exists(conn, conversation_id):
+        raise ValueError(f"Unknown conversation '{conversation_id}'.")
+    return {
+        "record": session_snapshot.get_chat_record(conn, conversation_id),
+        "links": {
+            "decisions": [
+                {k: d[k] for k in ("id", "decision_text", "state", "confidence", "created_at")}
+                for d in decision_log.list_for_conversation(conn, conversation_id)
+            ],
+            "outcomes": governance_audit.outcomes_for_conversation(conn, conversation_id),
+        },
+    }
+
+
+def api_correct_chat_record(conn, conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """The user's correction of a chat's record (#13 part 4); the ValueError's sentence is the 422 the user sees."""
+    if not conversation_store.conversation_exists(conn, conversation_id):
+        raise LookupError(f"Unknown conversation '{conversation_id}'.")
+    return {"record": session_snapshot.correct_chat_record(
+        conn, conversation_id, payload or {}, project_id=conversation_store.project_of(conn, conversation_id))}
+
+
+def api_clear_chat_record(conn, conversation_id: str) -> dict[str, Any]:
+    """Removes a chat's record (#13 part 4); the chat's next Observer pass may write a new one."""
+    if not conversation_store.conversation_exists(conn, conversation_id):
+        raise ValueError(f"Unknown conversation '{conversation_id}'.")
+    removed = session_snapshot.delete_chat_record(conn, conversation_id)
+    return {"status": "cleared" if removed else "nothing to clear"}
+
+
 def api_delete_conversation(conn, conversation_id: str) -> dict[str, Any]:
     """
     Deletes a chat and what PIP kept from it for later (BLUEPRINT P-2,
@@ -748,20 +786,19 @@ def api_delete_conversation(conn, conversation_id: str) -> dict[str, Any]:
     transcript of it queued for the next start was still learned from, and
     kept, after the chat was gone.
 
-    The note is cleared whichever chat wrote it, because it cannot say. So
-    deleting any chat also clears a note another chat wrote; the next chat to
-    end writes a fresh one. Stated rather than hidden: a lost recap costs one
-    chat's continuity, a deleted chat's summary in every later prompt costs
-    the delete. One record per chat, deleted with it, is the real fix (#13).
+    P-2 cleared that note whichever chat wrote it, because it could not say,
+    so deleting any chat also cost another chat's recap. Since #13 each chat
+    has its own record (chat_records), and deleting a chat deletes its record
+    and no other.
 
-    The queue and the note go first and the chat last, so a failure part-way
+    The queue and the record go first and the chat last, so a failure part-way
     leaves the chat in the sidebar to delete again rather than a chat that
     looks deleted while its text is still kept.
     """
     if not conversation_store.conversation_exists(conn, conversation_id):
         raise ValueError(f"Unknown conversation '{conversation_id}'.")
     pending_observer.discard_for_conversation(conn, conversation_id)
-    session_snapshot.clear_snapshot(conn)
+    session_snapshot.delete_chat_record(conn, conversation_id)
     deleted = conversation_store.delete_conversation(conn, conversation_id)
     if not deleted:
         raise ValueError(f"Unknown conversation '{conversation_id}'.")
@@ -985,6 +1022,7 @@ async def stream_pipeline_to_websocket(
     *,
     conversation_history: list[dict[str, str]],
     project_id: str | None = None,
+    conversation_id: str | None = None,
     executor=None,
     incoming: Optional[asyncio.Queue] = None,
     cache_generation: Optional[int] = None,
@@ -1036,7 +1074,7 @@ async def stream_pipeline_to_websocket(
     stop_event = threading.Event()
     gen = pipeline.run(
         conn, user_message, conversation_history=conversation_history,
-        project_id=project_id, should_stop=stop_event.is_set,
+        project_id=project_id, conversation_id=conversation_id, should_stop=stop_event.is_set,
         cache_generation=cache_generation,
     )
     # Everything forwarded so far, folded the way pipeline.run() folds it -
@@ -1943,6 +1981,8 @@ try:
                     websocket, conn, user_message,
                     conversation_history=conversation_history,
                     project_id=project_id,
+                    # Which chat this is, so it is given its own record (#13).
+                    conversation_id=conversation_id,
                     executor=executor,
                     incoming=incoming,
                     cache_generation=cache_generation,
@@ -2818,6 +2858,35 @@ try:
         with _conn() as conn:
             try:
                 return api_get_conversation_messages(conn, conversation_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get(f"{BASE_PREFIX}/conversations/{{conversation_id}}/record")
+    def get_chat_record(conversation_id: str):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_get_chat_record(conn, conversation_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.put(f"{BASE_PREFIX}/conversations/{{conversation_id}}/record")
+    def correct_chat_record(conversation_id: str, payload: dict[str, Any]):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_correct_chat_record(conn, conversation_id, payload)
+            except LookupError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+
+    @app.delete(f"{BASE_PREFIX}/conversations/{{conversation_id}}/record")
+    def clear_chat_record(conversation_id: str):
+        from fastapi import HTTPException
+        with _conn() as conn:
+            try:
+                return api_clear_chat_record(conn, conversation_id)
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail=str(exc))
 

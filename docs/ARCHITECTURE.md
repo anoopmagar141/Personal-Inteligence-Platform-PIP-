@@ -90,12 +90,25 @@ where `observed_at IS NULL`. Catch-up drains in a background task, never inline
 before serving. Every sign-in gets its own: one still running from a previous
 session queues the next behind it rather than standing in for it. A queued
 transcript names its chat (`pending_observer.conversation_id`); deleting a chat
-removes its queued transcripts and clears the "where we left off" note
-(`session_snapshot`, one row per profile), and the session-end pass does not run
-for a chat that no longer exists. A decision the pass learns, logged or queued
-to ask the user, carries the chat's project (read from the chat's
-`conversations` row) and the chat's id (`decision_log.conversation_id`), so the
-project's own decision lookup finds it (BLUEPRINT C-14).
+removes its queued transcripts and its own "where we left off" record, and the
+session-end pass does not run for a chat that no longer exists. A decision the
+pass learns, logged or queued to ask the user, carries the chat's project (read
+from the chat's `conversations` row) and the chat's id
+(`decision_log.conversation_id`), so the project's own decision lookup finds it
+(BLUEPRINT C-14).
+
+**One record per chat, the "small PIP" (#13).** The pass writes its chat's
+"where we left off" record into `chat_records` (topic, open problems, decisions,
+next step, date; one per chat, with its project; source `observer`, `user` or
+`earlier_note`), replacing the old single `session_snapshot` row, whose note an
+upgrade moves in once. A message's pipeline run is told its chat and chooses,
+before the answer cache, this chat's record, else its project's latest, else the
+newest; Stage 7 prints which one, its date and that PIP wrote it ("it may be
+wrong"), and the cache key names it. A chat with no record of its own is also
+shown the previous chat's end that its pass has not summarised yet. The user can
+read a chat's record with what the chat produced, correct it (it is theirs then,
+and later passes leave it) or clear it: `/conversations/{id}/record`, and the
+chat footer's dialog in the app.
 
 Each memory candidate then passes **two independent gates, in this order**:
 

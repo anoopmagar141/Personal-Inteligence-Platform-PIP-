@@ -24,7 +24,9 @@ The stop-gap: deleting a chat clears the note (whichever chat wrote it: the
 note does not record that, so a note from another chat is cleared too, and the
 next chat to end writes a fresh one), removes the chat's queued transcripts,
 and the end-of-chat pass does not run for a chat that is gone. The real fix,
-one record per chat that is deleted with it, is #13.
+one record per chat that is deleted with it, is #13: the note below is now the
+deleted chat's own record, as the end-of-chat pass writes it, and only that
+record goes (backend/tests/test_chat_records.py holds the rest).
 """
 
 import asyncio
@@ -86,7 +88,7 @@ def observer_calls(monkeypatch):
     def fake_run_session_end(conn, transcript, provider, project_id=None, unobserved_transcript=None,
                          conversation_id=None):
         calls.append(transcript)
-        session_snapshot.write_snapshot(conn, NOTE)
+        session_snapshot.write_snapshot(conn, NOTE, conversation_id=conversation_id)
         return {"memory_results": [], "decision_results": []}
 
     monkeypatch.setattr(session_lifecycle.observer, "run_session_end", fake_run_session_end)
@@ -109,7 +111,7 @@ def test_a_deleted_chats_note_does_not_reach_the_next_chat(tmp_path, monkeypatch
     response_cache.clear()
     try:
         cid = _seed_chat(conn)
-        session_snapshot.write_snapshot(conn, NOTE)
+        session_snapshot.write_snapshot(conn, NOTE, conversation_id=cid)
 
         # Precondition: the note does reach a new chat's first message, so the
         # assertion below cannot pass because the prompt never carries it.
@@ -176,8 +178,13 @@ async def test_a_chat_deleted_while_its_pass_runs_leaves_no_note(executor_conn, 
     def pass_that_outlives_its_chat(conn, transcript, provider, project_id=None, unobserved_transcript=None,
                          conversation_id=None):
         # The delete arrives during the pass, before the pass writes the note.
+        # The real pass isolates its record write, which the missing chat
+        # refuses (its foreign key); so does this one.
         server.api_delete_conversation(conn, cid)
-        session_snapshot.write_snapshot(conn, NOTE)
+        try:
+            session_snapshot.write_snapshot(conn, NOTE, conversation_id=cid)
+        except Exception:
+            pass
         return {"memory_results": [], "decision_results": []}
 
     monkeypatch.setattr(session_lifecycle.observer, "run_session_end", pass_that_outlives_its_chat)

@@ -3,9 +3,10 @@ import time
 import pytest
 
 from backend.memory.profile_store import get_connection, initialize_schema
+from backend.memory import conversation_store
 from backend.memory.session_snapshot import (
     SessionSnapshot,
-    clear_snapshot,
+    delete_chat_record,
     load_snapshot,
     write_snapshot,
 )
@@ -39,54 +40,55 @@ def test_load_and_write_success(conn):
 
 
 def test_no_row_yet_fails_open(conn):
-    # First-ever run: no session_snapshot row has been written yet.
+    # First-ever run: no chat record has been written yet.
     assert load_snapshot(conn) is None
 
 
-def test_write_is_a_singleton_upsert(conn):
-    # Security regression test: session_snapshot is now a DB table (singleton
-    # row id=1), not a file that gets overwritten - confirms a second write
-    # actually replaces the first row rather than erroring or duplicating it.
-    write_snapshot(conn, _sample())
+def test_a_chats_second_write_replaces_its_own_record(conn):
+    # Since #13 a chat has one record: a second write for the same chat
+    # replaces it rather than erroring or duplicating it (this test used to
+    # pin the profile's single session_snapshot row the same way).
+    chat = conversation_store.create_conversation(conn)
+    write_snapshot(conn, _sample(), conversation_id=chat)
     second = _sample()
     second["topic"] = "a completely different topic"
-    write_snapshot(conn, second)
+    write_snapshot(conn, second, conversation_id=chat)
 
     assert load_snapshot(conn)["topic"] == "a completely different topic"
-    assert conn.execute("SELECT COUNT(*) FROM session_snapshot").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM chat_records").fetchone()[0] == 1
 
 
-def test_clear_returns_the_store_to_its_genuine_empty_state(conn):
-    # A snapshot can be actively wrong rather than merely stale - one written
-    # from a conversation in which PIP failed to recall anything will be handed
-    # to every later session as established context. Clearing has to leave
-    # load_snapshot() reading None, not a row of empty strings that merely
-    # looks like none.
-    write_snapshot(conn, _sample())
+def test_two_chats_keep_two_records_and_the_newest_is_loaded(conn):
+    first, second = conversation_store.create_conversation(conn), conversation_store.create_conversation(conn)
+    write_snapshot(conn, _sample(), conversation_id=first)
+    later = _sample()
+    later["topic"] = "the later chat"
+    later["snapshot_date"] = "2026-07-12T09:00:00Z"
+    write_snapshot(conn, later, conversation_id=second)
 
-    assert clear_snapshot(conn) is True
-    assert load_snapshot(conn) is None
-    assert conn.execute("SELECT COUNT(*) FROM session_snapshot").fetchone()[0] == 0
-
-
-def test_clear_reports_honestly_when_there_was_nothing_to_clear(conn):
-    # False, so a caller can say "nothing to clear" rather than imply it undid
-    # something. This is the whole reason clear_snapshot returns a bool.
-    assert clear_snapshot(conn) is False
+    assert load_snapshot(conn)["topic"] == "the later chat"
+    assert conn.execute("SELECT COUNT(*) FROM chat_records").fetchone()[0] == 2
 
 
-def test_writing_after_a_clear_starts_clean(conn):
-    # The clear must not leave the singleton id in a state that blocks the next
-    # upsert - the next real session has to be able to write normally.
-    write_snapshot(conn, _sample())
-    clear_snapshot(conn)
+def test_deleting_a_chats_record_leaves_the_others(conn):
+    # A record can be actively wrong rather than merely stale, and it goes with
+    # its chat. Removing one chat's record must leave every other chat's, where
+    # the old clear_snapshot() removed the profile's only note (P-2).
+    first, second = conversation_store.create_conversation(conn), conversation_store.create_conversation(conn)
+    write_snapshot(conn, _sample(), conversation_id=first)
+    later = _sample()
+    later["topic"] = "the later chat"
+    later["snapshot_date"] = "2026-07-12T09:00:00Z"
+    write_snapshot(conn, later, conversation_id=second)
 
-    fresh = _sample()
-    fresh["topic"] = "what the next real session was actually about"
-    write_snapshot(conn, fresh)
+    assert delete_chat_record(conn, second) is True
+    assert load_snapshot(conn)["topic"] == "pytest fixtures"
 
-    assert load_snapshot(conn)["topic"] == "what the next real session was actually about"
-    assert conn.execute("SELECT COUNT(*) FROM session_snapshot").fetchone()[0] == 1
+
+def test_deleting_reports_honestly_when_the_chat_had_no_record(conn):
+    # False, so a caller can say "nothing to remove" rather than imply it undid
+    # something.
+    assert delete_chat_record(conn, conversation_store.create_conversation(conn)) is False
 
 
 def test_load_fails_open_on_unexpected_db_error():

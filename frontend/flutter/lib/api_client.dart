@@ -98,6 +98,15 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<dynamic> put(String path, [Map<String, dynamic>? body]) async {
+    final response = await http.put(
+      _uri(path),
+      headers: {'Content-Type': 'application/json', ..._authHeaders},
+      body: jsonEncode(body ?? {}),
+    );
+    return _decode(response);
+  }
+
   /// [body] is sent when given, which HTTP allows on DELETE and which one
   /// route here needs: deleting a profile is confirmed by re-typing its
   /// password, and a password does not belong in a query string - those are
@@ -608,5 +617,22 @@ class ApiClient {
 
   Future<void> deleteConversation(String conversationId) async {
     await delete('/conversations/$conversationId');
+  }
+
+  // --- a chat's "where we left off" record (BLUEPRINT #13) -------------
+  //
+  // {"record": {...} or null, "links": {"decisions": [...], "outcomes": {...}}}.
+  // The record is written by PIP when a chat ends and can be wrong; the user
+  // can correct it (it is then theirs, and PIP leaves it as it is) or clear it.
+
+  Future<Map<String, dynamic>> getChatRecord(String conversationId) async =>
+      await get('/conversations/$conversationId/record') as Map<String, dynamic>;
+
+  /// Throws ApiException with the backend's sentence for a record it refuses.
+  Future<Map<String, dynamic>> correctChatRecord(String conversationId, Map<String, dynamic> fields) async =>
+      await put('/conversations/$conversationId/record', fields) as Map<String, dynamic>;
+
+  Future<void> clearChatRecord(String conversationId) async {
+    await delete('/conversations/$conversationId/record');
   }
 }

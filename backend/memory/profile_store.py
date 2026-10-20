@@ -421,8 +421,42 @@ def initialize_schema(conn) -> None:
     rebuild_trace_log_if_stale(conn)
     rebuild_active_projects_if_stale(conn)
     backfill_document_blobs(conn)
+    move_session_snapshot_into_chat_records(conn)
     seed_provider_consent(conn)
     install_record_version_triggers(conn)
+
+
+def move_session_snapshot_into_chat_records(conn) -> bool:
+    """
+    Carries a database's single "where we left off" note into chat_records as
+    its first record (BLUEPRINT #13), so upgrading loses nothing the next chat
+    was about to be shown. The note never said which chat or project wrote it,
+    so the record names neither; source 'earlier_note' says where it came from.
+
+    Moved rather than copied: the singleton row is deleted in the same commit,
+    so a second start (or a restored backup opened again) cannot copy it twice,
+    and nothing reads the old row afterwards. Returns whether a note moved.
+    """
+    row = conn.execute(
+        "SELECT topic, open_problems, last_decisions, suggested_next_step, snapshot_date "
+        "FROM session_snapshot WHERE id = 1"
+    ).fetchone()
+    if row is None:
+        return False
+    conn.execute(
+        """
+        INSERT INTO chat_records (
+            conversation_id, project_id, topic, open_problems, last_decisions, suggested_next_step,
+            record_date, source
+        )
+        VALUES (NULL, NULL, ?, ?, ?, ?, ?, 'earlier_note')
+        """,
+        (row["topic"], row["open_problems"], row["last_decisions"], row["suggested_next_step"],
+         row["snapshot_date"] or now_utc()),
+    )
+    conn.execute("DELETE FROM session_snapshot WHERE id = 1")
+    conn.commit()
+    return True
 
 
 # Every table whose contents can reach the model's context: the profile
@@ -451,6 +485,9 @@ RECORD_TABLES = (
     "decision_log",
     "documents",
     "session_snapshot",
+    # The per-chat "where we left off" records (BLUEPRINT #13), which replace
+    # session_snapshot's single row.
+    "chat_records",
 )
 
 

@@ -4028,6 +4028,85 @@ was written for.
 - **A question about someone else's plans still raises its topic**, as the card says (the user asked it); with the
   gate's one-shared-word anchor, a multi-word topic can still be anchored by one word of that question.
 
+### 7.62 #13: one checked record per chat, the "small PIP", D-39 (authorized 2026-10-18; built 2026-10-18 to 2026-10-20)
+
+The sixth item of the final plan's step 4 (BLUEPRINT card #13, written first at the owner's request; PROTECTED,
+the owner's own headline design). No owner decision needed. Built in the card's four parts, each test first.
+
+- **Defect (D-39, A, medium):** "where we left off" was ONE row per profile (`session_snapshot`, `CHECK (id = 1)`),
+  overwritten by every chat that passed the Observer's substance check and loaded into every project's prompt. So
+  each chat's summary replaced the last; a chat in one project opened on another project's last chat; a chat
+  opened before the previous chat's Observer pass had run got an older note, or none; deleting any chat had to
+  clear the note whichever chat had written it (P-2, §7.53), because the row did not say; and the app had no screen
+  for it, so the user could neither see what PIP would carry forward nor correct it.
+- **Promise:** 9 (answers reflect the current record), and the owner's design: each chat a "small PIP" with its own
+  record, tied to its project.
+- **Mechanism:**
+  - **Part 1, one record per chat:** `chat_records` (chat id, unique when present, cascading with its chat;
+    project, set null with its project; topic, open problems, decisions, next step; date; source `observer`,
+    `user` or `earlier_note`). `run_session_end` writes its chat's record with its project under the existing
+    substance check; a later pass of the same chat replaces its own record only; a pass with no chat adds an
+    unattributed one. On upgrade the single note moves into `chat_records` as `earlier_note` (moved in one commit,
+    so never twice) and nothing writes `session_snapshot` again. In `RECORD_TABLES`. Deleting a chat deletes its
+    record and no other (`delete_chat_record`, which replaces `clear_snapshot`), as does the deleted-during-the-pass
+    path.
+  - **Part 2, the right record:** the chat socket tells the pipeline which chat a message is in; the pipeline
+    chooses once, before the cache, this chat's record, else its project's latest, else the newest; Stage 7
+    prints which it is, its date and "written by PIP when that chat ended; it may be wrong" (or "corrected by the
+    user"); the answer cache key names the chosen record (`context_key`), since two chats in one project can now
+    be given different context.
+  - **Part 3, not yet summarised:** a chat with no record of its own is also shown the end of the previous chat
+    (the newest other chat with messages in the same project, else overall) after that chat's last Observer pass:
+    up to 4 messages of up to 40 words, labelled "not yet summarised", after the record in the same budget; the
+    cache key names the last message shown (messages do not move the record version).
+  - **Part 4, read, correct, clear:** `GET`, `PUT` and `DELETE /api/v1/conversations/{id}/record`; the read carries
+    what the chat produced (its learned decisions, `decision_log.conversation_id`, and its audit outcomes as
+    counts, `governance_audit_log.conversation_id`). A correction is validated with a sentence (topic present and
+    at most 300 characters; lists of at most 20 texts of at most 300), becomes `source = 'user'`, and the
+    Observer's later passes leave it alone. The app: a "Where we left off" button in the open chat's footer opens
+    a dialog with the record, who wrote it and when, the chat's decisions and outcomes, Edit (the backend's refusal
+    shown, the form kept) and Clear (asked first).
+- **Tests:** `backend/tests/test_chat_records.py`, 32 (part 1: 9, part 2: 8, part 3: 6, part 4: 9), through the real
+  session-end path, pipeline and routes; one in `test_ws_chat.py` (the socket names the chat);
+  `frontend/flutter/test/chat_record_dialog_test.dart`, 8.
+  - **Seen failing first:** part 1, 7 of 9 (the two that keep today's behaviour passed, as they must); part 2, 6 of
+    6; part 3, 3 of 5 (two controls passed); part 4, 9 of 9; the app, 7 of 7 (it could not build). Added after a
+    break-it run found a gap, each held by the mutation that showed it: two in part 2 (a resumed chat beside a
+    newer chat in its project; two chats in one project and the cache), one in part 3 (an empty chat must not hide
+    the one before it, a fix made with it), one in the app (Cancel keeps the record); the socket test passed when
+    written (its fix came first) and is held by its break-it.
+  - **Existing tests changed:** `test_session_snapshot.py` (the singleton tests now pin per-chat records: a chat's
+    second write replaces its own, two chats keep two, deleting one keeps the other, an honest False);
+    `test_pipeline.py` (its seed writes a record); `test_deleting_a_chat_forgets_it.py` (its note is the deleted
+    chat's own record, and the pass that outlives its chat isolates the write the missing chat refuses).
+- **Break-it:** 31 mutations, each alone, restored byte for byte, each caught. Part 1 (7): a later pass keeping the
+  chat's old record instead of replacing it; deleting one chat's record deleting all; the old note not carried over;
+  copied instead of moved; records outside `RECORD_TABLES`; the Observer writing no chat id; no explicit delete and
+  no cascade. Part 2 (6): the socket not naming the chat; no own record; no project record; the cache key not
+  naming the record; the record unlabelled; Stage 7 given the newest record whatever the chat. Part 3 (6): the end
+  not shown; already-summarised messages shown; the previous chat taken from any project; a chat with its own
+  record shown another's end; the key not naming the end; an empty chat counted as the previous chat. Part 4 API
+  (6): the Observer overwriting a correction; a correction still marked the model's; an empty topic accepted; no
+  decisions linked; clearing keeping the record; a corrected record still called the model's guess. The app (6):
+  PIP's record not called possibly wrong; a refusal closing the form; the lines sent unsplit; no footer button;
+  clearing not waiting for the answer; Cancel still clearing.
+- **Suites:** Backend 1786 passed, 0 failed (22 min 54 s, slower because the app's widget tests ran beside it for
+  part of the time), on the working tree at 0c8fc7f plus this change (with other sessions' uncommitted `httpx2`
+  requirement and its test); the changed backend files were compared byte for byte with copies taken before the run.
+  A first run had stopped at 20% when the computer slept (exit 4, no test failed). Flutter 346 passed (338 + 8), the
+  generated platform files unchanged.
+
+**Not covered (still open):**
+- **The newest record of all is still the last resort**, so a chat with no project, or in a project with no record
+  yet, is shown the last chat's record from wherever it was; the prompt names it "your last chat" with its date.
+- **Documents are not linked to the chat** that used them: nothing records which chat a document served.
+- **The record is the model's summary**, labelled as such; the model can still lean on a wrong one until the user
+  corrects or clears it. The app has no list of all records, only the open chat's.
+- **The "not yet summarised" end is short** (4 messages of 40 words) and shares the record's 250-token budget, so a
+  long record can push it out.
+- **`session_snapshot` stays in the schema**, read only to carry an older database's or backup's note over.
+- **Not checked in a real window** (V-1): the dialog is tested as widgets.
+
 ---
 
 ## 8. Status
@@ -4102,6 +4181,7 @@ was written for.
 | D-36 a refused candidate left no lasting record | Fixed 2026-10-18 (§7.59) | A, medium for the thesis: a candidate the guard refused left a logger line only, and trace_log is purged after 90 days. Now an append-only `governance_audit_log` (triggers abort UPDATE and DELETE) holds one row for every terminal outcome of an Observer memory or decision candidate and for every user answer to a queued question, with an HMAC fingerprint and never the text, through one writer that refuses an unknown reason (DEC-5). 52 tests, 12 break-it mutations. Append-only within the trust boundary, not tamper-evident; decisions made by hand are not audited; no view in the app |
 | D-37 the Observer's decisions skipped the evidence gate; an immutable name could be a preference | Fixed 2026-10-18 (§7.60) | A, medium (§7.13 findings 1-2, DEC-7 = A): decisions were logged on grounding and the model's own signals, so tentative remarks, a friend's goal and the assistant's words became the user's decisions; `preference_memory.language_preference = French` sat in every prompt beside identity's English. Decisions now pass the gate (goal_memory's commitment language reused, the user's own words); the Constitution refuses an immutable name as a preference and Stage 4 keeps an old one out of prompts. 16 tests, 7 break-it mutations. Replays: nothing added; 154 of 197 decisions removed, 124 rightly, 9 real ones lost (30 lenient). W-1's run 1 re-run with the model: bar 2 met (0 of 162, W-1 had 2) |
 | D-38 the gate refuses a quote carrying its turn's "User:" label | Found 2026-10-18 (§7.60), open | A, low: the ledger holds turns without their role label, so a quote the user said word for word but cited with "User: " is EVIDENCE_NOT_FOUND; 7 of G-4's 9 strict decision losses, and memory candidates are judged by the same step. A false reject. Not fixed |
+| D-39 one "where we left off" note for every chat and project | Fixed 2026-10-20 (§7.62) | A, medium (#13): the note was one row per profile, overwritten by every chat, loaded into every project, cleared whichever chat was deleted, and invisible in the app. Now one record per chat (`chat_records`) with its project, deleted with its chat; a chat is shown its own, else its project's latest, else the newest, labelled and dated; the previous chat's unsummarised end; the record can be read, corrected and cleared in the app. 32 + 1 backend and 8 app tests, 31 break-it mutations. Documents are not linked to chats |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

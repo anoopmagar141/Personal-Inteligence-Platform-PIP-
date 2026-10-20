@@ -840,3 +840,28 @@ def test_proactive_route_reports_a_long_gap(monkeypatch, token, tmp_path):
 
     assert response.status_code == 200
     assert [t["trigger"] for t in response.json()] == ["session_gap_exceeds_48h"]
+
+
+def test_the_pipeline_is_told_which_chat_each_message_belongs_to(monkeypatch, token):
+    # BLUEPRINT #13: each chat has its own "where we left off" record, and the pipeline can only pick this chat's
+    # (and keep its cached answers apart from another chat's) if the socket says which chat a message is in.
+    seen = []
+
+    def fake_run(conn, user_message, **kw):
+        seen.append(kw.get("conversation_id"))
+        return _fake_pipeline_events(f"reply to {user_message}")
+
+    monkeypatch.setattr(server.pipeline, "run", fake_run)
+
+    client = TestClient(server.app)
+    with client.websocket_connect(ws_url(token)) as ws:
+        _expect_session_info(ws)
+        ws.send_json({"message": "first"})
+        created = _expect_session_info(ws)
+        for _ in range(4):
+            ws.receive_json()
+        ws.send_json({"message": "second"})
+        for _ in range(4):
+            ws.receive_json()
+
+    assert seen == [created["conversation_id"], created["conversation_id"]]

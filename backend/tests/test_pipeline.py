@@ -321,11 +321,10 @@ def _stamp(**kw):
 
 
 def _seed_snapshot(conn, when):
-    conn.execute(
-        "INSERT INTO session_snapshot (id, topic, snapshot_date) VALUES (1, 'topic', ?) "
-        "ON CONFLICT(id) DO UPDATE SET snapshot_date = excluded.snapshot_date",
-        (when,),
-    )
+    # The newest chat record is the note now (BLUEPRINT #13; it was the
+    # singleton session_snapshot row).
+    conn.execute("DELETE FROM chat_records")
+    conn.execute("INSERT INTO chat_records (topic, record_date, source) VALUES ('topic', ?, 'observer')", (when,))
     conn.commit()
 
 

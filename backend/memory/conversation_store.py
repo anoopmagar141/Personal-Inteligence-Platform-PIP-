@@ -86,6 +86,70 @@ def mark_observed(conn, conversation_id: str, *, timestamp: str | None = None) -
     conn.commit()
 
 
+# How much of the previous chat's not-yet-summarised end a new chat is shown
+# (BLUEPRINT #13 part 3): the last few messages, each cut short, inside the
+# same small budget as the record itself.
+UNSUMMARISED_MESSAGES = 4
+UNSUMMARISED_WORDS_PER_MESSAGE = 40
+
+
+def unsummarised_tail(conn, *, exclude: Optional[str], project_id: Optional[str]) -> Optional[dict[str, Any]]:
+    """
+    The end of the previous chat that its Observer pass has not summarised yet
+    (BLUEPRINT #13 part 3), or None.
+
+    A chat's record is written when its Observer pass runs, after the chat
+    ends; a new chat opened before that (the usual case: the user leaves one
+    chat and opens the next) used to be given an older note, or none. So the
+    new chat is also shown the previous chat's messages after its last pass,
+    labelled as not yet summarised: the user's own words, not a summary.
+
+    The previous chat is the newest other chat in the same project, else the
+    newest other chat of all (as the record's own fallback), counting only
+    chats with messages: an empty one (created, nothing said yet) has no end
+    to show and must not hide the chat before it. Only messages after its
+    observed_at count; a chat whose pass already ran shows nothing here,
+    since its record covers it.
+    """
+    has_messages = "EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = conversations.id)"
+    tries = []
+    if project_id:
+        tries.append((f"SELECT id, observed_at FROM conversations WHERE project_id = ? AND id != ? AND {has_messages} "
+                      "ORDER BY updated_at DESC, rowid DESC LIMIT 1", (project_id, exclude or ""),
+                      "the last chat in this project"))
+    tries.append((f"SELECT id, observed_at FROM conversations WHERE id != ? AND {has_messages} "
+                  "ORDER BY updated_at DESC, rowid DESC LIMIT 1",
+                  (exclude or "",), "your last chat"))
+    for sql, params, scope in tries:
+        previous = conn.execute(sql, params).fetchone()
+        if previous is None:
+            continue
+        rows = conn.execute(
+            "SELECT id, role, content, created_at FROM messages WHERE conversation_id = ? "
+            "AND (? IS NULL OR created_at > ?) ORDER BY id DESC LIMIT ?",
+            (previous["id"], previous["observed_at"], previous["observed_at"], UNSUMMARISED_MESSAGES),
+        ).fetchall()
+        if not rows:
+            return None
+        rows = list(reversed(rows))
+        return {
+            "conversation_id": previous["id"],
+            "scope": scope,
+            "last_message_id": rows[-1]["id"],
+            "date": rows[-1]["created_at"],
+            "messages": [
+                {"role": r["role"], "content": _first_words(r["content"], UNSUMMARISED_WORDS_PER_MESSAGE)}
+                for r in rows
+            ],
+        }
+    return None
+
+
+def _first_words(text: str, limit: int) -> str:
+    words = str(text).split()
+    return " ".join(words[:limit]) + (" ..." if len(words) > limit else "")
+
+
 def list_unobserved(conn) -> list[dict[str, Any]]:
     """
     Conversations that hold messages but have never been through the Observer.

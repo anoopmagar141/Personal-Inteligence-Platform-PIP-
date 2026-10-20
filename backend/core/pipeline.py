@@ -41,7 +41,7 @@ from typing import Any, Callable, Generator, Optional, Union
 
 from backend.core import response_cache, trace
 from backend.memory import llm_endpoint_store, profile_store
-from backend.memory import session_snapshot
+from backend.memory import conversation_store, session_snapshot
 from backend.providers.base_provider import BaseLLMProvider
 from backend.providers.ollama_provider import OllamaProvider, default_model_name, window_detail
 from backend.providers.openai_compatible_provider import OpenAICompatibleProvider
@@ -249,6 +249,7 @@ def run(
     user_message: str,
     *,
     project_id: Optional[str] = None,
+    conversation_id: Optional[str] = None,
     conversation_history: Optional[list[dict[str, str]]] = None,
     providers: Optional[list[BaseLLMProvider]] = None,
     max_tokens: int = 2000,
@@ -340,6 +341,24 @@ def run(
     # The record version prevents serving an answer after profile data changes.
     # If it cannot be read, skip cache both ways rather than risk stale output.
     tc = time.perf_counter()
+    # The "where we left off" record this chat is given (BLUEPRINT #13): this
+    # chat's own, else its project's latest, else the newest. Chosen here,
+    # before the cache, because it is part of the answer's context: two chats
+    # can now be given different records, so the key names which one.
+    chat_record = session_snapshot.load_record_for(conn, conversation_id=conversation_id, project_id=project_id)
+    context_key = f"chat_record:{chat_record['record_id']}" if chat_record else "chat_record:none"
+    # And, for a chat with no record of its own, the end of the previous chat
+    # that its Observer pass has not summarised yet (#13 part 3). Messages do
+    # not move the record version (they are written every turn), so the key
+    # names the last one shown.
+    unsummarised = None
+    if not chat_record or chat_record["record_scope"] != session_snapshot.SCOPE_THIS_CHAT:
+        try:
+            unsummarised = conversation_store.unsummarised_tail(conn, exclude=conversation_id, project_id=project_id)
+        except Exception as e:
+            logger.error(f"Pipeline: could not read the previous chat's unsummarised end, leaving it out: {e}")
+    if unsummarised:
+        context_key += f"|unsummarised:{unsummarised['last_message_id']}"
     try:
         record_version = profile_store.record_version(conn)
     except Exception as e:
@@ -353,7 +372,7 @@ def run(
     cached = (
         response_cache.get(
             user_message, project_id, record_version,
-            generation=cache_generation, model_name=active_model_name,
+            generation=cache_generation, model_name=active_model_name, context_key=context_key,
         )
         if record_version is not None and active_model_name is not None
         else None
@@ -508,11 +527,10 @@ def run(
     # Stage 7
     t7 = time.perf_counter()
     try:
-        snapshot = session_snapshot.load_snapshot(conn)
         assembled = stage_07.run(
             user_message,
             profile_fields=profile_fields,
-            session_snapshot=snapshot,
+            session_snapshot={**(chat_record or {}), "unsummarised": unsummarised} if unsummarised else chat_record,
             decision_log_entries=decision_entries,
             rag_chunks=rag_result["chunks"],
             web_results=web_results,
@@ -606,6 +624,7 @@ def run(
             record_version=record_version,
             generation=cache_generation,
             model_name=active_model_name,
+            context_key=context_key,
         )
 
     # Stage 10
