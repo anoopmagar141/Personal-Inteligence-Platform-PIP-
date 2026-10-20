@@ -4229,6 +4229,73 @@ decision needed. The plan's third part, matching a repeat by meaning, is left ou
 - **How often users confirm** these questions is not measured (no real users).
 - **Two per chat** is a chosen number, not a measured one.
 
+### 7.65 Step 6: a follow-up inside one chat keeps its thread (#7, #8, #9, #10, #12), D-44 (authorized 2026-10-20)
+
+The first Product step below the cut line (BLUEPRINT card "Step 6", written first). No owner decision needed. Q-1
+(#11, the greeting) has its own card and is not part of this.
+
+- **Defect (D-44, A, medium):** five ways a follow-up inside one chat lost what it was about.
+  - **#12:** the prompt never said what day it is, so "yesterday", "last week" or "by Friday" could not be placed.
+  - **#8:** after a 10-minute break the idle Observer pass cleared the open chat's history, so the next message
+    started from nothing.
+  - **#9:** history trimming stopped at the first message, counting from the newest, that did not fit its
+    1,000-token budget, so one long reply emptied the history, the last exchange included.
+  - **#10:** the answer cache did not know the chat, so a follow-up ("why?") could be answered with another chat's
+    saved answer for up to 24 h.
+  - **#7:** decisions and documents were searched with Stage 1's hint, the first 12 words of the newest message
+    only, so "and why?" found nothing it referred to.
+- **Promise:** none weakened, and nothing new leaves the machine: the web query is still the first 12 words of the
+  current message (DEC-14), and the date is the machine's own clock.
+- **Mechanism:**
+  - **#12:** Stage 7 adds "Today is Tuesday, 20 October 2026." (the machine's local date, `pipeline._today`) after
+    the system instructions; the cache key names the date, so a cached answer is not replayed on another day.
+  - **#8:** a successful idle pass keeps the history and marks what it read with the mark a resumed chat already
+    uses (`observed_prefix`, the turns so far); the disconnect pass is shown those turns but counts only the later
+    ones as new evidence. A failed idle pass marks nothing, so the next pass takes its turns again.
+  - **#9:** `_trim_conversation_history` always keeps the last exchange: the question whole if it fits half the
+    budget, the reply cut to what is left; older messages fill the rest, oldest dropped first. When the whole
+    prompt is over its budget, the history is still trimmed oldest first in the priority order (unchanged).
+  - **#10:** the cache is read and written only for a chat's first message (no history yet).
+  - **#7:** Stages 3 and 5 search with the previous user message and the whole current one
+    (`pipeline._search_text`); a first message is searched with its whole text, where it was the 12-word hint.
+- **Tests:** `backend/tests/test_keep_the_thread.py`, 11, through the real pipeline with a stand-in model that
+  records its prompt (Stage 7 alone for #9): the prompt names the day; a cached answer is not replayed the next day;
+  a 4,000-word reply is kept shortened, the question whole; earlier messages go first; a history that fits is passed
+  whole; a follow-up is neither answered from the cache nor saved to it; a first message still uses it; "and why?"
+  finds the decision its previous message asked about; Stages 3 and 5 get the previous and the whole current
+  message; the web query is still the first 12 words. `test_ws_chat.py`, 3 new for #8, through the chat socket with
+  a short idle timeout and a stand-in Observer: the next message after the idle pass still sees the chat; the
+  disconnect pass counts only the turns after it (`observed_prefix == 2`); after a failed idle pass it counts
+  everything (`observed_prefix == 0`).
+  - **Seen failing first:** 11 of 14; the three that check what must not change (a history that fits, a first
+    message cached, the 12-word web query) passed, as they must.
+  - **A test mistake, found and fixed:** the #8 tests first ran without the app's startup, so an earlier test's
+    shutdown flag kept the disconnect pass off; they passed alone and failed in their file. They now start the app,
+    as the other disconnect tests do (28 of 28 in the file).
+  - **A design point, changed back:** the first version also kept the last exchange when the whole prompt was over
+    budget; that would drop decisions, profile, documents or the chat's record before the history, against the
+    priority order, so the overall trim is as it was.
+- **Break-it:** 12 mutations, each alone, restored byte for byte, each caught by its test: no date line; the cache
+  key without the date; a long reply dropped instead of shortened; older messages kept past the budget; a follow-up
+  read from the cache; a follow-up saved to it; decisions searched with the hint; documents searched with the hint;
+  the web query given the earlier message; the history cleared after the idle pass; the idle pass marking nothing
+  read; a failed idle pass marking its turns read.
+- **Suites:** Backend 1813 passed, 0 failed (20 min 19 s; 1799 + 14), on the working tree at 52f9e42 plus this change, with other sessions' uncommitted changes in it (the httpx2 requirement and its test; evidence_gate.py and two of its tests, changed by another session and found after the run); the changed files were compared byte for byte with copies taken before the run. Flutter 348 passed (no app change).
+- **Not measured with a model:** the card asked for none (a cheap step).
+
+**Not covered (still open):**
+- **A whole prompt over its budget** (a long pasted message) can still lose the last exchange; the priority order
+  decides there, on purpose.
+- **Only the previous user message** joins the search: a follow-up about something two questions back is not
+  helped.
+- **Retrieval with the longer search text is not re-measured:** the §7.27 harness needs the real embedder (torch),
+  which this PC blocks. A first message is now searched with its whole text, not 12 words.
+- **The time of day is not given,** and a machine with a wrong clock or time zone gives a wrong day.
+- **Fewer cache hits:** a follow-up now always reaches the model; how often the cache served follow-ups was not
+  measured.
+- **The break was tested with a 0.05 s idle timeout** and a stand-in Observer, not a real 10-minute wait or a real
+  model.
+
 ---
 
 ## 8. Status
@@ -4308,6 +4375,7 @@ decision needed. The plan's third part, matching a repeat by meaning, is left ou
 | D-41 reported speech with "I" passes as the user's topic | Found 2026-10-20 (§7.63), open | A, low: D-33's first-person rule reads "My friend says I should do a full marathon" as the user's; two such topics in M-1(a), both discarded by the Constitution. Not fixed |
 | D-42 "my main project" accepted as a preference | Found 2026-10-20 (§7.63), open | A, low: "my main" is a preference marker, so the owner's project sentence became preference "project_management" and was written, while the project contract refuses it. Not fixed |
 | D-43 a genuine fact short of the count dropped silently | Fixed 2026-10-20 (§7.64) | A, medium (#19): a candidate the gate accepted but the Constitution refused for a count (or an inferred label in weeks 1-2) was thrown away, so learning nearly stopped after week 2 and a correction a month in was lost. Now one question (origin shortfall), at most 2 per chat, for belief tables only; a correction shows the stored value. 13 + 2 tests, 11 break-it mutations. Short set 35 -> 41 of 69 learned or asked, traps 0 of 75; long set 0 of 81 unchanged (lost at the gate's wording) |
+| D-44 a follow-up inside one chat lost its thread | Fixed 2026-10-20 (§7.65) | A, medium (#7, #8, #9, #10, #12): the prompt never named the day; a 10-minute break cleared the open chat's history; one long reply emptied the history; a follow-up could get another chat's cached answer; decisions and documents were searched with the newest message's first 12 words. Now the day is in the prompt and the cache key; the idle pass marks what it read and keeps the history; the last exchange is always kept, shortened; only a chat's first message is cached; Stages 3 and 5 search with the previous and the whole current message, the web query unchanged. 11 + 3 tests, 12 break-it mutations. Open: a whole prompt over budget can still lose the last exchange; retrieval with the longer text not re-measured |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

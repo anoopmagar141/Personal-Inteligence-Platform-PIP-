@@ -22,6 +22,7 @@
 # Hierarchy and Stage 2's default retrieval priority elsewhere in this project.
 
 import logging
+from datetime import date
 from typing import Any, Optional, TypedDict
 
 from backend.config.settings import get_settings
@@ -375,17 +376,52 @@ def _format_web_results(results: list[dict[str, Any]], max_tokens: int) -> str:
     return _truncate_to_tokens("WEB SEARCH RESULTS:\n" + "\n".join(lines), max_tokens)
 
 
+def _last_exchange_start(history: list[dict[str, str]]) -> int:
+    """Where the last exchange begins: the last user message, with the reply after it."""
+    for i in range(len(history) - 1, -1, -1):
+        if history[i].get("role") == "user":
+            return i
+    return max(0, len(history) - 1)
+
+
 def _trim_conversation_history(history: list[dict[str, str]], max_tokens: int) -> list[dict[str, str]]:
-    """Rolling window: keeps the most recent messages, drops oldest first."""
+    """
+    Rolling window: keeps the most recent messages, drops oldest first - and
+    always keeps the last exchange, shortened if it does not fit (#9).
+
+    The window used to stop at the first message that did not fit, counting
+    from the newest. So one long reply (a 2,000-word answer against a 1,000-word
+    budget) emptied the history: the follow-up "and why that one?" reached the
+    model with nothing it could refer to. The last exchange is what a follow-up
+    is about, so it is kept whatever its length - the question whole if it
+    fits, the reply cut to what is left - and older messages fill what remains,
+    oldest dropped first, as before.
+    """
+    if not history:
+        return []
+    start = _last_exchange_start(history)
+    last, older = history[start:], history[:start]
+    kept_last: list[dict[str, str]] = []
+    remaining = max(1, max_tokens)
+    for i, message in enumerate(last):
+        content = message.get("content", "")
+        # The question first and whole when it fits; the reply gets the rest, and
+        # every message of the exchange gets at least a share of the budget.
+        share = remaining if i == len(last) - 1 else max(1, min(remaining, max(1, max_tokens // 2)))
+        if _estimate_tokens(content) > share:
+            content = _truncate_to_tokens(content, share)
+            message = {**message, "content": content}
+        kept_last.append(message)
+        remaining = max(0, remaining - _estimate_tokens(content))
+
     kept: list[dict[str, str]] = []
-    total = 0
-    for message in reversed(history):
+    for message in reversed(older):
         tokens = _estimate_tokens(message.get("content", ""))
-        if total + tokens > max_tokens:
+        if tokens > remaining:
             break
         kept.append(message)
-        total += tokens
-    return list(reversed(kept))
+        remaining -= tokens
+    return list(reversed(kept)) + kept_last
 
 
 def run(
@@ -400,6 +436,7 @@ def run(
     conversation_history: Optional[list[dict[str, str]]] = None,
     context_depth_modifier: int = 2,
     category: Optional[str] = None,
+    today: Optional[date] = None,
 ) -> AssembledContext:
     """
     Assembles a token-budgeted context string and message list, ready for
@@ -490,6 +527,9 @@ def run(
                 break
             if key == "conversation_history" and sections[key]:
                 # Oldest-first partial trim, not whole-section removal, per spec.
+                # The last exchange goes last, but it can go: by now the history
+                # is within its own budget (#9 is kept there), and what overflows
+                # is the rest, so the priority order still decides.
                 while sections[key] and total > available_for_content:
                     dropped = sections[key].pop(0)
                     total -= _estimate_tokens(dropped.get("content", ""))
@@ -498,6 +538,11 @@ def run(
                 sections[key] = [] if key == "conversation_history" else ""
 
         context_parts = [system_instructions]
+        if today is not None:
+            # #12: nothing in the prompt said what day it is, so "yesterday",
+            # "last week" or "by Friday" could not be placed; the record's and
+            # the decisions' dates had nothing to be measured against.
+            context_parts.append(f"Today is {today:%A}, {today.day} {today:%B %Y}.")
         for key in _PRIORITY_RANK:
             if key != "conversation_history" and sections[key]:
                 context_parts.append(sections[key])

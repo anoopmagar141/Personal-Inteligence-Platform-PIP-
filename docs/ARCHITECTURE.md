@@ -110,6 +110,15 @@ read a chat's record with what the chat produced, correct it (it is theirs then,
 and later passes leave it) or clear it: `/conversations/{id}/record`, and the
 chat footer's dialog in the app.
 
+**Keeping the thread in a chat (step 6).** Stage 7 names the day ("Today is
+Tuesday, 20 October 2026.", the machine's local date) and always keeps the last
+exchange of the history, the reply shortened if it does not fit; older messages
+fill what is left. Stages 3 and 5 search with the previous user message and the
+whole current one (`pipeline._search_text`); the web query is still the first
+12 words of the current message. The idle pass keeps the open chat's history
+and marks what it read (`observed_prefix`), so the disconnect pass counts only
+the later turns; a failed idle pass marks nothing.
+
 Each memory candidate then passes **two independent gates, in this order**:
 
 ```
@@ -193,7 +202,9 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   so nothing a session stores or asks for crosses into a later one
   (FREEZE_LIST §7.20). The selected model name is also part of the key, so a
   cached answer from the previous model is not reused after a model switch
-  (FREEZE_LIST §7.38).
+  (FREEZE_LIST §7.38). The key names the day, as the prompt does, and only a
+  chat's first message is read from or written to the cache: a follow-up
+  ("why?") means something only in its own chat (FREEZE_LIST §7.65).
 - **Provider order is policy, but order is not consent.** `pipeline.OLLAMA_PRIORITY = 50`
   and `llm_endpoints.priority` defaults to 100, so an enabled cloud endpoint
   normally follows local Ollama. If Ollama is unreachable and another endpoint

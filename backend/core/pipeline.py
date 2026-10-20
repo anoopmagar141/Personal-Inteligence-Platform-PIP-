@@ -37,6 +37,7 @@
 
 import logging
 import time
+from datetime import date, datetime
 from typing import Any, Callable, Generator, Optional, Union
 
 from backend.core import response_cache, trace
@@ -218,6 +219,25 @@ def _load_last_session_timestamp(conn):
         return None
 
 
+def _today() -> date:
+    """Today on this machine's clock: PIP runs on the user's own computer, so its local date is theirs."""
+    return datetime.now().astimezone().date()
+
+
+def _search_text(user_message: str, conversation_history: Optional[list[dict[str, str]]]) -> str:
+    """
+    What decisions and documents are searched with (#7): the previous user
+    message and the whole current one. Stage 1's hint is the first 12 words
+    of the current message only, so a follow-up ("and the other one?",
+    "and why?") searched with words that say nothing about what it refers
+    to. The web query does not use this: it stays the hint (DEC-14), so
+    nothing from an earlier message is sent off the machine.
+    """
+    previous = next((m.get("content", "") for m in reversed(conversation_history or [])
+                     if m.get("role") == "user"), "")
+    return f"{previous} {user_message}".strip() if previous else user_message
+
+
 def _gate_providers(conn, trace_id: str, providers: list[BaseLLMProvider]) -> list[BaseLLMProvider]:
     """Stage 8: only providers that pass consent make it into Stage 9's fallback list."""
     gated = []
@@ -347,6 +367,14 @@ def run(
     # can now be given different records, so the key names which one.
     chat_record = session_snapshot.load_record_for(conn, conversation_id=conversation_id, project_id=project_id)
     context_key = f"chat_record:{chat_record['record_id']}" if chat_record else "chat_record:none"
+    # The prompt names the day (#12), so an answer is cached for the day it was
+    # built on and not replayed tomorrow.
+    today = _today()
+    context_key += f"|date:{today.isoformat()}"
+    # Only a chat's first message is cached (#10): a follow-up ("why?") means
+    # something only in its own chat, and its text alone said nothing about
+    # which chat, so another chat's saved answer could come back for it.
+    cache_allowed = not conversation_history
     # And, for a chat with no record of its own, the end of the previous chat
     # that its Observer pass has not summarised yet (#13 part 3). Messages do
     # not move the record version (they are written every turn), so the key
@@ -374,7 +402,7 @@ def run(
             user_message, project_id, record_version,
             generation=cache_generation, model_name=active_model_name, context_key=context_key,
         )
-        if record_version is not None and active_model_name is not None
+        if record_version is not None and active_model_name is not None and cache_allowed
         else None
     )
     dur_c = int(round((time.perf_counter() - tc) * 1000))
@@ -408,7 +436,7 @@ def run(
     # Stages 3/4/5/6 - sequential here; see module docstring on parallelization.
     t3 = time.perf_counter()
     try:
-        decision_entries = stage_03.run(conn, intent_result["retrieval_hint"], project_id)
+        decision_entries = stage_03.run(conn, _search_text(user_message, conversation_history), project_id)
     except Exception as e:
         logger.error(f"Pipeline: Stage 3 raised unexpectedly, returning empty: {e}")
         decision_entries = []
@@ -450,7 +478,7 @@ def run(
     try:
         # ADR-002: Stage 5 always runs, even when skip_rag is set. Its safety
         # check is broader than the lightweight intent pre-check.
-        rag_result = stage_05.run(conn, intent_result["retrieval_hint"], project_id)
+        rag_result = stage_05.run(conn, _search_text(user_message, conversation_history), project_id)
     except Exception as e:
         logger.error(f"Pipeline: Stage 5 raised unexpectedly, returning empty: {e}")
         rag_result = {"chunks": [], "conflict_flag": False}
@@ -537,6 +565,7 @@ def run(
             conversation_history=conversation_history,
             context_depth_modifier=gap_result.get("context_depth_modifier", 2),
             category=intent_result["category"],
+            today=today,
         )
     except Exception as e:
         logger.error(f"Pipeline: Stage 7 raised unexpectedly, falling back to minimal prompt: {e}")
@@ -616,7 +645,7 @@ def run(
         duration_ms=dur_9,
     )
 
-    if status == "success" and record_version is not None and active_model_name is not None:
+    if status == "success" and record_version is not None and active_model_name is not None and cache_allowed:
         response_cache.set(
             user_message, project_id, intent_result["category"],
             aggregate["response_text"], aggregate["stage_hints"],

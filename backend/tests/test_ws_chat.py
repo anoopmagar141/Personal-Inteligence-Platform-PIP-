@@ -870,3 +870,78 @@ def test_the_pipeline_is_told_which_chat_each_message_belongs_to(monkeypatch, to
         read_turn_to_its_end(ws)
 
     assert seen == [created["conversation_id"], created["conversation_id"]]
+
+
+# --- #8: a 10-minute break keeps the chat (BLUEPRINT "Step 6") ---------------------------------------------------
+
+
+def _idle_then_more(monkeypatch, token, *, idle_pass_fails=False):
+    """Says "hello", waits out the idle pass, says "and again", then leaves. Returns (histories the pipeline was given,
+    the Observer's calls)."""
+    monkeypatch.setattr(server, "_idle_timeout_seconds", lambda: 0.05)
+    histories = []
+
+    def fake_run(conn, user_message, *, conversation_history=None, **kw):
+        histories.append(list(conversation_history or []))
+        return _fake_pipeline_events()
+
+    monkeypatch.setattr(server.pipeline, "run", fake_run)
+    observer_calls = []
+
+    async def fake_run_observer_now(loop, executor, conn, conversation_history, provider, project_id=None,
+                                    conversation_id=None, observed_prefix=0):
+        observer_calls.append((list(conversation_history), observed_prefix))
+        if idle_pass_fails and len(observer_calls) == 1:
+            raise RuntimeError("model not reachable")
+        return {"memory_results": [], "decision_results": []}
+
+    monkeypatch.setattr(server.session_lifecycle, "run_observer_now", fake_run_observer_now)
+
+    def read_turn(ws):
+        while ws.receive_json()["type"] != "done":
+            pass
+
+    import time
+    # `with TestClient(...)`: the disconnect pass is gated on the registry's shutting_down flag, which a previous
+    # test's lifespan leaves set and lifespan STARTUP clears (see the startup-drain test above for why).
+    with TestClient(server.app) as client:
+        with client.websocket_connect(ws_url(token)) as ws:
+            _expect_session_info(ws)
+            ws.send_json({"message": "hello"})
+            _expect_session_info(ws)
+            read_turn(ws)
+            deadline = time.monotonic() + 2.0
+            while not observer_calls and time.monotonic() < deadline:
+                time.sleep(0.05)
+            ws.send_json({"message": "and again"})
+            read_turn(ws)
+        deadline = time.monotonic() + 15.0
+        while len(observer_calls) < 2 and time.monotonic() < deadline:
+            time.sleep(0.05)
+    return histories, observer_calls
+
+
+FIRST_TURN = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "Hello there "}]
+
+
+def test_after_a_break_the_next_message_still_sees_the_chat(monkeypatch, token):
+    histories, observer_calls = _idle_then_more(monkeypatch, token)
+
+    assert len(observer_calls) >= 1, "the idle pass ran"
+    assert histories[1] == FIRST_TURN, "the break did not wipe the chat from the model's view"
+
+
+def test_the_disconnect_pass_does_not_count_the_turns_the_idle_pass_read(monkeypatch, token):
+    _, observer_calls = _idle_then_more(monkeypatch, token)
+
+    assert len(observer_calls) == 2
+    history, observed_prefix = observer_calls[1]
+    assert history[:2] == FIRST_TURN and observed_prefix == 2, "the first turn was read already; only the new one counts"
+
+
+def test_a_failed_idle_pass_leaves_its_turns_for_the_next_pass(monkeypatch, token):
+    _, observer_calls = _idle_then_more(monkeypatch, token, idle_pass_fails=True)
+
+    assert len(observer_calls) == 2
+    history, observed_prefix = observer_calls[1]
+    assert history[:2] == FIRST_TURN and observed_prefix == 0, "nothing was read, so nothing is marked"

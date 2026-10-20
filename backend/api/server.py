@@ -1872,24 +1872,23 @@ try:
                                 observed_prefix=session_state["observed_prefix"],
                             )
                         except Exception as e:
-                            # Not discarded, which is what this used to claim:
-                            # run_observer_now only marks the conversation
-                            # observed after a successful extraction, so a
-                            # raise here leaves the high-water mark where it
-                            # was and startup recovery picks these turns up.
-                            # The in-memory copy is cleared below; the messages
-                            # themselves were committed per turn.
+                            # Not discarded: run_observer_now only marks the
+                            # conversation observed after a successful
+                            # extraction, and nothing below marks these turns
+                            # read, so the next pass (disconnect, or startup
+                            # recovery) takes them again.
                             logger.error(f"Idle-timeout Observer run failed, left for startup recovery: {e}")
-                        # Cleared here already; the flag has to follow it, or the
-                        # disconnect trigger would observe the same turns again
-                        # (and rewrite the snapshot from an empty transcript).
-                        session_state["has_unobserved_turns"] = False
-                        # And the prefix with it: the history it counted into is
-                        # gone, so anything typed after this point starts at 0.
-                        # Left at its old value it would slice away the first N
-                        # turns of the NEXT stretch of conversation.
-                        session_state["observed_prefix"] = 0
-                        conversation_history.clear()
+                        else:
+                            # The history stays (#8). It used to be cleared
+                            # here, so a 10-minute break wiped the chat from
+                            # the model's view and the next message started
+                            # from nothing. What the pass read is marked
+                            # instead, with the mark a resumed chat already
+                            # uses: the disconnect pass is shown these turns
+                            # (later turns rarely stand alone) but counts only
+                            # what came after them as new evidence.
+                            session_state["has_unobserved_turns"] = False
+                            session_state["observed_prefix"] = len(conversation_history)
                     continue
 
                 if data is _DISCONNECT:
