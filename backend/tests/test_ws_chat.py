@@ -945,3 +945,130 @@ def test_a_failed_idle_pass_leaves_its_turns_for_the_next_pass(monkeypatch, toke
     assert len(observer_calls) == 2
     history, observed_prefix = observer_calls[1]
     assert history[:2] == FIRST_TURN and observed_prefix == 0, "nothing was read, so nothing is marked"
+
+
+# --- D-45: no click, no search (BLUEPRINT card D-45) --------------------------------------------------------------
+
+NEWS = "what is the weather in Kathmandu today?"
+LOCAL_ANSWER = "I cannot see today's weather"
+WEB_ANSWER = "Light rain in Kathmandu"
+
+
+def _web_offer_pipeline(monkeypatch, calls):
+    """A stand-in pipeline whose first pass for NEWS ends with an offer, as the real one does when consent is given."""
+
+    def fake_run(conn, user_message, *, conversation_history=None, approved_web_query=None, **kw):
+        calls.append({"message": user_message, "history": list(conversation_history or []),
+                      "approved": approved_web_query})
+        text = WEB_ANSWER if approved_web_query else LOCAL_ANSWER
+        offer = NEWS if user_message == NEWS and approved_web_query is None else None
+        yield {"type": "token", "data": text}
+        yield {"type": "done", "data": None}
+        yield {"type": "pipeline_complete", "data": {"trace_id": "t", "response_text": text, "status": "success",
+                                                     "stage_hints": {}, "web_search_offer": offer}}
+
+    monkeypatch.setattr(server.pipeline, "run", fake_run)
+
+
+def _read_to_done(ws):
+    while ws.receive_json()["type"] != "done":
+        pass
+
+
+def _ask_news(ws):
+    """The first message of a new chat; returns (conversation id, the event that follows its reply)."""
+    _expect_session_info(ws)
+    ws.send_json({"message": NEWS})
+    created = _expect_session_info(ws)
+    _read_to_done(ws)
+    # A probe the server always answers ("message is required"), so a missing offer fails the test instead of
+    # leaving it waiting: the offer is sent before the server reads the next message, so it comes first.
+    ws.send_json({})
+    offer = ws.receive_json()
+    if offer["type"] == "web_search_offer":
+        assert ws.receive_json()["type"] == "error", "the probe's own answer"
+    return created["conversation_id"], offer
+
+
+def test_a_web_question_ends_with_an_offer_after_its_reply(monkeypatch, token):
+    calls = []
+    _web_offer_pipeline(monkeypatch, calls)
+
+    with TestClient(server.app) as client, client.websocket_connect(ws_url(token)) as ws:
+        _, offer = _ask_news(ws)
+
+    assert offer["type"] == "web_search_offer"
+    assert offer["data"]["query"] == NEWS and offer["data"]["offer_id"]
+    assert [c["approved"] for c in calls] == [None], "nothing was searched yet"
+
+
+def test_approving_an_offer_answers_the_same_question_with_that_query(monkeypatch, token, tmp_path):
+    calls = []
+    _web_offer_pipeline(monkeypatch, calls)
+
+    with TestClient(server.app) as client, client.websocket_connect(ws_url(token)) as ws:
+        conversation_id, offer = _ask_news(ws)
+        ws.send_json({"type": "web_search", "offer_id": offer["data"]["offer_id"]})
+        _read_to_done(ws)
+        ws.send_json({"message": "thanks"})
+        _read_to_done(ws)
+
+    assert calls[1] == {"message": NEWS, "history": [], "approved": NEWS}, \
+        "the same question, the history from before it (not repeated), exactly the offered query"
+    assert calls[2]["history"] == [
+        {"role": "user", "content": NEWS},
+        {"role": "assistant", "content": LOCAL_ANSWER},
+        {"role": "assistant", "content": WEB_ANSWER},
+    ], "the approved answer follows the first one; the question is not asked twice"
+
+    from backend.memory import conversation_store
+    conn = server.open_app_connection(str(tmp_path / "pip.db"), None)
+    try:
+        saved = [(m["role"], m["content"]) for m in conversation_store.get_messages(conn, conversation_id)]
+    finally:
+        conn.close()
+    assert saved[:3] == [("user", NEWS), ("assistant", LOCAL_ANSWER), ("assistant", WEB_ANSWER)]
+
+
+def test_an_offer_is_used_once(monkeypatch, token):
+    calls = []
+    _web_offer_pipeline(monkeypatch, calls)
+
+    with TestClient(server.app) as client, client.websocket_connect(ws_url(token)) as ws:
+        _, offer = _ask_news(ws)
+        ws.send_json({"type": "web_search", "offer_id": offer["data"]["offer_id"]})
+        _read_to_done(ws)
+        ws.send_json({"type": "web_search", "offer_id": offer["data"]["offer_id"]})
+        again = ws.receive_json()
+
+    assert again["type"] == "error"
+    assert [c["approved"] for c in calls] == [None, NEWS], "the second click searched nothing"
+
+
+def test_an_unknown_offer_sends_nothing(monkeypatch, token):
+    calls = []
+    _web_offer_pipeline(monkeypatch, calls)
+
+    with TestClient(server.app) as client, client.websocket_connect(ws_url(token)) as ws:
+        _expect_session_info(ws)
+        ws.send_json({"type": "web_search", "offer_id": "made-up"})
+        reply = ws.receive_json()
+
+    assert reply["type"] == "error"
+    assert calls == []
+
+
+def test_an_offer_does_not_outlive_its_connection(monkeypatch, token):
+    calls = []
+    _web_offer_pipeline(monkeypatch, calls)
+
+    with TestClient(server.app) as client:
+        with client.websocket_connect(ws_url(token)) as ws:
+            conversation_id, offer = _ask_news(ws)
+        with client.websocket_connect(ws_url(token) + f"&conversation_id={conversation_id}") as ws:
+            _expect_session_info(ws)
+            ws.send_json({"type": "web_search", "offer_id": offer["data"]["offer_id"]})
+            reply = ws.receive_json()
+
+    assert reply["type"] == "error"
+    assert [c["approved"] for c in calls] == [None]

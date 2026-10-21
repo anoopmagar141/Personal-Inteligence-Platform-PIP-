@@ -141,7 +141,9 @@ def test_web_search_blocked_without_consent_even_on_trigger_keywords(db_conn, mo
     assert len(calls) == 0
 
 
-def test_web_search_fires_on_trigger_keywords_once_consented(db_conn, monkeypatch):
+def test_web_search_is_offered_once_consented_and_runs_only_when_approved(db_conn, monkeypatch):
+    # Since D-45 consent lets PIP ask, not search: the first pass sends nothing and offers the query, and only the
+    # approved run sends it (test_ask_before_web_search.py has the rest).
     calls = []
     monkeypatch.setattr(pipeline.stage_06, "run", lambda *a, **kw: calls.append(a) or [{"title": "t", "url": "u", "snippet": "s"}])
     db_conn.execute(
@@ -149,12 +151,15 @@ def test_web_search_fires_on_trigger_keywords_once_consented(db_conn, monkeypatc
     )
     db_conn.commit()
 
-    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()])
+    offered = pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()])
+    assert len(calls) == 0 and offered["web_search_offer"]
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()],
+                      approved_web_query=offered["web_search_offer"])
     assert len(calls) == 1
 
     calls.clear()
-    pipeline.run_sync(db_conn, "Explain how a hash table works", providers=[FakeProvider()])
-    assert len(calls) == 0
+    plain = pipeline.run_sync(db_conn, "Explain how a hash table works", providers=[FakeProvider()])
+    assert len(calls) == 0 and plain["web_search_offer"] is None
 
 
 def test_web_search_blocked_after_consent_revoked(db_conn, monkeypatch):
@@ -164,13 +169,15 @@ def test_web_search_blocked_after_consent_revoked(db_conn, monkeypatch):
         "UPDATE provider_consent SET user_consented = 1, revoked = 0 WHERE provider_id = 'web_search'"
     )
     db_conn.commit()
-    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()])
+    offer = pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()])["web_search_offer"]
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], approved_web_query=offer)
     assert len(calls) == 1
 
     calls.clear()
     db_conn.execute("UPDATE provider_consent SET revoked = 1 WHERE provider_id = 'web_search'")
     db_conn.commit()
-    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()])
+    # Even an approved run: consent is checked again when the search would be sent (D-45).
+    pipeline.run_sync(db_conn, "What's the latest news today?", providers=[FakeProvider()], approved_web_query=offer)
     assert len(calls) == 0
 
 

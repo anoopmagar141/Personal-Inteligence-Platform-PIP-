@@ -351,7 +351,7 @@ class ApiClient {
   /// revoke already says without the ambiguity.
   static const consentScopes = <String, String>{
     'embedding_only': 'Embeddings only - text is sent to be turned into vectors, and nothing else.',
-    'web_search_only': 'Web search only - a short query (normally the first 12 words of your message) is sent to the search provider; your full conversation is not.',
+    'web_search_only': 'Web search only - PIP asks you before each search and shows the exact words. Only those (normally the first 12 words of your message) are sent to the search provider; your full conversation is not.',
     'full_inference': 'Full inference - your prompts and assembled context are sent to the provider.',
   };
 

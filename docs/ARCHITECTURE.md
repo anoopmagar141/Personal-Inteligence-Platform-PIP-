@@ -62,7 +62,7 @@ chat_view.dart
   → pipeline.run()               a generator, yields events as they happen
       Stage 0 gap → 1 intent → 2 route
       → response_cache (a hit skips Stages 3–9 entirely)
-      → 3 decisions → 4 memory → 5 RAG → 6 web search
+      → 3 decisions → 4 memory → 5 RAG → 6 web search (only one the user clicked)
       → 7 context assembly → 8 provider gate → 9 LLM stream → 10 delivery
   → events forwarded to the client verbatim: stage/stage_hint → token* → done|error
 ```
@@ -118,6 +118,17 @@ whole current one (`pipeline._search_text`); the web query is still the first
 12 words of the current message. The idle pass keeps the open chat's history
 and marks what it read (`observed_prefix`), so the disconnect pass counts only
 the later turns; a failed idle pass marks nothing.
+
+**No click, no search (D-45).** Whether a message would be searched (a
+Stage 1 trigger word, not a personal or project question, web search
+consented) is decided before the answer cache. Such a turn sends nothing: it
+is answered without the web, is not cached, and its result carries
+`web_search_offer`, the exact query. The socket sends it after the turn's
+done as `web_search_offer` {offer_id, query} and keeps it in the connection's
+memory, usable once. A click (`{"type": "web_search", "offer_id"}`) answers
+the same question again with exactly that query: Stage 8 is checked again,
+the prompt has the history from before the question, and the answer is saved
+as an assistant message only.
 
 Each memory candidate then passes **two independent gates, in this order**:
 
@@ -204,7 +215,8 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   cached answer from the previous model is not reused after a model switch
   (FREEZE_LIST §7.38). The key names the day, as the prompt does, and only a
   chat's first message is read from or written to the cache: a follow-up
-  ("why?") means something only in its own chat (FREEZE_LIST §7.65).
+  ("why?") means something only in its own chat (FREEZE_LIST §7.65). Nor a
+  turn with a web search offer, or an approved search (FREEZE_LIST §7.69).
 - **Provider order is policy, but order is not consent.** `pipeline.OLLAMA_PRIORITY = 50`
   and `llm_endpoints.priority` defaults to 100, so an enabled cloud endpoint
   normally follows local Ollama. If Ollama is unreachable and another endpoint

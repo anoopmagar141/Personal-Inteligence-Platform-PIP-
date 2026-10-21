@@ -199,6 +199,10 @@ def test_the_web_query_is_still_the_first_12_words_of_the_current_message(conn, 
     monkeypatch.setattr(pipeline.stage_06, "run", lambda query: seen.append(query) or [])
     current = "what is the latest news on the managed replicas and the nightly backups this week?"
 
-    _ask(conn, current, conversation_history=FOLLOW_UP_HISTORY)
+    # The offer, and the search once approved (D-45), are the current message's first 12 words.
+    offer = pipeline.run_sync(conn, current, providers=[_Recorder()],
+                              conversation_history=FOLLOW_UP_HISTORY)["web_search_offer"]
+    _ask(conn, current, conversation_history=FOLLOW_UP_HISTORY, approved_web_query=offer)
 
-    assert seen == [" ".join(current.split()[:12])], "nothing from the earlier message goes to the web"
+    assert offer == " ".join(current.split()[:12])
+    assert seen == [offer], "nothing from the earlier message goes to the web"

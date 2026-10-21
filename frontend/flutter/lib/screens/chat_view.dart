@@ -56,7 +56,22 @@ class ChatMessage {
   /// time, and the streaming bubble has not finished being written yet.
   final DateTime? createdAt;
 
-  const ChatMessage(this.role, this.content, {this.stopped = false, this.createdAt});
+  /// A web search PIP did not send for this answer, shown under it until it is
+  /// clicked (D-45). Live only: a reopened chat has none.
+  final WebSearchOffer? webOffer;
+
+  const ChatMessage(this.role, this.content, {this.stopped = false, this.createdAt, this.webOffer});
+
+  ChatMessage withOffer(WebSearchOffer? offer) =>
+      ChatMessage(role, content, stopped: stopped, createdAt: createdAt, webOffer: offer);
+}
+
+/// The exact words a click would send to the search provider, and the id the
+/// backend holds them under for this connection.
+class WebSearchOffer {
+  final String offerId;
+  final String query;
+  const WebSearchOffer(this.offerId, this.query);
 }
 
 /// The clock time of a message, 24-hour.
@@ -250,6 +265,15 @@ class ChatViewState extends State<ChatView> {
       case 'stage_hint':
         _pendingStageHint = event.data as Map<String, dynamic>?;
         break;
+      case 'web_search_offer':
+        // Sent after the answer it belongs to, which is the last one here.
+        final data = event.data as Map<String, dynamic>;
+        final last = _transcript.lastIndexWhere((m) => m.role == 'assistant');
+        if (last < 0) return;
+        setState(() => _transcript[last] = _transcript[last]
+            .withOffer(WebSearchOffer(data['offer_id'] as String, data['query'] as String)));
+        _scrollToBottom();
+        return;
       case 'token':
         setState(() => _streamingText += event.data as String);
         return;
@@ -320,6 +344,35 @@ class ChatViewState extends State<ChatView> {
     widget.chatClient.sendMessage(text, projectId: widget.activeProjectId);
     _controller.clear();
     _scrollToBottom();
+  }
+
+  /// Sends the one search the person clicked (D-45). The question is not sent
+  /// again: the backend answers it once more with the offered words, and that
+  /// answer streams in as the next reply.
+  void _approveWebSearch(int index) {
+    final offer = _transcript[index].webOffer;
+    if (offer == null || _isStreaming) return;
+    setState(() {
+      _transcript[index] = _transcript[index].withOffer(null);
+      _streamingText = '';
+      _steps = [];
+      _isStreaming = true;
+    });
+    widget.chatClient.approveWebSearch(offer.offerId);
+    _scrollToBottom();
+  }
+
+  Widget _messageRow(int index) {
+    final message = _transcript[index];
+    final offer = message.webOffer;
+    if (offer == null) return ChatMessageBubble(message: message);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ChatMessageBubble(message: message),
+        _WebSearchOfferButton(offer: offer, onPressed: _isStreaming ? null : () => _approveWebSearch(index)),
+      ],
+    );
   }
 
   void _stop() {
@@ -549,13 +602,13 @@ class ChatViewState extends State<ChatView> {
                           final showDate = message.createdAt != null &&
                               (previous == null || !isSameDay(previous, message.createdAt!));
                           if (!showDate) {
-                            return ChatMessageBubble(message: message);
+                            return _messageRow(index);
                           }
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _DaySeparator(day: message.createdAt!),
-                              ChatMessageBubble(message: message),
+                              _messageRow(index),
                             ],
                           );
                         }
@@ -980,6 +1033,42 @@ class _SendButton extends StatelessWidget {
             alignment: Alignment.center,
             child: Icon(icon, size: 18, color: enabled ? pip.accentOn : pip.textFaint),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A web search PIP did not send, under the answer it was made for (D-45).
+///
+/// The button carries the exact words, so what the person agrees to is what
+/// leaves the machine; the line under it says nothing else goes with them.
+class _WebSearchOfferButton extends StatelessWidget {
+  final WebSearchOffer offer;
+  final VoidCallback? onPressed;
+  const _WebSearchOfferButton({required this.offer, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = context.pip;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 16, bottom: AppSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            OutlinedButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(Icons.travel_explore, size: 16),
+              label: Text('Search the web for: "${offer.query}"'),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Only these words are sent to the search provider.',
+              style: TextStyle(fontSize: 11, color: pip.textFaint),
+            ),
+          ],
         ),
       ),
     );

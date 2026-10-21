@@ -312,18 +312,22 @@ def test_web_search_is_never_treated_as_local(conn, stub, ollama_down, searches)
 
 def test_web_search_runs_only_while_consented(conn, stub, ollama_down, searches):
     """Nothing preselected: a fresh install searches nothing; granted, it
-    searches; revoked, it stops."""
+    offers and searches once the offer is clicked (D-45); revoked, it stops,
+    even for an offer made while consent stood."""
     llm_endpoint_store.add_endpoint(
         conn, provider_id="lan-box", label="box", base_url=stub.url, model_name="m", is_local=True,
     )
 
-    _ask(conn, "what is the latest news on rust today")
+    assert _ask(conn, "what is the latest news on rust today")["web_search_offer"] is None
     assert searches == [], "web search ran on a fresh install"
 
     server.api_grant_consent(conn, "web_search", "web_search_only")
-    _ask(conn, "what is the latest news on go today")
+    offer = _ask(conn, "what is the latest news on go today")["web_search_offer"]
+    assert searches == [] and offer, "granted: offered, not sent"
+    pipeline.run_sync(conn, "what is the latest news on go today", approved_web_query=offer)
     assert len(searches) == 1
 
     server.api_revoke_consent(conn, "web_search")
+    pipeline.run_sync(conn, "what is the latest news on go today", approved_web_query=offer)
     _ask(conn, "what is the latest news on python today")
     assert len(searches) == 1, "web search ran after consent was revoked"

@@ -96,7 +96,11 @@ def test_a_question_about_the_user_or_a_project_sends_no_web_query(conn, sent, q
 
 
 @pytest.mark.parametrize("question", PLAIN_NEWS)
-def test_a_plain_news_question_is_still_searched(conn, sent, question):
-    pipeline.run_sync(conn, question, providers=[_Provider()])
+def test_a_plain_news_question_is_still_offered_and_searched_when_approved(conn, sent, question):
+    # Since D-45 the first pass only offers the search; the approved run sends it.
+    offer = pipeline.run_sync(conn, question, providers=[_Provider()])["web_search_offer"]
+    assert sent == [] and offer, f"{question!r} was not offered"
 
-    assert len(sent) == 1, f"{question!r} sent {sent!r}"
+    pipeline.run_sync(conn, question, providers=[_Provider()], approved_web_query=offer)
+
+    assert sent == [offer], f"{question!r} sent {sent!r}"

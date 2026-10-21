@@ -145,7 +145,8 @@ def test_web_search_status_shows_exact_query_even_when_no_results(conn, monkeypa
     monkeypatch.setattr(pipeline, "_gate_providers", lambda *args: [_FailingProvider("local", "m", False)])
     server.api_grant_consent(conn, "web_search", "web_search_only")
 
-    events = list(pipeline.run(conn, "What is the current news?"))
+    # The search is the one the user approved (D-45); its status still names the exact query.
+    events = list(pipeline.run(conn, "What is the current news?", approved_web_query=query))
 
     assert searches == [query]
     web_events = _stage_events(events, "web")

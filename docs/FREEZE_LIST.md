@@ -4467,6 +4467,72 @@ one was re-read from committed results, as marked. Nothing in the pipeline chang
 - Measured on one technical corpus and one prose document, questions by one hand, one 7B model at temperature 0.
 - Numbers from the hashed stand-in embedder are never carried over (§7.27).
 
+### 7.69 D-45: no click, no search, PIP asks before every web search (authorized 2026-10-21, the owner's option 1)
+
+Found by Q-1 (§7.66). Numbered 7.69 because another session's note already names §7.68 for #21. BLUEPRINT card D-45,
+written first.
+
+- **Defect (D-45, A, medium; §7.66 first rated it low, for greetings only):** with web search consented, any message
+  with one of Stage 1's trigger words (latest, today, current, news, price, who won, recent, weather, right now)
+  that was not filed as a personal or project question was searched at once, its first 12 words sent to the search
+  provider. Checked 2026-10-21 through the real Stage 1: "I feel tired today", "feeling anxious about the exam
+  today", "we had a big fight today" and "today I finished chapter two" were all sent.
+- **Promise:** 6, made stronger: consent now lets PIP ask, and each search needs its own click.
+- **Owner decision:** option 1 of four (ask first). The others: take "today" off the list, let the model decide, a
+  written limitation.
+- **Mechanism:**
+  - **The first pass sends nothing.** Whether a message would be searched (trigger word, category, Stage 8 consent)
+    is decided before the answer cache. Such a turn is answered without the web, says so (stage "web", "Web search
+    not sent", "asks you first: '<query>'", skipped), is neither read from nor saved to the cache, and its result
+    carries `web_search_offer`, the exact query. Only a run given `approved_web_query` sends it, with Stage 8 checked
+    again at that moment; that run is not cached either.
+  - **The socket** sends `web_search_offer` {offer_id, query} after the turn's done (additive, `shared/ws_spec.py`).
+    Offers live in the connection's memory under a random id, are used once and are gone at disconnect. {"type":
+    "web_search", "offer_id"} answers the same question again with exactly that query, the history from before the
+    question (not repeated), the new answer saved as an assistant message only; any other id gets one error and
+    nothing is sent.
+  - **The app** shows the offer under that answer as a button, Search the web for: "<query>", with "Only these words
+    are sent to the search provider."; a tap sends the approval, removes the button and streams the new answer, with
+    no new user bubble. The consent text says PIP asks before each search.
+  - **Unchanged:** the query is the first 12 words (DEC-14); personal and project questions are never searched or
+    offered (P-1); without consent nothing is offered; the older web client (frontend/web) shows no button, so it
+    never searches.
+- **Tests:** `backend/tests/test_ask_before_web_search.py`, 14, through the real pipeline and Stage 1 with Stage 6
+  recorded: the five D-45 sentences and a news question send nothing and are offered exactly their first 12 words;
+  the first pass says what it would send; an approved search sends exactly the offer, once, and its results reach
+  the answer; consent is checked again; an approved answer never comes from the cache; a turn with an offer is not
+  cached; no consent, a question about the user and no trigger word get no offer. `test_ws_chat.py`, 5 new: an offer
+  after the reply; approving answers the same question with that query and the history from before it, saved as an
+  assistant message only; an offer is used once; an unknown offer sends nothing; an offer does not outlive its
+  connection. `web_search_offer_test.dart`, 4: the button with the exact words; a tap sends that search, removes the
+  button and adds the answer with no new user bubble; no offer, no button; the consent text.
+  - **Seen failing first:** the new and changed pipeline tests 23 of 30 (the 7 that passed are the unchanged
+    personal-question tests); socket 4 of 5 (an unknown offer already got an error, since a message with no text is
+    refused); app 3 of 4 (the no-offer control passed).
+  - **Existing tests changed, on purpose:** six pinned an immediate search and now offer first and search when
+    approved: `test_pipeline.py` (2), `test_b1_honesty_fixes.py` (1), `test_personal_questions_stay_off_the_web.py`
+    (1, five cases), `test_keep_the_thread.py` (1) and `test_consent_before_sending.py` (1, also checking that an
+    offer made while consent stood sends nothing once it is revoked). The first full run found the last one.
+  - **A test design point:** the socket tests send one empty message after the reply, which the server always
+    answers with an error, so a missing offer fails the test instead of waiting; the first run before the fix waited
+    until it was stopped.
+- **Break-it:** 17 mutations, each alone, restored byte for byte, each caught by its test: the first pass searching
+  again; the approved run sending the message, not the offer; consent not checked again; a turn with an offer
+  cached; an approved search cached; an offer without consent; a question about the user offered; the offer left out
+  of the result; the socket sending no offer; an offer usable twice; the approved prompt repeating the question; the
+  question saved again; offers outliving their connection; the button without the exact words; a tap sending
+  nothing; the button staying after a tap; the consent text not saying PIP asks. (The app runs' output first could
+  not be read on this console; they were run again with the output read as UTF-8, and each failed on its own test.)
+- **Suites:** Backend 1850 passed, 0 failed (19 min 3 s), on the working tree at a09d9d1 plus this change, with other sessions' uncommitted changes in it (the httpx2 requirement and its test; 7e2304a, documents only, was committed by another session during the run); the changed files were compared byte for byte with copies taken before the run. The first full run had 1 failure, the sixth test that pinned an immediate search (above), updated; 11 of 11 in its file, then the full run again. Flutter 352 passed (348 + 4).
+
+**Not covered (still open):**
+- **The real app window was not used** (V-1 needs the owner), and no real search was sent.
+- **Cost:** a news question needs one more click, and its first answer is written without the web.
+- **The trigger words are unchanged:** a message without one is never offered a search, as before.
+- **The searched answer is a second reply** to the same question; the first stays in the chat and in what the
+  Observer reads.
+- **An offer is lost** when the chat reconnects; asking again makes a new one. The older web client cannot search.
+
 ---
 
 ## 8. Status
@@ -4548,7 +4614,7 @@ one was re-read from committed results, as marked. Nothing in the pipeline chang
 | D-43 a genuine fact short of the count dropped silently | Fixed 2026-10-20 (§7.64) | A, medium (#19): a candidate the gate accepted but the Constitution refused for a count (or an inferred label in weeks 1-2) was thrown away, so learning nearly stopped after week 2 and a correction a month in was lost. Now one question (origin shortfall), at most 2 per chat, for belief tables only; a correction shows the stored value. 13 + 2 tests, 11 break-it mutations. Short set 35 -> 41 of 69 learned or asked, traps 0 of 75; long set 0 of 81 unchanged (lost at the gate's wording) |
 | D-44 a follow-up inside one chat lost its thread | Fixed 2026-10-20 (§7.65) | A, medium (#7, #8, #9, #10, #12): the prompt never named the day; a 10-minute break cleared the open chat's history; one long reply emptied the history; a follow-up could get another chat's cached answer; decisions and documents were searched with the newest message's first 12 words. Now the day is in the prompt and the cache key; the idle pass marks what it read and keeps the history; the last exchange is always kept, shortened; only a chat's first message is cached; Stages 3 and 5 search with the previous and the whole current message, the web query unchanged. 11 + 3 tests, 12 break-it mutations. Open: a whole prompt over budget can still lose the last exchange; retrieval with the longer text not re-measured |
 | Q-1 a new user's greeting answered "no record" | Run 2026-10-21 (§7.66), closed, no code change | qwen2.5:7b on the real pipeline, 4 made-up new users x 26 greetings: 0 of 104 no-record replies by the pattern and by reading all 104; the bar (at most 1) met. llama3.1:8b and phi3:mini showed it on 2026-10-17 |
-| D-45 a greeting with "today" asks for a web search | Found 2026-10-21 (§7.66), open | A, low, privacy: "today" is a Stage 6 trigger word, so "hey pip, how are you doing today?" is external_information and Stage 8 is asked for a web search; refused here (no consent), but with web search consented its first 12 words go to the search provider. Not fixed |
+| D-45 a message with a trigger word sent to the web without asking | Fixed 2026-10-21 (§7.69) | A, medium (§7.66 first rated it low, for greetings only): with web search consented, "I feel tired today" and any message with a trigger word not about the user or a project went to the search provider at once. Now no click, no search: the turn is answered without the web and ends with an offer of the exact words; only a click sends them, with consent checked again. 14 + 5 backend and 4 app tests, 17 break-it mutations |
 | D-46 a hypothetical first-person sentence raises a topic | Found 2026-10-21 (§7.67), open | A, low: topics skip the hypothetical check and D-33's rule takes any sentence with "I", so "If I ever had a free summer I might look at Elixir" is the user's topic. The model's "User:" label had hidden it; with D-38 fixed one replayed trap is written. Not fixed: the owner's choice |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |

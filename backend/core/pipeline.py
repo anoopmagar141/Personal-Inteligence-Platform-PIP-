@@ -238,6 +238,26 @@ def _search_text(user_message: str, conversation_history: Optional[list[dict[str
     return f"{previous} {user_message}".strip() if previous else user_message
 
 
+# Never searched, and never offered: a question about the user or their project
+# is answered from their record, not the web (P-1).
+_NO_SEARCH_CATEGORIES = frozenset({"personal_question", "project_question", "project_continuation"})
+
+
+def _web_search_allowed(conn, trace_id: str) -> bool:
+    """Stage 8 for the web search provider; a refusal is traced and logged, as it always was."""
+    started = time.perf_counter()
+    try:
+        stage_08.run(conn, "web_search", requested_scope="web_search_only", provider_is_local=False)
+        return True
+    except stage_08.ProviderConsentError as e:
+        trace.stage_log(
+            conn, trace_id, "stage_08_provider_gate", "error",
+            "web_search blocked", error_detail=str(e), duration_ms=int(round((time.perf_counter() - started) * 1000)),
+        )
+        logger.warning(f"Pipeline: web_search blocked by Stage 8: {e}")
+        return False
+
+
 def _gate_providers(conn, trace_id: str, providers: list[BaseLLMProvider]) -> list[BaseLLMProvider]:
     """Stage 8: only providers that pass consent make it into Stage 9's fallback list."""
     gated = []
@@ -276,6 +296,7 @@ def run(
     timeout_seconds: int = 30,
     should_stop: Optional[Callable[[], bool]] = None,
     cache_generation: Optional[int] = None,
+    approved_web_query: Optional[str] = None,
 ) -> Generator[Union[WSChatEvent, PipelineCompleteEvent], None, None]:
     """
     Runs Stages 0-10 for one user message. A generator: yields every Stage 9 event
@@ -294,6 +315,14 @@ def run(
     chat connection passes the one it captured when it opened. Without one it
     is taken now, as the question arrives - never later, at the cache write,
     by which time a sign-out may have ended the session (FREEZE_LIST §7.19).
+
+    No click, no search (D-45). A message that would be searched - a trigger
+    word, not a personal or project question, web search consented - is
+    answered without the web, and its result carries web_search_offer: the
+    exact query that would be sent. Only a run given approved_web_query (the
+    offer the user clicked) sends anything, and consent is checked again then.
+    It used to search at once, so with consent given "I feel tired today" went
+    to the search provider for having the word "today" in it.
     """
     if cache_generation is None:
         cache_generation = response_cache.generation()
@@ -371,10 +400,28 @@ def run(
     # built on and not replayed tomorrow.
     today = _today()
     context_key += f"|date:{today.isoformat()}"
+    # Whether this message would be searched (D-45), decided here because it
+    # changes what may be cached: the answer to a message with an offer is the
+    # one without the web, and served from the cache it would come back with
+    # no offer, so the search could never be asked for. Fails closed: anything
+    # that goes wrong here offers nothing.
+    web_offer: Optional[str] = None
+    try:
+        if (
+            approved_web_query is None
+            and stage_06.matches_trigger(user_message)
+            and intent_result["category"] not in _NO_SEARCH_CATEGORIES
+            and _web_search_allowed(conn, trace_id)
+        ):
+            web_offer = intent_result["retrieval_hint"] or user_message
+    except Exception as e:
+        logger.error(f"Pipeline: could not decide whether to offer a web search, offering none: {e}")
     # Only a chat's first message is cached (#10): a follow-up ("why?") means
     # something only in its own chat, and its text alone said nothing about
-    # which chat, so another chat's saved answer could come back for it.
-    cache_allowed = not conversation_history
+    # which chat, so another chat's saved answer could come back for it. Nor a
+    # message with a web offer, or an approved search: that answer is the
+    # search the user asked for, every time (D-45).
+    cache_allowed = not conversation_history and web_offer is None and approved_web_query is None
     # And, for a chat with no record of its own, the end of the previous chat
     # that its Observer pass has not summarised yet (#13 part 3). Messages do
     # not move the record version (they are written every turn), so the key
@@ -510,36 +557,17 @@ def run(
     web_results: list[dict[str, Any]] = []
     search_query: str | None = None
     try:
-        no_search_categories = {
-            "personal_question",
-            "project_question",
-            "project_continuation",
-        }
-        if (
-            stage_06.matches_trigger(user_message)
-            and intent_result["category"] not in no_search_categories
-        ):
-            web_gate_started = time.perf_counter()
-            try:
-                stage_08.run(
-                    conn, "web_search", requested_scope="web_search_only", provider_is_local=False
-                )
-            except stage_08.ProviderConsentError as e:
-                gate_duration_ms = int(round((time.perf_counter() - web_gate_started) * 1000))
-                trace.stage_log(
-                    conn, trace_id, "stage_08_provider_gate", "error",
-                    "web_search blocked", error_detail=str(e), duration_ms=gate_duration_ms,
-                )
-                logger.warning(f"Pipeline: web_search blocked by Stage 8: {e}")
-            else:
-                search_query = intent_result["retrieval_hint"] or user_message
-                web_results = stage_06.run(search_query)
+        # Only the search the user clicked, exactly as it was shown to them
+        # (D-45). The first pass sends nothing; its offer was decided above.
+        if approved_web_query is not None and _web_search_allowed(conn, trace_id):
+            search_query = approved_web_query
+            web_results = stage_06.run(search_query)
     except Exception as e:
         logger.error(f"Pipeline: Stage 6 raised unexpectedly, returning empty: {e}")
     dur_6 = int(round((time.perf_counter() - t6) * 1000))
     trace.stage_log(
         conn, trace_id, "stage_06_web_search", "ok",
-        f"{len(web_results)} results",
+        "offered, not sent: the user is asked first" if web_offer is not None else f"{len(web_results)} results",
         duration_ms=dur_6,
     )
     # Report the exact query whenever it was sent, including when the search
@@ -551,6 +579,8 @@ def run(
             f"query sent: {search_query!r}",
             "ok" if web_results else "empty",
         )
+    elif web_offer is not None:
+        yield _stage_event("web", "Web search not sent", f"asks you first: {web_offer!r}", "skipped")
 
     # Stage 7
     t7 = time.perf_counter()
@@ -658,6 +688,8 @@ def run(
 
     # Stage 10
     result = stage_10.run(trace_id, aggregate, conn)
+    # The search this turn did not send, for the socket to offer (D-45).
+    result["web_search_offer"] = web_offer
     yield {"type": "pipeline_complete", "data": result}
 
 

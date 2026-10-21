@@ -16,7 +16,7 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class ChatEvent {
-  final String type; // 'stage_hint' | 'token' | 'done' | 'error' | 'stopped' | 'session_info'
+  final String type; // 'stage_hint' | 'token' | 'done' | 'error' | 'stopped' | 'session_info' | 'web_search_offer'
   final dynamic data;
   const ChatEvent(this.type, this.data);
 }
@@ -114,6 +114,13 @@ class WsChatClient {
   // rule (Part 15.2).
   void stop() {
     _channel?.sink.add(jsonEncode({'type': 'stop'}));
+  }
+
+  // The click on a web search offer (D-45): the backend answers that offer's
+  // question again, sending exactly the words the offer showed. Nothing is
+  // searched without this; an offer it no longer holds gets an error.
+  void approveWebSearch(String offerId) {
+    _channel?.sink.add(jsonEncode({'type': 'web_search', 'offer_id': offerId}));
   }
 
   // Switches to a different conversation (or starts a fresh one, if null) by

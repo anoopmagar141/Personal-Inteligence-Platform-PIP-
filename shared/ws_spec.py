@@ -173,6 +173,36 @@ class PipelineCompleteEvent(TypedDict):
     data: dict[str, Any]
 
 
+class WebSearchOfferData(TypedDict):
+    offer_id: str
+    query: str
+
+
+class WebSearchOfferEvent(TypedDict):
+    """
+    No click, no search (D-45). Sent after a turn's done when the message
+    would have been searched (a trigger word, not about the user or a project,
+    web search consented): the turn was answered without the web, and `query`
+    is exactly what a click would send. Like session_info it is not part of a
+    turn's stage* -> stage_hint -> token* -> (done|error|stopped) sequence. A
+    client that does not know it shows nothing, and then nothing is searched.
+    """
+
+    type: Literal["web_search_offer"]
+    data: WebSearchOfferData
+
+
+class WebSearchRequest(TypedDict):
+    """
+    The click: answer that offer's question again, sending its query. The
+    server keeps offers per connection, in memory, each usable once; any other
+    id gets one error and nothing is sent. The answer streams like any turn.
+    """
+
+    type: Literal["web_search"]
+    offer_id: str
+
+
 # What a client actually sends into /ws/chat (Part 15.2): one JSON object per
 # turn. project_id is optional - omitted/None means "no active project."
 class ChatRequest(TypedDict, total=False):

@@ -4,6 +4,7 @@ import gc
 import logging
 import os
 import re
+import secrets
 import threading
 import time
 from pathlib import Path
@@ -888,6 +889,14 @@ _CHAT_NOT_SAVED = (
     "The details are in the backend log."
 )
 
+# What a click on a web search offer is told when the offer is not one this
+# connection holds: already used, made on a connection that has since closed,
+# or never made. Nothing is searched (D-45).
+_WEB_OFFER_GONE = (
+    "This web search can no longer be sent: it was already used, or the chat was reopened since. "
+    "Ask the question again to get a new offer."
+)
+
 
 async def _run_write(loop, executor, conn, write, *args, **kwargs):
     """
@@ -1026,6 +1035,7 @@ async def stream_pipeline_to_websocket(
     executor=None,
     incoming: Optional[asyncio.Queue] = None,
     cache_generation: Optional[int] = None,
+    approved_web_query: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Bridges pipeline.run()'s synchronous generator into the async WebSocket
@@ -1075,7 +1085,7 @@ async def stream_pipeline_to_websocket(
     gen = pipeline.run(
         conn, user_message, conversation_history=conversation_history,
         project_id=project_id, conversation_id=conversation_id, should_stop=stop_event.is_set,
-        cache_generation=cache_generation,
+        cache_generation=cache_generation, approved_web_query=approved_web_query,
     )
     # Everything forwarded so far, folded the way pipeline.run() folds it -
     # what this turn returns if the pipeline raises before pipeline_complete.
@@ -1854,6 +1864,11 @@ try:
 
         incoming: asyncio.Queue = asyncio.Queue()
         reader_task = asyncio.ensure_future(_read_forever())
+        # The web searches this connection has offered and not yet sent, by a
+        # random id (D-45). Memory only: an offer is used once and is gone when
+        # the connection closes, so a click can only ever send what this chat
+        # showed, while it was open.
+        web_offers: dict[str, dict[str, Any]] = {}
 
         try:
             while True:
@@ -1906,6 +1921,38 @@ try:
                 # as an "Error:" row and takes as ending whatever turn it has
                 # open (FREEZE_LIST §7.44, D-24).
                 if isinstance(data, dict) and data.get("type") == "stop":
+                    continue
+
+                # A click on a web search offer (D-45): the same question answered
+                # again, sending exactly the query the offer showed. The prompt
+                # gets the history from before the question, so it is not asked
+                # twice, and the new answer is saved after the first one as an
+                # assistant message only. The pipeline checks consent again.
+                if isinstance(data, dict) and data.get("type") == "web_search":
+                    offer = web_offers.pop(str(data.get("offer_id") or ""), None)
+                    if offer is None:
+                        await websocket.send_json({"type": "error", "data": _WEB_OFFER_GONE})
+                        continue
+                    result = await stream_pipeline_to_websocket(
+                        websocket, conn, offer["message"],
+                        conversation_history=conversation_history[:offer["history_length"]],
+                        project_id=offer["project_id"],
+                        conversation_id=conversation_id,
+                        executor=executor,
+                        incoming=incoming,
+                        cache_generation=cache_generation,
+                        approved_web_query=offer["query"],
+                    )
+                    if result.get("status") in ("success", "stopped") and result.get("response_text"):
+                        conversation_history.append({"role": "assistant", "content": result["response_text"]})
+                        session_state["has_unobserved_turns"] = True
+                        pending_saves.append(("assistant", result["response_text"], now_utc()))
+                    try:
+                        await flush_pending_saves()
+                    except Exception:
+                        logger.exception(
+                            "Chat turn could not be saved; it is kept and tried again before the next message"
+                        )
                     continue
 
                 user_message = (data or {}).get("message", "")
@@ -1976,6 +2023,7 @@ try:
                 # user_message as the final message itself (Part 7 Stage 7). Passing
                 # a history that already includes the current message would
                 # duplicate it in every prompt sent to the LLM.
+                history_length = len(conversation_history)
                 result = await stream_pipeline_to_websocket(
                     websocket, conn, user_message,
                     conversation_history=conversation_history,
@@ -2009,6 +2057,22 @@ try:
                     logger.exception(
                         "Chat turn could not be saved; it is kept and tried again before the next message"
                     )
+
+                # The search this turn did not send, offered after its reply
+                # (D-45): an additive event, so a client that does not know it
+                # shows nothing, and then nothing is ever searched.
+                if result.get("status") == "success" and result.get("web_search_offer"):
+                    offer_id = secrets.token_urlsafe(12)
+                    web_offers[offer_id] = {
+                        "message": user_message,
+                        "query": result["web_search_offer"],
+                        "project_id": project_id,
+                        "history_length": history_length,
+                    }
+                    await websocket.send_json({
+                        "type": "web_search_offer",
+                        "data": {"offer_id": offer_id, "query": result["web_search_offer"]},
+                    })
         except WebSocketDisconnect:
             # Belt-and-suspenders alongside the reader's own _DISCONNECT
             # sentinel above: this path catches a disconnect surfaced through
