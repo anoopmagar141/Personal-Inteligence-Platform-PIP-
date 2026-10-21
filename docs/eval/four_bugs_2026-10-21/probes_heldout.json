@@ -1,0 +1,12 @@
+[
+ {"turn": "My brother reckons I would love rock climbing.", "field": "rock climbing", "expect": "refuse", "note": "held-out: reported opinion"},
+ {"turn": "Our team lead said I could pick up Kotlin next quarter.", "field": "Kotlin", "expect": "refuse", "note": "held-out: reported permission"},
+ {"turn": "If I had more time I would probably try Godot.", "field": "Godot", "expect": "refuse", "note": "held-out: conditional, not in the hypothetical list"},
+ {"turn": "Perhaps one day I will learn Japanese.", "field": "Japanese", "expect": "refuse", "note": "held-out: hypothetical, not in the list"},
+ {"turn": "Sam told me I should look at Flutter.", "field": "Flutter", "expect": "refuse", "note": "held-out: reported advice"},
+ {"turn": "Right now I'm digging into Rust lifetimes.", "field": "Rust lifetimes", "expect": "accept", "note": "held-out: I not first"},
+ {"turn": "These days I spend my evenings on chess openings.", "field": "chess openings", "expect": "accept", "note": "held-out: I not first"},
+ {"turn": "So, I've been playing with LangGraph this week.", "field": "LangGraph", "expect": "accept", "note": "held-out: I after a comma"},
+ {"turn": "How does Raft elect a leader?", "field": "Raft", "expect": "accept", "note": "held-out: a question"},
+ {"turn": "Because my friend uses it, I tried Obsidian last night.", "field": "Obsidian", "expect": "accept", "note": "held-out: the user acts, a friend mentioned first"}
+]

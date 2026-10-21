@@ -270,7 +270,8 @@ reaches a counting stub through the real pipeline (§7.21).
   that holds the API token. The dialog that explains the four scopes, with
   nothing preselected, is in the Flutter client; the older web client no
   longer grants at all (G-6, §7.51). The command-line client's `/consent`
-  still defaults to `full_inference` when no scope is typed (D-30, §7.51).
+  needs `--scope` and refuses a missing or unknown one before any request
+  (D-30, fixed in §7.72).
 - A question about the user is kept off the web only when Stage 1
   recognises it as one: a first-person phrase ("my", "I'm", "do I"), the
   word project or program, an active project's name, or a word shared with a
@@ -4634,6 +4635,115 @@ folder was empty) and is not part of this record.
 **Not covered:** the restore shortcut and the Backup screen's restore; the chat resumed after a new sign-in (the
 window was closed to stop the reconnects); the Review screen's questions (#19); the other screens.
 
+### 7.72 The four low defects: D-46 fixed, D-30 fixed, D-29 fixed the safe way with D-48, D-41 kept open (authorized
+2026-10-21)
+
+The owner's "start this" on the four low defects still open (2026-10-21): D-41, D-46, D-29, D-30. Built on branch
+`fix/four-small-bugs` from 1902c5e and moved onto 66c1f0a (records only between them). A workflow ran three
+independent designs for the topic rule (D-41/D-46), each
+measured by one harness, with a judge scoring them on held-out sentences none had seen; D-29 and D-30 were fixed
+test-first by two agents in separate worktrees; a second workflow reviewed all three changes, one reviewer each.
+Evidence: `docs/eval/four_bugs_2026-10-21/`.
+
+- **D-46 (A, low; Promise 4): a hypothetical first-person sentence raised the user's topic.** "If I ever had a free
+  summer I might look at Elixir, but honestly that is not going to happen." was written as topic "Elixir" (§7.67).
+  - **The owner's choice of three designs** (2026-10-21): (1) reuse the gate's own `_HYPOTHETICAL_MARKERS`, fixing
+    D-46 only; (2) the judge's pick, reading about 16 new grammar words (could, may, ought, he, she, they,
+    someone...), fixing D-46 and D-41 (held-out 9 of 10) in about 300 lines; (3) a sentence counts only when it
+    opens with "I", no new words, refusing "Right now I'm..." and "These days I..." (held-out 7 of 10). The owner
+    chose (1), no new words; it scores 5 of 10 held-out, its five misses the reported speech and unlisted hedges it
+    does not read.
+  - **Mechanism:** in `_topic_raising_text` a first-person statement sentence carrying one of the existing hedge
+    phrases (maybe, might, someday, if i ever, if i get time, if i have time) raises nothing; per sentence, so "I
+    use Go at work. Maybe I'll try Rust later." still raises Go; a question still raises its topic whatever hedge
+    it carries. The topic refusal now names "a statement about someone else or a hypothetical one". And, found by
+    the review: a hedge the model cut OUT of its quote is now read too, for every table, because
+    `_adjudicate_partial_quote` reads `_HYPOTHETICAL_MARKERS` beside its omissions list; the omissions list already
+    held maybe, might and "if i", so in effect "someday" ("I want to learn Clojure." cut from "Someday I want to
+    learn Clojure." was a topic and a goal).
+  - **Tests** (`test_topic_raised_by_the_user.py`, 11 to 22): the recorded quote and four new hedged sentences,
+    one with the hedge in another comma clause, are refused, each with a reason naming the hypothetical; a hedged
+    question and the plain sentence beside a hedged one still raise their topic, the hedged one does not; the
+    recorded trap through the real session-end path is neither written nor asked (one stage-11 audit row); a
+    trimmed "someday" is refused as a topic and as a goal. **Seen failing first:** 9 of the 11 on 66c1f0a's gate; the
+    two that must still pass did.
+  - **Break-it:** the check removed (6 tests), applied to questions too (1), the trimmed hedge no longer read (2).
+  - **Measured, no model:** the harness's 8 test files 324 -> 335 passed; the labelled corpus and
+    `scripts/eval_evidence_gate.py --include-new` unchanged apart from the run stamp; replay topics accepted at the
+    gate 31 unlabelled + 4 TRAP -> 30 + 1 (the TRAP left is the user's own question about a plain editor, which a
+    question is meant to raise); M-1(a) item 102 ("I might learn Swift someday, not sure yet.", graded supported)
+    refused, a cost. The replays of the seven recordings: trap rows written 1 -> 0 (the Elixir topic), 3 more
+    topic verdicts move on candidates the Constitution discarded anyway; facts learned 175 of 519 and every
+    decision unchanged. The reviewer checked the rule only ever removes: 94,244 word-aligned cuts of the user turns
+    of 285 transcripts, 458,819 topic verdicts, 0 accepted by the new rule and refused by the old.
+- **D-41 stays open (A, low; Promise 4).** "My friend says I should do a full marathon" is still the user's topic:
+  telling reported speech from the user's own sentence needs words the gate does not read (verbs of saying, or
+  design 2's pronouns and modals), which the owner ruled out. In M-1(a) the Constitution discarded both such
+  topics.
+- **D-30 (A, low; Promise 6): the command-line client's /consent defaulted to full_inference.**
+  - **Mechanism:** `--scope` has no default. Without it, or with a scope the server does not accept, `/consent`
+    sends nothing and names the four scopes (`CONSENT_SCOPES`, narrowest first, a copy of the server's
+    `VALID_CONSENT_SCOPES` so the CLI does not import the server; a test compares the two). argparse's own usage
+    line, printed for input it refuses itself, now reads "/consent PROVIDER_ID --scope SCOPE" (it showed the scope
+    in brackets, as optional; found by the review).
+  - **Tests** (`test_cli.py` 12 to 25, `test_ticket5_providers.py` 16 to 17): no scope sends nothing and names the
+    scopes, also through `main()` (exit 2, the fake opener pinned so nothing reaches a real backend on 8765); each
+    valid scope is sent exactly; three unknown scopes are refused before any request; the copy matches the server;
+    three inputs argparse refuses print the required form. `test_cli_consent_sends_correct_payload_default_scope`
+    asserted the bug (no scope sent full_inference) and was replaced. **Seen failing first:** 10 on 66c1f0a's
+    CLI. **Break-it:** 7 mutations, each caught (the default put back; a "least privilege" default instead of a
+    refusal; the unknown-scope check removed; case folded; "none" dropped from the copy; the scope list left out
+    of the refusal; the usage line generated again).
+- **D-29 (A, low; Promise 8): the first-run import's rule tested the method `p.exists`, not its result.**
+  - **What calling it would have done** (the first fix, then the probes before landing): an import let in beside or
+    INTO a registered profile with no database. Found unsafe, by the fixing agent and the review's probes through
+    the real routes: a profile whose password was chosen but whose database was never opened lost that password to
+    a same-named import; a profile whose deletion was put off to the next start had the import erased after a 200;
+    an import during a delete's retries went into the half-erased profile and was erased; a setup that finished
+    while the backup was being checked (seconds) was imported over; a dead profile's documents and sign-in picture
+    sat beside the imported database.
+  - **The owner's choice (2026-10-21): the safe rule.** Any registered profile refuses (the route's sentence, true
+    now); a profile being deleted refuses with its own ("A profile is still being deleted. Restart PIP, then import
+    the backup."); a profile of the owner's name registered while the backup is checked refuses instead of being
+    imported into. The welcome screen offers the import only when no profile is listed, so nothing it shows
+    changes.
+- **D-48 (A, medium; Promise 8), found by the review and fixed with D-29: the import wrote into a folder holding a
+  real database the registry did not list.** An unreadable or older `profiles.json`, or a profile unregistered with
+  `profiles.remove()`, leaves a folder the rule never looked at: the import moved its database aside, and if the
+  install then failed, the clean-up deleted the folder with the real data in it (reproduced through the real
+  routes). Now a folder holding anything but the empty `documents/` that `register()` makes is refused.
+  - **Tests** (`test_first_run_import.py`, 15 to 22): the original "a profile chosen before its password" test
+    restored (409 with the exact sentence); a waiting profile of the same name refuses and is left as it was; a
+    profile with a chosen password, and one waiting to be deleted, refuse; a profile created while the backup is
+    checked, with and without a password, is not imported into; a folder holding a database, and one holding a dead
+    profile's files, is never imported into. **Seen failing first:** 5 of the 7 on 66c1f0a's route (the race twice,
+    the two folders, the deletion's own sentence); the waiting profile and the chosen password were refused there too,
+    by the method that was never called - D-29 itself. **Break-it:** any registered profile
+    no longer refusing (5 tests), the pending sentence removed (1), the folder check removed (2), the fall-back to
+    an existing profile put back (1, caught only once the race test also ran without a password: with one, the
+    folder check refused first).
+- **Review** (one reviewer per change, a skeptic per finding): 12 findings. D-30's 3 skeptics finished: its
+  repeated `--scope` (the last one typed wins) refuted; its usage line and stale records confirmed, both fixed
+  here. The other 9 skeptics failed on the account's session limit, so their findings were checked by hand: the import
+  ones
+  reproduced with the reviewer's probe file (7 of 7), leading to the owner's safe rule and D-48; the gate ones by
+  test (trimmed "someday": fixed; per-sentence scope untested: test added; an ASCII "..." splitting a hedge from
+  its clause: kept, a limit; §7.72 not yet written: this section).
+- **Suites:** Backend 1881 passed, 0 failed (20 min 29 s), in a clean worktree at 66c1f0a plus the seven changed
+  files only, nothing else running; the committed files compared byte for byte with the ones that ran. A first
+  full run (16:44-17:04, at 1902c5e) hung at 92% opening a socket inside the test client, during the V-1 window's
+  reconnect storm (D-47, §7.71), with one failure it did not get to print; the hung file passes alone (17 of 17),
+  and the rerun with nothing else running is the result. No Flutter file changed.
+
+**Not covered (still open):**
+- D-41 (above). A hedge outside the list ("perhaps", "one day") still raises a topic, and so does a hedge split
+  from its clause by an ASCII "..." ("If I ever get a free summer... I'd look at Elixir.").
+- The command-line client prints "HTTP Error 422" without the server's sentence for every refused command (its
+  `request_json` drops the detail). Nothing ties the server's `VALID_CONSENT_SCOPES` to `constitutional.json` or
+  `schema.sql`.
+- A profile set up by someone else in the seconds the import is staging its OWN new profile is still overwritten:
+  the route takes no lock shared with setup or sign-in. It needs the new profile's name and a race of seconds.
+
 ---
 
 ## 8. Status
@@ -4693,11 +4803,11 @@ window was closed to stop the reconnects); the Review screen's questions (#19); 
 | D-27 a token that is not text is a provider failure | Landed 2026-10-16 (§7.46) | A, low: a server streaming structured content, or a null, put a non-text token into the stream; a provider whose first token was one was not treated as failed, so the next was never asked. Stage 9 now fails it like one that yields nothing: the next provider before any text, "Response interrupted" after. The message names the type, never the value. 10 unit and 2 end-to-end tests (8 + 2 failed first), 6 break-it mutations caught; the transport's guard kept and its tests moved onto a fake pipeline. Open: an exception that is neither provider error still ends the turn, on purpose |
 | G-1 / D-05 plaintext base slot before sign-in | Fixed 2026-10-16 (§7.47) | A, medium: with profiles registered and nobody signed in, 56 of 58 gated routes were served and the chat socket accepted, from a plaintext database created in the base slot, and a "Default" profile appeared. One rule (`_is_locked`, whose condition was `_no_profile_is_open` until G-1b replaced it with `_has_profiles`, §7.49) now answers 423 at the gate, 4423 at the socket and `LockedError` in `_conn()`, widening another session's uncommitted guard. 6 tests (4 failed first), 6 break-it mutations caught. Found beside it: D-28, fixed in G-1b (§7.49), which also put right the first-run import this refused |
 | D-28 / G-1b a profile chosen before its password gets a plaintext database | Fixed 2026-10-16 (§7.49) | A, medium: one request to any database route, before `/auth/setup`, created a plaintext `pip.db` in the profile's folder; the state became `needs_migration` and `/auth/setup` was refused, so the profile could not be given a password through the app, and 56 of 58 gated routes were served. G-1's rule one step further: with a registry, "setup" is refused at the gate, the chat socket and `_conn()` (`_has_profiles` replaces `_no_profile_is_open`). The first-run import, which G-1's gate had made dead after the last profile was deleted, is on the exempt list now. 7 tests (5 failed first), 9 break-it mutations caught |
-| D-29 the first-run import refuses for any registered profile | Found 2026-10-16 (§7.49), open | A, low: the route's rule is meant to be "no profile has a database" but tests the method `exists`, not its result, so a profile with no password yet also refuses it, with a sentence that is untrue then. Over-refuses only; the welcome screen cannot reach it. Not fixed |
+| D-29 the first-run import refuses for any registered profile | Fixed 2026-10-21 (§7.72) | A, low: the rule tested the method `exists`, not its result. Calling it let an import in beside or into a registered profile, which the probes found unsafe (a chosen password lost, an import erased by a delete, a setup imported over); the owner chose the safe rule: any registered profile refuses, with a true sentence, and the import never goes into an existing profile |
 | G-3 / D-08 a cloud model counted as local | Fixed 2026-10-16 (§7.48) | D then A, medium: Ollama's own `-cloud` models were answered over the internet but reported local, so a conversation and the Observer's transcript could leave the machine. One predicate (`is_cloud_model`): a pull and a selection are refused with a sentence (the selection before Ollama is asked, which fails open), and the provider reports itself not local, so Stage 8 and Stage 11 refuse a name already stored. 43 tests (28 failed first), 7 break-it mutations caught |
 | G-2 / D-06 a deleted document left its file and its stored bytes | Fixed 2026-10-16 (§7.50) | D then A, medium: `DELETE /rag/documents` removed the chunks and marked the row, but the uploaded file stayed in the documents folder and its bytes stayed in `document_blobs`, so in every later backup. Delete now removes the file (only one inside the profile's own folder; one that cannot be removed stops the delete with a sentence) and the stored bytes. 12 tests (9 failed first), 7 break-it mutations caught |
 | G-6 the older web client granted full consent in one click | Fixed 2026-10-16 (§7.51) | A, low: `frontend/web/` sent `consent_scope: "full_inference"`, the broadest scope, for any cloud provider on one click, with nothing explained and nothing chosen. The button and its handler are gone; the tab says to grant it in the PIP app; Revoke stays. 3 tests (2 failed first) that read the served files, 4 break-it mutations caught. The server still accepts any valid scope from any token holder |
-| D-30 the command-line client's /consent defaults to full_inference | Found 2026-10-16 (§7.51), open | A, low: `/consent PROVIDER_ID` with no `--scope` grants the broadest scope, a default the person did not choose. A typed command, in a client that is not shipped. Not fixed |
+| D-30 the command-line client's /consent defaults to full_inference | Fixed 2026-10-21 (§7.72) | A, low: `/consent` needs `--scope`; without it, or with an unknown scope, nothing is sent and the four scopes are named; argparse's own usage line says the scope is required. A test that asserted the old default was replaced |
 | D-31 a question about the user sent to the web | Fixed 2026-10-17 (§7.52) | A, low: with web search consented, a message with a news word was filed as news before Stage 1 asked whether it was about the user or a project, so "what is my current project?" sent its first 12 words to the search provider. Stage 1 now asks that first (no words added). 12 tests (7 failed first), 2 break-it mutations; the 14 §7.5 phrasings send 1 query instead of 4. Open: a phrasing Stage 1 does not recognise as about the user is still sent |
 | D-32 a deleted chat kept reaching later prompts | Fixed 2026-10-17 (§7.53) | A, medium: deleting a chat removed its messages only. Its "where we left off" note kept reaching every new chat's first prompt; the app's own order (delete the open chat, then leave it) ran the session-end pass on the deleted chat and wrote the note back; and a transcript queued for the next start was learned from and kept. The delete now removes the chat's queued transcripts (new `pending_observer.conversation_id`) and clears the note, and the pass skips a chat that is gone. 8 tests (7 failed first), 6 break-it mutations. Open: the note is cleared whichever chat wrote it; what was already learned stays |
 | S-1 a run stamp on every evaluation result | Built 2026-10-17 (§7.54) | Method: one of five evaluation scripts stamped its results, and only with --save-raw. `scripts/_stamp.py` now records, at the start of every run, the commit and a dirty flag, the Constitution's version and hash and, for a model run, Ollama's version, the model's digest and the options sent (a model run that cannot read them refuses to start); every result file and report carries it, one per start for a resumed run. 23 tests (10 script tests failed first), 8 break-it mutations. The two model-calling retrieval harnesses were not run |
@@ -4711,15 +4821,16 @@ window was closed to stop the reconnects); the Review screen's questions (#19); 
 | D-38 the gate refuses a quote carrying its turn's "User:" label | Fixed 2026-10-21 (§7.67) | A, low: a quote that begins "User:" and is not found as written is looked up without the label; who said it is still the ledger's answer, and an "Assistant:" label is never taken off. On the replays 6 of G-4's 7 label-caused decision losses come back; it also let D-46's trap through |
 | D-39 one "where we left off" note for every chat and project | Fixed 2026-10-20 (§7.62) | A, medium (#13): the note was one row per profile, overwritten by every chat, loaded into every project, cleared whichever chat was deleted, and invisible in the app. Now one record per chat (`chat_records`) with its project, deleted with its chat; a chat is shown its own, else its project's latest, else the newest, labelled and dated; the previous chat's unsummarised end; the record can be read, corrected and cleared in the app. 32 + 1 backend and 8 app tests, 31 break-it mutations. Documents are not linked to chats |
 | D-40 a skill level of 1.0 accepted from "N years professionally" | Fixed 2026-10-21 (§7.67) | A, low: experience language supports a level up to 0.9; above it the quote must say "I'm an expert". 5 of M-1(a)'s 8 graded false accepts are refused now (not a re-measurement); on the replays 7 true skills queued at 1.0 are refused instead of asked |
-| D-41 reported speech with "I" passes as the user's topic | Found 2026-10-20 (§7.63), open | A, low: D-33's first-person rule reads "My friend says I should do a full marathon" as the user's; two such topics in M-1(a), both discarded by the Constitution. Not fixed |
+| D-41 reported speech with "I" passes as the user's topic | Found 2026-10-20 (§7.63), open by the owner's choice (§7.72) | A, low: "My friend says I should do a full marathon" is still the user's topic. Telling reported speech apart needs words the gate does not read (verbs of saying, or pronouns and modals); the owner chose the design that reads none. Both M-1(a) cases were discarded by the Constitution |
 | D-42 "my main project" accepted as a preference | Fixed 2026-10-21 (§7.67) | A, low: "my main" is no longer preference language, so the Lanternfish sentence is not a preference. It is still not a project: that would need a wider word list |
 | D-43 a genuine fact short of the count dropped silently | Fixed 2026-10-20 (§7.64) | A, medium (#19): a candidate the gate accepted but the Constitution refused for a count (or an inferred label in weeks 1-2) was thrown away, so learning nearly stopped after week 2 and a correction a month in was lost. Now one question (origin shortfall), at most 2 per chat, for belief tables only; a correction shows the stored value. 13 + 2 tests, 11 break-it mutations. Short set 35 -> 41 of 69 learned or asked, traps 0 of 75; long set 0 of 81 unchanged (lost at the gate's wording) |
 | D-44 a follow-up inside one chat lost its thread | Fixed 2026-10-20 (§7.65) | A, medium (#7, #8, #9, #10, #12): the prompt never named the day; a 10-minute break cleared the open chat's history; one long reply emptied the history; a follow-up could get another chat's cached answer; decisions and documents were searched with the newest message's first 12 words. Now the day is in the prompt and the cache key; the idle pass marks what it read and keeps the history; the last exchange is always kept, shortened; only a chat's first message is cached; Stages 3 and 5 search with the previous and the whole current message, the web query unchanged. 11 + 3 tests, 12 break-it mutations. Open: a whole prompt over budget can still lose the last exchange; retrieval with the longer text not re-measured |
 | Q-1 a new user's greeting answered "no record" | Run 2026-10-21 (§7.66), closed, no code change | qwen2.5:7b on the real pipeline, 4 made-up new users x 26 greetings: 0 of 104 no-record replies by the pattern and by reading all 104; the bar (at most 1) met. llama3.1:8b and phi3:mini showed it on 2026-10-17 |
 | D-45 a message with a trigger word sent to the web without asking | Fixed 2026-10-21 (§7.69) | A, medium (§7.66 first rated it low, for greetings only): with web search consented, "I feel tired today" and any message with a trigger word not about the user or a project went to the search provider at once. Now no click, no search: the turn is answered without the web and ends with an offer of the exact words; only a click sends them, with consent checked again. 14 + 5 backend and 4 app tests, 17 break-it mutations |
-| D-46 a hypothetical first-person sentence raises a topic | Found 2026-10-21 (§7.67), open | A, low: topics skip the hypothetical check and D-33's rule takes any sentence with "I", so "If I ever had a free summer I might look at Elixir" is the user's topic. The model's "User:" label had hidden it; with D-38 fixed one replayed trap is written. Not fixed: the owner's choice |
+| D-46 a hypothetical first-person sentence raises a topic | Fixed 2026-10-21 (§7.72) | A, low: a first-person sentence carrying one of the gate's existing hedge phrases raises no topic, and a hedge cut out of a quote is read for every table. No new words (the owner's choice of three designs). Replays: trap rows written 1 -> 0; cost, "I might learn Swift someday" (graded supported) refused |
 | V-1 real-window check | Run 2026-10-21 (§7.71), report only | In a throwaway copy (05c6523, port 8790, the Release app): the first-run import, the D-45 web-search button and the record dialog worked as expected, and the D-23 turn end too; after a restart the locked backend refused the chat, the window never asked to sign in, and its reconnects multiplied (D-47) |
 | D-47 the chat's reconnects double on every failure | Found 2026-10-21 (§7.71), open | A, medium: ws_chat_client.dart reconnects from both onError and onDone, so a refused connection (a locked or stopped backend) starts two attempts and they double every 2 s: 30,800 in two minutes, 277 CPU-seconds. A socket refused as locked never brings back the sign-in screen. Not fixed |
+| D-48 the first-run import wrote into a folder the registry did not list | Found and fixed 2026-10-21 (§7.72) | A, medium: with an unreadable or older profiles.json, or a profile unregistered by remove(), the import moved a real database aside, and a failed install's clean-up deleted the folder with it. A folder holding anything is now refused |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

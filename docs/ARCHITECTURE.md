@@ -320,9 +320,13 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   user's questions and their sentences with the pronoun "I": "My friend wants to
   pass the Azure exam" is context, not the user's interest. The one word read
   is "I", not a list of phrasings. Cost: an elliptical answer ("A payments
-  service.") raises no topic. Open (D-46): a hypothetical sentence with "I" ("If
-  I ever had a free summer I might look at Elixir") still raises one; topics
-  skip the hypothetical check the other tables have.
+  service.") raises no topic. A first-person sentence carrying one of the
+  gate's existing hedge phrases (maybe, might, someday, if I ever...) raises
+  nothing (D-46; "If I ever had a free summer I might look at Elixir"), and a
+  hedge the model cut out of its quote is still read, for every table. Reported
+  speech ("My friend says I should run a marathon") still raises a topic (D-41,
+  open: telling it apart needs words the gate does not read, which the owner
+  ruled out).
 - **Role headers in a transcript are a security boundary, not formatting.**
   `format_transcript()` indents any content line beginning `User:` or
   `Assistant:`, because `EvidenceLedger` parses those headers back out to
@@ -430,8 +434,11 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   the lock (FREEZE_LIST D-09). The stop is a hard one by design - nothing can ask
   for a graceful one - and what it costs is already recovered at the next start.
 - **The first-run import is the one restore that is done at once.**
-  `POST /backup/import` (welcome screen) is allowed only while no profile has a
-  database and nobody is signed in: there is nothing to replace, and nothing holds a
+  `POST /backup/import` (welcome screen) is allowed only on a truly empty PIP: no
+  profile registered (with or without a database), none being deleted, nobody signed
+  in, and no folder for the new profile holding anything; it never imports into an
+  existing profile (D-29, D-48; FREEZE_LIST §7.72). The welcome screen offers it only
+  when no profile is listed. There is nothing to replace, and nothing holds a
   database open, so the swap that the in-app restore defers to the next start is done
   immediately. `restore.preflight()` makes every check staging makes *before* a profile
   is registered (both call `_open_checked_backup`, so they cannot disagree), which is

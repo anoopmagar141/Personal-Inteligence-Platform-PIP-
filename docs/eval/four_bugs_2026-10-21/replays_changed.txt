@@ -1,0 +1,36 @@
+## g4long: 1 run(s)
+## r1012: 3 run(s)
+## v2llama: 3 run(s)
+  r0 trap_might_swift: topic_interests.Swift='' EVIDENCE_SUFFICIENT/DISCARD/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+## v2long: 1 run(s)
+  r0 long_S_r2_d7: topic_interests.Elixir='language' EVIDENCE_SUFFICIENT/APPROVED/written -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r2_d7: learned {('written', 'UNLABELLED'): 4, ('written', 'TRAP'): 1} -> {('written', 'UNLABELLED'): 4}
+## v2qwen: 3 run(s)
+## w1long: 1 run(s)
+  r0 long_S_r2_d21: topic_interests.Elixir='long-running services, concurrent connections, Erl' EVIDENCE_SUFFICIENT/DISCARD/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.Elixir='Yes' EVIDENCE_SUFFICIENT/DISCARD/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+## w1short: 3 run(s)
+
+## totals
+  ('after', 'decision', 'logged') 27
+  ('after', 'decision', 'pending') 22
+  ('after', 'decision', 'rejected') 163
+  ('after', 'fact_learned') 175
+  ('after', 'facts') 519
+  ('after', 'queued', 'TRUE') 111
+  ('after', 'queued', 'UNLABELLED') 4
+  ('after', 'trap_hit') 0
+  ('after', 'written', 'TRUE') 72
+  ('after', 'written', 'UNLABELLED') 26
+  ('before', 'decision', 'logged') 27
+  ('before', 'decision', 'pending') 22
+  ('before', 'decision', 'rejected') 163
+  ('before', 'fact_learned') 175
+  ('before', 'facts') 519
+  ('before', 'queued', 'TRUE') 111
+  ('before', 'queued', 'UNLABELLED') 4
+  ('before', 'trap_hit') 1
+  ('before', 'written', 'TRAP') 1
+  ('before', 'written', 'TRUE') 72
+  ('before', 'written', 'UNLABELLED') 26
+  memory_changed 4

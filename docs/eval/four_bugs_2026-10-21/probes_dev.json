@@ -1,0 +1,12 @@
+[
+ {"turn": "My friend says I should do a full marathon but that's crazy.", "field": "marathon", "expect": "refuse", "note": "D-41 recorded (M-1(a) items 56/81)"},
+ {"turn": "If I ever had a free summer I might look at Elixir, but honestly that is not going to happen.", "field": "Elixir", "expect": "refuse", "note": "D-46 recorded (long set T2)"},
+ {"turn": "My manager thinks I ought to learn Terraform.", "field": "Terraform", "expect": "refuse", "note": "fresh: reported advice"},
+ {"turn": "Maybe someday I'll look at Zig.", "field": "Zig", "expect": "refuse", "note": "fresh: hypothetical"},
+ {"turn": "Priya keeps telling me I need to try Svelte.", "field": "Svelte", "expect": "refuse", "note": "fresh: reported speech"},
+ {"turn": "I'm curious about CRDTs lately.", "field": "CRDTs", "expect": "accept", "note": "D-33 test wording"},
+ {"turn": "Honestly, I keep thinking about WebAssembly.", "field": "WebAssembly", "expect": "accept", "note": "fresh: I after a comma"},
+ {"turn": "Lately I've been reading about consensus protocols.", "field": "consensus protocols", "expect": "accept", "note": "fresh: I not first"},
+ {"turn": "What is a B-tree index?", "field": "B-tree", "expect": "accept", "note": "a question"},
+ {"turn": "My friend mentioned Rust, so I started reading the Rust book.", "field": "Rust", "expect": "accept", "note": "fresh: the user acts after someone else's mention"}
+]

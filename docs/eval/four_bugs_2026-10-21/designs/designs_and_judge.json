@@ -1,0 +1,486 @@
+{
+ "designs": {
+  "reuse-only": {
+   "rule_summary": "A topic is still raised by any question the user asks (with or without a hedge), and by any statement sentence containing the pronoun \"I\", as in D-33. The one change: a first-person statement sentence that carries a phrase from the gate's existing _HYPOTHETICAL_MARKERS list (maybe, might, someday, if i ever, if i get time, if i have time) no longer raises its topic. The check works per sentence, so other sentences in the quote still count. This fixes D-46. D-41 (reported speech such as \"My friend says I should...\") is NOT fixed. No list or structure in the gate separates the user's own words from someone else's inside one sentence, and the only reading with no new word (the \"I\" must be its clause's subject, meaning at most one word before it) refuses too many of the user's own sentences.",
+   "words_read": [
+    {
+     "word": "i",
+     "already_in_gate": true
+    },
+    {
+     "word": "maybe",
+     "already_in_gate": true
+    },
+    {
+     "word": "might",
+     "already_in_gate": true
+    },
+    {
+     "word": "someday",
+     "already_in_gate": true
+    },
+    {
+     "word": "if i ever",
+     "already_in_gate": true
+    },
+    {
+     "word": "if i get time",
+     "already_in_gate": true
+    },
+    {
+     "word": "if i have time",
+     "already_in_gate": true
+    }
+   ],
+   "pytest_summary": "324 passed in 18.80s (same 8 gate/observer test files as the identity control, 0 failed). Labelled corpus: 2 topic cases, no verdict changed.",
+   "replay_accepted_after": "UNLABELLED 30, TRAP 1 (before: UNLABELLED 31, TRAP 4). The TRAP still accepted is the user's own question \"is a plain editor ever enough for a real project?\" (field \"text editor\", w1long long_S_r2_d21). The rule keeps it on purpose: a question the user asks raises its topic. Before the edit, the quote says only that the flatmate uses Notepad++.",
+   "m1a_changes": [
+    "102 | S | EVIDENCE_SUFFICIENT -> EVIDENCE_NOT_ENTAILING (topic Swift from \"I might learn Swift someday, not sure yet.\"; a new false reject by the blind grader's reading)",
+    "56 and 81 | D | unchanged, still EVIDENCE_SUFFICIENT (D-41 marathon, not fixed by this angle)"
+   ],
+   "dev_probes": "7 of 10 (the current rule gets 5 of 10). Fixed: the two hypothetical probes (Elixir D-46, \"Maybe someday I'll look at Zig\"). All five accept probes still accept. Failed, all three reported-speech refuse probes, still wrongly accepted: \"My friend says I should do a full marathon but that's crazy.\" (D-41 recorded), \"My manager thinks I ought to learn Terraform.\", \"Priya keeps telling me I need to try Svelte.\"",
+   "known_false_rejects": [
+    "M-1(a) item 102 (graded S): topic Swift from \"I might learn Swift someday, not sure yet.\" is refused; the same quote is refused in replay v2llama trap_might_swift",
+    "Own probe: \"I use Go daily, maybe too much.\" is refused as topic Go, because the hedge is about something other than the topic",
+    "Own probe: \"I've been reading about Zookeeper and might write a toy version.\" is refused as topic Zookeeper",
+    "General: any first-person statement sentence with maybe/might/someday/if i ever/if i get time/if i have time anywhere in it no longer raises a topic. Questions are unaffected. Other sentences in the same quote still count."
+   ],
+   "risks": [
+    "D-41 is NOT fixed. Reported speech with \"I\" still raises the user's topic: the recorded marathon sentence (M-1(a) 56/81, three v2llama replays) and every reported sentence in my own probes ('My boss keeps saying I should learn Kotlin', 'He thinks I would enjoy Clojure', 'Sam told me I have to look at GraphQL', ...).",
+    "Why D-41 needs a new word under this angle: the gate's role ledger works per turn, its first-person support lists match reported speech too, and _STOPWORDS's his/her/its/our/their exist for token matching. Two alternatives were built and measured on the dev probes and on 30 sentences of my own wording (reuse-only/probes_mine.json; current rule 17/30). (a) variant_position.py, no new word: the 'I' must have at most one word before it in its clause, using the clause cut _style_marker_is_negated uses. Dev 10/10, mine 15/30. It refuses 6 of the reported sentences but also 9 of 13 of the user's own sentences ('Last week I started reading about Raft', 'At work I maintain a Kafka cluster', 'Rust is something I keep coming back to', 'Ok so I've been reading about Datalog'). (b) variant_possessive.py, reads 'my' on its own plus his/her/its/our/their taken out of _STOPWORDS: the clause opens with a possessive and has an 'I' later. Dev 9/10 (misses Priya), mine 18/30. It catches only 'my X says I' (misses he/everyone/name/article subjects) and adds 2 false rejects ('My team runs everything on Nomad and I look after the cluster', 'My plan for the summer is that I learn OCaml properly'). Both alternatives also change M-1(a) 56 and 81 (D) to refused, plus the 3 marathon replays.",
+    "The same reported-speech hole exists in goal_memory, a belief table, and is out of this task's scope: today adjudicate() returns EVIDENCE_SUFFICIENT for goal 'try Svelte' from 'Priya keeps telling me I need to try Svelte.' and for goal 'learn Terraform' from 'My manager says I have to learn Terraform.', because 'i need to' and 'i have to' are _GOAL_MARKERS.",
+    "Hypotheticals the existing list does not hold still raise topics: 'If I had more time I would learn Haskell.' is accepted. Reuse-only cannot reach them.",
+    "A quote that cuts off a leading 'someday' still passes ('I'll learn Zig.' out of 'Someday I'll learn Zig.'). Step 7's omission list covers 'might', 'maybe' and 'if i' cut-offs, but not 'someday'. Every other table has the same limit.",
+    "If this ships, the refusal detail at evidence_gate.py lines 1067-1072 would call the Elixir sentence 'a statement about someone else' when it is a hypothetical. Only the reason string is misleading; the state is right. Changing the wording is outside this function.",
+    "Hearsay with one word before 'I' ('Apparently I should be using Bazel.') and frames cut off by a comma ('According to my mentor, I should study Scala.') are accepted by every variant measured, including the final one.",
+    "My 30 probe sentences are one author's wording, written after reading the dev probes. They are not held-out; they only show the size and shape of each variant's cost. I did not open the held-out folder.",
+    "Nothing in the repository was edited. All files are under C:/Users/USER/AppData/Local/Temp/claude/D--FINAL-YEAR-PROJECT-Personal-Inteligence-Platform--PIP-/e059c656-5a61-4aba-ab45-42c8740f5786/scratchpad/topicrule/reuse-only/ (final rule topic_rule_reuse_only.py; final.json with pytest; final_mine.json; variants variant_hyp_only.py, variant_position.py, variant_possessive.py with dev_*.json and mine_*.json)."
+   ]
+  },
+  "clause-position": {
+   "rule_summary": "A statement clause is the user's when its \"I\" is the first or second word of the clause. Clauses are split only at , ; : and the existing sentence ends; one word may come before \"I\" (\"Lately I\", \"So I\"), but no more, because putting words in the user's mouth takes a speaker and a verb (\"my friend says I\"). The \"I\" must be inside the quote itself. Where the quote was cut from mid-sentence, the words the user said in front of it count toward the position, so context can only take a clause away, never add one. A clause is also dropped when it opens inside a quotation mark, or when one of the gate's existing _HYPOTHETICAL_MARKERS starts before its \"I\" anywhere earlier in the sentence (\"maybe I'll\", \"if I ever …, I'd\"). Questions are kept whole as before, and the rule keeps clauses one by one, not whole sentences.",
+   "words_read": [
+    {
+     "word": "i (the pronoun, as _TOKEN_RE splits i'm/i've/i'd/i'll)",
+     "already_in_gate": true
+    },
+    {
+     "word": "maybe (via _HYPOTHETICAL_MARKERS)",
+     "already_in_gate": true
+    },
+    {
+     "word": "might (via _HYPOTHETICAL_MARKERS)",
+     "already_in_gate": true
+    },
+    {
+     "word": "if i ever (via _HYPOTHETICAL_MARKERS)",
+     "already_in_gate": true
+    },
+    {
+     "word": "if i get time (via _HYPOTHETICAL_MARKERS)",
+     "already_in_gate": true
+    },
+    {
+     "word": "if i have time (via _HYPOTHETICAL_MARKERS)",
+     "already_in_gate": true
+    },
+    {
+     "word": "someday (via _HYPOTHETICAL_MARKERS)",
+     "already_in_gate": true
+    },
+    {
+     "word": "punctuation , ; : as clause breaks (the gate already splits clauses on [.!?;,:] in _style_marker_is_negated)",
+     "already_in_gate": true
+    },
+    {
+     "word": "punctuation \" straight double quote (in the gate's _CLOSERS)",
+     "already_in_gate": true
+    },
+    {
+     "word": "punctuation “ (curly open double quote, U+201C)",
+     "already_in_gate": false
+    },
+    {
+     "word": "punctuation ” (curly close double quote, U+201D)",
+     "already_in_gate": false
+    },
+    {
+     "word": "punctuation ‘ (curly open single quote, U+2018)",
+     "already_in_gate": false
+    }
+   ],
+   "pytest_summary": "324 passed in 18.58s (same 8 gate/observer files as the 324-pass baseline; 0 failed)",
+   "replay_accepted_after": "UNLABELLED 28, TRAP 1 (before: UNLABELLED 31, TRAP 4); 111 topic candidates; no new accepts",
+   "m1a_changes": [
+    "56 | D | EVIDENCE_SUFFICIENT -> EVIDENCE_NOT_ENTAILING (\"My friend says I should do a full marathon\", topic marathon)",
+    "81 | D | EVIDENCE_SUFFICIENT -> EVIDENCE_NOT_ENTAILING (\"My friend says I should do a full marathon but that's crazy.\", topic marathon)",
+    "No S or U item changes: 6, 13, 29, 55, 68, 90, 98, 102, 103 stay accepted. Item 102, \"I might learn Swift someday, not sure yet\" (graded S), is kept on purpose."
+   ],
+   "dev_probes": "10 of 10; none failed. All 5 refuse probes (marathon, Elixir, Terraform, Zig, Svelte) changed from accept to refuse, and all 5 accept probes stay accepted. A second probe set I wrote and labelled myself (my_probes.json, 48 items, not held-out) scores 33 of 48. Its 15 misses are listed under known_false_rejects and risks.",
+   "known_false_rejects": [
+    "Two or more words before \"I\" with no comma, all newly refused (the D-33 rule accepted them): \"These days I'm really into Elixir.\", \"At work I mostly write Kotlin.\", \"For my thesis I'm comparing CRDTs with operational transforms.\", \"Right now I'm stuck on Docker networking.\", \"Ok so I've been learning Go.\", \"Hey Claude I want to learn Rust.\"",
+    "Topic named only outside the user's own clause, newly refused: \"My team uses Kafka; I'm trying to get my head around it.\", \"My friend recommended Dune and I loved it.\", \"My manager mentioned Terraform, and I've started the tutorial on it.\", \"Learning Go has been fun, I think I'll keep going.\"",
+    "A hypothetical marker earlier in the sentence also takes out a later plain clause: \"Maybe it's dumb, but I want to learn Haskell.\" is newly refused.",
+    "Not new, unchanged from today: a quote the Observer cut so the speaker is gone, such as \"our sync is broken\" from \"Right, I keep coming back to this because our sync is broken.\", stays refused. Context from the turn is only allowed to restrict.",
+    "In the scripted chats (observer_cases plus the long-chat set), 5 of 37 distinct first-person statement sentences lose every clause. All 5 are hedges or reported speech: \"Maybe, I'll think about it.\", \"My colleague wants us to move to Java but I'm not convinced.\", the marathon sentence, \"Maybe next year I'll think about the full one.\", and the Elixir sentence. 23 keep only part of the sentence, and in each of those the topic-bearing clause is kept."
+   ],
+   "risks": [
+    "False accepts that remain. Each one is also accepted by the current rule. (1) A reporting frame joined by and/but inside one clause: \"I love hiking and my friend says I should do a marathon.\" (2) A frame that itself opens with I: \"I heard from my friend that I should do a triathlon.\" (3) One-word hearsay: \"Apparently I should be learning Kubernetes.\" (4) A reporting lead-in set off by a comma or colon: \"According to my boss, I need to learn Terraform.\", \"My teacher says, I should practice SQL more.\", \"My friend's advice: I should run a marathon.\" (5) A conditional with none of the gate's markers: \"If I had more time(,) I'd learn Haskell.\" If the held-out set contains these shapes, it will catch them.",
+    "A deliberate choice that may not match the probe author's view: a hypothetical marker said AFTER the I does not refuse. So \"I might try Kotlin one day.\" and \"I might learn Swift someday\" still raise their topics. I chose this to keep M-1(a) item 102 (graded S) and hedges such as \"I think the bug might be in my Redis config.\" I measured the alternative, which reads the marker anywhere up to the end of the clause (alt_fwd_rule.py in the same folder; a one-line difference). It has the same dev score (10/10) and the same self-probe score (33/48). It also flips item 102 (S) and the Swift replay to refused, giving UNLABELLED 27, TRAP 1. If the owner holds that every hypothetical is out, that variant is the one to take.",
+    "Allowing one word before I is the weakest point. That word can be a hedge or a subordinator. Only the existing _HYPOTHETICAL_MARKERS catch it (\"Maybe I'll\", \"If I ever\", \"Someday I\"). \"If I had…\", \"Perhaps I'll…\" (no marker) and \"Apparently I…\" pass. A strict rule where I must come first refuses those, but costs 8/10 on the dev probes and six one-word-lead accepts.",
+    "My own probe set (my_probes.json, 48 items) is my labelling, written before the variants were scored. It is not independent and it is not held-out. The scripts explore.py, cut_checks.py and recall_scan.py are in the same folder.",
+    "The quotation-mark guard is incomplete. normalize() folds a curly closing single quote into the apostrophe, and a straight ' at the start of a clause is not treated as a quote, so a reported clause in single quotes is not caught by the guard. The word-position rule still applies to it.",
+    "Typed \"im\"/\"ive\" are not read as I. This is the same as today's rule; I left it alone because reading them would add words.",
+    "The 8 pytest files pass, but none of them tests a reported-speech or hypothetical topic refusal. Adopting this rule would need new cases, for example in test_topic_raised_by_the_user.py: D-41 cut from the front and from the back, the D-46 sentence, and the one-word-lead accepts.",
+    "The gate's partial-quote check (_adjudicate_partial_quote, whose omission list contains \"if i\" and \"might\") already refuses some hypothetical quotes cut from a longer turn, before and after this rule. Those refusals are not credited to this rule."
+   ]
+  },
+  "attack-first": {
+   "rule_summary": "A question still raises its topic, and a statement still needs the pronoun \"I\" in the quote, as in D-33. Each statement is now judged on the whole sentence it was cut from in the user's turn, so a quote cut down to \"I should do a full marathon\" is still read with its \"My friend says\". A sentence is dropped if it carries the gate's own _HYPOTHETICAL_MARKERS, or if it has \"if I\" plus another \"I\" followed by an auxiliary such as would, 'll or have to (D-46). Inside a sentence (split into clauses at , ; : dashes and before and/but/so/or), a clause is someone else's and is removed in three cases: its \"I\" comes right after \"me\"; or something other than \"I\" opens the clause and its first \"I\" takes should/would/'d/could/may/might/ought; or a person word (he/she/they/you/everyone/someone, or a possessive like my/our) opens the clause and its first \"I\" takes will/'ll/must/need or \"have to\"/\"going to\" (D-41). The sentence raises its topic only if a clause of the user's own keeps its \"I\" inside the quote. Clauses with no \"I\" stay as context, as before. The rule only removes text: it never returns a word D-33 would not.",
+   "words_read": [
+    {
+     "word": "i (and i'm/i've/i'd/i'll)",
+     "already_in_gate": true
+    },
+    {
+     "word": "should",
+     "already_in_gate": true
+    },
+    {
+     "word": "shouldn't / shouldnt",
+     "already_in_gate": false
+    },
+    {
+     "word": "ought",
+     "already_in_gate": false
+    },
+    {
+     "word": "would",
+     "already_in_gate": true
+    },
+    {
+     "word": "wouldn't / wouldnt",
+     "already_in_gate": true
+    },
+    {
+     "word": "i'd",
+     "already_in_gate": true
+    },
+    {
+     "word": "could",
+     "already_in_gate": false
+    },
+    {
+     "word": "couldn't / couldnt",
+     "already_in_gate": false
+    },
+    {
+     "word": "may",
+     "already_in_gate": false
+    },
+    {
+     "word": "might",
+     "already_in_gate": true
+    },
+    {
+     "word": "will / i'll",
+     "already_in_gate": true
+    },
+    {
+     "word": "won't / wont",
+     "already_in_gate": false
+    },
+    {
+     "word": "must",
+     "already_in_gate": true
+    },
+    {
+     "word": "mustn't / mustnt",
+     "already_in_gate": false
+    },
+    {
+     "word": "need",
+     "already_in_gate": true
+    },
+    {
+     "word": "needn't / neednt",
+     "already_in_gate": false
+    },
+    {
+     "word": "have to",
+     "already_in_gate": true
+    },
+    {
+     "word": "going to",
+     "already_in_gate": true
+    },
+    {
+     "word": "am (only in 'I am going to')",
+     "already_in_gate": true
+    },
+    {
+     "word": "he",
+     "already_in_gate": false
+    },
+    {
+     "word": "she",
+     "already_in_gate": false
+    },
+    {
+     "word": "they",
+     "already_in_gate": false
+    },
+    {
+     "word": "you",
+     "already_in_gate": true
+    },
+    {
+     "word": "everyone",
+     "already_in_gate": false
+    },
+    {
+     "word": "everybody",
+     "already_in_gate": false
+    },
+    {
+     "word": "someone",
+     "already_in_gate": false
+    },
+    {
+     "word": "somebody",
+     "already_in_gate": false
+    },
+    {
+     "word": "my",
+     "already_in_gate": true
+    },
+    {
+     "word": "your",
+     "already_in_gate": true
+    },
+    {
+     "word": "his",
+     "already_in_gate": true
+    },
+    {
+     "word": "her",
+     "already_in_gate": true
+    },
+    {
+     "word": "our",
+     "already_in_gate": true
+    },
+    {
+     "word": "their",
+     "already_in_gate": true
+    },
+    {
+     "word": "me",
+     "already_in_gate": true
+    },
+    {
+     "word": "that (only in 'me that I')",
+     "already_in_gate": true
+    },
+    {
+     "word": "and",
+     "already_in_gate": true
+    },
+    {
+     "word": "but",
+     "already_in_gate": true
+    },
+    {
+     "word": "or",
+     "already_in_gate": true
+    },
+    {
+     "word": "so",
+     "already_in_gate": false
+    },
+    {
+     "word": "if (only in 'if I')",
+     "already_in_gate": true
+    },
+    {
+     "word": "_HYPOTHETICAL_MARKERS (reused list: maybe, might, if i ever, if i get time, if i have time, someday)",
+     "already_in_gate": true
+    },
+    {
+     "word": "punctuation , ; : en-dash em-dash ' - '",
+     "already_in_gate": false
+    }
+   ],
+   "pytest_summary": "324 passed in 18.68s, 0 failed (the same 8 gate/observer test files as the identity control, with the candidate swapped in)",
+   "replay_accepted_after": "UNLABELLED 27, TRAP 1 (before: UNLABELLED 31, TRAP 4; 111 topic candidates, 7 verdicts changed, all accept -> refuse, none added)",
+   "m1a_changes": [
+    "56 | D | EVIDENCE_SUFFICIENT -> EVIDENCE_NOT_ENTAILING (\"My friend says I should do a full marathon\", marathon: D-41 fixed)",
+    "81 | D | EVIDENCE_SUFFICIENT -> EVIDENCE_NOT_ENTAILING (\"My friend says I should do a full marathon but that's crazy.\", marathon: D-41 fixed)",
+    "102 | S | EVIDENCE_SUFFICIENT -> EVIDENCE_NOT_ENTAILING (\"I might learn Swift someday, not sure yet.\", Swift: a false reject on a graded item, the price of applying the gate's hypothetical list to topics)"
+   ],
+   "dev_probes": "10 of 10 (current rule 5 of 10). None failed: all five refuse probes are now refused, and all five accept probes are still accepted.",
+   "known_false_rejects": [
+    "\"I might learn Swift someday, not sure yet.\" (M-1(a) item 102, graded S; also in the replays): refused by the reused _HYPOTHETICAL_MARKERS",
+    "\"Honestly I'd love to get better at SQL.\" (my round 2): no comma, so the clause is opened by something other than 'I', and 'I'd' follows. With a comma it is kept",
+    "\"Right now I should be studying for the CKA exam.\" (my round 2): same shape",
+    "\"These days I would rather write Go than Java.\" (my fresh round 4): the gate's own preference phrase 'i would rather', placed after a time phrase",
+    "Not measured, but follows from the rule: chat openers with no comma ('yeah I'd like to try Rust', 'ok I should learn SQL'); 'the X I would/should ...' relative clauses ('The editor I would pick is Helix'); a possessive-opened clause about the user's own things with will/need/have to ('My plan is that I'll learn Go', 'My job means I have to use Java'); 'it reminds me I need to renew my AWS cert'; 'Lately I'd been reading about Kafka' ('I'd' read as 'I would'); any sentence with maybe/might/someday, even next to a plain statement ('I'm curious about Rust, maybe I'll try it')"
+   ],
+   "risks": [
+    "Measured on my own sentences: 93 of them (20 written before any design, 25 in round 2 also before design, 12 in round 3 to attack design B, 20 in round 4 written fresh before the last changes, 6 in round 5 to test reusing _GOAL_MARKERS) plus the 10 dev probes. Result 84/93: 6 false accepts and 3 false rejects. The current rule scores 49/93 with 44 false accepts. The first 20, written before any design, score 16/20. Rounds 2 and 3 shaped the design: the person-opener auxiliaries and 'have to'/'going to' were added after round 2 missed X3, X8, X9 and X11. Round 4 was not used for tuning (18/20, and its two errors were left in).",
+    "False accepts still open, all in my own sentences: 'According to my mentor, I need to understand Kafka properly' (the comma puts 'I' first in its clause); 'Should I ever switch careers, I'd go into data engineering' and 'Were I younger, I would study medicine' (inverted conditionals with no 'if'); 'My wife suggested I take up pottery' (subjunctive, no auxiliary); 'Perhaps one day I will try Clojure' (hedge words in no gate list); 'My brother is learning Go and I'm learning Rust' as topic Go. That last one is D-33's sentence-level behaviour, which I kept: dropping clauses with no 'I' would also lose 'My coworker says Zig is overrated, but I find it fascinating'.",
+    "Also missed and not measured: an adverb between 'I' and the auxiliary ('my friend says I really should try Rust'). I tried allowing one word in between and dropped it, because 'The editor I use should support LSP' would then be refused. Also missed: a reporter with no auxiliary after the 'I' ('My friend says I talk about Rust too much').",
+    "The one remaining replay TRAP is not D-41 or D-46. It is the user's own question 'Is a plain editor ever enough for a real project?' (after 'My flatmate swears by Notepad++ ... keeps telling me to switch'), accepted as topic 'text editor' through the word 'editor'. The question rule is unchanged.",
+    "The rule judges the whole source sentence in the user turn, not only the quote, so a quote cut down to 'I should do a full marathon' is still refused. This is new behaviour. A property check over 10,390 word-aligned cuts of 205 user turns found no case where it returns a word D-33 would not return, so it can only turn accepts into refusals.",
+    "The refusal reason the gate prints for these cases is its existing D-33 text: 'names X only in a statement about someone else, neither asked about nor said in the first person'. For a D-46 hypothetical that wording is wrong. Fixing it means changing adjudicate's message in the gate, which this function's contract cannot do.",
+    "Weighing the word list (rule 1): the rule adds about 15 closed-class words no gate list holds (shouldn't, ought, could(n't), may, won't, mustn't, needn't, he, she, they, everyone, everybody, someone, somebody, so) plus clause punctuation. The other words it reads already appear in gate phrases. It adds no verbs of saying and no hedge phrases. I tried reusing _GOAL_MARKERS for 'someone else's plan for the user' and dropped it: it refused 4 of 4 of the user's own sentences in my round 5 ('My boss knows I'm working on the Kafka migration').",
+    "The low-recall concern: on the 111 replay candidates and the 92 'I' statements in the repo's chat corpora, nothing is lost except the Swift hedge, the marathon sentence and the Elixir trap. The new false-reject shapes (an 'I + should/would/could' after a fronted adverb with no comma) do not appear in the recorded chats, so their real-world rate is unmeasured."
+   ]
+  }
+ },
+ "judge": {
+  "verified": [
+   {
+    "angle": "reuse-only",
+    "pytest": "324 passed, 0 failed (re-run by judge)",
+    "replay_trap_accepted_after": 1,
+    "replay_unlabelled_accepted_after": 30,
+    "m1a_changes": "102 (S, Swift 'I might learn Swift someday, not sure yet.') SUFFICIENT -> NOT_ENTAILING. 56 and 81 (D, marathon) stay ACCEPTED: D-41 not fixed.",
+    "dev_ok": "7/10 (all three reported-speech refuse probes still accepted)",
+    "heldout_ok": "5/10",
+    "heldout_wrong": [
+     "My brother reckons I would love rock climbing. (refuse expected, accepted)",
+     "Our team lead said I could pick up Kotlin next quarter. (refuse expected, accepted)",
+     "If I had more time I would probably try Godot. (refuse expected, accepted)",
+     "Perhaps one day I will learn Japanese. (refuse expected, accepted)",
+     "Sam told me I should look at Flutter. (refuse expected, accepted)"
+    ],
+    "new_words": [],
+    "claims_matched": true
+   },
+   {
+    "angle": "clause-position",
+    "pytest": "324 passed, 0 failed (re-run by judge)",
+    "replay_trap_accepted_after": 1,
+    "replay_unlabelled_accepted_after": 28,
+    "m1a_changes": "56 (D) and 81 (D) marathon SUFFICIENT -> NOT_ENTAILING. No S or U item changed; 102 Swift kept.",
+    "dev_ok": "10/10",
+    "heldout_ok": "7/10",
+    "heldout_wrong": [
+     "If I had more time I would probably try Godot. (refuse expected, accepted)",
+     "Right now I'm digging into Rust lifetimes. (accept expected, REFUSED - false reject)",
+     "These days I spend my evenings on chess openings. (accept expected, REFUSED - false reject)"
+    ],
+    "new_words": [
+     "curly open double quote U+201C",
+     "curly close double quote U+201D",
+     "curly open single quote U+2018"
+    ],
+    "claims_matched": true
+   },
+   {
+    "angle": "attack-first",
+    "pytest": "324 passed, 0 failed (re-run by judge)",
+    "replay_trap_accepted_after": 1,
+    "replay_unlabelled_accepted_after": 27,
+    "m1a_changes": "56 (D) and 81 (D) marathon SUFFICIENT -> NOT_ENTAILING; 102 (S) Swift 'I might learn Swift someday, not sure yet.' SUFFICIENT -> NOT_ENTAILING (a cost).",
+    "dev_ok": "10/10",
+    "heldout_ok": "9/10",
+    "heldout_wrong": [
+     "Perhaps one day I will learn Japanese. (refuse expected, accepted: 'perhaps' is in no gate list)"
+    ],
+    "new_words": [
+     "shouldn't/shouldnt",
+     "ought",
+     "could",
+     "couldn't/couldnt",
+     "may",
+     "won't/wont",
+     "mustn't/mustnt",
+     "needn't/neednt",
+     "he",
+     "she",
+     "they",
+     "everyone",
+     "everybody",
+     "someone",
+     "somebody",
+     "so",
+     "en-dash, em-dash, ' - ' as clause breaks",
+     "(also read standalone for the first time, though they appear in gate phrases/_STOPWORDS: my, your, you, me, his, her, our, their, and, but, or, that, if, will, must, need, have to, going to, am)"
+    ],
+    "claims_matched": true
+   },
+   {
+    "angle": "recommended",
+    "pytest": "324 passed, 0 failed (byte-identical to attack-first/topic_rule.py, checked with cmp; same run)",
+    "replay_trap_accepted_after": 1,
+    "replay_unlabelled_accepted_after": 27,
+    "m1a_changes": "56 D and 81 D refused (D-41 fixed); 102 S Swift refused (cost).",
+    "dev_ok": "10/10",
+    "heldout_ok": "9/10",
+    "heldout_wrong": [
+     "Perhaps one day I will learn Japanese."
+    ],
+    "new_words": [
+     "shouldn't",
+     "ought",
+     "could",
+     "couldn't",
+     "may",
+     "won't",
+     "mustn't",
+     "needn't",
+     "he",
+     "she",
+     "they",
+     "everyone",
+     "everybody",
+     "someone",
+     "somebody",
+     "so",
+     "dashes"
+    ],
+    "claims_matched": true
+   }
+  ],
+  "ranking": [
+   {
+    "angle": "attack-first",
+    "score": 8,
+    "disqualified": false,
+    "reason": "Safety: TRAP 4->1, no D/U item newly accepted, both recorded sentences (marathon, Elixir) refused, including the marathon quote cut to its front half. Owner's rule: adds about 16 closed-class words no gate list holds (modals, pronouns, 'so'). It adds no verbs of saying and no hedge phrases, and it reuses _HYPOTHETICAL_MARKERS. This counts against it but is not a phrase list. Recall: loses only M-1(a) 102 Swift (S) and the matching replay; the other 3 lost UNLABELLED are the D-graded marathon. Probes: dev 10/10, held-out 9/10 (only miss is 'Perhaps', a false accept no design catches). Judge's own 24 probes: 20/24, with 2 false rejects of the same shape it documents: a comma-less chat opener plus would/could ('Yeah I would like to understand Docker', 'Honestly I could talk about Formula 1'). Independent property check: 2583 word-aligned cuts, 0 cases where it returns a token D-33 would not, so it can only turn accepts into refusals. Weakness: about 300 lines, much harder to check by eye than D-33's 10."
+   },
+   {
+    "angle": "clause-position",
+    "score": 5,
+    "disqualified": false,
+    "reason": "Safety passes (TRAP 1, marathon and Elixir refused), and it is the best fit for the owner's rule: it reads only 'I', its position, and punctuation (3 new curly-quote characters). It also keeps every S item on recorded data (UNLABELLED 28). But its rule ('at most one word before I') refuses a very common way users talk about themselves. Held-out loses 2 of 5 accept probes ('Right now I'm digging into Rust lifetimes', 'These days I spend my evenings on chess openings'). The judge's probes lose 7 of 13 accepts ('Last night I finally deployed my Flask app', 'For fun I write small games in Lua', 'My girlfriend and I...', 'Next month I'm going to...', 'My job is mostly Java but I enjoy writing Kotlin'). With recall already near zero (0 of 81), that is a needless false-reject class. Owner's rule 2 weighs against it."
+   },
+   {
+    "angle": "reuse-only",
+    "score": 3,
+    "disqualified": false,
+    "reason": "Simplest (a one-condition change to D-33) and adds no new words, but it does not fix D-41: the recorded marathon sentence is still accepted (M-1(a) 56/81 D, 3 replays), so it fails the safety requirement that both recorded sentences be refused. It also pays the same Swift (102 S) cost as attack-first. Held-out 5/10: every refuse probe fails. Judge probes 13/24: all 11 refuse probes fail. Not formally disqualified (no TRAP rise, no pytest failure), but it fixes only half the task."
+   }
+  ],
+  "recommended_angle": "attack-first",
+  "grafts": [
+   "None applied. recommended_rule.py is a byte-identical copy of attack-first/topic_rule.py (checked with cmp), so its harness numbers are attack-first's.",
+   "Graft considered and rejected: clause-position's 'a hedge marker counts only before the I'. It would keep M-1(a) 102 (Swift, S), but it would also accept 'I might try Kotlin one day'. That goes against the owner's D-46 statement and moves toward false accepts.",
+   "Graft considered and rejected: clause-position's 'one word before I is fine'. It would remove attack-first's two comma-less opener false rejects ('Yeah I would like...', 'Honestly I could...'), but it would bring back 'Apparently I should be using pnpm' as a false accept. A false accept is the critical failure."
+  ],
+  "concerns": [
+   "Not solved by any design (all accept these): hedges in no gate list ('Perhaps one day I will learn Japanese' from held-out, 'Possibly I'll try Tailwind'); reported speech with no auxiliary after the I ('My boss keeps saying I talk about Rust too much', 'My wife suggested I take up pottery'); a reporting frame set off by a comma ('According to my mentor, I need to...'); inverted conditionals ('Should I ever switch careers, I'd...'). Catching these needs a list of hedges or verbs of saying, which the owner forbids.",
+   "The recommended rule reads about 16 closed-class words no gate list holds today: shouldn't, ought, could(n't), may, won't, mustn't, needn't, he, she, they, everyone, everybody, someone, somebody, so, plus dashes. It also reads my/you/me/your/his/her/our/their on their own for the first time; today the gate has them only inside phrases or _STOPWORDS. The owner should approve this explicitly. These are modal and pronoun classes, not phrasings, but they are new.",
+   "Recall cost of the recommended rule: M-1(a) item 102 (S, 'I might learn Swift someday, not sure yet.') and the matching replay are refused. So is any first-person statement that has maybe/might/someday in the same sentence, e.g. 'I'm curious about Rust, maybe I'll try it'. So is a comma-less opener followed by would/could/should ('Yeah I would like to understand Docker better', 'Honestly I could talk about Formula 1 all day', both refused in my own probes). Replays show no other real topic lost, so the measured real-world rate of these shapes is low, but it is not well measured.",
+   "Complexity: about 300 lines replace D-33's 10-line function, and the rule is no longer checkable by eye. I independently re-checked its 'only removes, never adds' claim: 2583 word-aligned cuts of 36 turns, 0 cases returning a token D-33 would not return. Even so, new pytest cases are required before it ships. None of the 324 current tests covers a reported-speech or hypothetical topic refusal. Add D-41 (whole sentence, cut at the front, cut at the back), D-46, the counterfactual shape, and accept cases ('These days I...', 'Right now I'm...', 'My job is mostly Java but I enjoy Kotlin') to test_topic_raised_by_the_user.py, in wording not taken from the probes.",
+   "The refusal reason in adjudicate (evidence_gate.py around lines 1067-1072) will describe the Elixir/D-46 refusal as 'a statement about someone else'. The state is right but the text is wrong for a hypothetical; it needs a wording fix outside this function.",
+   "Out of scope, but the same hole exists elsewhere: goal_memory accepts 'Priya keeps telling me I need to try Svelte' as the goal 'try Svelte', because 'i need to' is a _GOAL_MARKER. It should be logged as its own D-number.",
+   "The one remaining replay TRAP (w1long long_S_r2_d21, 'text editor' from the user's question 'is a plain editor ever enough for a real project?') stays accepted under every design. This is by design: a question the user asks raises its topic.",
+   "Held-out probes are now spent: I (the judge) have seen them and every design was scored on them. They must not be used to tune a follow-up. My own 24 judge probes (judge/probes_judge.json) are one author's wording, written before inspecting the rules' weak spots, and are not independent held-out data. Scores: attack-first 20/24, clause-position 14/24, reuse-only 13/24.",
+   "clause-position was the best fit for the owner's no-new-words rule but was not chosen. If the owner rejects attack-first's word list, clause-position is the fallback. It refuses every sentence with two or more words before 'I' and no comma ('Last night I...', 'For fun I...', 'Next month I'm...'), a common shape in chat. With recall already at 0 of 81, that cost is high.",
+   "Judge outputs are in C:/Users/USER/AppData/Local/Temp/claude/D--FINAL-YEAR-PROJECT-Personal-Inteligence-Platform--PIP-/e059c656-5a61-4aba-ab45-42c8740f5786/scratchpad/topicrule/judge/: ro/cp/af_full.json (full runs), *_ho.json (held-out), *_jp.json (judge probes), prop.py (property check), recommended_rule.py. Nothing in the repository was edited."
+  ]
+ }
+}
