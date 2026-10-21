@@ -4328,6 +4328,94 @@ never on qwen2.5:7b (0 of 15 for a new user, too few to bound the rate).
 **Not covered:** the chat socket and the app window (the pipeline was run directly); other models; languages other
 than English; real users.
 
+### 7.67 Three gate fixes: a quote's "User:" label, the expert level, "my main", D-38, D-40, D-42 (authorized 2026-10-20; committed 2026-10-21)
+
+The owner's list of "small gate bugs found this week" (2026-10-20, "start"; 2026-10-21, "finish the gate bugs: run
+the suite and commit what left"). The owner's rule applies: no new word lists, tests in wording no list was written
+for. The replays below found D-46; the owner chose to commit the three as they are and record D-46 as open.
+
+- **Defects:**
+  - **D-38 (A, low; §7.60):** the evidence ledger holds each turn without its "User:" header, so a quote the model
+    copied with the header ("User: Good, I'll stay put.") was EVIDENCE_NOT_FOUND although the user said exactly
+    that: 7 of G-4's 9 strict decision losses. Memory candidates go through the same step.
+  - **D-40 (A, low; §7.63):** any expertise phrase ("years", "professionally", "i work mostly in") supported any
+    level from 0.7 to 1.0, so five skills were accepted at 1.0 (expert) from "I've written Go professionally for
+    four years" and alike, graded unsupported in M-1(a).
+  - **D-42 (A, low; §7.63):** "my main" was a preference marker, so "my main project this term is Lanternfish, a
+    budgeting app..." was accepted as preference "project_management" and written.
+- **Promise:** 4 (a stored memory is supported by the user's words). D-38 is a false reject, D-40 and D-42 false
+  accepts.
+- **Mechanism** (`backend/core/evidence_gate.py`):
+  - D-38: before every check, a quote that begins "User:" and is not found as written is looked up without the
+    label (`_without_user_label`). Who said it is still the ledger's answer, from the turn the words are found in,
+    so an assistant reply quoting "User: I always use Flask." (indented by `format_transcript`) stays the
+    assistant's. A quote found with its label keeps it; an "Assistant:" label is never taken off (that could only
+    turn a refusal into an accept).
+  - D-40: a level above 0.9 (`_EXPERIENCE_CEILING`) needs the quote itself to say "I'm an expert" or "I am an
+    expert" (`_EXPERT_MARKERS`: two phrases the skill list already held, not a new list). Experience language still
+    supports up to 0.9 (the suite's own case: "ten years professionally" supports 0.9). The bare word "expert" is
+    not used: "I'm not an expert" contains it.
+  - D-42: "my main" is removed from the preference markers. It ranks a project, a worry or a complaint as readily
+    as an editor ("my main complaint about Kubernetes" was a Kubernetes preference); narrowing it with "project"
+    would be a word fix that leaves "my main focus". Removing an allowlist entry can only add false rejects.
+- **Tests:** 16 new. `test_evidence_gate.py` (13): D-38, a decision cited "User: Good, I'll stay put." and a memory
+  candidate with a lower-case label are accepted, the label cannot make an assistant line the user's
+  (EVIDENCE_NOT_USER_SOURCE), and an "Assistant:" label stays (EVIDENCE_NOT_FOUND); D-40, M-1(a)'s three sentences
+  and two in no list ("I've built Elixir services for a living for five years.", "I'm not an expert in Elixir, but
+  I've built services in it for years.") are refused at 1.0, while 0.9 from the five-years sentence and 1.0 from
+  "I'm an expert in Elixir; ..." and "Honestly I am an expert at Elixir, ..." are accepted; D-42, the recorded
+  Lanternfish candidate and two in no list ("My main project right now is Tidewater, ...", "My main complaint about
+  Kubernetes is all the YAML.") are refused. `test_observer_decisions_through_the_gate.py` (3): G-4's three stated
+  decisions, quoted with the label, are logged through the real session-end path.
+  - **Seen failing first:** 13 of 16 on 52f9e42 (every defect case); the guards and the accepts passed there, as
+    they must.
+- **Break-it:** 5 mutations, each alone, restored byte for byte, each caught: the label kept (5 tests), an
+  "Assistant:" label also taken off (1), the ceiling at 1.0 (5), the bare word "expert" allowed (1), "my main" put
+  back (3).
+- **Gate evaluation:** `scripts/eval_evidence_gate.py --include-new` gives the same output on 35974b9 and with the
+  fixes, apart from the run stamp: 0 false accepts on every set.
+- **M-1(a)'s graded items, rebuilt from the key** (`docs/eval/gate_fixes_2026-10-21/`; the rebuilt verdicts on
+  35974b9 agree with the recorded ones on all 116): 6 verdicts change, all accepted to refused, and they are 6 of the
+  8 graded false accepts (the five 1.0 skills and Lanternfish). No item graded supported changes. The other 2 are
+  D-41's, not touched. Not a new measurement: the fixes were written from these items, so §7.63's verdict stands.
+- **Replays, no model** (the six recordings G-4 replayed and G-4's own long-chat run, through 35974b9 and with the
+  fixes; `replays_changed.txt`):
+  - D-38: 6 of G-4's 7 label-caused strict losses come back, the Postgres decision logged (llama) and "Good, I'll
+    stay put." queued in 5 runs (qwen 2, W-1 short 3). The seventh, the AWS exam goal, is now found but ends in a
+    question ("What is a sensible way to space out revision?"), which the gate refuses whatever the label (G-9's
+    rule; G-4's listing had shortened the quote). The Postgres goal is queued too. Most other labelled quotes now
+    fail entailment instead of being not found, with no outcome changed; a quote that runs into the next turn
+    ("... Assistant: Spaced practice ...") is still not found.
+  - D-40: 7 skills queued at 1.0 for the user to confirm (Go 5, Python 1, TypeScript 1, in llama and qwen) are now
+    refused, so they are not learned at all. The gate gives a verdict and cannot lower a level. Facts learned 181 to
+    175 of 519 (7 fewer, plus the Postgres goal).
+  - D-42: the Lanternfish preference is no longer written (V-2 long, M size).
+  - **A trap now reaches a belief table: 0 to 1 of the replayed traps.** V-2's long recording writes topic "Elixir"
+    from T2, "If I ever had a free summer I might look at Elixir, but honestly that is not going to happen. What is
+    it actually good at?", which the label had kept out; W-1's long recording passes it too, with two of the user's
+    own questions, and the Constitution discards all three there. The same quote without the label is
+    EVIDENCE_SUFFICIENT on 35974b9: D-46 below. Four of the user's own questions ("What do the Cache-Control and
+    ETag headers actually do in HTTP?" and alike) are written as topics in V-2's chat.
+  - Learned rows: written 94 to 99 (TRUE 71 to 72, unlabelled 23 to 26, TRAP 0 to 1); queued 120 to 115.
+- **Suites:** Backend 1830 passed, 0 failed (19 min 43 s), in a clean worktree at 35974b9 plus the three changed
+  files only; the committed files were compared byte for byte with the ones that ran. No Flutter file changed.
+
+**Not covered (still open):**
+- **D-46 (A, low): a hypothetical first-person sentence raises a topic.** D-33's rule takes any sentence with "I"
+  as the user raising a topic, and topics skip the hypothetical check the other tables have, so "If I ever had a
+  free summer I might look at Elixir" is the user's topic "Elixir". Found by these replays; before D-38 the model's
+  label usually hid it, so G-4's 0 of 162 on the long chats (§7.60) partly rested on D-38. Not fixed: the owner's
+  choice (2026-10-21).
+- **D-41** (reported speech with "I") is not touched.
+- **"My main project" is still not a project:** the project markers say "my project" and "my current project";
+  adding "my main project" would widen a word list. 7 of M-1(a)'s 20 false rejects are that sentence.
+- **The expert phrase is not tied to the skill:** "I'm an expert in Python and I've written Go for years" supports
+  Go at 1.0. Skill levels are gated, so the user is asked before one is written.
+- **"Neovim is my main editor" alone is no longer a preference** (a false reject). No recorded chat has a "my main"
+  sentence other than Lanternfish's.
+- **A decision's stored quote keeps the label** (`raw_quote` "User: Good, I'll stay put."); only the gate's
+  comparison drops it.
+
 ---
 
 ## 8. Status
@@ -4401,15 +4489,16 @@ than English; real users.
 | D-35 the Constitution edited after it was locked, its version never checked | Fixed 2026-10-18 (§7.58) | A, low: constitutional.json said 1.0 and was edited twice with no bump; every profile stored the literal 1.0 and nothing compared it. Now 1.1 with a changelog, each version registered with its text's fingerprint, and a sign-in check that warns (log, trace, /status) and keeps running (DEC-6). 8 tests, 5 break-it mutations. The app does not show the warning yet |
 | D-36 a refused candidate left no lasting record | Fixed 2026-10-18 (§7.59) | A, medium for the thesis: a candidate the guard refused left a logger line only, and trace_log is purged after 90 days. Now an append-only `governance_audit_log` (triggers abort UPDATE and DELETE) holds one row for every terminal outcome of an Observer memory or decision candidate and for every user answer to a queued question, with an HMAC fingerprint and never the text, through one writer that refuses an unknown reason (DEC-5). 52 tests, 12 break-it mutations. Append-only within the trust boundary, not tamper-evident; decisions made by hand are not audited; no view in the app |
 | D-37 the Observer's decisions skipped the evidence gate; an immutable name could be a preference | Fixed 2026-10-18 (§7.60) | A, medium (§7.13 findings 1-2, DEC-7 = A): decisions were logged on grounding and the model's own signals, so tentative remarks, a friend's goal and the assistant's words became the user's decisions; `preference_memory.language_preference = French` sat in every prompt beside identity's English. Decisions now pass the gate (goal_memory's commitment language reused, the user's own words); the Constitution refuses an immutable name as a preference and Stage 4 keeps an old one out of prompts. 16 tests, 7 break-it mutations. Replays: nothing added; 154 of 197 decisions removed, 124 rightly, 9 real ones lost (30 lenient). W-1's run 1 re-run with the model: bar 2 met (0 of 162, W-1 had 2) |
-| D-38 the gate refuses a quote carrying its turn's "User:" label | Found 2026-10-18 (§7.60), open | A, low: the ledger holds turns without their role label, so a quote the user said word for word but cited with "User: " is EVIDENCE_NOT_FOUND; 7 of G-4's 9 strict decision losses, and memory candidates are judged by the same step. A false reject. Not fixed |
+| D-38 the gate refuses a quote carrying its turn's "User:" label | Fixed 2026-10-21 (§7.67) | A, low: a quote that begins "User:" and is not found as written is looked up without the label; who said it is still the ledger's answer, and an "Assistant:" label is never taken off. On the replays 6 of G-4's 7 label-caused decision losses come back; it also let D-46's trap through |
 | D-39 one "where we left off" note for every chat and project | Fixed 2026-10-20 (§7.62) | A, medium (#13): the note was one row per profile, overwritten by every chat, loaded into every project, cleared whichever chat was deleted, and invisible in the app. Now one record per chat (`chat_records`) with its project, deleted with its chat; a chat is shown its own, else its project's latest, else the newest, labelled and dated; the previous chat's unsummarised end; the record can be read, corrected and cleared in the app. 32 + 1 backend and 8 app tests, 31 break-it mutations. Documents are not linked to chats |
-| D-40 a skill level of 1.0 accepted from "N years professionally" | Found 2026-10-20 (§7.63), open | A, low: the skill calibrator lets an expertise phrase support any level from 0.7 up; five such 1.0 claims graded unsupported in M-1(a). A skill level is asked before it is written. Not fixed |
+| D-40 a skill level of 1.0 accepted from "N years professionally" | Fixed 2026-10-21 (§7.67) | A, low: experience language supports a level up to 0.9; above it the quote must say "I'm an expert". 5 of M-1(a)'s 8 graded false accepts are refused now (not a re-measurement); on the replays 7 true skills queued at 1.0 are refused instead of asked |
 | D-41 reported speech with "I" passes as the user's topic | Found 2026-10-20 (§7.63), open | A, low: D-33's first-person rule reads "My friend says I should do a full marathon" as the user's; two such topics in M-1(a), both discarded by the Constitution. Not fixed |
-| D-42 "my main project" accepted as a preference | Found 2026-10-20 (§7.63), open | A, low: "my main" is a preference marker, so the owner's project sentence became preference "project_management" and was written, while the project contract refuses it. Not fixed |
+| D-42 "my main project" accepted as a preference | Fixed 2026-10-21 (§7.67) | A, low: "my main" is no longer preference language, so the Lanternfish sentence is not a preference. It is still not a project: that would need a wider word list |
 | D-43 a genuine fact short of the count dropped silently | Fixed 2026-10-20 (§7.64) | A, medium (#19): a candidate the gate accepted but the Constitution refused for a count (or an inferred label in weeks 1-2) was thrown away, so learning nearly stopped after week 2 and a correction a month in was lost. Now one question (origin shortfall), at most 2 per chat, for belief tables only; a correction shows the stored value. 13 + 2 tests, 11 break-it mutations. Short set 35 -> 41 of 69 learned or asked, traps 0 of 75; long set 0 of 81 unchanged (lost at the gate's wording) |
 | D-44 a follow-up inside one chat lost its thread | Fixed 2026-10-20 (§7.65) | A, medium (#7, #8, #9, #10, #12): the prompt never named the day; a 10-minute break cleared the open chat's history; one long reply emptied the history; a follow-up could get another chat's cached answer; decisions and documents were searched with the newest message's first 12 words. Now the day is in the prompt and the cache key; the idle pass marks what it read and keeps the history; the last exchange is always kept, shortened; only a chat's first message is cached; Stages 3 and 5 search with the previous and the whole current message, the web query unchanged. 11 + 3 tests, 12 break-it mutations. Open: a whole prompt over budget can still lose the last exchange; retrieval with the longer text not re-measured |
 | Q-1 a new user's greeting answered "no record" | Run 2026-10-21 (§7.66), closed, no code change | qwen2.5:7b on the real pipeline, 4 made-up new users x 26 greetings: 0 of 104 no-record replies by the pattern and by reading all 104; the bar (at most 1) met. llama3.1:8b and phi3:mini showed it on 2026-10-17 |
 | D-45 a greeting with "today" asks for a web search | Found 2026-10-21 (§7.66), open | A, low, privacy: "today" is a Stage 6 trigger word, so "hey pip, how are you doing today?" is external_information and Stage 8 is asked for a web search; refused here (no consent), but with web search consented its first 12 words go to the search provider. Not fixed |
+| D-46 a hypothetical first-person sentence raises a topic | Found 2026-10-21 (§7.67), open | A, low: topics skip the hypothetical check and D-33's rule takes any sentence with "I", so "If I ever had a free summer I might look at Elixir" is the user's topic. The model's "User:" label had hidden it; with D-38 fixed one replayed trap is written. Not fixed: the owner's choice |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

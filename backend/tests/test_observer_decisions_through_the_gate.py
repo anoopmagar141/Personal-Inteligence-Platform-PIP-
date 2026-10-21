@@ -172,6 +172,21 @@ def test_a_decision_the_user_stated_is_still_logged(conn, case_id, decision):
     assert _logged(conn) == [decision["decision_text"]]
 
 
+# D-38 (FREEZE_LIST §7.60): the model often copies the turn together with its
+# "User:" label, and the evidence ledger holds turns without it, so the quote
+# was "not found". G-4's replays lost 7 of their 9 plain decisions that way,
+# these three among them ("User: Good, I'll stay put.", "User: I've decided to
+# move our database to Postgres before the next release.").
+LABELLED = [(case_id, {**d, "raw_quote": "User: " + d["raw_quote"]}) for case_id, d in STATED]
+
+
+@pytest.mark.parametrize("case_id, decision", LABELLED, ids=[c for c, _ in LABELLED])
+def test_a_decision_quoted_with_its_user_label_is_still_logged(conn, case_id, decision):
+    observer.run_session_end(conn, TRANSCRIPTS[case_id], _Model(decisions=[decision]))
+
+    assert _logged(conn) == [decision["decision_text"]]
+
+
 def test_a_decision_with_one_signal_is_still_queued_rather_than_logged(conn):
     decision = _decision("Decided to run a half marathon in April.", "I've decided to run a half marathon in April.",
                          COMMITMENT)

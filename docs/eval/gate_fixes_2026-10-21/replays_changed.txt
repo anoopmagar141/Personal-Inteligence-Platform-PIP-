@@ -1,0 +1,139 @@
+## g4long: 1 run(s)
+  r0 long_L_r0_d7: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d7: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d7: goal_memory.AWS Solutions Architect Associate exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d7: goal_memory.Azure Fundamentals exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d21: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d21: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d21: goal_memory.AWS Solutions Architect Associate exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d21: goal_memory.Azure Fundamentals exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d63: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d63: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d63: goal_memory.AWS Solutions Architect Associate exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d63: goal_memory.Azure Fundamentals exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+## r1012: 3 run(s)
+## v2llama: 3 run(s)
+  r0 fact_python_years: skill_memory.Python='1.0' EVIDENCE_SUFFICIENT/REQUIRES_CONFIRMATION/pending -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 fact_python_years: learned {('queued', 'TRUE'): 1} -> {}
+  r0 mixed_stack: skill_memory.Go='1.0' EVIDENCE_SUFFICIENT/REQUIRES_CONFIRMATION/pending -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 mixed_stack: learned {('queued', 'TRUE'): 1} -> {}
+  r1 fact_typescript: skill_memory.TypeScript='1.0' EVIDENCE_SUFFICIENT/DISCARD/pending -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r1 fact_typescript: learned {('queued', 'TRUE'): 1} -> {}
+  r1 mixed_stack: skill_memory.Go='1.0' EVIDENCE_SUFFICIENT/REQUIRES_CONFIRMATION/pending -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r1 mixed_stack: learned {('queued', 'TRUE'): 1} -> {}
+  r2 fact_postgres_decision: goal_memory.active_goals='move database to Postgres before next release' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/REQUIRES_CONFIRMATION/pending
+  r2 fact_postgres_decision: active_projects.release='the next release' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r2 fact_postgres_decision: decisions ['rejected', 'rejected'] -> ['logged', 'rejected']
+      raw: 'User decided to move database to Postgres before the next release.' | quote "User: I've decided to move our database to Postgres before the next release."
+      raw: 'User decided to create a migration plan next week.' | quote 'User: Yes, next week.'
+  r2 fact_postgres_decision: learned {} -> {('written', 'TRUE'): 1, ('queued', 'TRUE'): 1}
+  r2 mixed_stack: skill_memory.Go='1.0' EVIDENCE_SUFFICIENT/REQUIRES_CONFIRMATION/pending -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r2 mixed_stack: learned {('queued', 'TRUE'): 1} -> {}
+## v2long: 1 run(s)
+  r0 long_S_r0_d21: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r0_d21: preference_memory.preferred_tools='Excalidraw' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r2_d7: topic_interests.Azure='Azure Fundamentals exam' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r2_d7: topic_interests.Android='null pointer error in Android build' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/APPROVED/written
+  r0 long_S_r2_d7: topic_interests.HTTP='Cache-Control and ETag headers' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/APPROVED/written
+  r0 long_S_r2_d7: topic_interests.Git='git rebase vs git merge' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/APPROVED/written
+  r0 long_S_r2_d7: topic_interests.Diagramming='sequence diagram' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r2_d7: topic_interests.Notepad++='plain editor for projects' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r2_d7: topic_interests.Testing='unit tests vs integration tests' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r2_d7: topic_interests.Big-O notation='common data structure operations' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/APPROVED/written
+  r0 long_S_r2_d7: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r2_d7: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r2_d7: topic_interests.Elixir='language' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/APPROVED/written
+  r0 long_S_r2_d7: learned {} -> {('written', 'UNLABELLED'): 4, ('written', 'TRAP'): 1}
+  r0 long_M_r2_d7: preference_memory.project_management='Lanternfish, a budgeting app for student hostels' EVIDENCE_SUFFICIENT/APPROVED/written -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d7: learned {('written', 'UNLABELLED'): 1} -> {}
+## v2qwen: 3 run(s)
+  r0 mixed_tools_and_question: preference_memory.preferred_tools='Docker Compose' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 mixed_tools_and_question: goal_memory.active_goals='Stay with Docker Compose on a small VPS' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/DISCARD/pending
+  r0 mixed_tools_and_question: decisions ['rejected'] -> ['pending']
+      raw: 'Stay with Docker Compose on a small VPS' | quote "User: Good, I'll stay put."
+  r0 mixed_tools_and_question: learned {} -> {('queued', 'UNLABELLED'): 1}
+  r1 mixed_stack: skill_memory.Go='1.0' EVIDENCE_SUFFICIENT/REQUIRES_CONFIRMATION/pending -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r1 mixed_stack: learned {('queued', 'TRUE'): 1} -> {}
+  r2 mixed_stack: skill_memory.Go='1.0' EVIDENCE_SUFFICIENT/DISCARD/pending -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r2 mixed_stack: learned {('queued', 'TRUE'): 1} -> {}
+  r2 mixed_tools_and_question: interaction_style.concise='concise' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r2 mixed_tools_and_question: decisions ['rejected'] -> ['pending']
+      raw: 'Stay with Docker Compose.' | quote "User: Good, I'll stay put."
+## w1long: 1 run(s)
+  r0 long_S_r0_d63: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r0_d63: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r0_d63: goal_memory.AWS_Solutions_Architect_Associate_exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_S_r0_d63: goal_memory.Azure_Fundamentals_exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r0_d63: preference_memory.preferred_tools='Excalidraw' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r0_d63: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r0_d63: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.database='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.exam_preparation='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.git='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.web_development='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.programming_languages='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.software_engineering='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.commit_messages='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.data_normalization='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.Elixir='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/DISCARD/rejected
+  r0 long_M_r2_d21: topic_interests.DNS='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/DISCARD/rejected
+  r0 long_M_r2_d63: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d63: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d63: preference_memory.Excalidraw='the only drawing tool I actually open' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d63: preference_memory.Notepad++='for everything' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_M_r2_d63: preference_memory.Elixir='What is it actually good at?' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d7: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d7: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d7: skill_memory.Kotlin='0.6' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d7: goal_memory.AWS Solutions Architect Associate exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d7: goal_memory.Azure Fundamentals exam='pass by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d63: preference_memory.preferred_tools='Excalidraw' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d63: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r0_d63: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r1_d7: goal_memory.active_goals='Pass the AWS Solutions Architect Associate exam by' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r1_d7: goal_memory.active_goals='Pass the Azure Fundamentals exam by March' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r1_d7: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r1_d7: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r2_d7: topic_interests.database='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_SUFFICIENT/DISCARD/rejected
+  r0 long_L_r2_d7: topic_interests.web development='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r2_d7: topic_interests.networking='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r2_d7: topic_interests.software engineering='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r2_d7: topic_interests.project management='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r2_d7: topic_interests.cloud computing='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r2_d7: topic_interests.web security='Yes' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r2_d7: active_projects.Lanternfish='a budgeting app for student hostels' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+  r0 long_L_r2_d7: active_projects.Pebblebox='a recipe-sharing app' EVIDENCE_NOT_FOUND/HARD_REJECT/rejected -> EVIDENCE_NOT_ENTAILING/DISCARD/rejected
+## w1short: 3 run(s)
+  r0 mixed_tools_and_question: decisions ['rejected'] -> ['pending']
+      raw: 'Stay with Docker Compose on a small VPS.' | quote "User: Good, I'll stay put."
+  r1 mixed_tools_and_question: decisions ['rejected'] -> ['pending']
+      raw: 'Stay with Docker Compose on a small VPS.' | quote "User: Good, I'll stay put."
+  r2 mixed_tools_and_question: decisions ['rejected'] -> ['pending']
+      raw: 'Stay with Docker Compose on a small VPS.' | quote "User: Good, I'll stay put."
+
+## totals
+  ('after', 'decision', 'logged') 27
+  ('after', 'decision', 'pending') 22
+  ('after', 'decision', 'rejected') 163
+  ('after', 'fact_learned') 175
+  ('after', 'facts') 519
+  ('after', 'queued', 'TRUE') 111
+  ('after', 'queued', 'UNLABELLED') 4
+  ('after', 'trap_hit') 1
+  ('after', 'written', 'TRAP') 1
+  ('after', 'written', 'TRUE') 72
+  ('after', 'written', 'UNLABELLED') 26
+  ('before', 'decision', 'logged') 26
+  ('before', 'decision', 'pending') 17
+  ('before', 'decision', 'rejected') 169
+  ('before', 'fact_learned') 181
+  ('before', 'facts') 519
+  ('before', 'queued', 'TRUE') 117
+  ('before', 'queued', 'UNLABELLED') 3
+  ('before', 'trap_hit') 0
+  ('before', 'written', 'TRUE') 71
+  ('before', 'written', 'UNLABELLED') 23
+  decision_cases_changed 6
+  memory_changed 83

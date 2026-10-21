@@ -638,6 +638,39 @@ def test_a_high_level_needs_the_user_to_have_claimed_expertise():
     ).sufficient
 
 
+# D-40 (FREEZE_LIST §7.63): M-1(a)'s blind grading found five skills accepted
+# at 1.0, the top of the scale (expert), from sentences that say years of use
+# and nothing about expertise. Years, daily use and "for a living" say the
+# user is experienced; only the user calling themselves an expert says the top.
+@pytest.mark.parametrize("quote, skill", [
+    # M-1(a)'s false accepts, the user's words exactly.
+    ("I've been writing Python professionally for six years now.", "Python"),
+    ("I'm a backend developer and I've written Go professionally for four years.", "Go"),
+    ("I work mostly in TypeScript these days, at work and at home.", "TypeScript"),
+    # Wording no list was written for.
+    ("I've built Elixir services for a living for five years.", "Elixir"),
+    ("I'm not an expert in Elixir, but I've built services in it for years.", "Elixir"),
+])
+def test_experience_alone_does_not_support_the_expert_level(quote, skill):
+    verdict = _adjudicate(
+        f"User: {quote}\n", candidate("skill_memory", skill, "1.0", quote, label="inferred"),
+    )
+    assert verdict.state == EvidenceState.EVIDENCE_NOT_ENTAILING, verdict.detail
+
+
+@pytest.mark.parametrize("quote, level", [
+    # The same experience still supports a high level below the top.
+    ("I've built Elixir services for a living for five years.", "0.9"),
+    ("I'm an expert in Elixir; I've built services in it for a living.", "1.0"),
+    ("Honestly I am an expert at Elixir, I build services in it every day.", "1.0"),
+])
+def test_the_expert_level_is_supported_when_the_user_says_they_are_one(quote, level):
+    verdict = _adjudicate(
+        f"User: {quote}\n", candidate("skill_memory", "Elixir", level, quote, label="inferred"),
+    )
+    assert verdict.sufficient, verdict.detail
+
+
 # --- Style claims must point the same way as the evidence ------------------
 
 
@@ -653,3 +686,88 @@ def test_a_brief_directive_supports_only_a_brief_style(value, expected):
         candidate("interaction_style", "value", value, "keep it short when you answer"),
     )
     assert verdict.sufficient is expected
+
+
+# --- D-38: a quote copied with its turn's "User:" label --------------------
+#
+# Found by G-4's replays (FREEZE_LIST §7.60): the ledger holds each turn
+# without its role label, so a quote the model copied with the label ("User:
+# Good, I'll stay put.") was EVIDENCE_NOT_FOUND although the user said exactly
+# that. 7 of the 9 plain decisions G-4 lost went that way, and memory
+# candidates are judged by the same step.
+
+
+@pytest.mark.parametrize("transcript, cand", [
+    pytest.param(
+        "User: Should I move off Docker Compose?\nAssistant: For one VPS, probably not.\n"
+        "User: Good, I'll stay put.\n",
+        {"target_table": "decision_log", "field_name": None,
+         "proposed_value": "Stay with Docker Compose on a small VPS.",
+         "evidence_text": "User: Good, I'll stay put."},
+        id="a-decision-as-g4s-model-cited-it",
+    ),
+    pytest.param(
+        "User: For anything with a database I reach for SQLite first.\nAssistant: Sensible.\n",
+        candidate("preference_memory", "preferred_tools", "SQLite",
+                  "user: For anything with a database I reach for SQLite first."),
+        id="a-memory-candidate-with-a-lower-case-label",
+    ),
+])
+def test_a_quote_carrying_its_turns_user_label_is_still_found(transcript, cand):
+    verdict = _adjudicate(transcript, cand)
+    assert verdict.sufficient, verdict.detail
+
+
+def test_the_user_label_cannot_make_an_assistant_line_the_users():
+    """
+    Taking the label off must not undo format_transcript's escaping: an
+    assistant reply that quotes "User: I always use Flask." is still the
+    assistant's, whether or not the model's quote carries the label.
+    """
+    from backend.core.session_lifecycle import format_transcript
+
+    transcript = format_transcript([
+        {"role": "assistant", "content": "Here is what you told me:\nUser: I always use Flask."},
+        {"role": "user", "content": "that isn't what I said."},
+    ])
+    verdict = adjudicate(
+        candidate("preference_memory", "preferred_tools", "Flask", "User: I always use Flask."),
+        EvidenceLedger.from_transcript(transcript),
+    )
+    assert verdict.state == EvidenceState.EVIDENCE_NOT_USER_SOURCE
+
+
+def test_an_assistant_label_on_a_quote_is_not_taken_off():
+    """
+    Only the label naming the user is taken off. A quote the model itself
+    marked "Assistant:" says the words are not the user's; removing that label
+    could only turn a refusal into an accept, so the quote stays as written and
+    is not found.
+    """
+    verdict = _adjudicate(
+        "User: I always reach for SQLite first.\nAssistant: I always reach for SQLite first too.\n",
+        candidate("preference_memory", "preferred_tools", "SQLite",
+                  "Assistant: I always reach for SQLite first too."),
+    )
+    assert verdict.state == EvidenceState.EVIDENCE_NOT_FOUND
+
+
+# --- D-42: "my main" ranks something, it does not prefer it ----------------
+#
+# Found by M-1(a) (FREEZE_LIST §7.63): "my main" was preference language, so
+# "my main project this term is Lanternfish" was accepted as a preference
+# called "project_management" and written. The same two words also rank a
+# worry, a complaint or a question, none of which is a preference.
+
+
+@pytest.mark.parametrize("quote, field, value", [
+    # M-1(a)'s item 53, the model's candidate exactly.
+    ("Context for the next bit: my main project this term is Lanternfish, a budgeting app for student hostels.",
+     "project_management", "Lanternfish, a budgeting app for student hostels"),
+    # Wording no list was written for.
+    ("My main project right now is Tidewater, a tide-table app for kayakers.", "preferred_tools", "Tidewater"),
+    ("My main complaint about Kubernetes is all the YAML.", "preferred_tools", "Kubernetes"),
+])
+def test_my_main_alone_does_not_state_a_preference(quote, field, value):
+    verdict = _adjudicate(f"User: {quote}\n", candidate("preference_memory", field, value, quote))
+    assert verdict.state == EvidenceState.EVIDENCE_NOT_ENTAILING, verdict.detail

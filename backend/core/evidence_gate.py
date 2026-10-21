@@ -278,6 +278,40 @@ class EvidenceLedger:
         return [t for t in self.turns if t["role"] == "user"]
 
 
+# The role label a quote can carry when the model copies a whole transcript
+# line, matched on an already normalised quote (lower case, single spaces).
+_USER_LABEL_RE = re.compile(r"^user:\s*")
+
+
+def _without_user_label(quote: str, ledger: EvidenceLedger) -> str:
+    """
+    The quote without a leading "User:" label, when the label is the only
+    reason it cannot be found.
+
+    D-38, found by G-4's replays (FREEZE_LIST §7.60): the model is shown the
+    transcript as "User: ..." lines and often copies the label with the words.
+    The ledger holds each turn WITHOUT its label (from_transcript strips it),
+    so "User: Good, I'll stay put." was EVIDENCE_NOT_FOUND although the user
+    said exactly that: 7 of the 9 plain decisions G-4 lost, and memory
+    candidates go through the same step.
+
+    Taking the label off decides nothing about who spoke. That is still the
+    ledger's answer, from the turn the words are found in, so an assistant
+    reply that quotes "User: I always use Flask." (indented by
+    format_transcript, so it stays inside the assistant's turn) is still the
+    assistant's. Two cases keep the quote as written:
+      - it is found with its label: the label is then part of what someone
+        typed, not the model's citation;
+      - the label is "Assistant:": the model itself says the words are not the
+        user's, and taking that label off could only turn a refusal into an
+        accept.
+    """
+    label = _USER_LABEL_RE.match(quote)
+    if label is None or ledger.locate(quote):
+        return quote
+    return quote[label.end():]
+
+
 # ---------------------------------------------------------------------------
 # Marker vocabularies.
 #
@@ -337,8 +371,22 @@ _PREFERENCE_MARKERS = _phrases(
     # list, which then rejected two of the codebase's own realistic transcript
     # fixtures - a false reject is the safe direction to fail in, but it is
     # still a failure, and these are not ambiguous.
+    #
+    # "my main" was in this list too, for "Neovim is my main editor", and it
+    # was wrong (D-42, found by M-1(a)'s blind grading, FREEZE_LIST §7.63):
+    # "Context for the next bit: my main project this term is Lanternfish, a
+    # budgeting app..." was accepted as a preference called
+    # "project_management" and written. "My main" ranks a thing among the
+    # user's things; it says nothing about liking or using it, and it ranks a
+    # project, a worry or a question as readily as an editor ("my main
+    # complaint about Kubernetes" was a Kubernetes preference). Narrowing it
+    # with the word "project" would leave "my main focus" and "my main worry"
+    # where they were, so it is gone instead. The cost is a false reject of
+    # "Neovim is my main editor" said with no other habit words, the safe
+    # direction; the only "my main" sentence in the recorded chats was the
+    # Lanternfish one.
     "still using", "still on", "sticking with", "i'm sticking with",
-    "of choice", "my daily driver", "my main", "i went with", "i'm going with",
+    "of choice", "my daily driver", "i went with", "i'm going with",
     "i am going with", "i've gone with", "went with", "i settle on",
 )
 
@@ -406,12 +454,32 @@ _NOVICE_MARKERS = _phrases(
 )
 
 # What a level at or above _EXPERTISE_FLOOR needs the user's own words to say.
+# They say the user is experienced, which is not the top of the scale: see
+# _EXPERT_MARKERS for what a level above _EXPERIENCE_CEILING needs.
 _EXPERTISE_MARKERS = _phrases(
     "expert", "advanced", "senior", "proficient", "years", "professionally",
     "daily", "every day", "for a living", "i maintain", "i've built",
     "i have built", "i build", "i've shipped", "fluent", "deeply",
     "i look after", "i work mostly in",
 )
+
+# What a level above _EXPERIENCE_CEILING, the expert end of the scale, needs:
+# the user saying they are an expert. D-40, found by M-1(a)'s blind grading
+# (FREEZE_LIST §7.63): five skills were accepted at 1.0 from "I've written Go
+# professionally for four years" and alike, because any expertise marker above
+# supported any level from _EXPERTISE_FLOOR up and nothing capped the level at
+# what the words say. Years, daily use and "for a living" say experienced.
+#
+# Not a new list: the two phrases are the skill list's own, and they are the
+# first-person form on purpose. The bare word "expert" from the list above
+# matches "I'm not an expert" and "I'm no expert", the commonest way the word
+# is said about oneself, so it cannot carry the top of the scale. A user who
+# says it another way ("I'm a Go expert") is not recorded at the top, the safe
+# direction. Known limit: the phrase is looked for in the quote, not tied to
+# the skill, so "I'm an expert in Python and I've written Go for years" still
+# supports Go at 1.0; skill levels are a gated field and the user is asked
+# before one is written.
+_EXPERT_MARKERS = _phrases("i'm an expert", "i am an expert")
 
 # constitutional.json: goal_memory validation = "commitment". Wanting to know
 # about something is not committing to it.
@@ -676,6 +744,12 @@ _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+#._-]*")
 # beginner rather than as nothing.
 _EXPERTISE_FLOOR = 0.7
 _NOVICE_CEILING = 0.4
+# The most that experience alone supports (D-40). Above it is the expert end
+# of the scale, 1.0 being "expert" in the level's own reading. 0.9 rather
+# than lower because this suite's own case, written with the gate, holds that
+# "I write Python professionally, ten years of it" supports 0.9; M-1(a)
+# graded only the 1.0 claims, so nothing measured says 0.9 is too high.
+_EXPERIENCE_CEILING = 0.9
 
 # A quote shorter than this is not a statement, it is a token. Three words is
 # the shortest genuine self-report the marker lists can match ("I prefer
@@ -866,7 +940,9 @@ def adjudicate(candidate: MemoryCandidate, ledger: EvidenceLedger) -> EvidenceVe
     a quote that DOES support the claim: it is about what the quote left behind
     in the turn it was cut from.
     """
-    quote = normalize(candidate.get("evidence_text"))
+    # Before every check, so the length rule counts the user's words and not
+    # the label, and the partial-quote check compares like with like (D-38).
+    quote = _without_user_label(normalize(candidate.get("evidence_text")), ledger)
     target_table = candidate.get("target_table")
     proposed_value = candidate.get("proposed_value")
     field_name = candidate.get("field_name")
@@ -1053,6 +1129,10 @@ def _adjudicate_skill_level(
         something about expertise. This is the rule that rejects the brief's
         own example: "I've been comparing FastAPI and Flask" -> "the user is an
         advanced Python developer".
+      - a level above _EXPERIENCE_CEILING requires the quote itself to say the
+        user is an expert (D-40). Read from the quote, not the whole turn,
+        because it is the sharpest claim the scale has: the words cited for it
+        must say it.
     """
     try:
         level = float(proposed_value)
@@ -1075,6 +1155,12 @@ def _adjudicate_skill_level(
         return EvidenceVerdict(
             EvidenceState.EVIDENCE_NOT_ENTAILING,
             f"level {level} claims expertise the user never asserted",
+        )
+    if level > _EXPERIENCE_CEILING and not _EXPERT_MARKERS.search(quote):
+        return EvidenceVerdict(
+            EvidenceState.EVIDENCE_NOT_ENTAILING,
+            f"level {level} is the expert end of the scale, and the cited evidence says "
+            "experience, not that the user is an expert",
         )
     return None
 

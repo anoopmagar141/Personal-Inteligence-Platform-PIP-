@@ -282,7 +282,17 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   signals as before. A decision made by hand (`/decide`) does not pass through
   it. Cost on the recordings: of 197 decisions that reached routing, 154 were
   removed, 124 rightly; 9 plain decisions were lost (30 counting borderline
-  ones), mostly because the model's quote carried the `User:` label (D-38).
+  ones), 7 of them because the model's quote carried the `User:` label (D-38,
+  fixed since: see the role-header point below).
+- **The top of the skill scale needs the user to say "I'm an expert"** (D-40).
+  A level at or above 0.7 needs expertise language somewhere in the user's
+  turn (years, daily use, "for a living"); that language says experienced, so
+  above 0.9 the quote itself must say "I'm an expert" or "I am an expert". The
+  bare word "expert" is not enough: "I'm not an expert" contains it.
+- **"My main" is not preference language** (D-42). It ranks a project, a worry
+  or a question as readily as an editor, so "my main project this term is
+  Lanternfish" was a preference. Cost: "Neovim is my main editor" alone is not
+  learned.
 - **An immutable field's name is not a preference** (G-4). The Constitution
   refuses `name`, `language_preference` and `timezone` as a `preference_memory`
   field outright (compared by letters and digits, so "Time Zone" counts), not
@@ -295,12 +305,18 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   user's questions and their sentences with the pronoun "I": "My friend wants to
   pass the Azure exam" is context, not the user's interest. The one word read
   is "I", not a list of phrasings. Cost: an elliptical answer ("A payments
-  service.") raises no topic.
+  service.") raises no topic. Open (D-46): a hypothetical sentence with "I" ("If
+  I ever had a free summer I might look at Elixir") still raises one; topics
+  skip the hypothetical check the other tables have.
 - **Role headers in a transcript are a security boundary, not formatting.**
   `format_transcript()` indents any content line beginning `User:` or
   `Assistant:`, because `EvidenceLedger` parses those headers back out to
   decide who said a quote. Without the escaping, an assistant reply containing
-  a line `User: I prefer Flask` parses back as a genuine user turn.
+  a line `User: I prefer Flask` parses back as a genuine user turn. The ledger
+  holds turns without their headers, so a quote the model copied together with
+  its line's `User:` label is looked up again without the label when it is not
+  found with it (D-38). That decides nothing about who spoke: the turn the
+  words are found in does. An `Assistant:` label is never taken off.
 - **A chat turn always ends on the socket, and a chat that cannot be saved
   is not answered into.** `stream_pipeline_to_websocket` guards the
   pipeline's next event and ends a turn that failed with one generic
