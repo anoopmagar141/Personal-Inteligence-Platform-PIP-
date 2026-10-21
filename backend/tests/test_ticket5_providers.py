@@ -8,7 +8,8 @@ Coverage:
 4. api_revoke_consent — sets revoked=1
 5. api_revoke_consent — raises ValueError for unknown provider_id
 6. CLI /providers dispatch — calls correct endpoint
-7. CLI /consent dispatch — sends correct payload, default scope
+7. CLI /consent dispatch — no --scope sends nothing (no default scope, D-30);
+   with one, sends the correct payload
 8. CLI /consent dispatch — --scope flag respected
 9. CLI /revoke dispatch — sends correct request
 10. CLI /revoke — raises ValueError when no provider_id given
@@ -181,12 +182,29 @@ def test_cli_providers_calls_get_providers():
     assert result[0]["provider_id"] == "ollama"
 
 
-def test_cli_consent_sends_correct_payload_default_scope():
+def test_cli_consent_without_scope_sends_nothing():
+    """
+    This test used to pin the opposite: that /consent with no --scope sent
+    full_inference. That default was D-30 (FREEZE_LIST §7.51), a grant of the
+    broadest scope that the person never typed. There is no default now; the
+    fuller tests of the refusal are in test_cli.py.
+    """
     opener = MagicMock(return_value=_mock_response(
         {"status": "consented", "provider_id": "web_search",
          "consent_scope": "full_inference"}
     ))
-    result = run_command(["/consent", "web_search"], opener=opener)
+    with pytest.raises(ValueError, match="--scope"):
+        run_command(["/consent", "web_search"], opener=opener)
+    opener.assert_not_called()
+
+
+def test_cli_consent_sends_correct_payload():
+    opener = MagicMock(return_value=_mock_response(
+        {"status": "consented", "provider_id": "web_search",
+         "consent_scope": "full_inference"}
+    ))
+    result = run_command(["/consent", "web_search", "--scope", "full_inference"],
+                         opener=opener)
     req = opener.call_args[0][0]
     assert "/providers/web_search/consent" in req.get_full_url()
     assert req.get_method() == "POST"

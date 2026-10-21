@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 
 import pytest
 
@@ -114,6 +115,138 @@ def test_rag_commands_call_rest_api():
     assert opener.requests[2]["method"] == "DELETE"
     # Path separators must survive percent-encoding as a single path segment.
     assert "%5C" in opener.requests[2]["url"] or "docs" in opener.requests[2]["url"]
+
+
+# ---------------------------------------------------------------------------
+# /consent: the scope is chosen, never defaulted (D-30, FREEZE_LIST §7.51)
+# ---------------------------------------------------------------------------
+#
+# `/consent PROVIDER_ID` with no --scope used to send full_inference, the
+# broadest of the four scopes: a permission the person at the shell never
+# typed. Promise 6 rules out a default the person did not choose, which is why
+# the Flutter dialog preselects nothing and the old web client no longer grants
+# at all (G-6). These pin the same thing for the typed command: no scope, no
+# request, and a refusal that says which scopes there are to choose from.
+#
+# The scopes are written out here rather than read from pip_cli, so a test of
+# what the CLI says cannot agree with itself whatever the CLI's list holds. The
+# last test is the one that ties the CLI's list to the server's.
+
+ALL_SCOPES = ["embedding_only", "web_search_only", "full_inference", "none"]
+
+# Queued in front of every refusal below. Were a request to go out after all,
+# the call would then return normally and the failure would read DID NOT
+# RAISE, rather than an IndexError from FakeOpener's empty queue that says
+# nothing about consent.
+_GRANTED = {"status": "consented", "provider_id": "web_search", "consent_scope": "full_inference"}
+
+
+def _names_every_scope(message: str) -> bool:
+    # Whole words, so "none" is not found inside some other word of the message.
+    return set(re.findall(r"\w+", message)) >= set(ALL_SCOPES)
+
+
+def test_consent_without_a_scope_sends_nothing_and_names_the_scopes():
+    opener = FakeOpener()
+    opener.queue(_GRANTED)
+
+    with pytest.raises(ValueError) as refused:
+        pip_cli.run_command(["/consent", "web_search"], opener=opener)
+
+    assert opener.requests == []
+    assert "--scope" in str(refused.value)
+    assert _names_every_scope(str(refused.value))
+
+
+@pytest.mark.parametrize("argv", [
+    ["/consent", "web_search", "--scope"],
+    ["/consent"],
+    ["/consent", "web_search", "extra", "--scope", "none"],
+], ids=["scope with no value", "nothing at all", "an extra word"])
+def test_argparses_own_usage_line_says_the_scope_is_required(argv, capsys):
+    """
+    Input argparse refuses itself (a SystemExit) prints argparse's usage line, and it
+    used to read "usage: /consent [--scope CONSENT_SCOPE] provider_id" - the scope in
+    brackets, as if optional - beside the refusal that says there is no default (found
+    reviewing D-30, FREEZE_LIST §7.72). Nothing is sent either way.
+    """
+    opener = FakeOpener()
+
+    with pytest.raises(SystemExit):
+        pip_cli.run_command(argv, opener=opener)
+
+    printed = capsys.readouterr().err
+    assert opener.requests == []
+    assert "usage: /consent PROVIDER_ID --scope SCOPE" in printed, printed
+    assert "[--scope" not in printed, printed
+
+
+def test_consent_without_a_scope_tells_the_shell_and_exits_nonzero(monkeypatch, capsys):
+    """
+    What the person at the shell actually sees. main() passes no opener, so the
+    fake goes in as run_command's own default: without it the unfixed code would
+    have posted a real full_inference grant to whatever PIP is listening on 8765.
+    """
+    opener = FakeOpener()
+    opener.queue(_GRANTED)
+    monkeypatch.setattr(
+        pip_cli.run_command, "__kwdefaults__", {"base_url": pip_cli.BASE_URL, "opener": opener}
+    )
+
+    assert pip_cli.main(["/consent", "web_search"]) == 2
+    assert opener.requests == []
+    assert _names_every_scope(capsys.readouterr().err)
+
+
+@pytest.mark.parametrize("scope", ALL_SCOPES)
+def test_consent_with_a_scope_sends_exactly_that_scope(scope):
+    opener = FakeOpener()
+    opener.queue({"status": "consented", "provider_id": "web_search", "consent_scope": scope})
+
+    pip_cli.run_command(["/consent", "web_search", "--scope", scope], opener=opener)
+
+    assert len(opener.requests) == 1
+    assert opener.requests[0]["method"] == "POST"
+    assert opener.requests[0]["url"].endswith("/providers/web_search/consent")
+    assert opener.requests[0]["body"] == {"consent_scope": scope}
+
+
+@pytest.mark.parametrize("scope", ["everything", "Full_Inference", ""])
+def test_consent_with_an_unknown_scope_is_refused_before_any_request(scope):
+    """
+    The server would refuse these too (422), but the CLI can know the list, so
+    nothing leaves for a scope that cannot be granted, and the refusal names
+    what was typed and what could have been. Full_Inference is here because a
+    check that folded case would accept it and the server does not.
+    """
+    opener = FakeOpener()
+    opener.queue(_GRANTED)
+
+    with pytest.raises(ValueError) as refused:
+        pip_cli.run_command(["/consent", "web_search", "--scope", scope], opener=opener)
+
+    assert opener.requests == []
+    assert f"'{scope}'" in str(refused.value)
+    assert _names_every_scope(str(refused.value))
+
+
+def test_the_cli_offers_exactly_the_scopes_the_server_accepts():
+    """
+    The CLI keeps its own copy of the list: the server's is in
+    backend/api/server.py, and importing that module pulls the whole backend
+    (FastAPI, the pipeline, the providers; about ten seconds) into a client
+    that otherwise needs only the standard library. This is what keeps the
+    copy honest. A scope added on the server and not here would be refused by
+    the CLI before the server saw it; one dropped there would still be offered
+    here.
+
+    Imported inside the test so the rest of this file stays as light as the
+    CLI it tests.
+    """
+    from backend.api.server import VALID_CONSENT_SCOPES
+
+    assert set(pip_cli.CONSENT_SCOPES) == VALID_CONSENT_SCOPES
+    assert len(pip_cli.CONSENT_SCOPES) == len(VALID_CONSENT_SCOPES)
 
 
 # ---------------------------------------------------------------------------

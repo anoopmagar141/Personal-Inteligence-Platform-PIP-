@@ -12,6 +12,25 @@ BASE_URL = "http://localhost:8765/api/v1"
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 
+# The scopes POST /providers/<id>/consent accepts. This MUST hold the same
+# values as VALID_CONSENT_SCOPES in backend/api/server.py, the list the server
+# refuses a grant against; test_cli.py's
+# test_the_cli_offers_exactly_the_scopes_the_server_accepts fails when the two
+# part. (The same four are also written out in backend/core/constitutional.json,
+# provider_consent.scope_values, and in the CHECK on provider_consent in
+# backend/core/schema.sql.) It is a copy rather than an import because
+# importing server.py pulls the whole backend - FastAPI, the pipeline, the
+# providers, about ten seconds - into a client that otherwise imports nothing
+# but the standard library and talks to the backend only over HTTP.
+#
+# Narrowest first, as the Flutter dialog lists them. Once there is no default
+# (D-30, below in _consent) the order a refusal lists the choices in is the
+# nearest a typed command comes to preselecting one, and leading with the
+# broadest would be that. "none" is last: the server accepts it, but it records
+# a consent to nothing, which Flutter leaves out for that reason and /revoke
+# says without the ambiguity. It stays here because this list is the server's.
+CONSENT_SCOPES = ("embedding_only", "web_search_only", "full_inference", "none")
+
 
 def request_json(
     method: str,
@@ -246,15 +265,41 @@ def _providers(args: list[str], *, base_url: str, opener: Callable) -> Any:
 
 
 def _consent(args: list[str], *, base_url: str, opener: Callable) -> Any:
-    """Usage: /consent PROVIDER_ID [--scope SCOPE]
+    """Usage: /consent PROVIDER_ID --scope SCOPE
 
-    Grant consent for PROVIDER_ID. Default scope: full_inference.
+    Grant consent for PROVIDER_ID, for SCOPE only. There is no default scope:
+    SCOPE must be typed, and is one of CONSENT_SCOPES.
     Example: /consent web_search --scope web_search_only
     """
-    parser = argparse.ArgumentParser(prog="/consent", add_help=False)
+    # The usage line is given, not generated: argparse would print "[--scope
+    # CONSENT_SCOPE] provider_id" for input it refuses itself (a missing value, a
+    # missing provider), the scope in brackets as if optional, beside a refusal
+    # saying there is no default (found reviewing D-30, FREEZE_LIST §7.72).
+    parser = argparse.ArgumentParser(prog="/consent", add_help=False, usage="/consent PROVIDER_ID --scope SCOPE")
     parser.add_argument("provider_id")
-    parser.add_argument("--scope", default="full_inference", dest="consent_scope")
+    # No default, and that absence is the fix for D-30 (FREEZE_LIST §7.51).
+    # This was default="full_inference": typing `/consent web_search` granted
+    # the broadest of the four scopes - your prompts and assembled context sent
+    # to the provider - when the person had chosen nothing at all. Promise 6
+    # rules out a default the person did not choose; the Flutter dialog
+    # preselects nothing and the old web client no longer grants at all (G-6).
+    # So a missing scope is refused here, before any request, with the scopes
+    # it could have been named in the refusal.
+    parser.add_argument("--scope", dest="consent_scope", metavar="SCOPE")
     parsed = parser.parse_args(args)
+
+    usage = f"usage: /consent PROVIDER_ID --scope SCOPE, where SCOPE is one of: {', '.join(CONSENT_SCOPES)}"
+    if parsed.consent_scope is None:
+        raise ValueError(f"/consent needs a scope; there is no default.\n{usage}")
+    # Refused here rather than left to the server, which would refuse it too
+    # (422) - but urllib turns that into "HTTP Error 422: Unprocessable Entity"
+    # with the server's reason dropped, so the person would learn that it
+    # failed and not which scopes there are. A ValueError rather than argparse's
+    # choices=, whose error is a SystemExit from inside run_command that main()
+    # does not catch; the hand-written usage errors here (/profile, /revoke,
+    # /remove) are ValueErrors too.
+    if parsed.consent_scope not in CONSENT_SCOPES:
+        raise ValueError(f"unknown scope '{parsed.consent_scope}'.\n{usage}")
     return request_json(
         "POST",
         f"/providers/{parsed.provider_id}/consent",
