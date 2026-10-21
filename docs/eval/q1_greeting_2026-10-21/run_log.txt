@@ -1,0 +1,119 @@
+Run stamp: 2026-10-20T23:52:10+00:00
+- commit 33dd522f1dd6de6b438d80ec27133c2a517522a8, uncommitted changes to tracked files: no
+- Constitution version 1.1, sha256 75363e5af8e00985f27d4b0c161e505e8e2d293b86c59dc7908ef125de048d83
+- model qwen2.5:7b, digest 845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e; Ollama 0.40.3
+- options sent: num_predict=2000, num_ctx=16384, temperature=0.0
+
+rule sha256 9c049a47c4f65046cd832e1bc839ad35e3a47d7c79cddbf45308580f337186e6; temp folder C:\Users\USER\AppData\Local\Temp\pip-q1-nb6humxv
+Pipeline: web_search blocked by Stage 8: Provider 'web_search' is a cloud provider and has not been consented to. Use /consent to grant access.
+Pipeline: web_search blocked by Stage 8: Provider 'web_search' is a cloud provider and has not been consented to. Use /consent to grant access.
+warm-up: 9.9 s, model calls 1, error None
+[  1] Alex Rai     'hi'                                     4.7s  'Hello Alex! How can I assist you today?'
+[  2] Alex Rai     'hi pip'                                 4.6s  'Hello Alex! How can I assist you today?'
+[  3] Alex Rai     'hello'                                  4.7s  'Hello Alex! How can I assist you today?'
+[  4] Alex Rai     'hey there'                              4.8s  'Hello Alex! How can I assist you today?'
+[  5] Alex Rai     'good morning'                           4.8s  'Good morning, Alex! How can I assist you today?'
+[  6] Alex Rai     'namaste'                                4.7s  'Namaste, Alex. How can I assist you today?'
+[  7] Alex Rai     'hii pip'                                4.7s  'Hello Alex! How can I assist you today?'
+[  8] Alex Rai     'yo'                                     4.7s  'Hello Alex! How can I assist you today?'
+[  9] Alex Rai     "how's it going"                         4.7s  'Hello Alex! How can I assist you today?'
+[ 10] Alex Rai     'hey'                                    4.7s  'Hello Alex! How can I assist you today?'
+[ 11] Alex Rai     'hello there!'                           4.6s  'Hello Alex! How can I assist you today?'
+[ 12] Alex Rai     'good evening'                           4.7s  'Good evening, Alex! How can I assist you today?'
+[ 13] Alex Rai     'good afternoon pip'                     4.8s  'Good afternoon, Alex! How can I assist you today?'
+[ 14] Alex Rai     'hiya'                                   4.6s  'Hello Alex! How can I assist you today?'
+[ 15] Alex Rai     "what's up"                              5.0s  'Hello Alex! How can I assist you today? Is there anything specific you need help with or discuss?'
+[ 16] Alex Rai     'howdy'                                  4.6s  'Hello Alex! How can I assist you today?'
+[ 17] Alex Rai     'heyy'                                   4.8s  'Heyyy Alex! How can I assist you today?'
+[ 18] Alex Rai     'hi, how are you?'                       4.8s  "Hello Alex! I'm here and ready to assist you. How can I help you today?"
+[ 19] Alex Rai     'hello pip, nice to meet you'            4.7s  'Hello Alex, nice to meet you too! How can I assist you today?'
+[ 20] Alex Rai     'hey pip, how are you doing today?'      4.9s  "Hello Alex! I'm doing well, thank you for asking. How can I assist you today?"
+[ 21] Alex Rai     'morning!'                               4.7s  'Good morning, Alex! How can I assist you today?'
+[ 22] Alex Rai     'hi :)'                                  4.7s  'Hello Alex! How can I assist you today?'
+[ 23] Alex Rai     'hola'                                   4.7s  'Hello! How can I assist you today, Alex?'
+[ 24] Alex Rai     'sup'                                    4.6s  'Hello Alex! How can I assist you today?'
+[ 25] Alex Rai     'greetings'                              4.7s  'Hello Alex! How can I assist you today?'
+[ 26] Alex Rai     'good day'                               4.8s  'Good day! How can I assist you today, Alex?'
+[ 27] Sita Gurung  'hi'                                     4.7s  'Hello Sita! How can I assist you today?'
+[ 28] Sita Gurung  'hi pip'                                 4.7s  'Hello Sita! How can I assist you today?'
+[ 29] Sita Gurung  'hello'                                  4.7s  'Hello Sita! How can I assist you today?'
+[ 30] Sita Gurung  'hey there'                              4.7s  'Hello Sita! How can I assist you today?'
+[ 31] Sita Gurung  'good morning'                           4.8s  'Good morning! How can I assist you today, Sita Gurung?'
+[ 32] Sita Gurung  'namaste'                                4.9s  'Namaste, Sita Gurung. How can I assist you today?'
+[ 33] Sita Gurung  'hii pip'                                4.7s  'Hello Sita! How can I assist you today?'
+[ 34] Sita Gurung  'yo'                                     4.8s  'Hello! How can I assist you today, Sita Gurung?'
+[ 35] Sita Gurung  "how's it going"                         4.7s  'Hello Sita! How can I assist you today?'
+[ 36] Sita Gurung  'hey'                                    4.7s  'Hello Sita! How can I assist you today?'
+[ 37] Sita Gurung  'hello there!'                           4.7s  'Hello Sita! How can I assist you today?'
+[ 38] Sita Gurung  'good evening'                           4.8s  'Good evening! How can I assist you today, Sita Gurung?'
+[ 39] Sita Gurung  'good afternoon pip'                     4.8s  'Good afternoon, Sita! How can I assist you today?'
+[ 40] Sita Gurung  'hiya'                                   4.7s  'Hello Sita! How can I assist you today?'
+[ 41] Sita Gurung  "what's up"                              5.0s  'Hello Sita! How can I assist you today? Is there anything specific you need help with or discuss?'
+[ 42] Sita Gurung  'howdy'                                  4.7s  'Hello Sita! How can I assist you today?'
+[ 43] Sita Gurung  'heyy'                                   4.8s  'Hey there! How can I assist you today, Sita Gurung?'
+[ 44] Sita Gurung  'hi, how are you?'                       5.0s  "Hello Sita! I'm here and ready to assist you. How can I help you today?"
+[ 45] Sita Gurung  'hello pip, nice to meet you'            5.0s  'Hello Sita! Nice to meet you too. How can I assist you today?'
+[ 46] Sita Gurung  'hey pip, how are you doing today?'      5.0s  "Hello Sita! I'm doing well, thank you for asking. How can I assist you today?"
+[ 47] Sita Gurung  'morning!'                               4.8s  'Good morning, Sita! How can I assist you today?'
+[ 48] Sita Gurung  'hi :)'                                  4.8s  'Hello Sita! How can I assist you today?'
+[ 49] Sita Gurung  'hola'                                   4.8s  'Hello! How can I assist you today, Sita Gurung?'
+[ 50] Sita Gurung  'sup'                                    4.6s  'Hello Sita! How can I assist you today?'
+[ 51] Sita Gurung  'greetings'                              4.7s  'Hello Sita! How can I assist you today?'
+[ 52] Sita Gurung  'good day'                               4.9s  'Good day! How can I assist you today, Sita Gurung?'
+[ 53] Bikash Thapa 'hi'                                     4.8s  'Hello Bikash! How can I assist you today?'
+[ 54] Bikash Thapa 'hi pip'                                 4.7s  'Hello Bikash! How can I assist you today?'
+[ 55] Bikash Thapa 'hello'                                  4.7s  'Hello Bikash! How can I assist you today?'
+[ 56] Bikash Thapa 'hey there'                              4.8s  'Hello Bikash! How can I assist you today?'
+[ 57] Bikash Thapa 'good morning'                           4.7s  'Good morning, Bikash! How can I assist you today?'
+[ 58] Bikash Thapa 'namaste'                                4.7s  'Namaste, Bikash. How can I assist you today?'
+[ 59] Bikash Thapa 'hii pip'                                4.7s  'Hello Bikash! How can I assist you today?'
+[ 60] Bikash Thapa 'yo'                                     4.7s  'Hello Bikash! How can I assist you today?'
+[ 61] Bikash Thapa "how's it going"                         4.8s  'Hello Bikash! How can I assist you today?'
+[ 62] Bikash Thapa 'hey'                                    4.7s  'Hello Bikash! How can I assist you today?'
+[ 63] Bikash Thapa 'hello there!'                           4.8s  'Hello Bikash! How can I assist you today?'
+[ 64] Bikash Thapa 'good evening'                           4.7s  'Good evening, Bikash! How can I assist you today?'
+[ 65] Bikash Thapa 'good afternoon pip'                     4.6s  'Good afternoon Bikash! How can I assist you today?'
+[ 66] Bikash Thapa 'hiya'                                   4.6s  'Hello Bikash! How can I assist you today?'
+[ 67] Bikash Thapa "what's up"                              4.9s  'Hello Bikash! How can I assist you today? Is there anything specific you need help with or discuss?'
+[ 68] Bikash Thapa 'howdy'                                  4.7s  'Hello Bikash! How can I assist you today?'
+[ 69] Bikash Thapa 'heyy'                                   4.7s  'Hey Bikash! How can I assist you today?'
+[ 70] Bikash Thapa 'hi, how are you?'                       4.9s  "Hello Bikash! I'm here and ready to assist you. How can I help you today?"Pipeline: web_search blocked by Stage 8: Provider 'web_search' is a cloud provider and has not been consented to. Use /consent to grant access.
+Pipeline: web_search blocked by Stage 8: Provider 'web_search' is a cloud provider and has not been consented to. Use /consent to grant access.
+
+[ 71] Bikash Thapa 'hello pip, nice to meet you'            4.8s  'Hello Bikash, nice to meet you too! How can I assist you today?'
+[ 72] Bikash Thapa 'hey pip, how are you doing today?'      5.0s  "Hello Bikash! I'm doing well, thank you. How about you? Is there anything specific you need help with today?"
+[ 73] Bikash Thapa 'morning!'                               4.7s  'Good morning, Bikash! How can I assist you today?'
+[ 74] Bikash Thapa 'hi :)'                                  4.7s  'Hello Bikash! How can I assist you today?'
+[ 75] Bikash Thapa 'hola'                                   4.7s  'Hello Bikash! How can I assist you today?'
+[ 76] Bikash Thapa 'sup'                                    4.8s  'Hello Bikash! How can I assist you today?'
+[ 77] Bikash Thapa 'greetings'                              4.8s  'Hello Bikash! How can I assist you today?'
+[ 78] Bikash Thapa 'good day'                               4.8s  'Good day! How can I assist you today, Bikash?'
+[ 79] Maria Lopez  'hi'                                     4.7s  'Hello Maria! How can I assist you today?'
+[ 80] Maria Lopez  'hi pip'                                 4.7s  'Hello Maria! How can I assist you today?'
+[ 81] Maria Lopez  'hello'                                  4.7s  'Hello Maria! How can I assist you today?'
+[ 82] Maria Lopez  'hey there'                              4.7s  'Hello Maria! How can I assist you today?'
+[ 83] Maria Lopez  'good morning'                           4.7s  'Good morning! How can I assist you today, Maria?'
+[ 84] Maria Lopez  'namaste'                                4.7s  'Namaste, Maria. How can I assist you today?'
+[ 85] Maria Lopez  'hii pip'                                4.7s  'Hello Maria! How can I assist you today?'
+[ 86] Maria Lopez  'yo'                                     4.7s  'Hello Maria! How can I assist you today?'
+[ 87] Maria Lopez  "how's it going"                         4.7s  'Hello Maria! How can I assist you today?'
+[ 88] Maria Lopez  'hey'                                    4.8s  'Hello Maria! How can I assist you today?'
+[ 89] Maria Lopez  'hello there!'                           4.7s  'Hello Maria! How can I assist you today?'
+[ 90] Maria Lopez  'good evening'                           4.8s  'Good evening! How can I assist you today, Maria?'
+[ 91] Maria Lopez  'good afternoon pip'                     4.8s  'Good afternoon, Maria! How can I assist you today?'
+[ 92] Maria Lopez  'hiya'                                   4.7s  'Hello Maria! How can I assist you today?'
+[ 93] Maria Lopez  "what's up"                              5.0s  "Hello Maria! How are you today? Is there anything specific you'd like to discuss or any assistance you need?"
+[ 94] Maria Lopez  'howdy'                                  4.8s  'Hello! How can I assist you today, Maria?'
+[ 95] Maria Lopez  'heyy'                                   4.7s  'Hey there! How can I assist you today, Maria?'
+[ 96] Maria Lopez  'hi, how are you?'                       4.9s  "Hello Maria! I'm here and ready to assist you. How can I help you today?"
+[ 97] Maria Lopez  'hello pip, nice to meet you'            4.9s  'Hello Maria, nice to meet you too! How can I assist you today?'
+[ 98] Maria Lopez  'hey pip, how are you doing today?'      5.1s  "Hello Maria! I'm doing well, thank you. How are you today? Is there anything specific you need help with or wo"
+[ 99] Maria Lopez  'morning!'                               4.7s  'Good morning! How can I assist you today, Maria?'
+[100] Maria Lopez  'hi :)'                                  4.7s  'Hello Maria! How can I assist you today?'
+[101] Maria Lopez  'hola'                                   4.6s  '¡Hola! ¿Cómo estás? ¿En qué puedo ayudarte hoy?'
+[102] Maria Lopez  'sup'                                    4.6s  'Hello Maria! How can I assist you today?'
+[103] Maria Lopez  'greetings'                              4.6s  'Hello Maria! How can I assist you today?'
+[104] Maria Lopez  'good day'                               5.3s  'Good day! How can I assist you today, Maria?'
+answered 104 of 104; pattern no-record 0; uses the name 103; models ['qwen2.5:7b']; options ['{"num_ctx": 16384, "num_predict": 2000, "temperature": 0.0}']
+wrote results_qwen2.5_7b.json
+exit 0

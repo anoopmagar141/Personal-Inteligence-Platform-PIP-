@@ -4288,13 +4288,45 @@ The first Product step below the cut line (BLUEPRINT card "Step 6", written firs
   decides there, on purpose.
 - **Only the previous user message** joins the search: a follow-up about something two questions back is not
   helped.
-- **Retrieval with the longer search text is not re-measured:** the §7.27 harness needs the real embedder (torch),
-  which this PC blocks. A first message is now searched with its whole text, not 12 words.
+- **Retrieval with the longer search text is not re-measured:** the §7.27 harness was not run. A first message is
+  now searched with its whole text, not 12 words. (Corrected 2026-10-21: this said the PC blocks torch, the real
+  embedder's library; that stopped on 2026-10-08, and torch 2.13.0 imports here.)
 - **The time of day is not given,** and a machine with a wrong clock or time zone gives a wrong day.
 - **Fewer cache hits:** a follow-up now always reaches the model; how often the cache served follow-ups was not
   measured.
 - **The break was tested with a 0.05 s idle timeout** and a stand-in Observer, not a real 10-minute wait or a real
   model.
+
+### 7.66 Q-1: a new user's greeting on qwen2.5:7b, 0 of 104 "no record" replies (run 2026-10-21, report only; no code change)
+
+BLUEPRINT card Q-1 (#11), the owner's "when I type hi, PIP says I don't have a record; it feels dumb". The
+2026-10-17 probe (`docs/eval/greeting_2026-10-17/`) found it on llama3.1:8b (3 of 30) and phi3:mini (12 of 30),
+never on qwen2.5:7b (0 of 15 for a new user, too few to bound the rate).
+
+- **Rule, fixed before the run:** `docs/eval/q1_greeting_2026-10-21/RULE.md` (sha256 9c049a47c4f6..., recorded in
+  the results). At most 1 of N "no record" replies closes the card with no code change; 2 or more stops and reports.
+- **Run:** commit 33dd522 in a clean worktree (stamp: no uncommitted tracked changes; Constitution 1.1; qwen2.5:7b
+  digest 845dbda0ea48...; Ollama 0.40.3, started with `ollama serve` and stopped after). The real pipeline
+  (`pipeline.run_sync`, the profile's active model through the real `OllamaProvider`: 16384-token window,
+  temperature 0.0, 2000 tokens), on 4 made-up new users (onboarded with a name and English, nothing else) x 26
+  greetings (the 3 used before, the card's 6, 17 more chosen for the run and in no list in the code) = 104, each
+  the first message of its chat; the answer cache emptied per user; every path in a temporary folder, `data/`
+  never opened. All 104 answered; every call was qwen2.5:7b.
+- **Result: 0 of 104** (the 2026-10-17 pattern found none; reading all 104 by hand added none and removed none).
+  **The bar is met: Q-1 closes with no code change.** Over these wordings and users the rate is below about 3%
+  (95%, rule of three).
+- **Report only:** the name was used in 103 of 104 (the miss: "hola", answered in Spanish though the profile says
+  English); no reply invented a chat, a project or a fact; every prompt held "Projects: none recorded." and the
+  date line, and qwen volunteered neither.
+- **Found, D-45 (A, low, privacy):** "hey pip, how are you doing today?" is a web-search question: "today" is a
+  Stage 6 trigger word and Stage 1 files the message as `external_information`, so Stage 8 was asked 4 times (once
+  per user) and refused for lack of consent. With web search consented, the greeting's first 12 words would go to
+  the search provider. Not fixed: the owner decides (the owner's rule rules out another word list).
+- **Kept for the write-up:** llama3.1:8b and phi3:mini show the reply, qwen2.5:7b does not; model behaviour varies
+  while the deterministic guard does not.
+
+**Not covered:** the chat socket and the app window (the pipeline was run directly); other models; languages other
+than English; real users.
 
 ---
 
@@ -4376,6 +4408,8 @@ The first Product step below the cut line (BLUEPRINT card "Step 6", written firs
 | D-42 "my main project" accepted as a preference | Found 2026-10-20 (§7.63), open | A, low: "my main" is a preference marker, so the owner's project sentence became preference "project_management" and was written, while the project contract refuses it. Not fixed |
 | D-43 a genuine fact short of the count dropped silently | Fixed 2026-10-20 (§7.64) | A, medium (#19): a candidate the gate accepted but the Constitution refused for a count (or an inferred label in weeks 1-2) was thrown away, so learning nearly stopped after week 2 and a correction a month in was lost. Now one question (origin shortfall), at most 2 per chat, for belief tables only; a correction shows the stored value. 13 + 2 tests, 11 break-it mutations. Short set 35 -> 41 of 69 learned or asked, traps 0 of 75; long set 0 of 81 unchanged (lost at the gate's wording) |
 | D-44 a follow-up inside one chat lost its thread | Fixed 2026-10-20 (§7.65) | A, medium (#7, #8, #9, #10, #12): the prompt never named the day; a 10-minute break cleared the open chat's history; one long reply emptied the history; a follow-up could get another chat's cached answer; decisions and documents were searched with the newest message's first 12 words. Now the day is in the prompt and the cache key; the idle pass marks what it read and keeps the history; the last exchange is always kept, shortened; only a chat's first message is cached; Stages 3 and 5 search with the previous and the whole current message, the web query unchanged. 11 + 3 tests, 12 break-it mutations. Open: a whole prompt over budget can still lose the last exchange; retrieval with the longer text not re-measured |
+| Q-1 a new user's greeting answered "no record" | Run 2026-10-21 (§7.66), closed, no code change | qwen2.5:7b on the real pipeline, 4 made-up new users x 26 greetings: 0 of 104 no-record replies by the pattern and by reading all 104; the bar (at most 1) met. llama3.1:8b and phi3:mini showed it on 2026-10-17 |
+| D-45 a greeting with "today" asks for a web search | Found 2026-10-21 (§7.66), open | A, low, privacy: "today" is a Stage 6 trigger word, so "hey pip, how are you doing today?" is external_information and Stage 8 is asked for a web search; refused here (no consent), but with web search consented its first 12 words go to the search provider. Not fixed |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
