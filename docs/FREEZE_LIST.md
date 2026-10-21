@@ -4416,6 +4416,57 @@ for. The replays below found D-46; the owner chose to commit the three as they a
 - **A decision's stored quote keeps the label** (`raw_quote` "User: Good, I'll stay put."); only the gate's
   comparison drops it.
 
+### 7.68 #21 documents: a stated limitation of v1.0, not built (written 2026-10-21; no code change, no new run)
+
+The final plan's step 7 (`notes/pip-issues-and-solutions-for-review-2026-10-17.md`, #21), below the cut line: build it
+"or a written limitation (cause measured and identified, out of scope for v1.0)". The owner chose the limitation
+(2026-10-21, "write the documents limitation next"). Every number below was measured before (§7.27, §7.28, §7.30);
+one was re-read from committed results, as marked. Nothing in the pipeline changed.
+
+- **What a user meets** (shipped: 500-word chunks with 50 overlap, cut-off 0.60, top 3, an 800-word documents
+  budget): a question about an uploaded document is almost never answered from it. Seven technical documents, 54
+  questions: the passage that answers came back for 2 (§7.27). End to end on qwen2.5:7b: 1 correct, 41 declined
+  ("I don't have that in front of me"), 4 wrong, 8 vague, and none of 12 unanswerable questions got an invented
+  answer (§7.28). The owner's own prose (a 2,993-word synopsis, kept out of git): 0 of 26 found, 1 correct answer
+  (§7.30). So the feature fails mostly by declining, and 4 of 54 times by answering wrongly.
+- **Causes, measured:**
+  1. **Most of every chunk is never searched.** Chunks are 500 words; all-MiniLM-L6-v2 reads 256 tokens; a median
+     chunk is 855 tokens, so 71% of chunk text is outside what is embedded. The right passage is in the top 3 for 12
+     of 16 questions whose answer starts in the readable part and 13 of 38 when it starts beyond it (§7.27).
+  2. **The cut-off sits above where answers score.** The passage that answers scores a median 0.38 on the technical
+     notes and 0.26 on prose; 0.60 lets through 2 of 54 and 0 of 26, while ranking alone has the answer in the top 3
+     for 25 of 54 (§7.27, §7.30).
+  3. **The query: fixed, and it does not change the result.** Search used the first 12 words; since step 6
+     (33dd522, §7.65, #7) it uses the whole message plus the previous one. Re-read on 2026-10-21 from the committed
+     2026-10-08 results (`docs/eval/retrieval_results_2026-10-08_real.json`, the "full question" rows, which is what
+     a first message is now searched with): the same 2 of 54 at 0.60, 25 of 54 in the top 3, a median answering
+     score of 0.38. A follow-up's added previous message is not measured.
+- **Why not just lower the cut-off:** measured twice and not supported. Technical notes, end to end: correct 1 / 11
+  / 26 of 54 at 0.60 / 0.45 / 0.30, but wrong 4 / 7 / 9, against a rule that wrong must not rise (§7.28). On 30
+  held-out answerable questions, 0.30 with a documents prompt rule, an 1,800-word budget, or both gave 6 to 8 wrong
+  against the shipped 4, and plain 0.30 gave 8 (§7.30). The
+  wrong answers come from passages that do not hold the answer: at 0.30 only 23% of what the model is handed holds
+  it. On prose, 0.30 gave 8 correct with no extra wrong (p = 0.039), inconclusive by the validity guard.
+- **Why it is out of scope for v1.0:** the fix is an order of steps, each with its own measurement (#21): chunks of
+  at most 256 tokens, then re-index every document, then a cut-off measured on both kinds of document with the bar
+  fixed before the run (BLUEPRINT cards R-2, then R-1). A cut-off measured on today's index would not carry over,
+  because that index never embedded most of each chunk. That is days of work below the cut line, and half of it
+  would leave retrieval less well understood than it is now.
+- **For the thesis, as worded here:** "Answering questions from uploaded documents is not a working feature of PIP
+  v1.0. At the shipped settings, retrieval returns the passage that holds the answer for 2 of 54 questions on
+  technical notes and 0 of 26 on prose. Two causes were measured: 500-word chunks against an embedding model that
+  reads 256 tokens, so most of each chunk is never searched, and a similarity cut-off of 0.60 above where answering
+  passages score (median 0.38 and 0.26). Lowering the cut-off alone raised wrong answers (4 to 9 of 54). The failure
+  is mostly conservative: of 54 answerable questions the model declined 41 and answered 4 wrongly, and it invented
+  no answer to 12 unanswerable ones. Smaller chunks, re-indexing and a re-measured cut-off are future work."
+
+**Not covered (still open):**
+- The "~256 tokens" comment in `backend/memory/vector_store.py` still understates the gap (a 500-word chunk is about
+  855 tokens); R-2's one-line comment fix, not done here.
+- `.docx` is not accepted (`.pdf .md .txt .py .json .html` only).
+- Measured on one technical corpus and one prose document, questions by one hand, one 7B model at temperature 0.
+- Numbers from the hashed stand-in embedder are never carried over (§7.27).
+
 ---
 
 ## 8. Status
@@ -4504,6 +4555,7 @@ for. The replays below found D-46; the owner chose to commit the three as they a
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
 | Hunt for unrecorded import/export defects | Run 2026-10-08 (§7.29), five fixed | A password or bearer token in any script crashed the export prompt, the shortcut restore's prompt and the token check (`compare_digest` on `str`): fixed. A backup whose owner's name has no a-z or 0-9 could not be imported ("already exists"): fixed. Two imports at once raced: fixed. The provider-consent seed raced between two connections: fixed. Probed with no defect: odd ASCII passwords, document write-back paths, SQL quoting. Not done: a real console's non-ASCII `getpass`, a real second computer, the real-window first-run import |
 | Levers on the cut-off, and the owner's own document | Run 2026-10-08 (§7.30), report only | Held-out set of 40: neither the document prompt rule (D), the 1800-word budget (E) nor both (F) is supported - wrong answers 6 / 8 / 7 against the shipped setting's 4, though correct answers rose by 12-13 and nothing invented; D and E only looked better on the development questions they were shaped on. Owner's own document (a 2,993-word synopsis, kept out of git): found at the shipped 0.60 for 0 of 26 questions, 7 at 0.30, 15 at 0.15; answers 1 correct shipped, 8 at 0.30 with no extra wrong; inconclusive by the validity guard. Nothing changed; a cut-off below 0.30 and retrieval that returns fewer no-answer passages are untested |
+| #21 document search almost never finds the answer | Written up as a v1.0 limitation 2026-10-21 (§7.68), not built | Product, below the cut line: 500-word chunks against a 256-token embedder, and a 0.60 cut-off above where answering passages score (median 0.38 technical, 0.26 prose); 2 of 54 and 0 of 26 found as shipped, 1 of 54 answered correctly, none invented. The whole-message query of step 6 gives the same 2 of 54 on the committed results. Lowering the cut-off alone raised wrong answers (§7.28, §7.30). Future work: smaller chunks, re-index, then a re-measured cut-off |
 | Graceful stop of the backend | Measured 2026-10-08 (§7.31), not built | A hard stop mid-answer lost nothing durable: transcript identical, 1.8 s restart, conversation resumed, the catch-up logged the decision. Only the turn being answered is gone (saved when finished). No shutdown route built |
 
 ---

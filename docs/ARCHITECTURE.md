@@ -491,6 +491,15 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   Deleting a document removes its file there and its bytes in `document_blobs`
   as well as its chunks; only a file inside that folder is ever removed, and
   one that cannot be removed stops the delete (FREEZE_LIST §7.50).
+- **Document search almost never finds the answer: a known limitation of
+  v1.0** (#21, FREEZE_LIST §7.68). Two measured causes remain: chunks are 500
+  words (a median 855 tokens) while all-MiniLM-L6-v2 embeds only the first 256
+  tokens, so most of every chunk is never searched; and the 0.60 cut-off sits
+  above where the answering passage scores (median 0.38 on technical notes,
+  0.26 on prose). As shipped, the passage that answers comes back for 2 of 54
+  and 0 of 26 questions. Lowering the cut-off alone was measured and raised
+  wrong answers, so the setting is unchanged and the fix (smaller chunks, then
+  re-index, then a cut-off measured on both kinds of document) is future work.
 - **The sign-in screen's profile picture is deliberately unencrypted.** That
   screen draws profiles *before* a password exists, so anything it can render
   is by definition readable without one — there is no third option. Publishing
