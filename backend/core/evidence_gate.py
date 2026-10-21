@@ -671,12 +671,37 @@ def _topic_raising_text(quote: str, user_sources: list[EvidenceTurn]) -> str:
     The one word read is the pronoun "I" - whose sentence it is, not what it
     means - so this adds no list of phrasings. A quote cut short of its
     sentence's question mark is still that question (see _only_ever_asked).
+
+    A first-person sentence that carries one of _HYPOTHETICAL_MARKERS raises
+    nothing (D-46, FREEZE_LIST §7.72). Found by the replays of §7.67: the
+    long-chat trap "If I ever had a free summer I might look at Elixir, but
+    honestly that is not going to happen. What is it actually good at?" was
+    written as the user's topic "Elixir", because adjudicate() runs its
+    hypothetical check for every table but topics - it refuses a whole quote,
+    and a topic quote may be a question. So the check is made here, with the
+    same list and nothing added (the owner's choice over two designs that read
+    new words, 2026-10-21), per SENTENCE and on the first-person statements
+    only: a hedge's scope runs past a comma ("If I ever get time, I'll learn
+    Zig"), "I use Go at work. Maybe I'll try Rust." still raises Go, and a
+    question still raises its topic whatever hedge it carries ("Maybe this is
+    silly, but what is a monad?" - the user asked it).
+
+    Known costs, measured and accepted: the list cannot tell a hedge about the
+    topic from a hedge elsewhere in the sentence, so "I might learn Swift
+    someday, not sure yet" (graded supported in M-1(a)) raises nothing, nor
+    does "I use Go daily, maybe too much". And a hedge outside the list
+    ("Perhaps one day I will learn Japanese") still raises its topic, as does
+    reported speech ("My friend says I should run a marathon", D-41): both
+    need words this function does not read.
     """
     pieces = _sentence_pieces(quote)
     if pieces and not pieces[-1][1] and _only_ever_asked(quote, user_sources):
         pieces[-1] = (pieces[-1][0], True)
     return " ".join(
-        text.strip() for text, is_question in pieces if is_question or "i" in _TOKEN_RE.findall(text)
+        text.strip()
+        for text, is_question in pieces
+        if is_question
+        or ("i" in _TOKEN_RE.findall(text) and not _HYPOTHETICAL_MARKERS.search(text))
     )
 
 
@@ -1065,10 +1090,13 @@ def adjudicate(candidate: MemoryCandidate, ledger: EvidenceLedger) -> EvidenceVe
     # 6. Does the evidence support THIS claim?
     if anchor_value is not None and not _anchored(anchor_value, asserted):
         if target_table == "topic_interests" and _anchored(anchor_value, quote):
+            # Two kinds of sentence end here since D-46: one about someone else and
+            # one the user hedged. The reason names both rather than guessing
+            # which, so a log reader is not told "someone else" about "If I ever".
             return EvidenceVerdict(
                 EvidenceState.EVIDENCE_NOT_ENTAILING,
-                f"the cited evidence names {str(anchor_value)[:60]!r} only in a statement about someone else, "
-                "neither asked about nor said in the first person",
+                f"the cited evidence names {str(anchor_value)[:60]!r} only in a statement about someone else "
+                "or a hypothetical one, neither asked about nor said in the first person as a fact",
             )
         if _anchored(anchor_value, quote):
             return EvidenceVerdict(
@@ -1241,18 +1269,27 @@ def _adjudicate_partial_quote(
     said it plainly once and hedged it elsewhere, the plain statement stands. A
     quote equal to its whole turn skips this entirely, which is the ordinary
     case for a well-behaved extraction.
+
+    A hedge left behind counts too: _HYPOTHETICAL_MARKERS, the list the gate
+    already refuses a quote for when the hedge is IN it. The omissions list held
+    "maybe", "might" and "if i", but not "someday", so "I want to learn Clojure."
+    cut from "Someday I want to learn Clojure." was a topic and a goal with the
+    hedge gone - D-46's check, and every table's, walked round by trimming the
+    quote (found reviewing D-46, FREEZE_LIST §7.72). No word is added: the two
+    lists the gate already has are read together.
     """
+    def _qualifier(remainder: str):
+        return _MEANING_CHANGING_OMISSIONS.search(remainder) or _HYPOTHETICAL_MARKERS.search(remainder)
+
     for turn in user_sources:
         remainder = turn["normalized"].replace(quote, " ")
         if not remainder.strip():
             # Quote IS the turn: nothing was left out, nothing to misrepresent.
             return None
-        if not _MEANING_CHANGING_OMISSIONS.search(remainder):
+        if not _qualifier(remainder):
             return None
 
-    hit = _MEANING_CHANGING_OMISSIONS.search(
-        user_sources[0]["normalized"].replace(quote, " ")
-    )
+    hit = _qualifier(user_sources[0]["normalized"].replace(quote, " "))
     return EvidenceVerdict(
         EvidenceState.EVIDENCE_INVALID,
         f"the quote is a fragment of a turn that qualifies it ({hit.group(0)!r} was left out)",
