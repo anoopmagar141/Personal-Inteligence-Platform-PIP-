@@ -4533,6 +4533,63 @@ written first.
   Observer reads.
 - **An offer is lost** when the chat reconnects; asking again makes a new one. The older web client cannot search.
 
+### 7.70 Long chats learn almost no true facts: a stated limitation of v1.0 (decided and written 2026-10-21; no code change, no new run)
+
+The owner's decision on the open question "long chats still learn 0 of 81 facts, because the gate refuses everyday
+wording": state it as a limitation in the thesis (2026-10-21, "write the 0 of 81 limitation next"). The two other
+options were set aside: more support phrases in the gate (a word list, which the owner ruled out on 2026-10-17)
+and judging support by meaning (too large for the days left). Every number below comes from the recordings already
+committed, replayed through a09d9d1 (the gate as it is now; `docs/eval/gate_fixes_2026-10-21/`), no model.
+
+- **What is measured.** V-2's long-chat set (§7.55): 27 made-up chats of about 1,400, 2,700 and 4,800 words, each
+  with the same three true facts (F1 "I do all my diagrams in Excalidraw these days, it's the only drawing tool I
+  actually open"; F2 "my main project this term is Lanternfish, a budgeting app for student hostels"; F3 "I want to
+  pass the AWS Solutions Architect Associate exam by March"), three trick statements and three near-misses, rotated
+  over start, middle and end, on profiles 1, 3 and 9 weeks old.
+- **Result, learned or asked, in the tables the labels name:**
+  - **0 of 81 on G-4's run** (W-1's rule on the G-4 code, §7.60), the recording #19 measured (§7.64); unchanged by
+    a09d9d1. Trick statements and near-misses: 0 of 162.
+  - 1 of 81 on V-2's long recording and 3 of 81 on W-1's, all three F3 when the model cited the statement without
+    its question, asked of the user rather than written. Traps 0 of 162 on W-1's; 1 of 162 on V-2's since a09d9d1,
+    the D-46 topic (§7.67).
+  - Short chats, the same pipeline: 39 of 69 (V-2 qwen; 41 before a09d9d1 dropped two "Go at 1.0" questions), 35
+    (V-2 llama), 48 (W-1 short), 49 (2026-10-12), with traps 0 of 75 on each.
+- **Where the 81 are lost, G-4's run** (each fact x 27 chats; the gate's own reasons, re-run with `adjudicate`):
+  - F1 Excalidraw: proposed in its table 18 times, all refused as carrying no preference support language; not
+    proposed 9 times.
+  - F2 Lanternfish: proposed 27 times; refused 12 as having no project support language ("my main project" is not
+    among the project phrases), 12 because the quote runs on into the user's next question ("How should I name the
+    tables for shared expenses?") and a quote that ends in a question is read as a question (`_only_ever_asked`), 3
+    not found.
+  - F3 the exam goal: not proposed as a memory 21 times (3 of them only as a decision), 3 times in other tables, and
+    the 3 in its table refused because the quote runs on into "What is a sensible way to space out revision?".
+  - So the losses are two, and length is not one of them (V-2 found the same candidates get the same verdicts
+    without the chat around them): the gate's allowlist does not hold the wording, or the cited message ends in a
+    question; and the model does not propose the fact. The blind measurement agrees: 20 of 58 quotes the gate
+    refused did support their claim (34%; §7.63).
+- **Why it is the price of the design, and not fixed:** the gate fails toward rejection on purpose (ARCHITECTURE:
+  "The evidence gate is an allowlist"): an unknown wording is a lost memory, never an invented one, and the same
+  pipeline wrote no trick statement on the long set's G-4 run. Recall is what that costs. The two fixes are both out
+  of scope: a longer phrase list is the brittle word list the owner ruled out, and a judge of meaning would put a
+  learned model in the trusted step the gate was built without, which is more than the days left. Reading a quote
+  that ends in a question as a statement would let a question pass as a fact.
+- **For the thesis, as worded here:** "PIP v1.0 learns little from long, natural conversations. In 27 made-up chats
+  of 1,400 to 4,800 words, each holding the same three true facts, it learned or asked about 0 of 81 facts on the
+  recording used for the thesis numbers (1 and 3 of 81 on two other recordings of the same chats), while writing
+  none of 162 trick statements and near-misses. The model proposed most of the facts. The deterministic evidence
+  gate refused them, either because their everyday wording ("I do all my diagrams in Excalidraw these days", "my
+  main project this term is Lanternfish") is not in its list of support phrases, or because the quoted message
+  ended in a question, which the gate refuses on purpose. A blind check agrees: a third of the quotes the gate
+  refused did support their claim. On short, direct statements the same pipeline learns or asks about 35 to 49 of
+  69 facts. This is the cost of a gate that fails toward rejection: it trades recall for not writing beliefs the
+  user never expressed. A longer phrase list or a judge of meaning are future work."
+
+**Not covered (still open):**
+- One author's made-up chats, in English, mostly one model (qwen2.5:7b); real users' long chats are not measured.
+- The model's share (facts never proposed, F3 above all) is not separated from its prompt. It is not the window on
+  G-4's run, which read all 27 prompts whole at 16k (§7.60); V-2's long recording was made at 4096 (§7.55).
+- D-46, the topic trap V-2's long recording now writes, is open (§7.67).
+
 ---
 
 ## 8. Status
@@ -4555,6 +4612,7 @@ written first.
 | Promise 7 final wording, including the key-in-environment clause; uploaded file copy stated as a limitation, not fixed (2026-09-28) | Decided |
 | Promise 8, profile isolation, adopted (2026-09-28) | Decided |
 | Promise 9, answers reflect the current record, adopted (2026-09-28) | Decided |
+| Long-chat learning (0 of 81) stated as a limitation of v1.0, not a longer phrase list and not a judge of meaning (2026-10-21, §7.70) | Decided |
 
 ### 8.2 Evidence status (facts; need reports)
 
@@ -4622,6 +4680,7 @@ written first.
 | Hunt for unrecorded import/export defects | Run 2026-10-08 (§7.29), five fixed | A password or bearer token in any script crashed the export prompt, the shortcut restore's prompt and the token check (`compare_digest` on `str`): fixed. A backup whose owner's name has no a-z or 0-9 could not be imported ("already exists"): fixed. Two imports at once raced: fixed. The provider-consent seed raced between two connections: fixed. Probed with no defect: odd ASCII passwords, document write-back paths, SQL quoting. Not done: a real console's non-ASCII `getpass`, a real second computer, the real-window first-run import |
 | Levers on the cut-off, and the owner's own document | Run 2026-10-08 (§7.30), report only | Held-out set of 40: neither the document prompt rule (D), the 1800-word budget (E) nor both (F) is supported - wrong answers 6 / 8 / 7 against the shipped setting's 4, though correct answers rose by 12-13 and nothing invented; D and E only looked better on the development questions they were shaped on. Owner's own document (a 2,993-word synopsis, kept out of git): found at the shipped 0.60 for 0 of 26 questions, 7 at 0.30, 15 at 0.15; answers 1 correct shipped, 8 at 0.30 with no extra wrong; inconclusive by the validity guard. Nothing changed; a cut-off below 0.30 and retrieval that returns fewer no-answer passages are untested |
 | #21 document search almost never finds the answer | Written up as a v1.0 limitation 2026-10-21 (§7.68), not built | Product, below the cut line: 500-word chunks against a 256-token embedder, and a 0.60 cut-off above where answering passages score (median 0.38 technical, 0.26 prose); 2 of 54 and 0 of 26 found as shipped, 1 of 54 answered correctly, none invented. The whole-message query of step 6 gives the same 2 of 54 on the committed results. Lowering the cut-off alone raised wrong answers (§7.28, §7.30). Future work: smaller chunks, re-index, then a re-measured cut-off |
+| Long chats learn almost no true facts | Stated as a v1.0 limitation 2026-10-21 (§7.70), not fixed | Thesis: 0 of 81 true facts learned or asked on G-4's long-chat run (1 and 3 of 81 on two other recordings), traps 0 of 162; the model proposes most facts and the gate refuses their wording or a quote that ends in a question; short chats 35 to 49 of 69. M-1(a), blind: 20 of 58 refused quotes were supported. The owner chose the limitation over a phrase list or a judge of meaning |
 | Graceful stop of the backend | Measured 2026-10-08 (§7.31), not built | A hard stop mid-answer lost nothing durable: transcript identical, 1.8 s restart, conversation resumed, the catch-up logged the decision. Only the turn being answered is gone (saved when finished). No shutdown route built |
 
 ---

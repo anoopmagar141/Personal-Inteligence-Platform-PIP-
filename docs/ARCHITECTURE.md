@@ -284,7 +284,10 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   queue. The reverse arrangement would pay for the same coverage in false
   *accepts* — beliefs written into the profile that the user never expressed.
   Measured cost on a held-out set: 1 false reject in 15 supported statements,
-  0 false accepts. `scripts/eval_evidence_gate.py` prints the numbers.
+  0 false accepts. `scripts/eval_evidence_gate.py` prints the numbers. On long,
+  natural chats the cost is far larger, and is a stated limitation of v1.0:
+  0 of 81 true facts learned on G-4's long-chat run, 0 of 162 traps written
+  (FREEZE_LIST §7.70).
 - **The Observer's decisions go through the same gate** (G-4; DEC-7 = A),
   before `decision_log.route_observer_decision`, under a `decision_log`
   contract: the user's own words, `commitment` language (goal_memory's list,
