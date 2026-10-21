@@ -4744,6 +4744,67 @@ Evidence: `docs/eval/four_bugs_2026-10-21/`.
 - A profile set up by someone else in the seconds the import is staging its OWN new profile is still overwritten:
   the route takes no lock shared with setup or sign-in. It needs the new profile's name and a race of seconds.
 
+### 7.73 D-47: one reconnect at a time, and a locked backend takes the app back to sign-in (authorized 2026-10-21)
+
+The owner's "fix d 47" (2026-10-21), the one open defect a user meets, found by V-1 in the real window (§7.71).
+Flutter only: `frontend/flutter/lib/ws_chat_client.dart`, `home_shell.dart`, `main.dart`; no backend file changed.
+Built on branch `fix/d47-reconnect` from 6a51798; two reviewers read it before landing.
+
+- **Defect (D-47, A, medium):** after the backend was started again and came back locked, it refused the chat
+  socket. `WsChatClient` scheduled a reconnect from both `onError` and `onDone`, and a refused connection fires both,
+  so attempts doubled every 2 s: 30,800 in about two minutes, 277 CPU-seconds, until the window was closed. And
+  nothing took the window back to sign-in, so the chat could not resume there.
+- **Mechanism:**
+  - The client: a connection's loss is handled once, by whichever callback comes first; the reconnect is one
+    `Timer` that `connect()`, `disconnect()` and `dispose()` cancel; `connect()` ends the connection it replaces.
+    "connected" is said when the handshake has finished (`channel.ready`), not when the connection is asked for, and
+    not by a connection that was replaced, dropped or disposed meanwhile; the handshake's failure is handled there
+    (it went unhandled, one console error per attempt). `disconnect()` after `dispose()` does nothing (it threw).
+  - The shell: a locked backend refuses the socket before accepting it, so the client sees a failed handshake and
+    never the 4423. On a drop, `HomeShell` asks `/auth/state` (open while locked); anything but "unlocked", or a 401
+    (the backend took a new token), stops the chat, closes any dialog the shell opened, and calls
+    `onBackendLocked`, which `main.dart` wires to `_connect()`: it re-reads the token file, asks again, and shows the
+    sign-in screen the backend needs, or waits while it is still coming back. No answer decides nothing; the client
+    keeps trying, one attempt every 2 s. Closes of the app's own (sign-out, a profile delete) are not taken for a
+    lock. `HomeShell` is keyed by its `ApiClient`, so a new connection always gets a new shell.
+  - Two test-only seams: `WsChatClient(connector:)` and `HomeShell(chatClient:)`. A real handshake never completes
+    under flutter_test, so a refused connection cannot be had any other way there.
+- **Tests** (`test/chat_reconnect_test.dart`, 13; the three files that build `HomeShell` pass the new callback): a
+  refused connection is tried once per period; a switch while a reconnect waits, and a second `connect()` while
+  connected, leave one chain; `disconnect()` cancels a waiting reconnect, and does nothing after `dispose()`; a
+  refused attempt never says connected and an accepted one does; a handshake that finishes after the client moved
+  on, was disposed, or dropped says nothing; through `HomeShell`, a locked backend hands back once and stops asking,
+  as does a 401, and a dialog open at that moment is closed; an unlocked backend, or one that does not answer, keeps
+  the app where it is; a sign-out is not also reported as a lock.
+  - **Seen failing first:** 6 of the first 7 against the original logic with only the seams added (127 attempts
+    after six periods, the storm itself, against 7); then all 12 (those 7 and 5 for the review's findings) against
+    the first fix, the 7 because a refused handshake's error now went unhandled. The late-handshake test was written
+    after the code it covers, and is held by three weakenings instead.
+- **Break-it:** 13 weakenings, each alone, restored byte for byte, each caught: the loss handled from both callbacks
+  again (9 tests); `connect()` leaving the waiting reconnect (1) or the connection it replaces (1); "connected" said
+  at once (13); a replaced, a disposed, and a dropped connection allowed to say connected (1 each); `disconnect()`
+  leaving the waiting reconnect (1) or adding to a closed stream (1); a locked backend not handed back (3); a close of
+  the app's own taken for a lock (1); a 401 taken for no answer (1); a dialog left open (1). A first round of the fix
+  had three more guards that no weakening of them could be seen by (each redundant with another); they were taken
+  out, not kept untested.
+- **Review** (two reviewers, the reconnect logic and the sign-in flow): 8 findings. Fixed here: a dialog left over
+  the sign-in screen, confirming it threw (medium, caused by the first fix); `connect()` not ending the connection it
+  replaced, as its comment said; `disconnect()` after `dispose()` throwing; the shell kept across a same-frame
+  reconnect (the key); a comment that claimed a lock from elsewhere is noticed; a 401 after a restart left stuck
+  (medium, older); "connected" before the handshake, and its failure unhandled (older). Recorded: D-49, and a lock
+  from elsewhere (below).
+- **Suites:** Flutter 365 passed (352 + 13), `flutter analyze` no issues, the generated platform files unchanged. No
+  backend file changed, so the backend suite was not re-run.
+
+**Not covered (still open):**
+- **D-49 (A, medium), found by the review:** a failed sign-out or a failed profile delete (a wrong password) leaves
+  the chat closed for good. The chat is closed before `/auth/lock` or the delete is sent, as it must be, and nothing
+  reopens it when that call fails; a later lock is then not noticed either, until the app restarts. Older than D-47.
+- **A lock from elsewhere** (the web client, `curl /auth/lock`) leaves the open chat socket open (server.py's
+  `auth_lock` hands it the connection it had), so the app is not sent to sign-in until something drops.
+- **The real window** (V-1's step D again: a backend stopped, started locked) is not re-run; it needs the owner at
+  the PC. The `HomeShell` key has no test of its own (AppRoot has no test harness).
+
 ---
 
 ## 8. Status
@@ -4829,8 +4890,9 @@ Evidence: `docs/eval/four_bugs_2026-10-21/`.
 | D-45 a message with a trigger word sent to the web without asking | Fixed 2026-10-21 (§7.69) | A, medium (§7.66 first rated it low, for greetings only): with web search consented, "I feel tired today" and any message with a trigger word not about the user or a project went to the search provider at once. Now no click, no search: the turn is answered without the web and ends with an offer of the exact words; only a click sends them, with consent checked again. 14 + 5 backend and 4 app tests, 17 break-it mutations |
 | D-46 a hypothetical first-person sentence raises a topic | Fixed 2026-10-21 (§7.72) | A, low: a first-person sentence carrying one of the gate's existing hedge phrases raises no topic, and a hedge cut out of a quote is read for every table. No new words (the owner's choice of three designs). Replays: trap rows written 1 -> 0; cost, "I might learn Swift someday" (graded supported) refused |
 | V-1 real-window check | Run 2026-10-21 (§7.71), report only | In a throwaway copy (05c6523, port 8790, the Release app): the first-run import, the D-45 web-search button and the record dialog worked as expected, and the D-23 turn end too; after a restart the locked backend refused the chat, the window never asked to sign in, and its reconnects multiplied (D-47) |
-| D-47 the chat's reconnects double on every failure | Found 2026-10-21 (§7.71), open | A, medium: ws_chat_client.dart reconnects from both onError and onDone, so a refused connection (a locked or stopped backend) starts two attempts and they double every 2 s: 30,800 in two minutes, 277 CPU-seconds. A socket refused as locked never brings back the sign-in screen. Not fixed |
+| D-47 the chat's reconnects double on every failure | Fixed 2026-10-21 (§7.73) | A, medium: one reconnect at a time (the loss handled once, the timer cancelled, "connected" only after the handshake), and a dropped chat asks /auth/state: a backend no longer unlocked, or refusing the token, sends the app back through the start screen to sign in, closing any dialog. Flutter 365 passed; the real window not re-run |
 | D-48 the first-run import wrote into a folder the registry did not list | Found and fixed 2026-10-21 (§7.72) | A, medium: with an unreadable or older profiles.json, or a profile unregistered by remove(), the import moved a real database aside, and a failed install's clean-up deleted the folder with it. A folder holding anything is now refused |
+| D-49 a failed sign-out or profile delete leaves the chat closed for good | Found 2026-10-21 (§7.73), open | A, medium: the chat is closed before /auth/lock or the delete is sent; when that call fails (a wrong password on delete), nothing reopens it, and a later lock is not noticed until the app restarts. Older than D-47. Not fixed |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

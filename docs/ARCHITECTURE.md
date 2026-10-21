@@ -187,7 +187,10 @@ and the legacy composite-key rebuild preserves it and the rows already there.
 - **The frontend has no logic.** `api_client.dart` turns a path plus payload
   into an HTTP call and the JSON back into a Dart value — no caching, no
   retries, no client-side validation. `ws_chat_client.dart` relays events and
-  reconnects; it decides nothing.
+  reconnects, one attempt at a time; it decides nothing. A dropped chat makes
+  `HomeShell` ask `/auth/state`, and a backend that is no longer unlocked sends
+  the app back through the start screen to sign in (D-47): a locked backend
+  refuses the socket before accepting it, so the socket alone cannot say why.
 - **`config/provider_consent.json` is seed data only** — loaded into SQLite on
   first run. Runtime consent checks query the `provider_consent` table, never
   the file. Its own `comment` field says so.
