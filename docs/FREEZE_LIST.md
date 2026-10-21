@@ -4590,6 +4590,50 @@ committed, replayed through a09d9d1 (the gate as it is now; `docs/eval/gate_fixe
   G-4's run, which read all 27 prompts whole at 16k (§7.60); V-2's long recording was made at 4096 (§7.55).
 - D-46, the topic trap V-2's long recording now writes, is open (§7.67).
 
+### 7.71 V-1: the real window, first-run import, the web-search button, the record dialog and a backend stop, D-47 (run 2026-10-21, report only)
+
+The last item in the plan (BLUEPRINT card V-1). Driven by Claude through screen control in a throwaway copy, with the
+owner's OK; the owner allowed the two test passwords to be typed this once, for that copy only (the new one is kept in
+the copy's folder, TEST_PASSWORD.txt). The owner's first "all as expected" came before the copy had run (its data
+folder was empty) and is not part of this record.
+
+- **The copy:** `D:\FINAL YEAR PROJECT\pip-work\v1-window`: `git archive 05c6523` of backend/, shared/, config/ and
+  scripts/; its own .venv (a .pth onto the development site-packages, no test hooks); the Release app built from
+  05c6523's client on 2026-10-21; its own data folder and port 8790 (PIP_PORT, PIP_API_BASE, PIP_WS_URL); started by
+  the real launch_pip.ps1, which started Ollama with `ollama serve`. The owner's PIP was not running, port 8765 stayed
+  free, `data/` was never opened, and screen control was granted for that one executable by its full path.
+- **A, first-run import: as expected.** Welcome screen; Import existing PIP; the file chooser; the import dialog with
+  the file name and full path; three passwords; "Imported "BatMan". Sign in with the new password you just chose.";
+  signed in. Sidebar: Session 14 down to Session 1. Profile: BatMan, English, UTC, 10 decisions, 2 things learned,
+  the project "PIP - Personal Intelligence Platform".
+- **B, the web-search button (D-45): as expected.** Providers: web_search "not consented"; the consent dialog's
+  web_search_only text says PIP asks before each search; granted. In a new chat, "what is the weather in Kathmandu
+  today?" was answered without the web, with Search the web for: "what is the weather in Kathmandu today?" and "Only
+  these words are sent to the search provider." under it; its steps said "Web search not sent - asks you first".
+  "I feel tired today" was answered and offered, not clicked, and nothing was sent. The weather click removed the
+  button; the steps said "query sent: 'what is the weather in Kathmandu today?'", web_search_used Yes; the searched
+  answer came as a new reply with no new user bubble. One real search went to DuckDuckGo.
+  - Seen: the searched answer is added at the end of the chat, after the "I feel tired today" exchange, with nothing
+    saying which question it answers.
+- **C, Where we left off (#13): opens.** On Session 14: "No record of this chat yet. PIP writes one when a chat with
+  something to summarise ends.", with Write it and Close. Nothing was written.
+- **D, the backend stopped mid-answer (D-23): the turn ends, the chat does not come back.**
+  - As expected: while "explain how a hash map works, in detail" was being written, the test backend (only the
+    process on 8790) was stopped. The chat said "The connection to PIP was lost before this reply finished. Send
+    your message again.", kept no partial answer, gave Send back and showed "disconnected".
+  - Not as expected: the backend was started again the way the launcher starts it and came back locked (a
+    password-protected profile needs a sign-in), so it refused the chat socket (4423, logged as 403). The window
+    never showed the sign-in screen, and its reconnects multiplied: 30,800 attempts in about two minutes, over 1,000
+    a second and rising, 277 CPU-seconds in the window, until it was closed.
+- **D-47 (A, medium, found here): the chat's reconnects double on every failed attempt.** `ws_chat_client.dart`
+  schedules a reconnect from both `onError` and `onDone`, and a refused connection fires both, so each failure starts
+  two attempts two seconds later and they double every round, whatever the refusal (a locked backend, a stopped one).
+  And a socket refused as locked never brings the app back to sign-in, so the chat cannot resume in that window. Not
+  fixed.
+
+**Not covered:** the restore shortcut and the Backup screen's restore; the chat resumed after a new sign-in (the
+window was closed to stop the reconnects); the Review screen's questions (#19); the other screens.
+
 ---
 
 ## 8. Status
@@ -4674,6 +4718,8 @@ committed, replayed through a09d9d1 (the gate as it is now; `docs/eval/gate_fixe
 | Q-1 a new user's greeting answered "no record" | Run 2026-10-21 (§7.66), closed, no code change | qwen2.5:7b on the real pipeline, 4 made-up new users x 26 greetings: 0 of 104 no-record replies by the pattern and by reading all 104; the bar (at most 1) met. llama3.1:8b and phi3:mini showed it on 2026-10-17 |
 | D-45 a message with a trigger word sent to the web without asking | Fixed 2026-10-21 (§7.69) | A, medium (§7.66 first rated it low, for greetings only): with web search consented, "I feel tired today" and any message with a trigger word not about the user or a project went to the search provider at once. Now no click, no search: the turn is answered without the web and ends with an offer of the exact words; only a click sends them, with consent checked again. 14 + 5 backend and 4 app tests, 17 break-it mutations |
 | D-46 a hypothetical first-person sentence raises a topic | Found 2026-10-21 (§7.67), open | A, low: topics skip the hypothetical check and D-33's rule takes any sentence with "I", so "If I ever had a free summer I might look at Elixir" is the user's topic. The model's "User:" label had hidden it; with D-38 fixed one replayed trap is written. Not fixed: the owner's choice |
+| V-1 real-window check | Run 2026-10-21 (§7.71), report only | In a throwaway copy (05c6523, port 8790, the Release app): the first-run import, the D-45 web-search button and the record dialog worked as expected, and the D-23 turn end too; after a restart the locked backend refused the chat, the window never asked to sign in, and its reconnects multiplied (D-47) |
+| D-47 the chat's reconnects double on every failure | Found 2026-10-21 (§7.71), open | A, medium: ws_chat_client.dart reconnects from both onError and onDone, so a refused connection (a locked or stopped backend) starts two attempts and they double every 2 s: 30,800 in two minutes, 277 CPU-seconds. A socket refused as locked never brings back the sign-in screen. Not fixed |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
