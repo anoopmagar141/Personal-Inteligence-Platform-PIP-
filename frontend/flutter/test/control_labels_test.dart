@@ -66,7 +66,7 @@ Future<void> _pumpShell(WidgetTester tester) async {
   addTearDown(tester.view.reset);
   await tester.pumpWidget(MaterialApp(
     theme: AppTheme.light,
-    home: HomeShell(api: FakeApi(), themeMode: ThemeMode.light, onCycleTheme: () {}, onSignedOut: () {}),
+    home: HomeShell(api: FakeApi(), themeMode: ThemeMode.light, onCycleTheme: () {}, onSignedOut: () {}, onBackendLocked: () {}),
   ));
   // pump, never pumpAndSettle: the chat client retries a dead port forever.
   await tester.pump();

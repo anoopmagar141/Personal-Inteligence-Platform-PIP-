@@ -42,11 +42,21 @@ class WsChatClient {
   Stream<ChatEvent> get events => _eventController.stream;
   Stream<String> get status => _statusController.stream;
 
+  // How a connection is opened: WebSocketChannel.connect, unless a test hands
+  // in one that is refused at once (flutter_test never completes a real
+  // handshake, so a refused connection cannot be had any other way there).
+  final WebSocketChannel Function(Uri uri) _open;
+
   // The private field's leading underscore shouldn't leak into the
   // constructor's public parameter name, hence the manual assignment below
   // instead of an initializing formal (this._conversationId).
-  WsChatClient(this.wsUrl, {this.apiToken = '', this.reconnectDelay = const Duration(seconds: 2), String? conversationId})
-      : _conversationId = conversationId; // ignore: prefer_initializing_formals
+  WsChatClient(this.wsUrl,
+      {this.apiToken = '',
+      this.reconnectDelay = const Duration(seconds: 2),
+      String? conversationId,
+      @visibleForTesting WebSocketChannel Function(Uri uri)? connector})
+      : _conversationId = conversationId, // ignore: prefer_initializing_formals
+        _open = connector ?? WebSocketChannel.connect;
 
   /// What the next connection will ask for. Visible for tests, which cannot open a socket.
   @visibleForTesting
@@ -74,24 +84,57 @@ class WsChatClient {
     _eventController.add(ChatEvent(type, decoded['data']));
   }
 
+  /// The one reconnect waiting to happen, if any (D-47).
+  Timer? _reconnectTimer;
+
+  /// Opens a connection, ending whatever this client had before.
+  ///
+  /// One waiting reconnect at a time (D-47, found by V-1, FREEZE_LIST §7.71).
+  /// A reconnect was scheduled from BOTH onError and onDone, and a refused
+  /// connection - a backend that came back locked, or one that is down - fires
+  /// both, so every failure started two attempts and each of those two more:
+  /// 30,800 in two minutes in the real window, 277 CPU-seconds. Nor was a
+  /// waiting reconnect ever cancelled, so switchConversation during a drop
+  /// started a second chain beside the first, and disconnect() let one more
+  /// attempt through. So a connection's loss is handled once, by whichever
+  /// callback comes first, and the reconnect is a Timer that connect(),
+  /// disconnect() and dispose() cancel. connect() also ends the connection it
+  /// replaces (its subscription, so none of its callbacks run, and its socket):
+  /// a second connect() used to leave two live connections, and two chains
+  /// once both dropped (found reviewing D-47).
+  ///
+  /// "connected" is said when the handshake has finished, not when the
+  /// connection was asked for: it was said at once, so the sidebar showed
+  /// Connected for a moment on every attempt a backend refused, and the
+  /// handshake's own failure (channel.ready) went unhandled, one console error
+  /// per attempt (also found reviewing D-47). The stream reports that failure
+  /// too, and it is handled there.
   void connect() {
     if (_disposed) return;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _subscription?.cancel();
+    _channel?.sink.close();
     _statusController.add('connecting');
     try {
-      final channel = WebSocketChannel.connect(connectUri);
+      final channel = _open(connectUri);
       _channel = channel;
+      var lost = false;
+      void onLost() {
+        if (lost) return;
+        lost = true;
+        _statusController.add('disconnected');
+        _scheduleReconnect();
+      }
+
       _subscription = channel.stream.listen(
         (raw) => handleRaw(raw as String),
-        onDone: () {
-          _statusController.add('disconnected');
-          _scheduleReconnect();
-        },
-        onError: (Object error) {
-          _statusController.add('disconnected');
-          _scheduleReconnect();
-        },
+        onDone: onLost,
+        onError: (Object error) => onLost(),
       );
-      _statusController.add('connected');
+      channel.ready.then((_) {
+        if (!lost && !_disposed && identical(channel, _channel)) _statusController.add('connected');
+      }, onError: (Object _) {});
     } catch (_) {
       _statusController.add('disconnected');
       _scheduleReconnect();
@@ -100,7 +143,10 @@ class WsChatClient {
 
   void _scheduleReconnect() {
     if (_disposed) return;
-    Future.delayed(reconnectDelay, connect);
+    _reconnectTimer = Timer(reconnectDelay, () {
+      _reconnectTimer = null;
+      connect();
+    });
   }
 
   void sendMessage(String text, {String? projectId}) {
@@ -150,13 +196,19 @@ class WsChatClient {
   /// against a backend that has since locked, so it would fail, and retry.
   void disconnect() {
     _disposed = true;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     _subscription?.cancel();
     _channel?.sink.close();
-    _statusController.add('disconnected');
+    // After dispose() there is nobody left to tell, and adding to the closed
+    // stream threw - reached once a dialog outlived its shell (D-47's review).
+    if (!_statusController.isClosed) _statusController.add('disconnected');
   }
 
   void dispose() {
     _disposed = true;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     _subscription?.cancel();
     _channel?.sink.close();
     _eventController.close();

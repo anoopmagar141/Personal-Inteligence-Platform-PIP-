@@ -22,6 +22,7 @@ import 'screens/profile_view.dart';
 import 'screens/projects_view.dart';
 import 'screens/providers_view.dart';
 import 'screens/review_view.dart';
+import 'screens/sign_in_screen.dart' show AuthState, authStateFrom;
 import 'screens/trace_view.dart';
 import 'theme.dart';
 import 'ws_chat_client.dart';
@@ -31,12 +32,24 @@ class HomeShell extends StatefulWidget {
   final ThemeMode themeMode;
   final VoidCallback onCycleTheme;
   final VoidCallback onSignedOut;
+
+  /// The chat dropped and the backend is no longer unlocked, or no longer takes
+  /// this app's token (a restart): the chat socket will be refused for as long
+  /// as that is true, so the app has to go back to where it signs in (D-47).
+  /// Only a drop asks: a lock from somewhere else leaves an open chat socket
+  /// open (server.py's auth_lock), so it is not noticed here.
+  final VoidCallback onBackendLocked;
+
+  /// The chat connection to use instead of a real one. Tests only.
+  final WsChatClient? chatClient;
   const HomeShell({
     super.key,
     required this.api,
     required this.themeMode,
     required this.onCycleTheme,
     required this.onSignedOut,
+    required this.onBackendLocked,
+    @visibleForTesting this.chatClient,
   });
 
   @override
@@ -111,12 +124,18 @@ class _HomeShellState extends State<HomeShell> {
   /// opened is the moment the user expects the answer to be current.
   final GlobalKey<BackupViewState> _backupKey = GlobalKey<BackupViewState>();
 
+  /// This shell closed the chat itself (sign-out, a profile deleted) or has
+  /// handed back to the sign-in screen: a drop from here on is not news.
+  bool _leaving = false;
+  bool _askingWhetherLocked = false;
+
   @override
   void initState() {
     super.initState();
-    _chatClient = WsChatClient(_wsUrlFromApiBase(widget.api.baseUrl), apiToken: widget.api.apiToken);
+    _chatClient = widget.chatClient ?? WsChatClient(_wsUrlFromApiBase(widget.api.baseUrl), apiToken: widget.api.apiToken);
     _chatClient.status.listen((status) {
       if (mounted) setState(() => _connectionStatus = status);
+      if (status == 'disconnected') _askWhetherStillUnlocked();
     });
     _chatClient.connect();
     _refreshPendingCount();
@@ -138,6 +157,59 @@ class _HomeShellState extends State<HomeShell> {
     } catch (_) {
       if (mounted) setState(() => _pendingCount = 0);
     }
+  }
+
+  /// A dropped chat asks the backend whether it is still unlocked (D-47).
+  ///
+  /// Found by V-1 (FREEZE_LIST §7.71): the backend was started again and came
+  /// back locked, it refused the chat socket for as long as it stayed locked,
+  /// and nothing took the window back to sign-in, so the chat could not resume
+  /// there. The refusal itself says nothing: the server closes the socket
+  /// before accepting it, so this end sees a failed handshake, not its 4423.
+  /// /auth/state is the answer the start screen already asks for, and it is
+  /// open while locked. Anything but "unlocked" stops the chat and hands back
+  /// to the root, which asks again and shows the sign-in screen the backend
+  /// needs. No answer (stopped, or still starting) decides nothing: the
+  /// client keeps trying, one attempt at a time. One question at a time too:
+  /// a drop that arrives while one is out is answered by it.
+  Future<void> _askWhetherStillUnlocked() async {
+    if (_leaving || _askingWhetherLocked) return;
+    _askingWhetherLocked = true;
+    try {
+      final state = authStateFrom(await widget.api.authState());
+      if (!mounted || _leaving || state == AuthState.unlocked) return;
+      _handBack();
+    } on ApiException catch (error) {
+      // A 401 is an answer: this backend no longer takes the token this shell
+      // holds (it was started again with a new one). The start screen re-reads
+      // the token file and this shell cannot, so it goes back there (found
+      // reviewing D-47; before, it reconnected with the old token forever).
+      if (mounted && !_leaving && error.statusCode == 401) _handBack();
+    } catch (_) {
+      // Not answering: nothing to decide yet.
+    } finally {
+      _askingWhetherLocked = false;
+    }
+  }
+
+  /// Stops the chat and hands back to the root.
+  ///
+  /// Any dialog this shell opened is closed first. Dialogs sit on the root
+  /// navigator, above the screen the root swaps, so one left open (Sign out?,
+  /// Delete profile) was drawn over the sign-in screen, and confirming it ran
+  /// code of a shell that was gone (found reviewing D-47).
+  void _handBack() {
+    _leaving = true;
+    _chatClient.disconnect();
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    widget.onBackendLocked();
+  }
+
+  /// Closes the chat for a reason of this app's own (a profile being deleted),
+  /// which is not the backend locking under it.
+  void _closeChat() {
+    _leaving = true;
+    _chatClient.disconnect();
   }
 
   /// Locks the database and returns to the sign-in screen.
@@ -169,7 +241,7 @@ class _HomeShellState extends State<HomeShell> {
     );
     if (confirmed != true) return;
 
-    _chatClient.disconnect();
+    _closeChat();
     try {
       await widget.api.lock();
     } catch (error) {
@@ -348,7 +420,7 @@ class _HomeShellState extends State<HomeShell> {
                   // transcript enqueue has to be the last word on the
                   // conversation, and the backend cannot delete a database
                   // file this client still has open.
-                  onCloseChat: _chatClient.disconnect,
+                  onCloseChat: _closeChat,
                   onSignedOut: widget.onSignedOut,
                 ),
                 DecisionsView(api: widget.api, activeProjectId: _activeProjectId),

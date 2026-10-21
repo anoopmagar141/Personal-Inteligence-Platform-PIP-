@@ -73,6 +73,7 @@ Future<SignOutSpy> _pumpShell(WidgetTester tester, FakeApi api) async {
       themeMode: ThemeMode.light,
       onCycleTheme: () {},
       onSignedOut: () => spy.count++,
+      onBackendLocked: () {},
     ),
   ));
   await tester.pump();

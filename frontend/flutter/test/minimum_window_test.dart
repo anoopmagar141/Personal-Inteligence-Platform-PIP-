@@ -110,7 +110,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light,
-      home: HomeShell(api: FakeApi(), themeMode: ThemeMode.light, onCycleTheme: () {}, onSignedOut: () {}),
+      home: HomeShell(api: FakeApi(), themeMode: ThemeMode.light, onCycleTheme: () {}, onSignedOut: () {}, onBackendLocked: () {}),
     ));
     await tester.pump();
 

@@ -396,6 +396,11 @@ class _AppRootState extends State<AppRoot> {
         return OnboardingScreen(api: api, onComplete: () => setState(() => _state = _RootState.ready));
       case _RootState.ready:
         return HomeShell(
+          // A new shell for each new connection (_connect() makes a new
+          // ApiClient): a shell that handed back has a chat it closed for good,
+          // and if _connect() reached ready again before a frame was drawn,
+          // Flutter would have kept that one (found reviewing D-47).
+          key: ValueKey(api),
           api: api,
           themeMode: widget.themeMode,
           onCycleTheme: widget.onCycleTheme,
@@ -411,6 +416,12 @@ class _AppRootState extends State<AppRoot> {
             _authState = AuthState.locked;
             _state = _RootState.signIn;
           }),
+          // Through _connect() this time, the opposite of onSignedOut above:
+          // the app did not lock this backend, so it does not know which
+          // sign-in screen the backend now needs (locked, setup, a migration)
+          // or whether it is still up. _connect() asks /auth/state and routes
+          // on the answer, and retries if the backend is still coming back (D-47).
+          onBackendLocked: _connect,
         );
     }
   }
