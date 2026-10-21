@@ -3241,7 +3241,9 @@ try:
     async def _import_backup_first_run(payload: dict[str, Any]):
         """
         Import a .pipbak from the welcome screen, as a NEW profile named after the
-        person in it. Allowed only while no profile has a database.
+        person in it. Allowed only on a truly empty PIP: no profile registered (with
+        or without a database), none being deleted, and no folder for the new profile
+        already holding anything (D-29, D-48; FREEZE_LIST §7.72).
 
         Why this exists. "Import existing PIP" was a signpost - close PIP, run a
         shortcut, sign in to a profile called "Default" - because the in-app restore
@@ -3251,9 +3253,9 @@ try:
         replaced, and the swap that the in-app restore defers to the next start can
         be done at once because nothing holds a database open.
 
-        Why ONLY then. The moment any profile has a database this is a way to put
-        data into an installation without proving who you are, so it is refused
-        (409) and the signed-in restore under Backup is the way to replace one.
+        Why ONLY then. Once any profile exists this is a way to put data into an
+        installation without proving who you are, so it is refused (409) and the
+        signed-in restore under Backup is the way to replace one.
         Nothing that can be refused is refused late: restore.preflight() makes every
         check staging makes, BEFORE a profile is registered, so a refusal leaves the
         installation exactly as empty as it found it.
@@ -3268,7 +3270,33 @@ try:
                 status_code=409,
                 detail="Sign out before importing a backup.",
             )
-        if any(p.exists for p in profiles.list_profiles()):
+        # ANY registered profile refuses, on purpose (D-29, FREEZE_LIST §7.49 and
+        # §7.72). The check used to read `p.exists`, the method, never called, which
+        # is truthy for every registered profile: the code refused for any profile
+        # while its docstring said "while no profile has a database". Calling it (the
+        # first fix) made the docstring's rule real, and probing the states that let
+        # in found them unsafe: a profile whose password was chosen but whose
+        # database was never opened (pip.db appears at the first database access,
+        # not at setup) lost that password to a same-named import; a profile whose
+        # deletion was put off to the next start had the import erased after a 200;
+        # an import during a delete's retries went into the half-erased profile; a
+        # setup that finished while the backup was being checked was imported over;
+        # and a dead profile's documents and sign-in picture sat beside the imported
+        # database. All of those are a profile that is registered. The welcome
+        # screen offers the import only when no profile is listed, so refusing any
+        # registered one takes nothing a person can reach away (the owner's choice
+        # of the safe rule, 2026-10-21).
+        #
+        # A profile being deleted gets its own sentence: "sign in to it" is not
+        # something anyone can do to a profile that is being erased.
+        listed = profiles.list_profiles()
+        pending = set(profiles.pending_deletions())
+        if any(p.slug in pending for p in listed):
+            raise HTTPException(
+                status_code=409,
+                detail="A profile is still being deleted. Restart PIP, then import the backup.",
+            )
+        if listed:
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -3302,17 +3330,48 @@ try:
         except ValueError:
             slug = profiles.slugify("Imported profile")
 
-        # An empty profile of that name may already be waiting (created, never given
-        # a password); it has nothing in it, so it is the one to import into.
-        registered_here = False
+        # The import writes only into a folder it creates. The check above looked at
+        # LISTED profiles, and a folder can hold a real database the registry does not
+        # list (an unreadable or older profiles.json, or a profile unregistered with
+        # profiles.remove(), which leaves its files on purpose). Imported into, its
+        # database was moved aside, and a failed install's clean-up below deleted the
+        # folder with the real data in it (D-48, found reviewing D-29, §7.72). So a
+        # folder holding anything but the empty documents/ that register() itself
+        # makes is refused, whatever the registry says.
+        def _holds_anything(folder: Path) -> bool:
+            if not folder.exists():
+                return False
+            if not folder.is_dir():
+                return True
+            for entry in folder.iterdir():
+                if entry.name == "documents" and entry.is_dir() and not any(entry.iterdir()):
+                    continue
+                return True
+            return False
+
+        if _holds_anything(profiles.data_dir() / profiles.PROFILES_SUBDIR / slug):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "A folder for this profile already holds data on this computer, so the backup "
+                    "was not imported over it."
+                ),
+            )
+
+        # Never into an existing profile. This used to fall back to a profile of the
+        # same name that was "waiting" (created, never given a password), but the
+        # check above already refuses any registered profile, so a name taken here
+        # was registered while the backup was being checked - seconds, two key
+        # derivations - perhaps by someone setting it up; importing into it replaced
+        # their password (D-29's review, §7.72).
         try:
             profile = profiles.register(name, slug=slug)
-            registered_here = True
         except ValueError:
-            try:
-                profile = profiles.get(slug)
-            except Exception:
-                raise HTTPException(status_code=409, detail="A profile with that name already exists.")
+            raise HTTPException(
+                status_code=409,
+                detail="A profile with that name was created while the backup was being checked. Nothing was imported.",
+            )
+        registered_here = True
         profiles.activate(profile.slug)
 
         try:

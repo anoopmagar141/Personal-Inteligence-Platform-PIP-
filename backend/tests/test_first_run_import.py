@@ -12,9 +12,11 @@ What is held, as outcomes a person meets:
 
   - the profile arrives named after the person inside the backup, not "Default", and
     can be signed in to with the NEW password and no other;
-  - it is refused, with a sentence, the moment any profile has a database or somebody
-    is signed in - the in-app restore, which asks for a signed-in profile, is the way
-    to replace one;
+  - it is refused, with a sentence, the moment any profile is registered (with or
+    without a database), one is being deleted, or somebody is signed in - the in-app
+    restore, which asks for a signed-in profile, is the way to replace one (D-29);
+  - it never writes into a profile folder that already holds anything, listed or not
+    (D-48);
   - a refusal or a failure leaves nothing behind: no registered profile, no folder,
     no staged file, and the empty installation is still an empty installation.
 """
@@ -34,6 +36,12 @@ from backend.memory import conversation_store, decision_log, profile_store
 LIVE_KEY = "11" * 32
 BACKUP_PASSWORD = "the-backup-password"
 NEW_PASSWORD = "a-brand-new-live-password"
+
+# The route's refusal while any profile is registered, word for word.
+ALREADY_HAS_A_PROFILE = (
+    "PIP already has a profile on this computer. To replace one, sign in "
+    "to it and use Backup, then Choose a .pipbak."
+)
 
 
 def _load(name):
@@ -180,7 +188,7 @@ def test_it_is_refused_once_any_profile_has_a_database(fresh, tmp_path, monkeypa
     response = _post(client, headers, path=str(backup))
 
     assert response.status_code == 409, response.text
-    assert "Backup" in response.json()["detail"]
+    assert response.json()["detail"] == ALREADY_HAS_A_PROFILE
     assert sorted(p.slug for p in profiles.list_profiles()) == ["empty", "priya"], "an imported profile was registered anyway"
     assert not list(data.glob("restore-*.tmp.*"))
 
@@ -304,6 +312,10 @@ def test_the_route_answers_with_its_own_sentence_for_a_profile_chosen_before_its
     A profile that was created and chosen but has no password yet is in "setup". The lock gate
     refuses database routes there (G-1b), but this route is not one: what answers is the
     route's own sentence about Backup, not the gate's "PIP is locked".
+
+    That sentence is true here: since D-29 (FREEZE_LIST §7.72) the rule is "no profile is
+    registered", stated and tested, where it used to be "no profile has a database",
+    stated, and `p.exists` - the method, never called - tested.
     """
     client, headers, data = fresh
     backup = _make_backup(tmp_path, monkeypatch)
@@ -314,5 +326,141 @@ def test_the_route_answers_with_its_own_sentence_for_a_profile_chosen_before_its
     response = _post(client, headers, path=str(backup))
 
     assert response.status_code == 409, response.text
-    assert "Backup" in response.json()["detail"], "the gate answered, not the route"
+    assert response.json()["detail"] == ALREADY_HAS_A_PROFILE, "the gate answered, not the route"
     assert [p.name for p in profiles.list_profiles()] == ["Carol"], "an imported profile was registered anyway"
+
+
+# ---------------------------------------------------------------------------
+# Only a truly empty PIP takes an import (D-29, D-48; FREEZE_LIST §7.72)
+# ---------------------------------------------------------------------------
+#
+# D-29: the rule read `p.exists` without calling it, so any registered profile refused the
+# import. Calling it (the first fix) let the import in beside, or INTO, a profile that was
+# registered but had no database, and probing that before landing found it unsafe: a profile
+# whose password was chosen but whose database was never opened lost that password; a profile
+# being deleted had the import erased after a 200; a setup that finished during the seconds an
+# import checks its backup was imported over; and a dead profile's documents and sign-in
+# picture sat beside the imported database. The owner chose the safe rule (2026-10-21): any
+# registered profile refuses, and the import never writes into an existing profile or into a
+# folder that holds anything. The welcome screen offers the import only when no profile is
+# listed, so nothing it shows changes.
+#
+# D-48, found in the same review: the rule looked only at LISTED profiles, so a folder holding a
+# real database that the registry does not list (an unreadable or older profiles.json, or a
+# profile unregistered with profiles.remove()) was imported into, its database moved aside -
+# and if the install then failed, the clean-up deleted the folder with the real data in it.
+
+
+def test_a_waiting_profile_of_the_same_name_refuses_and_is_left_as_it_was(fresh, tmp_path, monkeypatch):
+    client, headers, data = fresh
+    backup = _make_backup(tmp_path, monkeypatch)
+    client.post("/api/v1/auth/profiles", json={"name": "BatMan"}, headers=headers)
+    waiting = profiles.get("batman")
+
+    response = _post(client, headers, path=str(backup))
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == ALREADY_HAS_A_PROFILE
+    assert profiles.list_profiles() == [waiting], "the waiting profile's entry was changed or a second one added"
+    assert not waiting.exists() and not waiting.paths()["salt"].exists(), "the refused import wrote into it"
+
+
+def test_a_profile_whose_password_was_chosen_still_refuses_the_import(fresh, tmp_path, monkeypatch):
+    client, headers, data = fresh
+    backup = _make_backup(tmp_path, monkeypatch)
+    client.post("/api/v1/auth/profiles", json={"name": "BatMan"}, headers=headers)
+    batman = profiles.get("batman")
+    batman.paths()["salt"].parent.mkdir(parents=True, exist_ok=True)
+    batman.paths()["salt"].write_bytes(b"\x07" * 16)
+    assert not batman.exists(), "not the state this test is about: the database was opened"
+
+    response = _post(client, headers, path=str(backup))
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == ALREADY_HAS_A_PROFILE
+    assert batman.paths()["salt"].read_bytes() == b"\x07" * 16, "the chosen password's salt was replaced"
+    assert not batman.exists(), "the refused import still installed a database"
+    assert not restore.pending_restore_path().exists()
+
+
+def test_a_profile_waiting_to_be_deleted_refuses_with_its_own_sentence(fresh, tmp_path, monkeypatch):
+    client, headers, data = fresh
+    backup = _make_backup(tmp_path, monkeypatch)
+    client.post("/api/v1/auth/profiles", json={"name": "BatMan"}, headers=headers)
+    profiles.mark_for_deletion("batman")
+
+    response = _post(client, headers, path=str(backup))
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "A profile is still being deleted. Restart PIP, then import the backup."
+    assert not profiles.get("batman").exists(), "the refused import still installed a database"
+    assert profiles.pending_deletions() == ["batman"]
+    assert not restore.pending_restore_path().exists()
+
+
+@pytest.mark.parametrize("given_a_password", [True, False], ids=["and given a password", "not given one yet"])
+def test_a_profile_created_while_the_backup_is_checked_is_not_imported_into(fresh, tmp_path, monkeypatch, given_a_password):
+    # The check above runs before the backup is read, which takes seconds (two key derivations);
+    # a profile of the backup owner's name created in that window used to be taken for one
+    # "waiting", and was imported into - over the password, if it had been given one. With a
+    # password its folder holds a salt and the folder check refuses; without one the folder is
+    # as empty as register() leaves it, and it is the refusal at register() that holds.
+    client, headers, data = fresh
+    backup = _make_backup(tmp_path, monkeypatch)
+    real_preflight = restore.preflight
+
+    def preflight_while_someone_makes_a_profile(*args, **kwargs):
+        name = real_preflight(*args, **kwargs)
+        made = profiles.register("BatMan")
+        if given_a_password:
+            made.paths()["salt"].write_bytes(b"	" * 16)
+        return name
+
+    monkeypatch.setattr(restore, "preflight", preflight_while_someone_makes_a_profile)
+
+    response = _post(client, headers, path=str(backup))
+
+    assert response.status_code == 409, response.text
+    batman = profiles.get("batman")
+    assert not batman.exists(), "the import was installed into a profile someone else made"
+    assert batman.paths()["salt"].exists() is given_a_password, "the new profile's password was replaced or added"
+    if given_a_password:
+        assert batman.paths()["salt"].read_bytes() == b"	" * 16
+    assert not restore.pending_restore_path().exists()
+
+
+def _an_unlisted_folder(data, *files):
+    folder = data / "profiles" / "batman"
+    for name, content in files:
+        path = folder / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    assert profiles.list_profiles() == [], "not the state these tests are about: the folder is listed"
+    return folder
+
+
+def test_a_folder_that_already_holds_a_database_is_never_imported_into(fresh, tmp_path, monkeypatch):
+    client, headers, data = fresh
+    backup = _make_backup(tmp_path, monkeypatch)
+    folder = _an_unlisted_folder(data, ("pip.db", b"somebody's real database"), ("salt.bin", b"\x05" * 16))
+
+    response = _post(client, headers, path=str(backup))
+
+    assert response.status_code == 409, response.text
+    assert (folder / "pip.db").read_bytes() == b"somebody's real database"
+    assert (folder / "salt.bin").read_bytes() == b"\x05" * 16
+    assert sorted(p.name for p in folder.iterdir()) == ["pip.db", "salt.bin"], "something was moved aside or added"
+    assert profiles.list_profiles() == [], "the folder was registered"
+
+
+def test_a_folder_holding_a_dead_profiles_files_is_never_imported_into(fresh, tmp_path, monkeypatch):
+    client, headers, data = fresh
+    backup = _make_backup(tmp_path, monkeypatch)
+    folder = _an_unlisted_folder(data, ("documents/old-diary.txt", b"dear diary"), ("signin-picture", b"\x89PNG"))
+
+    response = _post(client, headers, path=str(backup))
+
+    assert response.status_code == 409, response.text
+    assert (folder / "documents" / "old-diary.txt").read_bytes() == b"dear diary"
+    assert not (folder / "pip.db").exists(), "the import was installed beside the dead profile's files"
+    assert profiles.list_profiles() == []
