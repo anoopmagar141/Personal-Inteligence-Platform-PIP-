@@ -11,6 +11,20 @@ from backend.providers.base_provider import BaseLLMProvider, ProviderUnavailable
 
 logger = logging.getLogger(__name__)
 
+# Where the local Ollama is reached, by every function below (D-50, FREEZE_LIST
+# §7.74). This was "http://localhost:11434", and on Windows every request to it
+# waited two seconds before it began: "localhost" resolves to the IPv6 address
+# ::1 first, Ollama listens on 127.0.0.1 only (its default), and a refused
+# connection is retried for about two seconds before the next address is tried.
+# Measured 2026-10-21: 2.04 s to localhost, 0.001 s to 127.0.0.1. A chat message
+# makes two requests (is_available(), then chat()), so the first word of every
+# answer took about 4.5 s instead of about 0.4 s, and the Observer, the model
+# list and a pull paid the same wait. The address is written out rather than
+# resolved so no name lookup can choose another one.
+# Cost: an Ollama set up to listen on IPv6 only (OLLAMA_HOST=[::1]) is not found
+# here, where "localhost" used to find it after the wait.
+OLLAMA_HOST = "http://127.0.0.1:11434"
+
 
 def _llm_settings() -> Dict[str, Any]:
     """
@@ -86,7 +100,7 @@ def is_cloud_model(name: str) -> bool:
 
 
 class OllamaProvider(BaseLLMProvider):
-    def __init__(self, model_name: Optional[str] = None, host: str = "http://localhost:11434"):
+    def __init__(self, model_name: Optional[str] = None, host: str = OLLAMA_HOST):
         # The default used to be the literal "llama3.1:8b" here, in
         # pipeline.DEFAULT_MODEL_NAME and in an observer.model setting nothing
         # read - three places free to disagree, while every measured number is
@@ -213,7 +227,7 @@ class OllamaProvider(BaseLLMProvider):
         }
 
 
-def list_models(host: str = "http://localhost:11434") -> List[Dict[str, Any]]:
+def list_models(host: str = OLLAMA_HOST) -> List[Dict[str, Any]]:
     """
     Every model Ollama has locally pulled, via its GET /api/tags endpoint -
     standalone rather than an OllamaProvider method, since it isn't tied to
@@ -261,7 +275,7 @@ MODEL_CATALOG: List[Dict[str, Any]] = [
 ]
 
 
-def delete_model(name: str, host: str = "http://localhost:11434") -> None:
+def delete_model(name: str, host: str = OLLAMA_HOST) -> None:
     """
     Remove a pulled model from Ollama's store.
 
@@ -329,7 +343,7 @@ class PullCancelled(Exception):
 def pull_model(
     name: str,
     on_progress,
-    host: str = "http://localhost:11434",
+    host: str = OLLAMA_HOST,
     should_cancel=None,
 ) -> None:
     """

@@ -41,7 +41,11 @@ import urllib.request
 from typing import Any, Optional
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-OLLAMA_HOST = "http://localhost:11434"
+# The same address as backend/providers/ollama_provider.OLLAMA_HOST (D-50):
+# "localhost" made every request wait two seconds on Windows, trying IPv6 ::1
+# before the 127.0.0.1 Ollama listens on. Written out, not imported, so this
+# module keeps needing nothing but the standard library.
+OLLAMA_HOST = "http://127.0.0.1:11434"
 CONSTITUTION = pathlib.Path("backend") / "core" / "constitutional.json"
 
 # A first call to a cold Ollama can take seconds while it starts; a short

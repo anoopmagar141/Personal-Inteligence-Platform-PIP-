@@ -163,7 +163,7 @@ def generate(args) -> None:
 
     model = "qwen2.5:7b"
     if not OllamaProvider(model_name=model).is_available():
-        sys.exit("Ollama is not reachable on localhost:11434 - start it first")
+        sys.exit("Ollama is not reachable on 127.0.0.1:11434 - start it first")
 
     # Before any answer exists (BLUEPRINT S-1): the options PinnedOllama below
     # sends with every question (num_predict 400, from the run_sync call).

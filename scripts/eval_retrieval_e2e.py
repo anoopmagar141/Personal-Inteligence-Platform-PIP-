@@ -154,7 +154,7 @@ def generate(args) -> None:
 
     model = "qwen2.5:7b"
     if not OllamaProvider(model_name=model).is_available():
-        sys.exit("Ollama is not reachable on localhost:11434 - start it first")
+        sys.exit("Ollama is not reachable on 127.0.0.1:11434 - start it first")
     # Before any answer exists (BLUEPRINT S-1). PinnedOllama below sends these
     # options and no num_ctx, so Ollama's default context window applied.
     try:
