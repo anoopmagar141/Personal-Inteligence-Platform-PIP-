@@ -4805,6 +4805,48 @@ Built on branch `fix/d47-reconnect` from 6a51798; two reviewers read it before l
 - **The real window** (V-1's step D again: a backend stopped, started locked) is not re-run; it needs the owner at
   the PC. The `HomeShell` key has no test of its own (AppRoot has no test harness).
 
+### 7.74 D-50: PIP called Ollama at "localhost", and every call waited two seconds first (authorized 2026-10-22)
+
+The owner's "record the localhost delay as a defect in FREEZE_LIST and fix it test-first (use 127.0.0.1 for Ollama),
+then re-measure the speed" (2026-10-22), after the speed measurement for the report found it on 2026-10-21. Backend
+only: `backend/providers/ollama_provider.py`; the evaluation stamp `scripts/_stamp.py` and two evaluation scripts'
+messages follow it. Built, tested and measured in the worktree `pip-work/d50-127` (52db009 plus this change).
+
+- **Defect (D-50, A, medium):** every request PIP sent to Ollama went to `http://localhost:11434`. On Windows
+  "localhost" resolves to the IPv6 address ::1 first (`getaddrinfo` gives `['::1', '127.0.0.1']`), Ollama listens on
+  127.0.0.1 only (its default), and a refused connection is retried for about two seconds before the next address is
+  tried: 2.039-2.043 s per request to localhost, 0.001 s to 127.0.0.1. A chat message makes two such requests
+  (`_default_providers` asks `is_available()`, then `chat()` streams the answer), so about 4 s of every answer's first
+  word was that wait; Ollama itself read a PIP-sized prompt and began answering in 0.05-0.26 s. The Observer's
+  provider check, the model list, a pull and a delete paid the same wait. Nothing failed, and a 4.5 s first word reads
+  as a slow model, which is why no test or report had seen it.
+- **Mechanism:** one constant, `ollama_provider.OLLAMA_HOST = "http://127.0.0.1:11434"`, the default of
+  `OllamaProvider`, `list_models`, `delete_model` and `pull_model`; the address is written out, not resolved, so no
+  name lookup can choose another one. `scripts/_stamp.py` writes out the same address (it stays standard library
+  only). The launchers and the app already used 127.0.0.1.
+- **Tests** (`backend/tests/test_ollama_is_called_on_127_0_0_1.py`, 8): where each call really tries to connect,
+  recorded at `http.client.HTTPConnection.connect` and refused on the spot, so nothing is contacted: `is_available`,
+  `chat`, `list_models`, `delete_model` and `pull_model`; the provider the chat pipeline builds for itself; the
+  Observer's provider; and a control, that a host given explicitly is still the one used. The two-second retry belongs
+  to Windows and is not reproduced; the measurement below is the evidence for the time.
+  - **Seen failing first:** 7 of 8 against 52db009, each recording `('localhost', 11434)`; the control passed.
+- **Break-it:** 2 weakenings, each alone, restored byte for byte, each caught: `pull_model`'s default back to
+  localhost (1 test fails); the provider class's default back to localhost (4 fail).
+- **Measured** (`notes/report/chapter6/measure_speed.py`, the same questions and rules as the day before; the app
+  choosing its own provider, as the chat socket does; Ollama 0.40.3, qwen2.5:7b; a throwaway test profile): the first
+  word, median of 24 runs, took 4.48 s before (6a51798, 2026-10-21; no backend file differs from 52db009) and 0.36 s
+  after (0.26-0.48); PIP's own steps before the model 2.32 s and 0.26 s; a cold start 9.0 s and 5.0 s to the first
+  word. The day before, the harness forcing 127.0.0.1 without changing PIP had predicted 0.41 s. 0 of 56 runs failed.
+  Results in `notes/report/chapter6/results/` (untracked notes; the after run's stamp names 52db009 and the four
+  changed files).
+- **Suites:** Backend 1889 passed, 0 failed (15 min 19 s; 1881 + 8), in the worktree at 52db009 plus this change, on the second run. The first run died at about 98%: `test_ws_chat.py::test_ws_chat_accumulates_conversation_history_across_turns` (the test LOG's archive names for the hang that brought in the 300 s timeout) waited past it for the second turn's events. Run six times on each side, that file gave, with this change, 5 passes and 1 run with one failure; on 52db009, 4 passes, 1 run with one failure and 1 hang the same way, so the hang is older than this change (the failing tests' names were not captured). The file took about 55 s with this change and 97 s without: its "Ollama is down" checks no longer wait for ::1 first. No Flutter file changed.
+
+**Not covered:**
+- An Ollama set up to listen on IPv6 only (`OLLAMA_HOST=[::1]`) is not found now, where "localhost" found it after
+  the wait. An `OLLAMA_HOST` setting is not read, as it was not before.
+- Other machines: the wait is Windows' handling of a refused connection; on a machine where "localhost" resolves to
+  127.0.0.1 first there was no wait, and the change costs nothing there.
+
 ### 7.75 D-49: a sign-out or profile delete that fails opens the chat again (authorized 2026-10-22)
 
 The owner's "start" on the open list (2026-10-22): D-49, found reviewing D-47 (§7.73). Flutter only:
@@ -4938,6 +4980,7 @@ Built on branch `fix/d49-reopen-chat` from 52db009; one reviewer read it before 
 | D-47 the chat's reconnects double on every failure | Fixed 2026-10-21 (§7.73) | A, medium: one reconnect at a time (the loss handled once, the timer cancelled, "connected" only after the handshake), and a dropped chat asks /auth/state: a backend no longer unlocked, or refusing the token, sends the app back through the start screen to sign in, closing any dialog. Flutter 365 passed; the real window not re-run |
 | D-48 the first-run import wrote into a folder the registry did not list | Found and fixed 2026-10-21 (§7.72) | A, medium: with an unreadable or older profiles.json, or a profile unregistered by remove(), the import moved a real database aside, and a failed install's clean-up deleted the folder with it. A folder holding anything is now refused |
 | D-49 a failed sign-out or profile delete leaves the chat closed for good | Fixed 2026-10-22 (§7.75) | A, medium: a sign-out or delete that fails opens the chat again, once the last close still running has failed; a sign-out answered 423 goes back to sign-in, or leaves the outcome to a delete still running. Flutter 372 passed; the real window not re-run |
+| D-50 every call to Ollama waited two seconds first | Fixed 2026-10-22 (§7.74) | A, medium: PIP called Ollama at "localhost", which resolves to ::1 first on Windows while Ollama listens on 127.0.0.1 only, so each request waited 2.04 s, twice per message. Ollama is now called at 127.0.0.1 by every function that reaches it: the first word 4.48 s before, 0.36 s after (median of 24 runs); 8 tests (7 failed first), 2 break-its caught. Cost: an Ollama listening on IPv6 only is not found |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |

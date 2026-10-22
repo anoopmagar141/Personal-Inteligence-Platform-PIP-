@@ -252,6 +252,13 @@ and the legacy composite-key rebuild preserves it and the rows already there.
   prompt from the front - the Observer's instructions first (FREEZE_LIST
   §7.55). The chat (Stage 9) and Observer trace lines record the prompt tokens
   Ollama read, the window, and whether PIP's estimate said it would not fit.
+- **Ollama is called at 127.0.0.1, never "localhost"** (D-50, FREEZE_LIST §7.74).
+  `ollama_provider.OLLAMA_HOST` is the default of every function that reaches
+  Ollama. On Windows "localhost" resolves to the IPv6 address ::1 first, Ollama
+  listens on 127.0.0.1 only, and each request waited about two seconds before
+  falling back - twice per chat message, so the first word of every answer took
+  about 4.5 s instead of 0.4 s. Cost: an Ollama listening on IPv6 only is not
+  found.
 - **The Constitution has a checked version** (`constitution_version.py`, G-5).
   Each released version of `constitutional.json` is registered with the
   sha256 of its LF-normalised text (the fingerprint the S-1 run stamp also
