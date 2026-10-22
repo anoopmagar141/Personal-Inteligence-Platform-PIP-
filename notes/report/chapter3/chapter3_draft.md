@@ -17,7 +17,7 @@ Table 3.1: Development phases of PIP
 | 6 | 16–17 August | Document storage, the vector index and Stage 5 retrieval | – |
 | 7 | 17 August | Stage 11, the Observer, and evidence reinforcement across sessions | – |
 | 8 | 17–18 August | The remaining stages of Stages 1–10, the chat WebSocket and the Flutter client | – |
-| Reliability | 26 September to October | Each promise tested and each defect fixed test-first; a few authorised additions the evaluation needed (the audit log, one record per chat); the evaluations of Chapter 6 | 1,889 backend and 372 Flutter tests passed |
+| Reliability | 26 September to October | Each promise tested and each defect fixed test-first; a few authorised additions the evaluation needed (the audit log, one record per chat); the evaluations of Chapter 6 | 1,914 backend and 372 Flutter tests passed |
 
 By September the system worked, but its most costly faults had been silent ones: encryption that was implemented but at first never given a key, a recovery path that was never called, and evidence that was collected but never checked. On 26 September 2026 the project therefore adopted a reliability freeze. Features were frozen: from then on, code changed only to fix a broken promise or, with explicit authorisation, to add something the evaluation needed, such as the audit log. Every change followed the same four rules:
 

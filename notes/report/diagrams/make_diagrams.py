@@ -310,7 +310,7 @@ def dfd1():
 
     # 3.0 with duplicate stores
     s.line(20, 950, 1380, 950, end=None, dash="3 5", sw=0.9)
-    s.text(20, 968, "At session end (after 10 idle minutes, a disconnect, sign-out, shutdown, or at the next start):",
+    s.text(20, 968, "At session end (after 2 idle minutes, a disconnect, sign-out, shutdown, or at the next start):",
            size=13, anchor="start", style="italic")
     dup = [("D7*", ["Model providers", "and consent"], "in", "locality"),
            ("D2*", ["Chats, records,", "session-end queue"], "both", "transcript, chat record"),
@@ -437,7 +437,7 @@ def dfd2_learning():
     FX, FW = 1110, 270
     c = [80 + 84 * i + H / 2 - 29 for i in range(9)]
     c = [80 + 84 * i for i in range(9)]
-    s.text(30, 28, "Runs once per chat at session end: after 10 idle minutes, a disconnect, sign-out, "
+    s.text(30, 28, "Runs once per chat at session end: after 2 idle minutes, a disconnect, sign-out, "
            "shutdown, or at the next start for a chat a crash left unfinished.", size=13, anchor="start",
            style="italic")
     main = [("3.1", ["Take the transcript", "from the queue"]),
@@ -887,7 +887,7 @@ def activity_learning():
 
     s.start_node(cx, 40)
     s.line(cx, 51, cx, 82)
-    act(cx, 112, 360, 56, ["Chat ends: 10 idle minutes, a disconnect,", "sign-out, shutdown, or the next start"])
+    act(cx, 112, 360, 56, ["Chat ends: 2 idle minutes, a disconnect,", "sign-out, shutdown, or the next start"])
     s.line(cx, 140, cx, 172)
     act(cx, 198, 280, 50, ["Queue the transcript", "(pending_observer)"])
     s.line(cx, 223, cx, 260)

@@ -1,6 +1,7 @@
 # PIP final year report: what we have, what is missing
 
-Made 2026-10-21 from the repo at commit 1902c5e. It follows your college's 7-chapter outline
+Made 2026-10-21 from the repo at commit 1902c5e; report facts updated to b7759c3 on 2026-10-22 (the 2-minute
+learning wait, D-51, 1,914 tests). It follows your college's 7-chapter outline
 (the scanned 3 pages). Each section says:
 
 - **Status:** READY (material exists, you only need to write it as report text),
@@ -279,7 +280,7 @@ Table 6.1 (30 test cases) and Table 6.2 (speed) placed whole, Table 6.3 (accurac
 
 **6.5 System testing** - DRAFTED
 - Product-wide validation pass (§7.16, `docs/eval/reliability_validation_2026-10-01.md`).
-- Last full backend run: 1,881 passed, 0 failed (§7.72). Flutter: 352 passed (§7.69).
+- Last full backend run: 1,914 passed, 0 failed (§7.76, at b7759c3). Flutter: 372 passed (§7.75).
 - V-1, the real app window (§7.71, 2026-10-21): first-run import, the web-search button, the record
   dialog and the turn end worked; a backend restart set off a reconnect storm in the app (D-47, open).
 
@@ -315,8 +316,8 @@ Text drafted 2026-10-22 in `notes/report/chapter7/`: 7.1-7.4 written, Table 7.1 
 - Which promises hold (`docs/FREEZE_LIST.md` §4 and §8.2), and what the numbers mean.
 
 **7.3 Limitations** - DRAFTED (points back to 1.6)
-- §7.68 document search, §7.70 long chats, M-1(a)'s 14%, open defects (D-41 and D-47 on
-  2026-10-21; D-46, D-30, D-29 were fixed that day; re-check `docs/FREEZE_LIST.md` §8.2 when you write),
+- §7.68 document search, §7.70 long chats, M-1(a)'s 14%, open defects (D-41 and D-51 on
+  2026-10-22, both in 1.6; D-47, D-49, D-50 fixed; re-check `docs/FREEZE_LIST.md` §8.2 when you write),
   locality taken on trust, one process for all profiles, uploaded files kept unencrypted on disk.
 
 **7.4 Future enhancements** - DRAFTED (only recorded future work, privacy first)

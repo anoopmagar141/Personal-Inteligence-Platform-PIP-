@@ -9,7 +9,7 @@
   from `results/`. The chapter page includes them whole, so if you change one, run its script first, then rebuild
   the chapter. Table 6.3 (accuracy) is written in the draft itself.
 
-Where the numbers come from (all in docs/FREEZE_LIST.md): the method §1-§5; the suites §7.74 (1,889 backend,
+Where the numbers come from (all in docs/FREEZE_LIST.md): the method §1-§5; the suites §7.76 (1,914 backend,
 22 Oct) and §7.75 (372 Flutter); the validation pass §7.16; the migration re-run §7.24 and its fixes §7.26; the hard
 stop §7.31; the real-window check §7.71 and D-47 §7.73; short chats §7.14, §7.37, §7.55, §7.64, §7.70; long chats
 §7.70; the blind check §7.63, with D-40 and D-42 fixed in §7.67 and D-41 kept open in §7.72; document search §7.27,

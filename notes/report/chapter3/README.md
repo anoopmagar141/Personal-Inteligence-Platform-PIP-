@@ -18,6 +18,7 @@ virtual environment, pubspec.yaml and `flutter --version` (22 October 2026); the
    version of the app has no screen for adding one (the endpoint route was never merged). Keep that wording, or
    add the screen before you submit.
 2. If you upgrade a package or Ollama, update Table 3.4, and re-run the speed measurement so Chapter 6 matches.
-3. The commit count (329) and the test counts (1,889 backend, 372 Flutter) are as of 22 October 2026; update
+3. The commit count (329, at ccf9d0b) and the test counts (1,914 backend at b7759c3, 372 Flutter) are as of 22
+   October 2026; update
    them at the end.
 4. Ask your supervisor whether the phase table (3.1) should become a Gantt chart; the dates are all here.

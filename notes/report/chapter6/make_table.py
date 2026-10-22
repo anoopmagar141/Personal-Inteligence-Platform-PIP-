@@ -173,7 +173,7 @@ NOTE = (
     "pipeline or scripts, with the language model and the network replaced by test stand-ins; "
     "UI = Flutter widget test. "
     f"All 30 test cases (50 runs counting parameter variants) passed on {RUN}, at commit 6a51798. "
-    "The full suites last recorded 1,889 backend tests passed, 0 failed (docs/FREEZE_LIST.md §7.74, "
+    "The full suites last recorded 1,914 backend tests passed, 0 failed (docs/FREEZE_LIST.md §7.76, "
     "22 Oct 2026), and 372 Flutter tests passed (§7.75)."
 )
 TITLE = "Table 6.1: Test cases for PIP"

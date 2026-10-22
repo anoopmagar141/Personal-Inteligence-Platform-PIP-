@@ -10,6 +10,9 @@ Taken on 22 October 2026 from the real Windows app, in a throwaway copy of PIP, 
   already use), two decisions and a short design note, all added through the copy's own backend; the chats were
   typed into the app. The model was qwen2.5:7b on the Ollama that was already running. Nothing was sent to the web:
   web search consent was granted in the copy so the offer would show, and the offer was never clicked.
+- The pictures are of ccf9d0b, before ff916d7 (D-51: the model is told it saves nothing during a chat) and
+  b7759c3 (learning after a 2-minute pause). Neither changes how a screen looks, but the model's replies in the
+  chats could now be worded differently.
 - Each picture is the app window only (1280 x 800 at 150% scaling, so 1902 x 1191 pixels), captured with the
   Windows PrintWindow call by the window's exact program path, so no other window could appear in it.
 

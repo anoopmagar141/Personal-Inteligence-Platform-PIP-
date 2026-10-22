@@ -6,7 +6,7 @@
   Rebuild it after editing:
   `.venv/Scripts/python.exe -I notes/report/make_chapter_html.py notes/report/front/front_matter_draft.md`
 
-The summary's numbers are the report's own: 1,889 and 372 tests (Chapter 6), 237 trick statements (75 short + 162
+The summary's numbers are the report's own: 1,914 and 372 tests (Chapter 6), 237 trick statements (75 short + 162
 long), 0 of 81, 8 of 58 (Table 6.3), 4.48 s to 0.36 s (Table 6.2). The abbreviations were collected from the seven
 chapter drafts, outside code listings, on 22 October 2026.
 

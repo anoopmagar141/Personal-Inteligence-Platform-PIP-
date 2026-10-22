@@ -40,7 +40,7 @@ Four system-level checks were run, each in a throwaway copy that never touched t
 3. A hard stop of the backend in the middle of an answer lost only the answer being written; the saved chat was intact, PIP restarted in 1.8 seconds and the chat continued.
 4. A real-window check on 21 October drove the real Windows app: the first-run import, the web search button and the chat record dialog worked as designed. After a backend restart, however, the app's reconnect attempts multiplied (D-47). This was fixed the same day, but the real window has not been re-checked since.
 
-At the end, on 22 October 2026, the full suites passed: 1,889 backend tests and 372 app tests, with none failing. The backend suite passed on its second run; the first stopped at one older test that sometimes hangs, on the earlier code as well.
+At the end, on 22 October 2026, the full suites passed: 1,914 backend tests and 372 app tests, with none failing.
 
 ## 6.6 Performance Evaluation
 

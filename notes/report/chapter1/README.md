@@ -14,6 +14,8 @@ measurement in notes/report/chapter6. The sources it cites are in notes/report/c
    grouped; Chapter 6 should show a result for each one.
 2. If your numbers change before submission (a new run, a fixed defect), update 1.5 and 1.6 too: they quote
    the time to the first word (4.5 s to 0.4 s), 0 of 81, 0 of 162, 8 of 58 and 2 of 54.
-3. Limitation 8 names one open defect (D-41). Remove it if it is fixed before you submit.
+3. Limitation 8 names two open defects: D-41 and D-51 (partly fixed in ff916d7: told that nothing is saved during a
+   chat, the model's claims to have saved a stated fact fell from 9 to 5 of 24 in a test, not to 0; FREEZE_LIST
+   §7.76). Remove a defect from it if it is fixed before you submit.
 4. Word count: Chapters 1 and 2 together are about 3,800 words of the 10,000-word limit. Chapter 1 can lose
    about 300 words from 1.4 (the feature list) if you need room.

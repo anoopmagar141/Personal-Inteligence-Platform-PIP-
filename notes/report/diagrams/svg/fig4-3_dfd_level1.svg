@@ -182,7 +182,7 @@
 <rect x="1150.02" y="596.68" width="84.96" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
 <text x="1192.5" y="609.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">prompt, tokens</text>
 <polyline points="20,950 1380,950" fill="none" stroke="#000" stroke-width="0.9" stroke-dasharray="3 5"/>
-<text x="20" y="972.4" font-family="Times New Roman" font-size="13" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">At session end (after 10 idle minutes, a disconnect, sign-out, shutdown, or at the next start):</text>
+<text x="20" y="972.4" font-family="Times New Roman" font-size="13" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">At session end (after 2 idle minutes, a disconnect, sign-out, shutdown, or at the next start):</text>
 <rect x="140" y="995" width="150" height="44" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
 <path d="M290,995 L140,995 L140,1039 L290,1039" fill="none" stroke="#000" stroke-width="1.4"/>
 <polyline points="180,995 180,1039" fill="none" stroke="#000" stroke-width="1.1"/>

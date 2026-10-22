@@ -62,7 +62,7 @@ The project has the following limitations, discussed further in Chapter 7.
 5. One backend process serves every profile, so profiles are kept apart by the program's own mechanisms rather than by the operating system.
 6. Uploaded document files are also kept as ordinary, unencrypted files in the profile's folder; the copy inside the database is encrypted.
 7. The system was evaluated on one computer, in English, and mostly on test conversations written for the purpose rather than on real users' conversations.
-8. One known defect is left open: a sentence that reports what someone else said about the user (for example, "My friend says I should run a marathon") can still be recorded as the user's topic.
+8. Two known defects are left open. A sentence that reports what someone else said about the user (for example, "My friend says I should run a marathon") can still be recorded as the user's topic (D-41), and the model can still say it has noted something during a chat, although PIP saves nothing until the chat ends (D-51).
 
 ## 1.7 Organization of the Report
 

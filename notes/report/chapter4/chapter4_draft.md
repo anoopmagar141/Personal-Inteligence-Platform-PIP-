@@ -25,7 +25,7 @@ Table 4.1: Use case descriptions
 | UC-13 | Stream the answer | Local model, cloud model | The model writes the answer; a cloud model is used only with recorded consent. |
 | UC-14 | Search the web (after a click) | Web search | Extends UC-03: runs only when the user clicks the offered search, sending exactly the words shown. |
 | UC-15 | Pull a model | Local model | Extends UC-10: downloads a local model; a cloud model offered through Ollama is refused. |
-| UC-16 | Learn from a finished chat | Session end, local model | Runs after 10 idle minutes, a disconnect, sign-out or shutdown, or at the next start for a chat a crash left unfinished; includes UC-17. |
+| UC-16 | Learn from a finished chat | Session end, local model | Runs after 2 idle minutes, a disconnect, sign-out or shutdown, or at the next start for a chat a crash left unfinished; includes UC-17. |
 | UC-17 | Check evidence and Constitution | – | For each proposed fact: grounding, the evidence gate and the Constitution's rules, then write, ask or reject, with an audit row. |
 
 ## 4.2 Data Flow Diagrams
