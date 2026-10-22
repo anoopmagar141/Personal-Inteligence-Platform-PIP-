@@ -3,7 +3,7 @@
 # Non-negotiable rules (Part 12.1):
 #   Rule 1: Labels candidates explicit or inferred. NEVER assigns confidence scores.
 #   Rule 2: Produces candidates only. NEVER writes to any store directly.
-#   Rule 3: Runs at session end only (10-min idle OR process exit). NEVER per-message.
+#   Rule 3: Runs at session end only (an idle wait OR process exit). NEVER per-message.
 #           NOT enforced by this module - there is no process-lifecycle context here.
 #           The caller (Phase 8) is responsible for only invoking run_session_end()
 #           when a session has actually ended.

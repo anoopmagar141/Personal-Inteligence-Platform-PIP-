@@ -1875,9 +1875,12 @@ try:
                 try:
                     data: ChatRequest = await asyncio.wait_for(incoming.get(), timeout=_idle_timeout_seconds())
                 except asyncio.TimeoutError:
-                    # Rule 3: 10-min idle triggers Observer session-end. There's
-                    # time here (nothing else is waiting on this connection), so
-                    # run it now rather than persist-and-defer.
+                    # Rule 3: the idle wait (observer.idle_timeout_minutes, 2 since
+                    # FREEZE_LIST §7.77; the spec said 10) triggers Observer
+                    # session-end. There's time here (nothing else is waiting on
+                    # this connection), so run it now rather than persist-and-defer.
+                    # A message sent while it runs waits in `incoming` until the
+                    # pass ends - the cost of the shorter wait.
                     if session_state["has_unobserved_turns"]:
                         try:
                             await session_lifecycle.run_observer_now(

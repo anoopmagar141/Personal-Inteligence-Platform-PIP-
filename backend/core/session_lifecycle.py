@@ -1,7 +1,8 @@
 # PIP Core - Session Lifecycle (idle-timeout / disconnect / process-exit triggering)
 #
-# Rule 3 (Part 12.1): Observer runs at session end only - 10-min idle OR process
-# exit, never per-message. In a WS server, "session" = one WebSocket connection's
+# Rule 3 (Part 12.1): Observer runs at session end only - an idle wait OR process
+# exit, never per-message. The spec's wait was 10 minutes; the owner made it 2
+# (observer.idle_timeout_minutes, FREEZE_LIST §7.77). In a WS server, "session" = one WebSocket connection's
 # conversation; "process exit" from the original single-session CLI-era spec
 # doesn't map 1:1 onto a multi-connection server, so this module treats three
 # triggers differently, on purpose:

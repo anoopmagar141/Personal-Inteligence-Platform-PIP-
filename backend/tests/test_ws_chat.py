@@ -872,7 +872,17 @@ def test_the_pipeline_is_told_which_chat_each_message_belongs_to(monkeypatch, to
     assert seen == [created["conversation_id"], created["conversation_id"]]
 
 
-# --- #8: a 10-minute break keeps the chat (BLUEPRINT "Step 6") ---------------------------------------------------
+# --- How long a paused chat waits before it is learned from -------------------------------------------------------
+
+
+def test_a_paused_chat_is_learned_from_after_two_minutes():
+    # The owner's choice (2026-10-22, FREEZE_LIST §7.77): ten minutes was too long to wait before a chat someone stays
+    # in is learned from. Leaving the chat still starts the pass at once (the disconnect path); this is the wait
+    # inside a chat that is still open. Read through the handler's own conversion, from the shipped settings.
+    assert server._idle_timeout_seconds() == 120
+
+
+# --- #8: an idle break keeps the chat (BLUEPRINT "Step 6") --------------------------------------------------------
 
 
 def _idle_then_more(monkeypatch, token, *, idle_pass_fails=False):

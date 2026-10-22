@@ -84,8 +84,9 @@ authenticated requests.
 
 **Session end** is a separate path, not part of the per-message pipeline.
 Stages 11–13 (Observer, validation, profile write) run once per session — on
-idle timeout, disconnect, clean shutdown (queued to `pending_observer`), or, for
-a killed process, rebuilt at the next startup from `conversations` /`messages`
+idle timeout (2 minutes without a message, `observer.idle_timeout_minutes`),
+disconnect (the app opening another chat or a new one is one), clean shutdown
+(queued to `pending_observer`), or, for a killed process, rebuilt at the next startup from `conversations` /`messages`
 where `observed_at IS NULL`. Catch-up drains in a background task, never inline
 before serving. Every sign-in gets its own: one still running from a previous
 session queues the next behind it rather than standing in for it. A queued

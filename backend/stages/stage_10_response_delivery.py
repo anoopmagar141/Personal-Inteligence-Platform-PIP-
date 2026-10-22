@@ -3,7 +3,7 @@
 # Part 7 spec: "User receives output. Main pipeline complete. All learning happens
 # AFTER this stage." "Learning" refers to Stage 11 Observer, which is explicitly
 # NOT triggered from here - Rule 3 (Part 12.1) requires Observer to run at session
-# end only (10-min idle OR process exit), never per-message. Calling it from this
+# end only (an idle wait OR process exit), never per-message. Calling it from this
 # stage would violate that rule outright, not just bend it.
 #
 # Takes stage_09_llm_streaming.collect()'s output rather than the raw event

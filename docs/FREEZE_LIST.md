@@ -4967,6 +4967,33 @@ Built in the worktree `pip-work/d51-learn-sooner` from ccf9d0b, together with §
 - Only qwen2.5:7b, one run per message at temperature 0, two made-up profiles. The owner's own app is not re-run.
 - The follow-up's Java answer is not looked into (the record was not read).
 
+### 7.77 A paused chat is learned from after 2 minutes, not 10 (decided and built 2026-10-22)
+
+The owner's "10 mins is so long", then "Change the idle wait from 10 to 2 minutes ... test-first, one commit each.
+Keep the gate and Constitution as they are." (2026-10-22). Part 12.1's Rule 3 stays: the Observer runs at a chat's
+end, never per message. Only the wait after which an open chat counts as ended changes. One setting,
+`observer.idle_timeout_minutes` 10 -> 2 in `backend/config/settings.json`; the comments that said "10-min idle"
+(`server.py`, `session_lifecycle.py`, Stages 10 and 11) and `docs/ARCHITECTURE.md` follow it. Built with §7.76.
+
+- **What changes:** a chat the user stays in, with no message for 2 minutes, is learned from then instead of after
+  10. Leaving a chat was already immediate and is unchanged: opening another chat or a new one closes the old
+  chat's connection (`WsChatClient.switchConversation`), and a closed connection runs the pass at once (the
+  disconnect path in `ws_chat`). Several passes over one chat were already safe: since D-44 (§7.65) the idle pass
+  marks what it read (`observed_prefix`) and the next pass counts only the later turns as new evidence.
+- **Cost:** the idle pass runs inside the chat's own loop, so a message sent while it runs waits until it ends. One
+  pass took 10-30 s per chat on qwen2.5:7b (§7.55). After a 2-minute pause this is likelier than after 10: the next
+  answer can start that much later. Not measured in the app.
+- **Not per message, on purpose:** the reply and the pass share one local model, so every answer would wait behind
+  a pass; a later turn often corrects an earlier one; and Rule 3 says never per message.
+- **Test:** `test_ws_chat.py::test_a_paused_chat_is_learned_from_after_two_minutes`, through the handler's own
+  conversion from the shipped settings. Seen failing first (600 != 120). The existing idle tests, with a 0.05 s
+  wait, already show that the wait starts the pass and that the chat keeps its history.
+- **Break-it:** 2 weakenings, each caught: the wait back to 10 minutes, and 5 minutes.
+- **Suites:** the run in §7.76 (Backend 1914 passed), which held both changes.
+
+**Not covered:** the 2-minute wait was not run in real time with the real model, and the delay a user sees after a
+2-minute pause is not measured.
+
 ---
 
 ## 8. Status
@@ -4990,6 +5017,7 @@ Built in the worktree `pip-work/d51-learn-sooner` from ccf9d0b, together with §
 | Promise 8, profile isolation, adopted (2026-09-28) | Decided |
 | Promise 9, answers reflect the current record, adopted (2026-09-28) | Decided |
 | Long-chat learning (0 of 81) stated as a limitation of v1.0, not a longer phrase list and not a judge of meaning (2026-10-21, §7.70) | Decided |
+| A paused chat is learned from after 2 minutes, not Part 12.1's 10; still never per message (2026-10-22, §7.77) | Decided and built |
 
 ### 8.2 Evidence status (facts; need reports)
 
