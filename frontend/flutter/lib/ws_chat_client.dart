@@ -205,6 +205,18 @@ class WsChatClient {
     if (!_statusController.isClosed) _statusController.add('disconnected');
   }
 
+  /// Opens the chat again after disconnect(), for a close that turned out not
+  /// to end the session: a sign-out the backend refused, a profile delete that
+  /// failed (D-49, found reviewing D-47). Both close the chat first, as they
+  /// must, and nothing opened it again, so the chat stayed dead - and with no
+  /// reconnects, a later lock went unnoticed - until the app was restarted.
+  /// After dispose() it does nothing: its streams are closed.
+  void reopen() {
+    if (_eventController.isClosed) return;
+    _disposed = false;
+    connect();
+  }
+
   void dispose() {
     _disposed = true;
     _reconnectTimer?.cancel();

@@ -264,6 +264,9 @@ class ProfileView extends StatefulWidget {
   /// connection the chat tab is using.
   final VoidCallback onCloseChat;
 
+  /// Open the chat socket again, after an operation that closed it failed.
+  final VoidCallback onReopenChat;
+
   /// Return to the sign-in screen, after this profile has stopped existing.
   final VoidCallback onSignedOut;
 
@@ -271,6 +274,7 @@ class ProfileView extends StatefulWidget {
     super.key,
     required this.api,
     required this.onCloseChat,
+    required this.onReopenChat,
     required this.onSignedOut,
   });
 
@@ -544,6 +548,7 @@ class _ProfileViewState extends State<ProfileView> {
             AccountCard(
               api: widget.api,
               onCloseChat: widget.onCloseChat,
+              onReopenChat: widget.onReopenChat,
               onSignedOut: widget.onSignedOut,
             ),
             ],
@@ -1344,6 +1349,10 @@ class AccountCard extends StatefulWidget {
   /// database file this client still has open.
   final VoidCallback onCloseChat;
 
+  /// Open the chat socket again when the delete fails: the profile is still
+  /// here, and so is the person using it (D-49).
+  final VoidCallback onReopenChat;
+
   /// Back to the sign-in screen, once the profile is gone.
   final VoidCallback onSignedOut;
 
@@ -1351,6 +1360,7 @@ class AccountCard extends StatefulWidget {
     super.key,
     required this.api,
     required this.onCloseChat,
+    required this.onReopenChat,
     required this.onSignedOut,
   });
 
@@ -1524,6 +1534,10 @@ class _AccountCardState extends State<AccountCard> {
     try {
       result = await widget.api.deleteProfile(slug, password);
     } catch (error) {
+      // The profile is still here (a wrong password, a refusal), so the chat
+      // closed for the delete is opened again: it stayed closed until the app
+      // was restarted (D-49, found reviewing D-47).
+      widget.onReopenChat();
       if (!mounted) return;
       setState(() {
         _busy = false;

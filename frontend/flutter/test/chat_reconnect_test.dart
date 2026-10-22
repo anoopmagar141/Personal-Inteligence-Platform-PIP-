@@ -24,6 +24,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:pip_flutter_client/api_client.dart';
 import 'package:pip_flutter_client/home_shell.dart';
+import 'package:pip_flutter_client/screens/profile_view.dart';
 import 'package:pip_flutter_client/theme.dart';
 import 'package:pip_flutter_client/ws_chat_client.dart';
 
@@ -247,6 +248,26 @@ void main() {
       await tester.pump(_delay);
     });
 
+    testWidgets('reopen() after disconnect() connects again; after dispose() it does nothing', (tester) async {
+      // A close that turned out not to end the session (D-49): the chat has to come back.
+      // Counted by what the client says, not by calls to connect(): a closed client ignores those.
+      final client = CountingClient();
+      final said = <String>[];
+      client.status.listen(said.add);
+      client.connect();
+      await tester.pump();
+      client.disconnect();
+      await tester.pump();
+      said.clear();
+
+      client.reopen();
+      await _onePeriod(tester);
+      expect(said, contains('connecting'), reason: 'the chat stayed closed');
+
+      client.dispose();
+      expect(client.reopen, returnsNormally, reason: 'a disposed client tried to come back');
+    });
+
     testWidgets('disconnect() after dispose() does nothing', (tester) async {
       final client = CountingClient()..connect();
       await tester.pump();
@@ -330,6 +351,119 @@ void main() {
       expect(spy.backendLocked, 0);
     });
 
+    testWidgets('a sign-out the backend refuses leaves the chat working', (tester) async {
+      // D-49 (found reviewing D-47): the chat is closed before /auth/lock, as it must be, and
+      // when the lock failed nothing opened it again: no reconnects, so a later lock was never
+      // noticed either, until the app was restarted.
+      final api = FakeApi('unlocked')..lockFailure = Exception('the backend said no');
+      final spy = await _pumpShell(tester, api);
+      await tester.tap(find.text('Sign out'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign out'));
+      await tester.pump();
+      expect(spy.signedOut, 0, reason: 'a failed lock is not a sign-out');
+      final asked = api.authStateCalls;
+
+      for (var i = 0; i < 3; i++) {
+        await _onePeriod(tester);
+      }
+      expect(api.authStateCalls, greaterThan(asked), reason: 'the chat stayed closed after the failed sign-out');
+
+      api.state = 'locked';
+      for (var i = 0; i < 2; i++) {
+        await _onePeriod(tester);
+      }
+      expect(spy.backendLocked, 1, reason: 'a later lock was not noticed');
+    });
+
+    testWidgets('a sign-out answered "PIP is locked" goes back to sign-in', (tester) async {
+      // /auth/lock is not open while locked, so an already locked backend answers it 423 (D-49).
+      // The sign-out's aim is met; the app said it could not sign out and stayed. It goes back
+      // through the start screen, which asks which sign-in the backend needs: the app did not
+      // lock it, so it does not know.
+      final api = FakeApi('unlocked')
+        ..lockFailure = ApiException(423, '{"detail": "PIP is locked. Sign in to open your data."}');
+      final spy = await _pumpShell(tester, api);
+      await _confirmSignOut(tester);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(spy.backendLocked, 1);
+      expect(spy.signedOut, 0);
+      expect(find.textContaining('Could not sign out'), findsNothing);
+    });
+
+    testWidgets('a sign-out answered "PIP is locked" while a profile delete runs leaves it to the delete', (tester) async {
+      // The delete locks the backend first, so a sign-out clicked while it runs gets 423. Going to
+      // sign-in then would leave the delete's own ending unshown - "Deleting on next start" when
+      // the erase has to wait (found reviewing D-49).
+      final api = FakeApi('unlocked')
+        ..lockFailure = ApiException(423, '{"detail": "PIP is locked. Sign in to open your data."}');
+      final spy = await _pumpShell(tester, api);
+      final profile = tester.widget<ProfileView>(find.byType(ProfileView, skipOffstage: false));
+      profile.onCloseChat(); // the delete starts
+
+      await _confirmSignOut(tester);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(spy.backendLocked, 0, reason: 'the sign-out went to sign-in under a delete still running');
+      expect(spy.signedOut, 0);
+
+      profile.onSignedOut(); // the delete finishes and says where to go
+      expect(spy.signedOut, 1);
+    });
+
+    testWidgets('a failed profile delete opens the chat again, and a later lock is noticed', (tester) async {
+      // The shell's wiring of D-49: the profile screen's close and reopen are the shell's.
+      final api = FakeApi('unlocked');
+      final spy = await _pumpShell(tester, api);
+      final profile = tester.widget<ProfileView>(find.byType(ProfileView, skipOffstage: false));
+      profile.onCloseChat(); // the delete starts
+      await _onePeriod(tester);
+      final asked = api.authStateCalls;
+      await _onePeriod(tester);
+      expect(api.authStateCalls, asked, reason: 'a chat closed for the delete went on reconnecting');
+
+      profile.onReopenChat(); // the delete failed (a wrong password)
+      for (var i = 0; i < 2; i++) {
+        await _onePeriod(tester);
+      }
+      expect(api.authStateCalls, greaterThan(asked), reason: 'the chat stayed closed after the failed delete');
+
+      api.state = 'locked';
+      for (var i = 0; i < 2; i++) {
+        await _onePeriod(tester);
+      }
+      expect(spy.backendLocked, 1, reason: 'a later lock was not noticed');
+    });
+
+    testWidgets('a failed delete does not open the chat while a sign-out still runs', (tester) async {
+      // Two closes at once: the chat opens again only when the last of them has failed, or it
+      // would be talking to the server around the lock (found reviewing D-49).
+      var attempts = 0;
+      final api = FakeApi('unlocked')..lockWait = Completer<void>();
+      api.lockFailure = Exception('the backend said no');
+      await _pumpShell(tester, api, connector: (uri) {
+        attempts++;
+        return RefusedChannel();
+      });
+      final profile = tester.widget<ProfileView>(find.byType(ProfileView, skipOffstage: false));
+      profile.onCloseChat(); // the delete starts
+      await _confirmSignOut(tester); // the sign-out starts, its lock still running
+      final before = attempts;
+
+      profile.onReopenChat(); // the delete failed
+      for (var i = 0; i < 2; i++) {
+        await _onePeriod(tester);
+      }
+      expect(attempts, before, reason: 'the chat opened while the sign-out was still running');
+
+      api.lockWait!.complete(); // the sign-out fails too
+      for (var i = 0; i < 2; i++) {
+        await _onePeriod(tester);
+      }
+      expect(attempts, greaterThan(before), reason: 'the chat stayed closed after both failed');
+    });
+
     testWidgets('signing out is not also reported as a locked backend', (tester) async {
       // Unlocked until the sign-out locks it, as the real backend is.
       final api = FakeApi('unlocked');
@@ -366,8 +500,16 @@ class FakeApi extends ApiClient {
     return state!;
   }
 
+  /// What lock() throws, if anything, and what it waits for first.
+  Object? lockFailure;
+  Completer<void>? lockWait;
+
   @override
-  Future<void> lock() async => state = 'locked';
+  Future<void> lock() async {
+    if (lockWait != null) await lockWait!.future;
+    if (lockFailure != null) throw lockFailure!;
+    state = 'locked';
+  }
 
   @override
   Future<Map<String, dynamic>> getStatus() async => {'pending_count': 0};
@@ -384,7 +526,17 @@ class ShellSpy {
   int backendLocked = 0;
 }
 
-Future<ShellSpy> _pumpShell(WidgetTester tester, FakeApi api) async {
+/// Opens the sign-out dialog and confirms it.
+Future<void> _confirmSignOut(WidgetTester tester) async {
+  await tester.tap(find.text('Sign out'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.tap(find.widgetWithText(FilledButton, 'Sign out'));
+  await tester.pump();
+}
+
+Future<ShellSpy> _pumpShell(WidgetTester tester, FakeApi api,
+    {WebSocketChannel Function(Uri uri) connector = _refused}) async {
   final spy = ShellSpy();
   tester.view.physicalSize = const Size(1600, 1200);
   tester.view.devicePixelRatio = 1.0;
@@ -398,7 +550,7 @@ Future<ShellSpy> _pumpShell(WidgetTester tester, FakeApi api) async {
       onCycleTheme: () {},
       onSignedOut: () => spy.signedOut++,
       onBackendLocked: () => spy.backendLocked++,
-      chatClient: WsChatClient('ws://127.0.0.1:1/ws/chat', reconnectDelay: _delay, connector: _refused),
+      chatClient: WsChatClient('ws://127.0.0.1:1/ws/chat', reconnectDelay: _delay, connector: connector),
     ),
   ));
   await tester.pump();

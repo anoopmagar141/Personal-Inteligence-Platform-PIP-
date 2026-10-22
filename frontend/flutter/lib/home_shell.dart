@@ -208,8 +208,26 @@ class _HomeShellState extends State<HomeShell> {
   /// Closes the chat for a reason of this app's own (a profile being deleted),
   /// which is not the backend locking under it.
   void _closeChat() {
+    _closing++;
     _leaving = true;
     _chatClient.disconnect();
+  }
+
+  /// How many operations that closed the chat are still running: a sign-out
+  /// and a profile delete can overlap (the sidebar stays usable while the
+  /// delete's spinner turns).
+  int _closing = 0;
+
+  /// One operation that closed the chat failed (D-49): the session goes on, so
+  /// the chat has to, and a drop is news again - but only once the last of them
+  /// has failed. One still running decides the outcome, and a chat opened under
+  /// it would talk to the server around its lock or hold the database a delete
+  /// is about to erase (found reviewing D-49).
+  void _reopenChat() {
+    if (_closing > 0) _closing--;
+    if (_closing > 0) return;
+    _leaving = false;
+    _chatClient.reopen();
   }
 
   /// Locks the database and returns to the sign-in screen.
@@ -245,11 +263,27 @@ class _HomeShellState extends State<HomeShell> {
     try {
       await widget.api.lock();
     } catch (error) {
+      // 423 is "PIP is locked": /auth/lock is not open while locked, so an
+      // already locked backend (a restart, a lock from elsewhere) answers it
+      // that way. The sign-out's aim is met, and the app said it could not
+      // sign out and stayed on a chat that could not work (D-49). It goes
+      // back through the start screen, which asks which sign-in the backend
+      // needs: this app did not lock it, so it does not know. Unless a profile
+      // delete is still running: it locked the backend, and its own ending
+      // ("Deleting on next start", or sign-in) is the one to show (found
+      // reviewing D-49).
+      if (error is ApiException && error.statusCode == 423) {
+        if (_closing > 0) _closing--;
+        if (_closing == 0 && mounted) _handBack();
+        return;
+      }
       // Reported rather than swallowed, and the screen does NOT change: a
       // failed lock means the data is still open, and sending somebody to a
       // sign-in screen over an unlocked database would be the one outcome
-      // worse than the error itself.
+      // worse than the error itself. The chat closed for the lock is opened
+      // again (D-49): it stayed closed until the app was restarted.
       if (mounted) {
+        _reopenChat();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not sign out: $error')),
         );
@@ -421,6 +455,7 @@ class _HomeShellState extends State<HomeShell> {
                   // conversation, and the backend cannot delete a database
                   // file this client still has open.
                   onCloseChat: _closeChat,
+                  onReopenChat: _reopenChat,
                   onSignedOut: widget.onSignedOut,
                 ),
                 DecisionsView(api: widget.api, activeProjectId: _activeProjectId),

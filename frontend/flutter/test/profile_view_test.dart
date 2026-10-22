@@ -92,7 +92,7 @@ Future<FakeApi> pumpProfile(WidgetTester tester, List<dynamic> fields) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: ProfileView(api: api, onCloseChat: () {}, onSignedOut: () {}),
+        body: ProfileView(api: api, onCloseChat: () {}, onReopenChat: () {}, onSignedOut: () {}),
       ),
     ),
   );
@@ -450,7 +450,7 @@ void main() {
       ..status = null;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: ProfileView(api: api, onCloseChat: () {}, onSignedOut: () {}),
+        body: ProfileView(api: api, onCloseChat: () {}, onReopenChat: () {}, onSignedOut: () {}),
       ),
     ));
     await tester.pumpAndSettle();

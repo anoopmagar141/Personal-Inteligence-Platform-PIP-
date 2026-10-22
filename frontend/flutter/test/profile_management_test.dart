@@ -176,6 +176,7 @@ Future<FakeApi> pumpProfile(
   WidgetTester tester, {
   FakeApi? api_,
   VoidCallback? onCloseChat,
+  VoidCallback? onReopenChat,
   VoidCallback? onSignedOut,
 }) async {
   final api = api_ ?? FakeApi();
@@ -185,6 +186,7 @@ Future<FakeApi> pumpProfile(
         body: ProfileView(
           api: api,
           onCloseChat: onCloseChat ?? () {},
+          onReopenChat: onReopenChat ?? () {},
           onSignedOut: onSignedOut ?? () {},
         ),
       ),
@@ -604,6 +606,31 @@ void main() {
 
       expect(signedOut, isFalse);
       expect(find.text('files could not be deleted'), findsOneWidget);
+    });
+
+    testWidgets('opens the chat again when the delete fails, and not when it succeeds', (tester) async {
+      // D-49 (found reviewing D-47): the chat is closed before the delete, as it must be, and a
+      // delete that failed (a wrong password) left it closed until the app was restarted.
+      for (final fails in [true, false]) {
+        final events = <String>[];
+        // The backend's own refusal of a wrong password (server.py, auth_delete_profile).
+        final api = FakeApi()..failWith = fails ? ApiException(401, '{"detail":"That is not your password."}') : null;
+        await pumpProfile(tester,
+            api_: api,
+            onCloseChat: () => events.add('closed'),
+            onReopenChat: () => events.add('reopened'),
+            onSignedOut: () => events.add('signed out'));
+        await openDeleteDialog(tester);
+
+        final fields = find.byType(TextField);
+        await tester.enterText(fields.at(0), 'Anup');
+        await tester.enterText(fields.at(1), 'my-password');
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Delete permanently'));
+        await settleDelete(tester);
+
+        expect(events, fails ? ['closed', 'reopened'] : ['closed', 'signed out']);
+      }
     });
 
     testWidgets('says so when the erase is recorded for the next start', (tester) async {
