@@ -1,0 +1,635 @@
+{
+ "mode": "app-ipv4",
+ "protocol": "(they are also written into the result file):\n- Eight questions, one per kind of message a user sends (below). Each is asked three times, in three rounds\n  (q1..q8, then again, then again), with the answer cache emptied before every question, so every timed answer\n  goes through the model.\n- Measured per answer, by the wall clock from the moment the message enters the pipeline:\n    first word   = the first streamed token reaches the caller (what the user sees start to move),\n    full answer  = the pipeline's final event (the whole reply is on screen),\n    PIP's own steps = time until the model is called (Stages 0-8: routing, memory, decisions, documents,\n                      context assembly, consent check),\n  plus Ollama's own counts: prompt tokens read, tokens written, model load seconds.\n- Also measured: a cold start (the model unloaded from the GPU first, then one question), and three answers\n  served from the answer cache (the same first message asked twice; the second is timed).\n- Reported: the median of the three runs per question, with the lowest and highest. No run is dropped; a failed\n  run is recorded as failed.\n- Three conditions (--mode). \"pinned\": the harness hands the pipeline the app's OllamaProvider, so the app's own\n  provider choice (_default_providers, which first asks is_available()) is skipped. \"app\": the pipeline picks its\n  provider exactly as the chat socket does. \"app-ipv4\": as \"app\", but the harness makes OllamaProvider talk to\n  127.0.0.1 instead of localhost; no PIP code is changed. The first run (pinned) showed every model call waiting\n  about 2 s before its first token although Ollama itself answered in 0.05-0.26 s; \"localhost\" resolves to ::1\n  first on this PC, Ollama listens on 127.0.0.1 only, and the fallback costs 2.04 s per request. The \"app\" and\n  \"app-ipv4\" conditions were added after that run to measure the as-shipped cost and what using 127.0.0.1 would\n  give; the questions and rules above were not changed.",
+ "stamp": {
+  "stamp_version": 1,
+  "date": "2026-10-21T17:16:15+00:00",
+  "git": {
+   "commit": "6a51798f1834a5803047747fb16e36482e7f528d",
+   "dirty": false,
+   "changed": []
+  },
+  "constitution": {
+   "version": "1.1",
+   "sha256": "75363e5af8e00985f27d4b0c161e505e8e2d293b86c59dc7908ef125de048d83"
+  },
+  "ollama": {
+   "host": "http://localhost:11434",
+   "version": "0.40.3"
+  },
+  "model": {
+   "tag": "qwen2.5:7b",
+   "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+   "parameters": null
+  },
+  "options_sent": {
+   "num_predict": 2000,
+   "num_ctx": 16384,
+   "temperature": 0.0
+  },
+  "note": "options_sent lists what the harness put in Ollama's request options. A key whose value is null was not sent, so Ollama's or the model's own default applied (the model's own defaults are under model.parameters)."
+ },
+ "gpu_before": "NVIDIA GeForce RTX 4060 Laptop GPU, 6743 MiB, 8188 MiB, 5 %",
+ "questions": [
+  {
+   "id": "q1",
+   "kind": "Greeting",
+   "message": "hi",
+   "history_turns": 0
+  },
+  {
+   "id": "q2",
+   "kind": "Short general question",
+   "message": "What is a hash map?",
+   "history_turns": 0
+  },
+  {
+   "id": "q3",
+   "kind": "Explanation",
+   "message": "Explain how vector clocks work in a distributed system.",
+   "history_turns": 0
+  },
+  {
+   "id": "q4",
+   "kind": "Coding request",
+   "message": "Write a Python function that checks whether a string is a palindrome.",
+   "history_turns": 0
+  },
+  {
+   "id": "q5",
+   "kind": "About the user",
+   "message": "What do you know about me?",
+   "history_turns": 0
+  },
+  {
+   "id": "q6",
+   "kind": "About a project decision",
+   "message": "What did we decide about the database for Lanternfish?",
+   "history_turns": 0
+  },
+  {
+   "id": "q7",
+   "kind": "About an uploaded document",
+   "message": "In the Lanternfish design note, how are budgets shared?",
+   "history_turns": 0
+  },
+  {
+   "id": "q8",
+   "kind": "Follow-up in the same chat",
+   "message": "Why is that better than using timestamps?",
+   "history_turns": 2
+  }
+ ],
+ "cold": {
+  "question": "q2",
+  "status": "success",
+  "first_word_s": 4.956,
+  "full_answer_s": 6.809,
+  "pip_steps_ms": 366.1,
+  "prompt_tokens": 463,
+  "tokens_out": 84,
+  "load_s": 4.3,
+  "answer_words": 73
+ },
+ "runs": [
+  {
+   "round": 1,
+   "question": "q1",
+   "status": "success",
+   "first_word_s": 0.357,
+   "full_answer_s": 0.564,
+   "pip_steps_ms": 311.6,
+   "prompt_tokens": 458,
+   "tokens_out": 10,
+   "load_s": 0.0,
+   "answer_words": 7
+  },
+  {
+   "round": 1,
+   "question": "q2",
+   "status": "success",
+   "first_word_s": 0.308,
+   "full_answer_s": 1.954,
+   "pip_steps_ms": 247.4,
+   "prompt_tokens": 463,
+   "tokens_out": 75,
+   "load_s": 0.0,
+   "answer_words": 67
+  },
+  {
+   "round": 1,
+   "question": "q3",
+   "status": "success",
+   "first_word_s": 0.304,
+   "full_answer_s": 6.098,
+   "pip_steps_ms": 211.7,
+   "prompt_tokens": 462,
+   "tokens_out": 262,
+   "load_s": 0.0,
+   "answer_words": 242
+  },
+  {
+   "round": 1,
+   "question": "q4",
+   "status": "success",
+   "first_word_s": 0.361,
+   "full_answer_s": 3.578,
+   "pip_steps_ms": 276.1,
+   "prompt_tokens": 470,
+   "tokens_out": 146,
+   "load_s": 0.0,
+   "answer_words": 96
+  },
+  {
+   "round": 1,
+   "question": "q5",
+   "status": "success",
+   "first_word_s": 0.38,
+   "full_answer_s": 3.072,
+   "pip_steps_ms": 303.2,
+   "prompt_tokens": 474,
+   "tokens_out": 122,
+   "load_s": 0.0,
+   "answer_words": 99
+  },
+  {
+   "round": 1,
+   "question": "q6",
+   "status": "success",
+   "first_word_s": 0.419,
+   "full_answer_s": 0.937,
+   "pip_steps_ms": 281.7,
+   "prompt_tokens": 526,
+   "tokens_out": 24,
+   "load_s": 0.0,
+   "answer_words": 19
+  },
+  {
+   "round": 1,
+   "question": "q7",
+   "status": "success",
+   "first_word_s": 0.521,
+   "full_answer_s": 3.134,
+   "pip_steps_ms": 363.1,
+   "prompt_tokens": 765,
+   "tokens_out": 118,
+   "load_s": 0.0,
+   "answer_words": 27
+  },
+  {
+   "round": 1,
+   "question": "q8",
+   "status": "success",
+   "first_word_s": 0.551,
+   "full_answer_s": 2.115,
+   "pip_steps_ms": 386.9,
+   "prompt_tokens": 544,
+   "tokens_out": 71,
+   "load_s": 0.0,
+   "answer_words": 64
+  },
+  {
+   "round": 2,
+   "question": "q1",
+   "status": "success",
+   "first_word_s": 0.302,
+   "full_answer_s": 0.508,
+   "pip_steps_ms": 256.7,
+   "prompt_tokens": 458,
+   "tokens_out": 10,
+   "load_s": 0.0,
+   "answer_words": 7
+  },
+  {
+   "round": 2,
+   "question": "q2",
+   "status": "success",
+   "first_word_s": 0.337,
+   "full_answer_s": 2.338,
+   "pip_steps_ms": 265.7,
+   "prompt_tokens": 463,
+   "tokens_out": 91,
+   "load_s": 0.0,
+   "answer_words": 79
+  },
+  {
+   "round": 2,
+   "question": "q3",
+   "status": "success",
+   "first_word_s": 0.419,
+   "full_answer_s": 15.089,
+   "pip_steps_ms": 321.9,
+   "prompt_tokens": 462,
+   "tokens_out": 662,
+   "load_s": 0.0,
+   "answer_words": 521
+  },
+  {
+   "round": 2,
+   "question": "q4",
+   "status": "success",
+   "first_word_s": 0.392,
+   "full_answer_s": 2.423,
+   "pip_steps_ms": 279.4,
+   "prompt_tokens": 470,
+   "tokens_out": 92,
+   "load_s": 0.0,
+   "answer_words": 54
+  },
+  {
+   "round": 2,
+   "question": "q5",
+   "status": "success",
+   "first_word_s": 0.388,
+   "full_answer_s": 3.079,
+   "pip_steps_ms": 286.0,
+   "prompt_tokens": 474,
+   "tokens_out": 121,
+   "load_s": 0.0,
+   "answer_words": 98
+  },
+  {
+   "round": 2,
+   "question": "q6",
+   "status": "success",
+   "first_word_s": 0.479,
+   "full_answer_s": 0.998,
+   "pip_steps_ms": 341.2,
+   "prompt_tokens": 526,
+   "tokens_out": 24,
+   "load_s": 0.0,
+   "answer_words": 19
+  },
+  {
+   "round": 2,
+   "question": "q7",
+   "status": "success",
+   "first_word_s": 0.477,
+   "full_answer_s": 3.084,
+   "pip_steps_ms": 317.2,
+   "prompt_tokens": 765,
+   "tokens_out": 118,
+   "load_s": 0.0,
+   "answer_words": 27
+  },
+  {
+   "round": 2,
+   "question": "q8",
+   "status": "success",
+   "first_word_s": 0.398,
+   "full_answer_s": 1.952,
+   "pip_steps_ms": 270.8,
+   "prompt_tokens": 544,
+   "tokens_out": 71,
+   "load_s": 0.0,
+   "answer_words": 64
+  },
+  {
+   "round": 3,
+   "question": "q1",
+   "status": "success",
+   "first_word_s": 0.353,
+   "full_answer_s": 0.56,
+   "pip_steps_ms": 307.2,
+   "prompt_tokens": 458,
+   "tokens_out": 10,
+   "load_s": 0.0,
+   "answer_words": 7
+  },
+  {
+   "round": 3,
+   "question": "q2",
+   "status": "success",
+   "first_word_s": 0.356,
+   "full_answer_s": 2.358,
+   "pip_steps_ms": 299.4,
+   "prompt_tokens": 463,
+   "tokens_out": 91,
+   "load_s": 0.0,
+   "answer_words": 79
+  },
+  {
+   "round": 3,
+   "question": "q3",
+   "status": "success",
+   "first_word_s": 0.459,
+   "full_answer_s": 15.18,
+   "pip_steps_ms": 381.8,
+   "prompt_tokens": 462,
+   "tokens_out": 662,
+   "load_s": 0.0,
+   "answer_words": 521
+  },
+  {
+   "round": 3,
+   "question": "q4",
+   "status": "success",
+   "first_word_s": 0.481,
+   "full_answer_s": 2.512,
+   "pip_steps_ms": 393.4,
+   "prompt_tokens": 470,
+   "tokens_out": 92,
+   "load_s": 0.0,
+   "answer_words": 54
+  },
+  {
+   "round": 3,
+   "question": "q5",
+   "status": "success",
+   "first_word_s": 0.468,
+   "full_answer_s": 3.151,
+   "pip_steps_ms": 382.0,
+   "prompt_tokens": 474,
+   "tokens_out": 121,
+   "load_s": 0.0,
+   "answer_words": 98
+  },
+  {
+   "round": 3,
+   "question": "q6",
+   "status": "success",
+   "first_word_s": 0.566,
+   "full_answer_s": 1.084,
+   "pip_steps_ms": 424.8,
+   "prompt_tokens": 526,
+   "tokens_out": 24,
+   "load_s": 0.0,
+   "answer_words": 19
+  },
+  {
+   "round": 3,
+   "question": "q7",
+   "status": "success",
+   "first_word_s": 0.664,
+   "full_answer_s": 3.295,
+   "pip_steps_ms": 489.3,
+   "prompt_tokens": 765,
+   "tokens_out": 118,
+   "load_s": 0.0,
+   "answer_words": 27
+  },
+  {
+   "round": 3,
+   "question": "q8",
+   "status": "success",
+   "first_word_s": 0.525,
+   "full_answer_s": 2.091,
+   "pip_steps_ms": 373.9,
+   "prompt_tokens": 544,
+   "tokens_out": 71,
+   "load_s": 0.0,
+   "answer_words": 64
+  }
+ ],
+ "cache_hits": [
+  {
+   "status": "success",
+   "first_word_s": 0.01,
+   "full_answer_s": 0.012,
+   "pip_steps_ms": null,
+   "prompt_tokens": null,
+   "tokens_out": null,
+   "load_s": null,
+   "answer_words": 73
+  },
+  {
+   "status": "success",
+   "first_word_s": 0.012,
+   "full_answer_s": 0.015,
+   "pip_steps_ms": null,
+   "prompt_tokens": null,
+   "tokens_out": null,
+   "load_s": null,
+   "answer_words": 73
+  },
+  {
+   "status": "success",
+   "first_word_s": 0.011,
+   "full_answer_s": 0.013,
+   "pip_steps_ms": null,
+   "prompt_tokens": null,
+   "tokens_out": null,
+   "load_s": null,
+   "answer_words": 73
+  }
+ ],
+ "gpu_after": "NVIDIA GeForce RTX 4060 Laptop GPU, 6737 MiB, 8188 MiB, 97 %",
+ "summary": {
+  "q1": {
+   "first_word_s": {
+    "median": 0.35,
+    "min": 0.3,
+    "max": 0.36
+   },
+   "full_answer_s": {
+    "median": 0.56,
+    "min": 0.51,
+    "max": 0.56
+   },
+   "pip_steps_ms": {
+    "median": 307.2,
+    "min": 256.7,
+    "max": 311.6
+   },
+   "tokens_out": {
+    "median": 10,
+    "min": 10,
+    "max": 10
+   },
+   "prompt_tokens": {
+    "median": 458,
+    "min": 458,
+    "max": 458
+   }
+  },
+  "q2": {
+   "first_word_s": {
+    "median": 0.34,
+    "min": 0.31,
+    "max": 0.36
+   },
+   "full_answer_s": {
+    "median": 2.34,
+    "min": 1.95,
+    "max": 2.36
+   },
+   "pip_steps_ms": {
+    "median": 265.7,
+    "min": 247.4,
+    "max": 299.4
+   },
+   "tokens_out": {
+    "median": 91,
+    "min": 75,
+    "max": 91
+   },
+   "prompt_tokens": {
+    "median": 463,
+    "min": 463,
+    "max": 463
+   }
+  },
+  "q3": {
+   "first_word_s": {
+    "median": 0.42,
+    "min": 0.3,
+    "max": 0.46
+   },
+   "full_answer_s": {
+    "median": 15.09,
+    "min": 6.1,
+    "max": 15.18
+   },
+   "pip_steps_ms": {
+    "median": 321.9,
+    "min": 211.7,
+    "max": 381.8
+   },
+   "tokens_out": {
+    "median": 662,
+    "min": 262,
+    "max": 662
+   },
+   "prompt_tokens": {
+    "median": 462,
+    "min": 462,
+    "max": 462
+   }
+  },
+  "q4": {
+   "first_word_s": {
+    "median": 0.39,
+    "min": 0.36,
+    "max": 0.48
+   },
+   "full_answer_s": {
+    "median": 2.51,
+    "min": 2.42,
+    "max": 3.58
+   },
+   "pip_steps_ms": {
+    "median": 279.4,
+    "min": 276.1,
+    "max": 393.4
+   },
+   "tokens_out": {
+    "median": 92,
+    "min": 92,
+    "max": 146
+   },
+   "prompt_tokens": {
+    "median": 470,
+    "min": 470,
+    "max": 470
+   }
+  },
+  "q5": {
+   "first_word_s": {
+    "median": 0.39,
+    "min": 0.38,
+    "max": 0.47
+   },
+   "full_answer_s": {
+    "median": 3.08,
+    "min": 3.07,
+    "max": 3.15
+   },
+   "pip_steps_ms": {
+    "median": 303.2,
+    "min": 286.0,
+    "max": 382.0
+   },
+   "tokens_out": {
+    "median": 121,
+    "min": 121,
+    "max": 122
+   },
+   "prompt_tokens": {
+    "median": 474,
+    "min": 474,
+    "max": 474
+   }
+  },
+  "q6": {
+   "first_word_s": {
+    "median": 0.48,
+    "min": 0.42,
+    "max": 0.57
+   },
+   "full_answer_s": {
+    "median": 1.0,
+    "min": 0.94,
+    "max": 1.08
+   },
+   "pip_steps_ms": {
+    "median": 341.2,
+    "min": 281.7,
+    "max": 424.8
+   },
+   "tokens_out": {
+    "median": 24,
+    "min": 24,
+    "max": 24
+   },
+   "prompt_tokens": {
+    "median": 526,
+    "min": 526,
+    "max": 526
+   }
+  },
+  "q7": {
+   "first_word_s": {
+    "median": 0.52,
+    "min": 0.48,
+    "max": 0.66
+   },
+   "full_answer_s": {
+    "median": 3.13,
+    "min": 3.08,
+    "max": 3.29
+   },
+   "pip_steps_ms": {
+    "median": 363.1,
+    "min": 317.2,
+    "max": 489.3
+   },
+   "tokens_out": {
+    "median": 118,
+    "min": 118,
+    "max": 118
+   },
+   "prompt_tokens": {
+    "median": 765,
+    "min": 765,
+    "max": 765
+   }
+  },
+  "q8": {
+   "first_word_s": {
+    "median": 0.53,
+    "min": 0.4,
+    "max": 0.55
+   },
+   "full_answer_s": {
+    "median": 2.09,
+    "min": 1.95,
+    "max": 2.12
+   },
+   "pip_steps_ms": {
+    "median": 373.9,
+    "min": 270.8,
+    "max": 386.9
+   },
+   "tokens_out": {
+    "median": 71,
+    "min": 71,
+    "max": 71
+   },
+   "prompt_tokens": {
+    "median": 544,
+    "min": 544,
+    "max": 544
+   }
+  }
+ }
+}

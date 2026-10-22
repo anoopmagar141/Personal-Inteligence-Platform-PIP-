@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1110" height="1230" viewBox="0 0 1110 1230">
+<defs>
+<marker id="arr" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker>
+<marker id="arrs" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker>
+<marker id="open" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#000" stroke-width="1.3"/></marker>
+<marker id="opens" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#000" stroke-width="1.3"/></marker>
+</defs>
+<rect width="1110" height="1230" fill="#fff"/>
+<circle cx="60" cy="31" r="11" fill="#fff" stroke="#000" stroke-width="1.3"/>
+<polyline points="60,42 60,72" fill="none" stroke="#000" stroke-width="1.4"/>
+<polyline points="40,52 80,52" fill="none" stroke="#000" stroke-width="1.4"/>
+<polyline points="60,72 44,96" fill="none" stroke="#000" stroke-width="1.4"/>
+<polyline points="60,72 76,96" fill="none" stroke="#000" stroke-width="1.4"/>
+<text x="60" y="116.8" font-family="Times New Roman" font-size="14" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">User</text>
+<polyline points="60,120 60,1205" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="137" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="215.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">Flutter app</text>
+<text x="215.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">(chat screen)</text>
+<polyline points="215,90 215,1205" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="332" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="410.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">server.py</text>
+<text x="410.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">/ws/chat</text>
+<polyline points="410,90 410,1205" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="537" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="615.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">pipeline.py</text>
+<text x="615.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">(Stages 0–10)</text>
+<polyline points="615,90 615,1205" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="742" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="820.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">pip.db</text>
+<text x="820.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">(SQLCipher)</text>
+<polyline points="820,90 820,1205" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="932" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="1010.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">Ollama</text>
+<text x="1010.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">(qwen2.5:7b)</text>
+<polyline points="1010,90 1010,1205" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="404" y="200" width="12" height="90" rx="0" fill="#fff" stroke="#000" stroke-width="1.1"/>
+<rect x="404" y="318" width="12" height="832" rx="0" fill="#fff" stroke="#000" stroke-width="1.1"/>
+<rect x="609" y="384" width="12" height="640" rx="0" fill="#fff" stroke="#000" stroke-width="1.1"/>
+<polyline points="60,140 213,140" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="52.72" y="121.68" width="169.56" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="137.5" y="134.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">types a message, presses Send</text>
+<rect x="130" y="160" width="470" height="140" rx="0" fill="none" stroke="#000" stroke-width="1.1"/>
+<path d="M130,160 L170,160 L170,172 L162,180 L130,180 Z" fill="#e2e2e2" stroke="#000" stroke-width="1.1"/>
+<text x="147.0" y="174.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">opt</text>
+<text x="178" y="175.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">[first message since the chat opened]</text>
+<polyline points="215,212 402,212" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="188.06" y="193.68" width="242.88" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="309.5" y="206.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">connect /ws/chat?token=…&amp;conversation_id=…</text>
+<polyline points="416,234 450,234 450,250 418,250" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="453" y="233.68" width="169.56" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="456" y="246.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">check token, unlocked, origin</text>
+<polyline points="404,280 217,280" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="216.26" y="261.68" width="186.48" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="309.5" y="274.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">session_info (chat id, messages)</text>
+<polyline points="215,330 402,330" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="247.28" y="311.68" width="124.44" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="309.5" y="324.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">{message, project_id}</text>
+<polyline points="416,362 818,362" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="485.28" y="343.68" width="265.44" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="618.0" y="356.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">save earlier unsaved turns; create chat if new</text>
+<polyline points="416,396 607,396" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="424.9" y="377.68" width="175.2" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="512.5" y="390.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">run(message, history, chat id)</text>
+<polyline points="621,418 655,418 655,434 623,434" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="658" y="417.68" width="254.16" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="661" y="430.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">Stage 0 gap · Stage 1 intent · Stage 2 route</text>
+<polyline points="621,470 818,470" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="652.64" y="451.68" width="135.72" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="720.5" y="464.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">read this chat&#x27;s record</text>
+<polyline points="621,492 655,492 655,508 623,508" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="658" y="491.68" width="197.76" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="661" y="504.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">check the answer cache (in memory)</text>
+<rect x="130" y="525" width="970" height="435" rx="0" fill="none" stroke="#000" stroke-width="1.1"/>
+<path d="M130,525 L170,525 L170,537 L162,545 L130,545 Z" fill="#e2e2e2" stroke="#000" stroke-width="1.1"/>
+<text x="147.0" y="539.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">alt</text>
+<text x="178" y="540.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">[cache hit]</text>
+<polyline points="609,565 418,565" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="413.62" y="546.68" width="197.76" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="512.5" y="559.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">cached answer (Stages 3–9 skipped)</text>
+<polyline points="130,585 1100,585" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4"/>
+<text x="138" y="602.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">[cache miss]</text>
+<polyline points="621,625 818,625" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="607.52" y="606.68" width="225.95999999999998" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="720.5" y="619.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">Stages 3–5: decisions, memory, passages</text>
+<polyline points="609,660 418,660" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="475.66" y="641.68" width="73.67999999999999" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="512.5" y="654.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">stage events</text>
+<polyline points="404,690 217,690" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="272.66" y="671.68" width="73.67999999999999" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="309.5" y="684.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">stage events</text>
+<polyline points="621,710 655,710 655,726 623,726" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="658" y="709.68" width="276.71999999999997" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="661" y="722.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">Stage 7 build the prompt · Stage 8 check consent</text>
+<polyline points="621,765 1008,765" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="705.34" y="746.68" width="220.32" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="815.5" y="759.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">POST /api/chat (stream, num_ctx 16384)</text>
+<rect x="145" y="785" width="943" height="120" rx="0" fill="none" stroke="#000" stroke-width="1.1"/>
+<path d="M145,785 L193,785 L193,797 L185,805 L145,805 Z" fill="#e2e2e2" stroke="#000" stroke-width="1.1"/>
+<text x="166.0" y="799.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">loop</text>
+<text x="201" y="800.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">[each token]</text>
+<polyline points="1010,825 623,825" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="798.4" y="806.68" width="34.2" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="815.5" y="819.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">token</text>
+<polyline points="609,855 418,855" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="495.4" y="836.68" width="34.2" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="512.5" y="849.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">token</text>
+<polyline points="404,885 217,885" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="210.62" y="866.68" width="197.76" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="309.5" y="879.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">token (the answer grows on screen)</text>
+<polyline points="621,930 655,930 655,946 623,946" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="658" y="929.68" width="214.67999999999998" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="661" y="942.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">cache the answer (first message only)</text>
+<polyline points="621,990 818,990" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="627.26" y="971.68" width="186.48" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="720.5" y="984.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">Stage 10: trace rows (stage, ms)</text>
+<polyline points="609,1020 418,1020" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="430.54" y="1001.68" width="163.92" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="512.5" y="1014.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">result (status, answer text)</text>
+<polyline points="404,1050 217,1050" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="295.22" y="1031.68" width="28.56" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="309.5" y="1044.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">done</text>
+<polyline points="416,1080 818,1080" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="527.58" y="1061.68" width="180.84" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="618.0" y="1074.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">save the message and the answer</text>
+<rect x="130" y="1095" width="430" height="65" rx="0" fill="none" stroke="#000" stroke-width="1.1"/>
+<path d="M130,1095 L170,1095 L170,1107 L162,1115 L130,1115 Z" fill="#e2e2e2" stroke="#000" stroke-width="1.1"/>
+<text x="147.0" y="1109.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">opt</text>
+<text x="178" y="1110.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">[the message would need the web]</text>
+<polyline points="404,1140 217,1140" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="238.82" y="1121.68" width="141.35999999999999" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="309.5" y="1134.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">web_search_offer (query)</text>
+<polyline points="215,1185 62,1185" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="89.38" y="1166.68" width="96.24" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="137.5" y="1179.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">shows the answer</text>
+</svg>

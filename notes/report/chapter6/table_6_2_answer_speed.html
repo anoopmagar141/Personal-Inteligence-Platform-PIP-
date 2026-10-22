@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Table 6.2: Answer speed of PIP on the test PC, before and after the D-50 fix</title>
+<style>
+  body { font-family: "Times New Roman", serif; font-size: 10pt; margin: 24px; background: #fff; color: #000; }
+  p.cap { font-size: 12pt; margin: 0 0 6px 0; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; text-align: left; }
+  td + td { white-space: nowrap; }
+  th { background: #d9d9d9; font-weight: bold; }
+  p.note { font-size: 10pt; margin-top: 6px; }
+</style></head><body>
+<p class="cap"><b>Table 6.2: Answer speed of PIP on the test PC, before and after the D-50 fix</b></p>
+<table><thead><tr><th>Message</th><th>First word, before (s)</th><th>First word, after (s)</th><th>Full answer, before (s)</th><th>Full answer, after (s)</th><th>Tokens written</th><th>Speed (tokens/s)</th></tr></thead>
+<tbody>
+<tr><td>Greeting: “hi”</td><td>4.4 (4.4–4.5)</td><td>0.3 (0.3–0.3)</td><td>4.6 (4.6–4.7)</td><td>0.5 (0.5–0.5)</td><td>11</td><td>49</td></tr>
+<tr><td>Short general question: “What is a hash map?”</td><td>4.4 (4.4–4.5)</td><td>0.3 (0.3–0.4)</td><td>6.4 (6.1–6.5)</td><td>1.9 (1.8–2.9)</td><td>83</td><td>47</td></tr>
+<tr><td>Explanation: “Explain how vector clocks work in a distributed system.”</td><td>4.4 (4.3–4.4)</td><td>0.3 (0.3–0.4)</td><td>19.0 (10.2–19.0)</td><td>8.8 (8.8–8.8)</td><td>395</td><td>46</td></tr>
+<tr><td>Coding request: “Write a Python function that checks whether a string is a palindrome.”</td><td>4.5 (4.4–4.5)</td><td>0.4 (0.3–0.4)</td><td>6.5 (6.5–7.7)</td><td>2.3 (2.3–2.3)</td><td>92</td><td>46</td></tr>
+<tr><td>About the user: “What do you know about me?”</td><td>4.5 (4.4–7.3)</td><td>0.4 (0.3–0.4)</td><td>7.2 (7.1–10.0)</td><td>2.2 (2.1–2.2)</td><td>103</td><td>46</td></tr>
+<tr><td>About a project decision: “What did we decide about the database for Lanternfish?”</td><td>4.5 (4.3–4.5)</td><td>0.4 (0.3–0.4)</td><td>5.0 (4.8–5.0)</td><td>0.9 (0.8–0.9)</td><td>24</td><td>48</td></tr>
+<tr><td>About an uploaded document: “In the Lanternfish design note, how are budgets shared?”</td><td>4.5 (4.5–4.5)</td><td>0.4 (0.3–0.5)</td><td>6.8 (6.8–6.8)</td><td>2.6 (2.5–2.7)</td><td>103</td><td>46</td></tr>
+<tr><td>Follow-up in the same chat: “Why is that better than using timestamps?” (after 2 earlier turns)</td><td>4.5 (4.5–4.6)</td><td>0.4 (0.4–0.4)</td><td>6.1 (6.1–6.1)</td><td>1.9 (1.9–1.9)</td><td>71</td><td>46</td></tr>
+<tr><td>Cold start: “What is a hash map?” with the model not yet loaded (loading: 4.3 s and 4.3 s)</td><td>9.0</td><td>5.0</td><td>10.9</td><td>7.5</td><td>100</td><td>45</td></tr>
+<tr><td>The same first message asked again (from the answer cache, no model call)</td><td>0.01 (0.01–0.01)</td><td>0.01 (0.01–0.01)</td><td>0.01 (0.01–0.01)</td><td>0.01 (0.01–0.01)</td><td>–</td><td>–</td></tr>
+</tbody></table>
+<p class="note"><i>Note.</i> Each row is the median of 3 runs, with the lowest and highest in brackets; the cold start is one run. Times are wall-clock seconds from the moment a message enters PIP&#x27;s pipeline, run exactly as the chat uses it: first word = the first streamed token, full answer = the whole reply. Before = PIP as shipped (commit 6a51798, 2026-10-21): it called Ollama at &quot;localhost&quot;, which on this PC resolves to the IPv6 address ::1 first while Ollama listens on 127.0.0.1 only, so every request waited 2.04 s before falling back, twice per message (the availability check and the answer). After = the D-50 fix, Ollama called at 127.0.0.1 (commit 52db009 plus the fix, 2026-10-22). Over all 24 runs the first word took a median 4.48 (4.30–7.29) s before and 0.36 (0.26–0.48) s after; the day before the fix, the test script forcing 127.0.0.1 without changing PIP had predicted 0.41 (0.30–0.66) s. PIP&#x27;s own steps before the model (Stages 0–8, the availability check included) took 2.32 (2.14–5.14) s before and 0.26 (0.15–0.32) s after. With the model handed in directly (no availability check, still localhost) the first word took 2.4 s, one 2 s wait. Full-answer times also follow the answer&#x27;s length, which differed between runs and days even at temperature 0 (the explanation was 262 or 662 tokens before and 395 after), so the first word is the clean comparison; tokens written and speed are medians over both. The answer cache was emptied before every timed question. Test PC: Intel Core i9-14900HX, 16 GB RAM, NVIDIA GeForce RTX 4060 Laptop GPU (8 GB), Windows 11 Home. Model qwen2.5:7b (Q4_K_M, digest 845dbda0ea48) on Ollama 0.40.3, 16,384-token window, temperature 0. A throwaway test profile, never the user&#x27;s own data. Failed runs: 0 of 56.</p>
+</body></html>

@@ -1,0 +1,221 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Chapter 5: System Implementation (draft)</title>
+<style>
+  body { font-family: "Times New Roman", serif; font-size: 12pt; line-height: 2; margin: 1in 1in 1in 1.5in;
+         background: #fff; color: #000; text-align: left; }
+  h1 { font-size: 12pt; font-weight: bold; text-align: center; margin: 0 0 24pt 0; page-break-before: always; }
+  h1:first-of-type { page-break-before: auto; }
+  h2 { font-size: 12pt; font-weight: bold; margin: 24pt 0 12pt 0; }
+  h3 { font-size: 12pt; font-weight: bold; margin: 18pt 0 12pt 0; }
+  p { margin: 0 0 12pt 0; }
+  ol { margin: 0 0 12pt 0; padding-left: 0.4in; }
+  li { margin: 0 0 6pt 0; }
+  p.cap { margin: 12pt 0 6pt 0; }
+  table { border-collapse: collapse; width: 100%; line-height: 1.3; font-size: 11pt; margin-bottom: 12pt; }
+  th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; text-align: left; }
+  th { background: #d9d9d9; }
+  .check { color: #777; font-style: italic; }
+  p.fig { margin: 12pt 0 0 0; text-align: center; line-height: 1; }
+  p.fig img { max-width: 100%; }
+  p.figcap { margin: 6pt 0 18pt 0; text-align: center; }
+  pre { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; line-height: 1.25; white-space: pre-wrap;
+        border: 1px solid #000; background: #f5f5f5; padding: 6pt 8pt; margin: 0 0 12pt 0; }
+</style></head><body>
+<h1>CHAPTER 5: SYSTEM IMPLEMENTATION</h1>
+<p>This chapter describes how the design of Chapter 4 was built: the modules, the app, the backend, the database, the main algorithms, and the finished system&#x27;s screens. The code excerpts are taken from the project&#x27;s code as of 22 October 2026 (commit ccf9d0b); &quot;...&quot; marks lines left out.</p>
+<h2>5.1 MODULE DESCRIPTION</h2>
+<p>PIP&#x27;s backend has 19,214 lines of Python and its app 13,493 lines of Dart, not counting tests. These counts include comments, which are long because each one records why the code is as it is. The tests add 34,051 lines of Python in 111 files and 7,623 lines of Dart in 35 files. Table 5.1 lists the modules.</p>
+<p class="cap"><b>Table 5.1: Modules of PIP</b></p>
+<table><tr><th>Module</th><th>Files</th><th>Lines</th><th>What it does</th></tr>
+<tr><td>backend/api</td><td>1</td><td>3,468</td><td>server.py: the FastAPI application, its three middleware layers, 68 REST routes, the chat WebSocket, and the plain functions the routes call</td></tr>
+<tr><td>backend/core</td><td>18</td><td>6,085</td><td>The pipeline that runs Stages 0–10; sign-in, keys and profiles; the evidence gate and the Constitution enforcer; the answer cache; the trace; backup and restore checks; the single-instance lock</td></tr>
+<tr><td>backend/stages</td><td>14</td><td>3,807</td><td>One module per stage, each with one run function: Stages 0–10 for each message, Stages 11–13 at the end of a session</td></tr>
+<tr><td>backend/memory</td><td>11</td><td>4,928</td><td>One module per kind of stored data, such as the profile, chats, decisions, questions for the user, the audit log, and documents with their vector index; each uses plain SQL</td></tr>
+<tr><td>backend/providers</td><td>3</td><td>704</td><td>The provider interface and its two implementations, for Ollama and for OpenAI-compatible endpoints</td></tr>
+<tr><td>backend/config, shared</td><td>3</td><td>222</td><td>The loader for settings.json, which holds every tunable value, and the chat event types used by both ends</td></tr>
+<tr><td>frontend/flutter/lib</td><td>27</td><td>13,493</td><td>The Windows app: start-up, sign-in, the main window and its nine tabs, the REST and chat clients, and the theme</td></tr>
+<tr><td>scripts, installer</td><td>–</td><td>–</td><td>PowerShell launchers, backup and restore scripts, the Git hook and the Inno Setup installer</td></tr>
+</table>
+<h2>5.2 FRONTEND IMPLEMENTATION</h2>
+<p>The app is written in Flutter for Windows and holds no logic of its own: it shows what the backend sends and sends back what the user does. Its state is kept with Flutter&#x27;s own StatefulWidget and setState, without a state-management package, which keeps the app small and easy to test.</p>
+<p>The launcher script starts Ollama and the backend in hidden windows and then opens the app. The app first shows a launch screen that reads a progress file written by the launcher and the backend, so the user sees which step of start-up is running, and which one failed if any does. The sign-in screen then lists the profiles, and after sign-in the main window shows the nine tabs described in Section 4.6.</p>
+<p>Two classes talk to the backend. ApiClient has one method for each request the app makes; each method turns a path and its data into an HTTP request carrying the bearer token, and turns the JSON answer back into a Dart value, with no caching or retrying. WsChatClient keeps the chat WebSocket open and passes each event (a stage, a token, done, an error or a web search offer) to the chat screen. If the connection drops, it reconnects after two seconds, with only one reconnect waiting at a time, and the app asks the backend whether it is still signed in, returning to the sign-in screen if not.</p>
+<p>The chat screen adds each token to the answer as it arrives and shows the answer as formatted Markdown. The theme defines light and dark colour sets whose contrast is checked by tests, and one widget test walks through every control on every tab to check that a screen reader can name it.</p>
+<h2>5.3 BACKEND IMPLEMENTATION</h2>
+<h3>5.3.1 Requests And The Message Pipeline</h3>
+<p>The backend is a FastAPI application served by Uvicorn at 127.0.0.1, port 8765 by default. Each request passes three middleware layers, outermost first: CORS, which accepts only a local origin; the bearer-token check; and the lock gate, which refuses every route except the sign-in routes, with status 423, until a password has opened a database. A route then opens a database connection and calls a plain function that does the work, so the functions can be tested without HTTP.</p>
+<p>Each chat connection gets its own worker thread, because an encrypted database connection must be used on the thread that opened it. The pipeline is a Python generator: it calls the stages in order and yields an event each time a stage finishes or the model writes a token, and the server forwards each event to the app at once. This is how the app can show each step, and the answer, as they happen. Algorithm 5.1 gives the order of the stages.</p>
+<p>Stage 1 sorts a message into one of eight categories (such as general knowledge, project question or personal question) with keyword and pattern rules rather than a model call, which keeps it fast. Stage 9 calls Ollama&#x27;s HTTP interface through Python&#x27;s standard urllib library. Every request, from the chat and from the Observer alike, asks for the same 16,384-token window, so the model is not reloaded between them, and for temperature 0, so the model always picks its most likely next word.</p>
+<p>At the end of a session, Stage 11 sends the transcript to the local model with a JSON schema as the required output format. Ollama can then only produce output of the expected shape: a list of memory candidates, each with a table, a field, a value, a label and the user&#x27;s own words as evidence, and a list of decision candidates. The checks of Section 5.5 then decide each candidate.</p>
+<h3>5.3.2 Security Implementation</h3>
+<p>Table 5.2 lists what PIP protects against and how the code does it. Two principles run through the table. First, every check fails closed: a provider with no consent record is blocked, a provider whose two records disagree about being local is blocked, and a key is tested before it is accepted. Second, every rule is enforced in the backend, so it applies to any program that calls the backend, not only to the app. Listing 5.1 shows the consent gate that runs before every call to a model.</p>
+<p class="cap"><b>Table 5.2: Security measures in the code</b></p>
+<table><tr><th>Risk</th><th>Measure</th><th>Where</th></tr>
+<tr><td>Someone with the disk reads the profile</td><td>The whole database is encrypted with SQLCipher under a key derived from the password (Section 5.4); the key is never written to disk</td><td>db_key.py, profile_store.py</td></tr>
+<tr><td>Document text read from the vector index</td><td>Each chunk&#x27;s text and file path are encrypted with Fernet under a key derived from the database key, and chunk ids are keyed hashes of the path</td><td>vector_store.py</td></tr>
+<tr><td>Guessing the password</td><td>PBKDF2 costs about a quarter of a second per guess, and each wrong attempt adds 0.25 s more, up to 1 s</td><td>session_key.py</td></tr>
+<tr><td>Another program calls the backend</td><td>It listens on 127.0.0.1 only; every request needs a 64-character random token, compared in constant time; a browser origin must be localhost or 127.0.0.1</td><td>launch_pip.ps1, auth.py, server.py</td></tr>
+<tr><td>Data used while signed out</td><td>The lock gate answers 423 to every route except sign-in, and the database helper refuses on its own as well</td><td>server.py</td></tr>
+<tr><td>One profile&#x27;s data shown in another</td><td>Sign-out forgets the key, empties the answer cache and starts a new cache generation; each profile has its own folder, salt and index</td><td>session_key.py, response_cache.py</td></tr>
+<tr><td>Data sent off the computer without consent</td><td>Stage 8 checks the consent record before every model call (Listing 5.1); Ollama cloud models are refused when pulled or selected; the Observer runs only on a model that both records call local</td><td>stage_08, server.py, stage_11</td></tr>
+<tr><td>A fact stored that the user never said</td><td>Grounding, the evidence gate and the Constitution (Section 5.5); sensitive fields wait for the user&#x27;s confirmation</td><td>evidence_gate.py, constitution_enforcer.py, stage_13</td></tr>
+<tr><td>A reply posing as the user</td><td>Any line in a message that starts with &quot;User:&quot; or &quot;Assistant:&quot; is indented in the transcript, so it cannot be read back as a turn</td><td>session_lifecycle.py</td></tr>
+<tr><td>The record of decisions changed</td><td>Triggers refuse UPDATE and DELETE on the audit log, whose rows hold a keyed hash, never the text (Listing 5.4)</td><td>schema.sql, governance_audit.py</td></tr>
+</table>
+<p class="cap"><b>Listing 5.1: The consent gate, Stage 8 (shortened)</b></p>
+<pre># backend/stages/stage_08_provider_gate.py, run()
+    row = conn.execute(
+        &quot;SELECT provider_id, is_cloud, user_consented, consent_scope, revoked &quot;
+        &quot;FROM provider_consent WHERE provider_id = ?&quot;,
+        (provider_id,),
+    ).fetchone()
+    if row is None:
+        raise ProviderConsentError(...)
+    is_cloud = bool(row[&quot;is_cloud&quot;])
+    ...
+    if not is_cloud:
+        if not provider_is_local:
+            raise ProviderConsentError(...)
+        return ConsentRecord(...)
+    if revoked:
+        raise ProviderConsentError(...)
+    if not user_consented:
+        raise ProviderConsentError(...)
+    if consent_scope == &quot;none&quot;:
+        raise ProviderConsentError(...)
+    if consent_scope != requested_scope and consent_scope not in _FULL_INFERENCE_SCOPES:
+        raise ProviderConsentError(...)
+    return ConsentRecord(...)</pre>
+<p>Some limits are kept by decision and stated in Chapter 1. An uploaded document is also kept as an ordinary, unencrypted file in the profile&#x27;s folder; the encrypted copy is the one inside the database. While a profile is signed in, its key is held in the backend&#x27;s memory and in its process environment. Profile names, and a sign-in picture if the user chooses to show one, are readable without a password, because the sign-in screen must show them before any password is typed.</p>
+<h2>5.4 DATABASE IMPLEMENTATION</h2>
+<p>Each profile&#x27;s data is one SQLite file encrypted with SQLCipher. When a profile&#x27;s password is first set, a random 16-byte salt is saved beside the database. At sign-in, PBKDF2-HMAC-SHA512 with 256,000 iterations turns the password and the salt into a 32-byte key, which SQLCipher receives as a raw key in hexadecimal (Listing 5.2). SQLCipher reports a wrong key only when a page is first read, so the backend runs one query on the schema before it accepts a key; a wrong password is therefore reported as a wrong password, not as a damaged database later.</p>
+<p class="cap"><b>Listing 5.2: Turning the password into a key and opening the database (shortened)</b></p>
+<pre># backend/core/db_key.py
+KDF_HASH = &quot;sha512&quot;
+KDF_ITERATIONS = 256_000
+KEY_BYTES = 32  # 256-bit, the width SQLCipher&#x27;s raw-hex key syntax expects
+SALT_BYTES = 16
+
+def derive_key(password: str, salt: bytes) -&gt; str:
+    ...
+    return hashlib.pbkdf2_hmac(
+        KDF_HASH, password.encode(&quot;utf-8&quot;), salt, KDF_ITERATIONS, dklen=KEY_BYTES
+    ).hex()
+
+# backend/memory/profile_store.py, get_connection()
+    if db_key is not None and not re.fullmatch(r&quot;[0-9a-fA-F]+&quot;, db_key):
+        raise ValueError(&quot;db_key must be hex-encoded&quot;)
+    ...
+        conn = sqlcipher3.connect(db_path)
+        conn.execute(f&quot;PRAGMA key = \&quot;x&#x27;{db_key}&#x27;\&quot;&quot;)</pre>
+<p>The schema is one file, schema.sql (740 lines, 33 tables), applied each time the backend opens a database. Every table is created only if it does not exist, and columns added after the first version are added by a short migration list, so an older database is upgraded in place. Foreign keys are switched on for every connection, and all queries are plain SQL with parameters, without an ORM.</p>
+<p>Triggers keep two rules inside the database itself. The audit log&#x27;s triggers refuse any change or deletion. The record-version triggers add one to a counter after any write to the 13 tables that answers draw on, such as the profile, decisions, documents and chat records; the answer cache includes this counter in its key (Listing 5.3).</p>
+<p>An uploaded document is kept in three forms: its bytes inside the encrypted database, an ordinary copy in the profile&#x27;s folder (one of the limits in Section 5.3.2), and its chunks in the vector index. The text is split into chunks of 500 words that overlap by 50, and each chunk is turned into a vector of 384 numbers by the all-MiniLM-L6-v2 model and stored in ChromaDB. ChromaDB does not encrypt anything itself, so PIP encrypts each chunk&#x27;s text and file path with Fernet, using a key derived from the database key, before storing them; the vectors stay unencrypted, because ChromaDB must compare them. When the password changes, the index is re-encrypted under the new key together with the database.</p>
+<h2>5.5 ALGORITHMS USED</h2>
+<p>Algorithm 5.1 gives the order in which one message is answered, from pipeline.run.</p>
+<p class="cap"><b>Algorithm 5.1: Answering one chat message (Stages 0–10)</b></p>
+<pre>Input: message, chat history, chat id
+ 1  level   &lt;- Stage 0: time since the last session
+ 2  intent  &lt;- Stage 1: keyword rules -&gt; one of 8 categories
+ 3  plan    &lt;- Stage 2: which look-ups this intent needs
+ 4  record  &lt;- this chat&#x27;s record, else its project&#x27;s latest, else the newest
+ 5  if this is the chat&#x27;s first message and no web search would be offered:
+ 6      key &lt;- SHA-256(message, project, record version, session, model, record, date)
+ 7      if the cache holds key and it has not expired:
+ 8          deliver the cached answer; stop
+ 9  decisions &lt;- Stage 3;  memory &lt;- Stage 4
+10  passages  &lt;- Stage 5: the 3 closest chunks with cosine similarity &gt;= 0.60
+11  if the user clicked a web search offer: results &lt;- Stage 6, with exactly that query
+12  prompt    &lt;- Stage 7: assemble everything to fit the model&#x27;s window
+13  provider  &lt;- Stage 8: the first provider whose consent allows it, else an error
+14  for each token the provider streams (Stage 9): send it to the app
+15  Stage 10: save each stage&#x27;s time; cache the answer if its category allows; done</pre>
+<p>Algorithm 5.2 is the evidence gate. It answers one question, whether the user&#x27;s own words support the claim, and asks it in a fixed order: first whether the user said the words at all, then whether they contradict the claim, then whether they support it. Each &quot;no&quot; has its own reason, which goes into the audit row. For most kinds of fact, the gate accepts a claim only when the user&#x27;s words carry a support phrase known for that kind, such as &quot;I prefer&quot; for a preference, and wording it does not know is rejected; a topic needs only that the user asked about it or mentioned it in the first person. This makes the gate fail towards forgetting a true fact rather than towards storing a false one.</p>
+<p class="cap"><b>Algorithm 5.2: The evidence gate (evidence_gate.adjudicate)</b></p>
+<pre>Input: candidate (table, field, value, quote); the transcript&#x27;s turns, each with its speaker
+ 1  if the quote is empty                                  -&gt; NO_EVIDENCE
+ 2  if the quote is under 3 words, or addressed to the system -&gt; EVIDENCE_INVALID
+ 3  turns &lt;- the transcript turns that contain the quote
+ 4  if turns is empty                                      -&gt; EVIDENCE_NOT_FOUND
+ 5  if none of turns is the user&#x27;s                         -&gt; EVIDENCE_NOT_USER_SOURCE
+ 6  if the quote, or any user turn, negates the value      -&gt; EVIDENCE_CONTRADICTORY
+ 7  if the quote is only a question, hypothetical or sarcastic -&gt; EVIDENCE_NOT_ENTAILING
+ 8  if the quote never names the value                     -&gt; EVIDENCE_NOT_ENTAILING
+ 9  if it has no support phrase for this table             -&gt; EVIDENCE_NOT_ENTAILING
+10  if a skill level is higher than the words allow        -&gt; EVIDENCE_NOT_ENTAILING
+11  if the quote was cut short of a word that changes its meaning -&gt; EVIDENCE_NOT_ENTAILING
+12  otherwise                                              -&gt; EVIDENCE_SUFFICIENT</pre>
+<p>A candidate the gate accepts has its evidence counted across chats and is then checked against the Constitution (Algorithm 5.3), whose rules and thresholds are read from constitutional.json. Stage 13 acts on the result: APPROVED is written; REQUIRES_CONFIRMATION, TIER_2_REQUIRED and PROMPT_RECONCILIATION become a question on the Review tab; a belief about the user that is discarded only for too little evidence becomes a question too, at most two per chat; anything else is rejected. Every outcome adds one audit row.</p>
+<p class="cap"><b>Algorithm 5.3: The Constitution check (ConstitutionEnforcer.validate)</b></p>
+<pre>Input: candidate, the stored value of the same field, profile age in weeks
+ 1  if the field is name, language or time zone, and is
+        already set or proposed as a preference             -&gt; HARD_REJECT
+ 2  if the table is not one the Observer may write          -&gt; HARD_REJECT
+ 3  if the user&#x27;s behaviour has contradicted the stored value
+        in at least 3 sessions over at least 14 days        -&gt; PROMPT_RECONCILIATION
+ 4  confidence &lt;- (0.9 if the user said it plainly, else 0.4) x min(evidence, 5) / 5
+ 5  if age &lt;= 2 weeks:  require evidence &gt;= 1 and a plain statement
+    elif age &lt;= 4 weeks: require evidence &gt;= 2
+    else:                require evidence &gt;= 3 and confidence &gt;= 0.7 (not for goals)
+    if not met                                              -&gt; DISCARD
+ 6  if the field is gated (style, goals, projects, skill level) -&gt; REQUIRES_CONFIRMATION
+ 7  if it differs from a stored value of confidence &gt; 0.7    -&gt; TIER_2_REQUIRED
+ 8  otherwise                                               -&gt; APPROVED</pre>
+<p>Two smaller algorithms protect the user&#x27;s record. The answer cache key (Listing 5.3) is a SHA-256 hash of everything an answer depends on, including the record-version counter, so an answer stored before the user&#x27;s data changed is never found again. The audit fingerprint (Listing 5.4) is an HMAC-SHA256 of the table, the field and the value under a random salt kept in each profile, so the audit log can show that two rows concern the same fact without holding the fact itself.</p>
+<p class="cap"><b>Listing 5.3: The answer cache key and the record-version triggers (shortened)</b></p>
+<pre># backend/core/response_cache.py, cache_key()
+    raw = _normalize(user_message) + &quot;|&quot; + (project_id or &quot;&quot;) + &quot;|&quot; + (
+        &quot;&quot; if record_version is None else str(record_version)
+    ) + &quot;|&quot; + str(_generation if generation is None else generation) + &quot;|&quot; + (model_name or &quot;&quot;) + &quot;|&quot; + (
+        context_key or &quot;&quot;
+    )
+    return hashlib.sha256(raw.encode(&quot;utf-8&quot;)).hexdigest()
+
+# backend/memory/profile_store.py, install_record_version_triggers()
+    for table in RECORD_TABLES:
+        for event in (&quot;INSERT&quot;, &quot;UPDATE&quot;, &quot;DELETE&quot;):
+            conn.execute(
+                f&quot;CREATE TRIGGER IF NOT EXISTS record_version_{table}_{event.lower()} &quot;
+                f&quot;AFTER {event} ON {table} BEGIN &quot;
+                f&quot;UPDATE record_version SET version = version + 1 WHERE id = 1; END&quot;
+            )</pre>
+<p class="cap"><b>Listing 5.4: The audit fingerprint and the append-only triggers (shortened)</b></p>
+<pre># backend/memory/governance_audit.py
+def fingerprint(conn, target_table: Optional[str], field_name: Optional[str], value: Any) -&gt; str:
+    &quot;&quot;&quot;HMAC-SHA256 of table, field and value under this profile&#x27;s salt.&quot;&quot;&quot;
+    message = &quot;\x1f&quot;.join([
+        str(target_table or &quot;&quot;), str(field_name or &quot;&quot;), &quot;&quot; if value is None else str(value),
+    ]).encode(&quot;utf-8&quot;)
+    return hmac.new(bytes.fromhex(salt(conn)), message, hashlib.sha256).hexdigest()
+
+-- backend/core/schema.sql
+CREATE TRIGGER IF NOT EXISTS governance_audit_log_no_update
+BEFORE UPDATE ON governance_audit_log
+BEGIN
+    SELECT RAISE(ABORT, &#x27;governance_audit_log is append-only&#x27;);
+...</pre>
+<h2>5.6 SCREENSHOTS OF SYSTEM FEATURES</h2>
+<p>The figures below show the main features of the finished system. They were taken on 22 October 2026 in a throwaway copy of PIP, with a made-up profile and made-up content, so they hold no real personal data.</p>
+<p class="fig"><img src="../screenshots/shot5-1_launch.png" alt="The launch screen while PIP starts"></p>
+<p class="figcap"><b>Figure 5.1:</b> The launch screen while PIP starts</p>
+<p class="fig"><img src="../screenshots/shot5-2_sign_in.png" alt="The sign-in screen, asking for the profile&#x27;s password"></p>
+<p class="figcap"><b>Figure 5.2:</b> The sign-in screen, asking for the profile&#x27;s password</p>
+<p class="fig"><img src="../screenshots/shot5-3_chat.png" alt="A chat, with the stage strip under the answer and a web search offer"></p>
+<p class="figcap"><b>Figure 5.3:</b> A chat, with the stage strip under the answer and a web search offer</p>
+<p class="fig"><img src="../screenshots/shot5-4_chat_record.png" alt="The &quot;where we left off&quot; record of a chat, which the user can edit or clear"></p>
+<p class="figcap"><b>Figure 5.4:</b> The &quot;where we left off&quot; record of a chat, which the user can edit or clear</p>
+<p class="fig"><img src="../screenshots/shot5-5_review.png" alt="The Review tab, with a learned goal waiting for the user&#x27;s answer"></p>
+<p class="figcap"><b>Figure 5.5:</b> The Review tab, with a learned goal waiting for the user&#x27;s answer</p>
+<p class="fig"><img src="../screenshots/shot5-6_profile.png" alt="The Profile tab, listing stored facts and how each was learned"></p>
+<p class="figcap"><b>Figure 5.6:</b> The Profile tab, listing stored facts and how each was learned</p>
+<p class="fig"><img src="../screenshots/shot5-7_decisions.png" alt="The Decisions tab, with two decisions about a project"></p>
+<p class="figcap"><b>Figure 5.7:</b> The Decisions tab, with two decisions about a project</p>
+<p class="fig"><img src="../screenshots/shot5-8_documents.png" alt="The Documents tab, with an uploaded document and a search"></p>
+<p class="figcap"><b>Figure 5.8:</b> The Documents tab, with an uploaded document and a search</p>
+<p class="fig"><img src="../screenshots/shot5-9_consent.png" alt="The consent dialog for web search, with no scope chosen in advance"></p>
+<p class="figcap"><b>Figure 5.9:</b> The consent dialog for web search, with no scope chosen in advance</p>
+<p class="fig"><img src="../screenshots/shot5-10_backup.png" alt="The Backup tab"></p>
+<p class="figcap"><b>Figure 5.10:</b> The Backup tab</p>
+<p class="fig"><img src="../screenshots/shot5-11_trace.png" alt="The Trace tab, with the stages one message passed through and what each found"></p>
+<p class="figcap"><b>Figure 5.11:</b> The Trace tab, with the stages one message passed through and what each found</p>
+</body></html>

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="620" viewBox="0 0 1100 620">
+<defs>
+<marker id="arr" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker>
+<marker id="arrs" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker>
+<marker id="open" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#000" stroke-width="1.3"/></marker>
+<marker id="opens" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#000" stroke-width="1.3"/></marker>
+</defs>
+<rect width="1100" height="620" fill="#fff"/>
+<rect x="30" y="265" width="170" height="100" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.6"/>
+<text x="115.0" y="320.4" font-family="Times New Roman" font-size="16" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">User</text>
+<rect x="430" y="225" width="260" height="180" rx="10" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<polyline points="430,247 690,247" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="560.0" y="240.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">0</text>
+<text x="560.0" y="311.9" font-family="Times New Roman" font-size="16" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">PIP</text>
+<text x="560.0" y="331.4" font-family="Times New Roman" font-size="16" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">Personal Intelligence</text>
+<text x="560.0" y="351.0" font-family="Times New Roman" font-size="16" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">Platform</text>
+<rect x="880" y="40" width="195" height="90" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.6"/>
+<text x="977.5" y="81.2" font-family="Times New Roman" font-size="14" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">Web search</text>
+<text x="977.5" y="98.3" font-family="Times New Roman" font-size="14" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">(DuckDuckGo)</text>
+<rect x="880" y="270" width="195" height="100" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.6"/>
+<text x="977.5" y="316.2" font-family="Times New Roman" font-size="14" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">Local language</text>
+<text x="977.5" y="333.3" font-family="Times New Roman" font-size="14" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">model (Ollama)</text>
+<rect x="880" y="480" width="195" height="100" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.6"/>
+<text x="977.5" y="526.2" font-family="Times New Roman" font-size="14" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">Cloud language</text>
+<text x="977.5" y="543.3" font-family="Times New Roman" font-size="14" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">model (optional)</text>
+<polyline points="200,290 428,290" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="208.13" y="225.21" width="213.73999999999998" height="49.58" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="315" y="238.6" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">password, messages, search clicks,</text>
+<text x="315" y="254.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">answers to questions, corrections,</text>
+<text x="315" y="270.3" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">documents, consent, backup file</text>
+<polyline points="430,345 202,345" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="226.46" y="361.21" width="177.07999999999998" height="49.58" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="315" y="374.6" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">streamed answers, questions</text>
+<text x="315" y="390.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">to confirm, memory, records,</text>
+<text x="315" y="406.3" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">trace, backup file</text>
+<polyline points="690,290 878,290" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="719.9" y="245.14" width="128.2" height="33.72" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="784" y="258.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">prompt with context,</text>
+<text x="784" y="274.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">chat transcript</text>
+<polyline points="880,345 692,345" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="726.01" y="357.14" width="115.97999999999999" height="33.72" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="784" y="370.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">streamed tokens,</text>
+<text x="784" y="386.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">learned candidates</text>
+<polyline points="600,225 600,70 878,70" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="636.185" y="45.07" width="207.63" height="17.86" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="740" y="58.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">search query (only after a click)</text>
+<polyline points="880,105 640,105 640,223" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="714.23" y="112.07" width="91.53999999999999" height="17.86" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="760" y="125.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">search results</text>
+<polyline points="600,405 600,555 878,555" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="630.075" y="563.07" width="219.85" height="17.86" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="740" y="576.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">prompt (only with recorded consent)</text>
+<polyline points="880,505 640,505 640,407" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="711.175" y="480.07" width="97.64999999999999" height="17.86" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="760" y="493.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">streamed tokens</text>
+</svg>

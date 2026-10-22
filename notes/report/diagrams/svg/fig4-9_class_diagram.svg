@@ -1,0 +1,222 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1110" viewBox="0 0 1400 1110">
+<defs>
+<marker id="arr" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker>
+<marker id="arrs" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker>
+<marker id="open" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#000" stroke-width="1.3"/></marker>
+<marker id="opens" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#000" stroke-width="1.3"/></marker>
+</defs>
+<rect width="1400" height="1110" fill="#fff"/>
+<rect x="15" y="30" width="510" height="470" rx="8" fill="#fff" stroke="#000" stroke-width="1.0" stroke-dasharray="6 4"/>
+<text x="25" y="48.4" font-family="Times New Roman" font-size="13" text-anchor="start" font-weight="bold" font-style="normal" fill="#000">providers (backend/providers)</text>
+<rect x="545" y="30" width="840" height="680" rx="8" fill="#fff" stroke="#000" stroke-width="1.0" stroke-dasharray="6 4"/>
+<text x="555" y="48.4" font-family="Times New Roman" font-size="13" text-anchor="start" font-weight="bold" font-style="normal" fill="#000">evidence gate and Constitution (backend/core)</text>
+<rect x="15" y="520" width="510" height="330" rx="8" fill="#fff" stroke="#000" stroke-width="1.0" stroke-dasharray="6 4"/>
+<text x="25" y="538.4" font-family="Times New Roman" font-size="13" text-anchor="start" font-weight="bold" font-style="normal" fill="#000">chat sessions (backend/core)</text>
+<rect x="545" y="730" width="840" height="235" rx="8" fill="#fff" stroke="#000" stroke-width="1.0" stroke-dasharray="6 4"/>
+<text x="555" y="748.4" font-family="Times New Roman" font-size="13" text-anchor="start" font-weight="bold" font-style="normal" fill="#000">frozen records</text>
+<rect x="110" y="60" width="300" height="142" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="110" y="60" width="300" height="41" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="260.0" y="75.7" font-family="Times New Roman" font-size="11" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">«abstract»</text>
+<text x="260.0" y="93.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">BaseLLMProvider</text>
+<polyline points="110,107 410,107" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="118" y="124.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ chat(messages, context, max_tokens,</text>
+<text x="118" y="141.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">      timeout_seconds, response_format)</text>
+<text x="118" y="158.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">      : Iterator[str]</text>
+<text x="118" y="175.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ is_available(): bool</text>
+<text x="118" y="192.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ get_model_info(): dict</text>
+<rect x="30" y="280" width="235" height="165" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="30" y="280" width="235" height="26" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="147.5" y="297.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">OllamaProvider</text>
+<polyline points="30,367 265,367" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="38" y="323.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">model_name: str</text>
+<text x="38" y="340.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">host: str = OLLAMA_HOST</text>
+<text x="38" y="357.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">last_counts: dict</text>
+<text x="38" y="384.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ request_options(max_tokens): dict</text>
+<text x="38" y="401.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ chat(...): Iterator[str]</text>
+<text x="38" y="418.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ is_available(): bool</text>
+<text x="38" y="435.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ get_model_info(): dict</text>
+<rect x="280" y="280" width="235" height="165" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="280" y="280" width="235" height="26" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="397.5" y="297.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">OpenAICompatibleProvider</text>
+<polyline points="280,384 515,384" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="288" y="323.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">model_name, base_url: str</text>
+<text x="288" y="340.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">provider_id, api_key: str</text>
+<text x="288" y="357.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">is_local: bool</text>
+<text x="288" y="374.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">supports_response_format: bool</text>
+<text x="288" y="401.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ chat(...): Iterator[str]</text>
+<text x="288" y="418.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ is_available(): bool</text>
+<text x="288" y="435.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ get_model_info(): dict</text>
+<polyline points="147.5,280 147.5,250 397.5,250 397.5,280" fill="none" stroke="#000" stroke-width="1.3"/>
+<polyline points="260.0,250 260.0,215" fill="none" stroke="#000" stroke-width="1.3"/>
+<path d="M260.0,202 L252.2,215.0 L267.8,215.0 Z" fill="#fff" stroke="#000" stroke-width="1.3"/>
+<rect x="560" y="60" width="250" height="176" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="560" y="60" width="250" height="41" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="685.0" y="75.7" font-family="Times New Roman" font-size="11" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">«TypedDict»</text>
+<text x="685.0" y="93.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">MemoryCandidate</text>
+<polyline points="560,230 810,230" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="568" y="118.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">target_table, field_name: str</text>
+<text x="568" y="135.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">proposed_value: str</text>
+<text x="568" y="152.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">label: explicit | inferred | ...</text>
+<text x="568" y="169.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">evidence_count: int</text>
+<text x="568" y="186.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">evidence_text: str</text>
+<text x="568" y="203.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">candidate_id?: str</text>
+<text x="568" y="220.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">conversation_id?: str</text>
+<rect x="860" y="60" width="250" height="97" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="860" y="60" width="250" height="26" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="985.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">ConstitutionEnforcer</text>
+<polyline points="860,113 1110,113" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="868" y="103.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">rules: dict (constitutional.json)</text>
+<text x="868" y="130.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ validate(candidate, existing_field,</text>
+<text x="868" y="147.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">      profile_age_weeks): ValidationResult</text>
+<rect x="1150" y="60" width="222" height="199" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="1150" y="60" width="222" height="26" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="1261.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">ValidationResult</text>
+<polyline points="1150,130 1372,130" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="1158" y="103.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">status: str</text>
+<text x="1158" y="120.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">reason: str</text>
+<text x="1158" y="147.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ APPROVED()</text>
+<text x="1158" y="164.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ DISCARD(reason)</text>
+<text x="1158" y="181.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ REQUIRES_CONFIRMATION(reason)</text>
+<text x="1158" y="198.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ PROMPT_RECONCILIATION(reason)</text>
+<text x="1158" y="215.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ TIER_2_REQUIRED(reason)</text>
+<text x="1158" y="232.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ HARD_REJECT(reason)</text>
+<text x="1158" y="249.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">(all class methods)</text>
+<rect x="560" y="330" width="250" height="114" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="560" y="330" width="250" height="26" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="685.0" y="347.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">EvidenceLedger</text>
+<polyline points="560,383 810,383" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="568" y="373.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">turns: list[EvidenceTurn]</text>
+<text x="568" y="400.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ from_transcript(transcript)  (class method)</text>
+<text x="568" y="417.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ locate(quote): list[EvidenceTurn]</text>
+<text x="568" y="434.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ user_turns(): list[EvidenceTurn]</text>
+<rect x="560" y="545" width="250" height="125" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="560" y="545" width="250" height="41" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="685.0" y="560.7" font-family="Times New Roman" font-size="11" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">«TypedDict»</text>
+<text x="685.0" y="578.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">EvidenceTurn</text>
+<polyline points="560,664 810,664" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="568" y="603.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">index: int</text>
+<text x="568" y="620.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">role: user | assistant | unknown</text>
+<text x="568" y="637.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">text: str</text>
+<text x="568" y="654.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">normalized: str</text>
+<rect x="860" y="330" width="250" height="131" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="860" y="330" width="250" height="26" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="985.0" y="347.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">EvidenceVerdict</text>
+<polyline points="860,400 1110,400" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="868" y="373.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">state: str (one of EvidenceState)</text>
+<text x="868" y="390.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">detail: str</text>
+<text x="868" y="417.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ sufficient: bool  (property)</text>
+<text x="868" y="434.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ to_validation_result()</text>
+<text x="868" y="451.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">      : ValidationResult</text>
+<rect x="860" y="500" width="250" height="176" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="860" y="500" width="250" height="41" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="985.0" y="515.7" font-family="Times New Roman" font-size="11" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">«constants»</text>
+<text x="985.0" y="533.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">EvidenceState</text>
+<polyline points="860,670 1110,670" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="868" y="558.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">NO_EVIDENCE</text>
+<text x="868" y="575.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">EVIDENCE_INVALID</text>
+<text x="868" y="592.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">EVIDENCE_NOT_FOUND</text>
+<text x="868" y="609.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">EVIDENCE_NOT_USER_SOURCE</text>
+<text x="868" y="626.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">EVIDENCE_CONTRADICTORY</text>
+<text x="868" y="643.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">EVIDENCE_NOT_ENTAILING</text>
+<text x="868" y="660.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">EVIDENCE_SUFFICIENT</text>
+<polyline points="860,120 812,120" fill="none" stroke="#000" stroke-width="1.3" stroke-dasharray="7 4" marker-end="url(#open)"/>
+<rect x="818.9" y="99.68" width="34.2" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="836" y="112.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">reads</text>
+<polyline points="1110,120 1148,120" fill="none" stroke="#000" stroke-width="1.3" stroke-dasharray="7 4" marker-end="url(#open)"/>
+<rect x="1106.26" y="99.68" width="45.48" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="1129" y="112.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">creates</text>
+<polyline points="1060,330 1060,300 1200,300 1200,261" fill="none" stroke="#000" stroke-width="1.3" stroke-dasharray="7 4" marker-end="url(#open)"/>
+<rect x="1107.26" y="279.68" width="45.48" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="1130" y="292.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">creates</text>
+<polyline points="685.0,466 685.0,545" fill="none" stroke="#000" stroke-width="1.3"/>
+<path d="M685.0,444 L678.95,455.0 L685.0,466 L691.05,455.0 Z" fill="#000" stroke="#000" stroke-width="1.3"/>
+<text x="693.0" y="539.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">0..*</text>
+<text x="693.0" y="460.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">1</text>
+<polyline points="985.0,461 985.0,498" fill="none" stroke="#000" stroke-width="1.3" marker-end="url(#arr)"/>
+<text x="993.0" y="483.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">state</text>
+<path d="M1150,330 L1360,330 L1372,342 L1372,480 L1150,480 Z" fill="#fffbe6" stroke="#000" stroke-width="1.2"/>
+<path d="M1360,330 L1360,342 L1372,342" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="1158" y="365.2" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">evidence_gate.adjudicate(</text>
+<text x="1158" y="379.8" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">  candidate, ledger)</text>
+<text x="1158" y="394.4" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">  -&gt; EvidenceVerdict</text>
+<text x="1158" y="409.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">is a module function, not</text>
+<text x="1158" y="423.7" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">a method. stage_11_observer</text>
+<text x="1158" y="438.4" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">makes the ledger and the</text>
+<text x="1158" y="453.0" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">enforcer at session end.</text>
+<polyline points="1150,405 1112,405" fill="none" stroke="#000" stroke-width="1.0" stroke-dasharray="3 3"/>
+<rect x="30" y="560" width="250" height="165" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="30" y="560" width="250" height="26" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="155.0" y="577.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">SessionRegistry</text>
+<polyline points="30,647 280,647" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="38" y="603.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">_sessions: dict</text>
+<text x="38" y="620.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">_lock: Lock</text>
+<text x="38" y="637.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">shutting_down: bool</text>
+<text x="38" y="664.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ register(session_id, conn, executor,</text>
+<text x="38" y="681.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">      conversation_history, session_state)</text>
+<text x="38" y="698.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ unregister(session_id)</text>
+<text x="38" y="715.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ snapshot(): list[dict]</text>
+<rect x="335" y="560" width="180" height="131" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="335" y="560" width="180" height="26" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="425.0" y="577.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">PinnedExecutor</text>
+<polyline points="335,630 515,630" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="343" y="603.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">_queue: Queue</text>
+<text x="343" y="620.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">_thread: Thread (daemon)</text>
+<text x="343" y="647.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ submit(fn): Future</text>
+<text x="343" y="664.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ shutdown(wait, cancel_futures)</text>
+<text x="343" y="681.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ thread: Thread  (property)</text>
+<polyline points="302,620 335,620" fill="none" stroke="#000" stroke-width="1.3"/>
+<path d="M280,620 L291.0,626.05 L302,620 L291.0,613.95 Z" fill="#fff" stroke="#000" stroke-width="1.3"/>
+<text x="305" y="638.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">0..*</text>
+<path d="M30,760 L503,760 L515,772 L515,832 L30,832 Z" fill="#fffbe6" stroke="#000" stroke-width="1.2"/>
+<path d="M503,760 L503,772 L515,772" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="38" y="785.4" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">server.py keeps one SessionRegistry for the process and opens one PinnedExecutor</text>
+<text x="38" y="800.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">(one daemon thread) per chat socket: a SQLCipher connection must stay on the</text>
+<text x="38" y="814.7" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">thread that opened it.</text>
+<rect x="560" y="770" width="250" height="146" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="560" y="770" width="250" height="41" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="685.0" y="785.7" font-family="Times New Roman" font-size="11" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">«dataclass, frozen» core/profiles.py</text>
+<text x="685.0" y="803.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">Profile</text>
+<polyline points="560,872 810,872" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="568" y="828.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">slug, name: str</text>
+<text x="568" y="845.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">data_dir, created_at: str</text>
+<text x="568" y="862.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">last_used: str | None</text>
+<text x="568" y="889.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ paths(data_root): dict[str, Path]</text>
+<text x="568" y="906.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">+ exists(data_root): bool</text>
+<rect x="860" y="770" width="250" height="142" rx="0" fill="#fff" stroke="#000" stroke-width="1.4"/>
+<rect x="860" y="770" width="250" height="41" rx="0" fill="#e2e2e2" stroke="#000" stroke-width="1.4"/>
+<text x="985.0" y="785.7" font-family="Times New Roman" font-size="11" text-anchor="middle" font-weight="normal" font-style="italic" fill="#000">«dataclass, frozen» stages/stage_08</text>
+<text x="985.0" y="803.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">ConsentRecord</text>
+<polyline points="860,906 1110,906" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="868" y="828.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">provider_id: str</text>
+<text x="868" y="845.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">is_cloud: bool</text>
+<text x="868" y="862.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">user_consented: bool</text>
+<text x="868" y="879.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">consent_scope: str</text>
+<text x="868" y="896.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">revoked: bool</text>
+<path d="M1150,760 L1360,760 L1372,772 L1372,965 L1150,965 Z" fill="#fffbe6" stroke="#000" stroke-width="1.2"/>
+<path d="M1360,760 L1360,772 L1372,772" fill="none" stroke="#000" stroke-width="1.1"/>
+<text x="1158" y="786.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">Exceptions, each a subclass</text>
+<text x="1158" y="800.7" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">of Exception / RuntimeError</text>
+<text x="1158" y="815.3" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">(&quot;Error&quot; left off the names):</text>
+<text x="1158" y="830.0" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">providers: ProviderUnavailable,</text>
+<text x="1158" y="844.6" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">  ProviderExecution, PullCancelled</text>
+<text x="1158" y="859.3" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">stages: ProviderConsent,</text>
+<text x="1158" y="873.9" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">  ObserverLocalProvider,</text>
+<text x="1158" y="888.5" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">  ObserverUnavailable</text>
+<text x="1158" y="903.2" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">core: Restore, WrongPassword,</text>
+<text x="1158" y="917.8" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">  NoSalt, AlreadyRunning,</text>
+<text x="1158" y="932.5" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">  IncompleteBackup</text>
+<text x="1158" y="947.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">memory: IndexLocked, DocumentFile</text>
+<polyline points="30,1000 75,1000" fill="none" stroke="#000" stroke-width="1.3"/>
+<path d="M75,1000 L62.0,992.2 L62.0,1007.8 Z" fill="#fff" stroke="#000" stroke-width="1.3"/>
+<text x="90" y="1004.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">is a kind of</text>
+<polyline points="200,1000 245,1000" fill="none" stroke="#000" stroke-width="1.3" stroke-dasharray="7 4" marker-end="url(#open)"/>
+<text x="255" y="1004.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">uses or creates</text>
+<polyline points="390,1000 435,1000" fill="none" stroke="#000" stroke-width="1.3"/>
+<path d="M390,1000 L401.0,1006.05 L412,1000 L401.0,993.95 Z" fill="#000" stroke="#000" stroke-width="1.3"/>
+<text x="445" y="1004.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">holds (composition)</text>
+<polyline points="600,1000 645,1000" fill="none" stroke="#000" stroke-width="1.3"/>
+<path d="M600,1000 L611.0,1006.05 L622,1000 L611.0,993.95 Z" fill="#fff" stroke="#000" stroke-width="1.3"/>
+<text x="655" y="1004.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">keeps (aggregation)</text>
+<text x="30" y="1046.8" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">PIP is written mostly as module-level functions (one run() per stage; store functions that take the database connection first), so this</text>
+<text x="30" y="1061.4" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">shows every class it has outside the tests, except the event TypedDicts of shared/ws_spec.py and a few private helpers.</text>
+</svg>

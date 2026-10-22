@@ -1,0 +1,634 @@
+{
+ "protocol": "(they are also written into the result file):\n- Eight questions, one per kind of message a user sends (below). Each is asked three times, in three rounds\n  (q1..q8, then again, then again), with the answer cache emptied before every question, so every timed answer\n  goes through the model.\n- Measured per answer, by the wall clock from the moment the message enters the pipeline:\n    first word   = the first streamed token reaches the caller (what the user sees start to move),\n    full answer  = the pipeline's final event (the whole reply is on screen),\n    PIP's own steps = time until the model is called (Stages 0-8: routing, memory, decisions, documents,\n                      context assembly, consent check),\n  plus Ollama's own counts: prompt tokens read, tokens written, model load seconds.\n- Also measured: a cold start (the model unloaded from the GPU first, then one question), and three answers\n  served from the answer cache (the same first message asked twice; the second is timed).\n- Reported: the median of the three runs per question, with the lowest and highest. No run is dropped; a failed\n  run is recorded as failed.",
+ "stamp": {
+  "stamp_version": 1,
+  "date": "2026-10-21T17:04:51+00:00",
+  "git": {
+   "commit": "6a51798f1834a5803047747fb16e36482e7f528d",
+   "dirty": false,
+   "changed": []
+  },
+  "constitution": {
+   "version": "1.1",
+   "sha256": "75363e5af8e00985f27d4b0c161e505e8e2d293b86c59dc7908ef125de048d83"
+  },
+  "ollama": {
+   "host": "http://localhost:11434",
+   "version": "0.40.3"
+  },
+  "model": {
+   "tag": "qwen2.5:7b",
+   "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+   "parameters": null
+  },
+  "options_sent": {
+   "num_predict": 2000,
+   "num_ctx": 16384,
+   "temperature": 0.0
+  },
+  "note": "options_sent lists what the harness put in Ollama's request options. A key whose value is null was not sent, so Ollama's or the model's own default applied (the model's own defaults are under model.parameters)."
+ },
+ "gpu_before": "NVIDIA GeForce RTX 4060 Laptop GPU, 1743 MiB, 8188 MiB, 6 %",
+ "questions": [
+  {
+   "id": "q1",
+   "kind": "Greeting",
+   "message": "hi",
+   "history_turns": 0
+  },
+  {
+   "id": "q2",
+   "kind": "Short general question",
+   "message": "What is a hash map?",
+   "history_turns": 0
+  },
+  {
+   "id": "q3",
+   "kind": "Explanation",
+   "message": "Explain how vector clocks work in a distributed system.",
+   "history_turns": 0
+  },
+  {
+   "id": "q4",
+   "kind": "Coding request",
+   "message": "Write a Python function that checks whether a string is a palindrome.",
+   "history_turns": 0
+  },
+  {
+   "id": "q5",
+   "kind": "About the user",
+   "message": "What do you know about me?",
+   "history_turns": 0
+  },
+  {
+   "id": "q6",
+   "kind": "About a project decision",
+   "message": "What did we decide about the database for Lanternfish?",
+   "history_turns": 0
+  },
+  {
+   "id": "q7",
+   "kind": "About an uploaded document",
+   "message": "In the Lanternfish design note, how are budgets shared?",
+   "history_turns": 0
+  },
+  {
+   "id": "q8",
+   "kind": "Follow-up in the same chat",
+   "message": "Why is that better than using timestamps?",
+   "history_turns": 2
+  }
+ ],
+ "cold": {
+  "question": "q2",
+  "status": "success",
+  "first_word_s": 7.422,
+  "full_answer_s": 9.292,
+  "pip_steps_ms": 297.1,
+  "prompt_tokens": 463,
+  "tokens_out": 84,
+  "load_s": 4.7,
+  "answer_words": 73
+ },
+ "runs": [
+  {
+   "round": 1,
+   "question": "q1",
+   "status": "success",
+   "first_word_s": 2.345,
+   "full_answer_s": 2.583,
+   "pip_steps_ms": 260.6,
+   "prompt_tokens": 458,
+   "tokens_out": 10,
+   "load_s": 0.0,
+   "answer_words": 7
+  },
+  {
+   "round": 1,
+   "question": "q2",
+   "status": "success",
+   "first_word_s": 2.375,
+   "full_answer_s": 4.087,
+   "pip_steps_ms": 269.8,
+   "prompt_tokens": 463,
+   "tokens_out": 75,
+   "load_s": 0.0,
+   "answer_words": 67
+  },
+  {
+   "round": 1,
+   "question": "q3",
+   "status": "success",
+   "first_word_s": 2.438,
+   "full_answer_s": 8.118,
+   "pip_steps_ms": 291.4,
+   "prompt_tokens": 462,
+   "tokens_out": 262,
+   "load_s": 0.0,
+   "answer_words": 242
+  },
+  {
+   "round": 1,
+   "question": "q4",
+   "status": "success",
+   "first_word_s": 2.45,
+   "full_answer_s": 5.585,
+   "pip_steps_ms": 296.5,
+   "prompt_tokens": 470,
+   "tokens_out": 146,
+   "load_s": 0.0,
+   "answer_words": 96
+  },
+  {
+   "round": 1,
+   "question": "q5",
+   "status": "success",
+   "first_word_s": 2.483,
+   "full_answer_s": 5.09,
+   "pip_steps_ms": 336.9,
+   "prompt_tokens": 474,
+   "tokens_out": 122,
+   "load_s": 0.0,
+   "answer_words": 99
+  },
+  {
+   "round": 1,
+   "question": "q6",
+   "status": "success",
+   "first_word_s": 2.482,
+   "full_answer_s": 2.996,
+   "pip_steps_ms": 301.3,
+   "prompt_tokens": 526,
+   "tokens_out": 24,
+   "load_s": 0.0,
+   "answer_words": 19
+  },
+  {
+   "round": 1,
+   "question": "q7",
+   "status": "success",
+   "first_word_s": 2.465,
+   "full_answer_s": 4.709,
+   "pip_steps_ms": 248.7,
+   "prompt_tokens": 765,
+   "tokens_out": 103,
+   "load_s": 0.0,
+   "answer_words": 77
+  },
+  {
+   "round": 1,
+   "question": "q8",
+   "status": "success",
+   "first_word_s": 2.504,
+   "full_answer_s": 4.001,
+   "pip_steps_ms": 304.0,
+   "prompt_tokens": 544,
+   "tokens_out": 71,
+   "load_s": 0.0,
+   "answer_words": 64
+  },
+  {
+   "round": 2,
+   "question": "q1",
+   "status": "success",
+   "first_word_s": 2.452,
+   "full_answer_s": 2.684,
+   "pip_steps_ms": 338.5,
+   "prompt_tokens": 458,
+   "tokens_out": 10,
+   "load_s": 0.0,
+   "answer_words": 7
+  },
+  {
+   "round": 2,
+   "question": "q2",
+   "status": "success",
+   "first_word_s": 2.414,
+   "full_answer_s": 4.397,
+   "pip_steps_ms": 288.7,
+   "prompt_tokens": 463,
+   "tokens_out": 91,
+   "load_s": 0.0,
+   "answer_words": 79
+  },
+  {
+   "round": 2,
+   "question": "q3",
+   "status": "success",
+   "first_word_s": 2.526,
+   "full_answer_s": 16.822,
+   "pip_steps_ms": 381.1,
+   "prompt_tokens": 462,
+   "tokens_out": 662,
+   "load_s": 0.0,
+   "answer_words": 521
+  },
+  {
+   "round": 2,
+   "question": "q4",
+   "status": "success",
+   "first_word_s": 2.474,
+   "full_answer_s": 4.545,
+   "pip_steps_ms": 313.1,
+   "prompt_tokens": 470,
+   "tokens_out": 92,
+   "load_s": 0.0,
+   "answer_words": 54
+  },
+  {
+   "round": 2,
+   "question": "q5",
+   "status": "success",
+   "first_word_s": 2.441,
+   "full_answer_s": 5.03,
+   "pip_steps_ms": 315.4,
+   "prompt_tokens": 474,
+   "tokens_out": 121,
+   "load_s": 0.0,
+   "answer_words": 98
+  },
+  {
+   "round": 2,
+   "question": "q6",
+   "status": "success",
+   "first_word_s": 2.527,
+   "full_answer_s": 3.038,
+   "pip_steps_ms": 357.5,
+   "prompt_tokens": 526,
+   "tokens_out": 24,
+   "load_s": 0.0,
+   "answer_words": 19
+  },
+  {
+   "round": 2,
+   "question": "q7",
+   "status": "success",
+   "first_word_s": 2.474,
+   "full_answer_s": 4.675,
+   "pip_steps_ms": 272.7,
+   "prompt_tokens": 765,
+   "tokens_out": 103,
+   "load_s": 0.0,
+   "answer_words": 77
+  },
+  {
+   "round": 2,
+   "question": "q8",
+   "status": "success",
+   "first_word_s": 2.397,
+   "full_answer_s": 3.901,
+   "pip_steps_ms": 242.1,
+   "prompt_tokens": 544,
+   "tokens_out": 71,
+   "load_s": 0.0,
+   "answer_words": 64
+  },
+  {
+   "round": 3,
+   "question": "q1",
+   "status": "success",
+   "first_word_s": 2.354,
+   "full_answer_s": 2.563,
+   "pip_steps_ms": 246.0,
+   "prompt_tokens": 458,
+   "tokens_out": 10,
+   "load_s": 0.0,
+   "answer_words": 7
+  },
+  {
+   "round": 3,
+   "question": "q2",
+   "status": "success",
+   "first_word_s": 2.345,
+   "full_answer_s": 4.177,
+   "pip_steps_ms": 222.3,
+   "prompt_tokens": 463,
+   "tokens_out": 91,
+   "load_s": 0.0,
+   "answer_words": 79
+  },
+  {
+   "round": 3,
+   "question": "q3",
+   "status": "success",
+   "first_word_s": 2.352,
+   "full_answer_s": 16.164,
+   "pip_steps_ms": 249.4,
+   "prompt_tokens": 462,
+   "tokens_out": 662,
+   "load_s": 0.0,
+   "answer_words": 521
+  },
+  {
+   "round": 3,
+   "question": "q4",
+   "status": "success",
+   "first_word_s": 2.412,
+   "full_answer_s": 4.271,
+   "pip_steps_ms": 283.4,
+   "prompt_tokens": 470,
+   "tokens_out": 92,
+   "load_s": 0.0,
+   "answer_words": 54
+  },
+  {
+   "round": 3,
+   "question": "q5",
+   "status": "success",
+   "first_word_s": 2.404,
+   "full_answer_s": 4.854,
+   "pip_steps_ms": 267.9,
+   "prompt_tokens": 474,
+   "tokens_out": 121,
+   "load_s": 0.0,
+   "answer_words": 98
+  },
+  {
+   "round": 3,
+   "question": "q6",
+   "status": "success",
+   "first_word_s": 2.458,
+   "full_answer_s": 2.935,
+   "pip_steps_ms": 280.1,
+   "prompt_tokens": 526,
+   "tokens_out": 24,
+   "load_s": 0.0,
+   "answer_words": 19
+  },
+  {
+   "round": 3,
+   "question": "q7",
+   "status": "success",
+   "first_word_s": 2.49,
+   "full_answer_s": 4.752,
+   "pip_steps_ms": 276.8,
+   "prompt_tokens": 765,
+   "tokens_out": 103,
+   "load_s": 0.0,
+   "answer_words": 77
+  },
+  {
+   "round": 3,
+   "question": "q8",
+   "status": "success",
+   "first_word_s": 2.512,
+   "full_answer_s": 4.065,
+   "pip_steps_ms": 337.3,
+   "prompt_tokens": 544,
+   "tokens_out": 71,
+   "load_s": 0.0,
+   "answer_words": 64
+  }
+ ],
+ "cache_hits": [
+  {
+   "status": "success",
+   "first_word_s": 0.01,
+   "full_answer_s": 0.012,
+   "pip_steps_ms": null,
+   "prompt_tokens": null,
+   "tokens_out": null,
+   "load_s": null,
+   "answer_words": 73
+  },
+  {
+   "status": "success",
+   "first_word_s": 0.013,
+   "full_answer_s": 0.015,
+   "pip_steps_ms": null,
+   "prompt_tokens": null,
+   "tokens_out": null,
+   "load_s": null,
+   "answer_words": 73
+  },
+  {
+   "status": "success",
+   "first_word_s": 0.014,
+   "full_answer_s": 0.016,
+   "pip_steps_ms": null,
+   "prompt_tokens": null,
+   "tokens_out": null,
+   "load_s": null,
+   "answer_words": 73
+  }
+ ],
+ "gpu_after": "NVIDIA GeForce RTX 4060 Laptop GPU, 7113 MiB, 8188 MiB, 71 %",
+ "summary": {
+  "q1": {
+   "first_word_s": {
+    "median": 2.35,
+    "min": 2.35,
+    "max": 2.45
+   },
+   "full_answer_s": {
+    "median": 2.58,
+    "min": 2.56,
+    "max": 2.68
+   },
+   "pip_steps_ms": {
+    "median": 260.6,
+    "min": 246.0,
+    "max": 338.5
+   },
+   "tokens_out": {
+    "median": 10,
+    "min": 10,
+    "max": 10
+   },
+   "prompt_tokens": {
+    "median": 458,
+    "min": 458,
+    "max": 458
+   }
+  },
+  "q2": {
+   "first_word_s": {
+    "median": 2.38,
+    "min": 2.35,
+    "max": 2.41
+   },
+   "full_answer_s": {
+    "median": 4.18,
+    "min": 4.09,
+    "max": 4.4
+   },
+   "pip_steps_ms": {
+    "median": 269.8,
+    "min": 222.3,
+    "max": 288.7
+   },
+   "tokens_out": {
+    "median": 91,
+    "min": 75,
+    "max": 91
+   },
+   "prompt_tokens": {
+    "median": 463,
+    "min": 463,
+    "max": 463
+   }
+  },
+  "q3": {
+   "first_word_s": {
+    "median": 2.44,
+    "min": 2.35,
+    "max": 2.53
+   },
+   "full_answer_s": {
+    "median": 16.16,
+    "min": 8.12,
+    "max": 16.82
+   },
+   "pip_steps_ms": {
+    "median": 291.4,
+    "min": 249.4,
+    "max": 381.1
+   },
+   "tokens_out": {
+    "median": 662,
+    "min": 262,
+    "max": 662
+   },
+   "prompt_tokens": {
+    "median": 462,
+    "min": 462,
+    "max": 462
+   }
+  },
+  "q4": {
+   "first_word_s": {
+    "median": 2.45,
+    "min": 2.41,
+    "max": 2.47
+   },
+   "full_answer_s": {
+    "median": 4.54,
+    "min": 4.27,
+    "max": 5.58
+   },
+   "pip_steps_ms": {
+    "median": 296.5,
+    "min": 283.4,
+    "max": 313.1
+   },
+   "tokens_out": {
+    "median": 92,
+    "min": 92,
+    "max": 146
+   },
+   "prompt_tokens": {
+    "median": 470,
+    "min": 470,
+    "max": 470
+   }
+  },
+  "q5": {
+   "first_word_s": {
+    "median": 2.44,
+    "min": 2.4,
+    "max": 2.48
+   },
+   "full_answer_s": {
+    "median": 5.03,
+    "min": 4.85,
+    "max": 5.09
+   },
+   "pip_steps_ms": {
+    "median": 315.4,
+    "min": 267.9,
+    "max": 336.9
+   },
+   "tokens_out": {
+    "median": 121,
+    "min": 121,
+    "max": 122
+   },
+   "prompt_tokens": {
+    "median": 474,
+    "min": 474,
+    "max": 474
+   }
+  },
+  "q6": {
+   "first_word_s": {
+    "median": 2.48,
+    "min": 2.46,
+    "max": 2.53
+   },
+   "full_answer_s": {
+    "median": 3.0,
+    "min": 2.94,
+    "max": 3.04
+   },
+   "pip_steps_ms": {
+    "median": 301.3,
+    "min": 280.1,
+    "max": 357.5
+   },
+   "tokens_out": {
+    "median": 24,
+    "min": 24,
+    "max": 24
+   },
+   "prompt_tokens": {
+    "median": 526,
+    "min": 526,
+    "max": 526
+   }
+  },
+  "q7": {
+   "first_word_s": {
+    "median": 2.47,
+    "min": 2.46,
+    "max": 2.49
+   },
+   "full_answer_s": {
+    "median": 4.71,
+    "min": 4.67,
+    "max": 4.75
+   },
+   "pip_steps_ms": {
+    "median": 272.7,
+    "min": 248.7,
+    "max": 276.8
+   },
+   "tokens_out": {
+    "median": 103,
+    "min": 103,
+    "max": 103
+   },
+   "prompt_tokens": {
+    "median": 765,
+    "min": 765,
+    "max": 765
+   }
+  },
+  "q8": {
+   "first_word_s": {
+    "median": 2.5,
+    "min": 2.4,
+    "max": 2.51
+   },
+   "full_answer_s": {
+    "median": 4.0,
+    "min": 3.9,
+    "max": 4.07
+   },
+   "pip_steps_ms": {
+    "median": 304.0,
+    "min": 242.1,
+    "max": 337.3
+   },
+   "tokens_out": {
+    "median": 71,
+    "min": 71,
+    "max": 71
+   },
+   "prompt_tokens": {
+    "median": 544,
+    "min": 544,
+    "max": 544
+   }
+  }
+ }
+}

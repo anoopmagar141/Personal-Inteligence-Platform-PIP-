@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1110" height="1130" viewBox="0 0 1110 1130">
+<defs>
+<marker id="arr" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker>
+<marker id="arrs" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker>
+<marker id="open" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#000" stroke-width="1.3"/></marker>
+<marker id="opens" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#000" stroke-width="1.3"/></marker>
+</defs>
+<rect width="1110" height="1130" fill="#fff"/>
+<circle cx="60" cy="31" r="11" fill="#fff" stroke="#000" stroke-width="1.3"/>
+<polyline points="60,42 60,72" fill="none" stroke="#000" stroke-width="1.4"/>
+<polyline points="40,52 80,52" fill="none" stroke="#000" stroke-width="1.4"/>
+<polyline points="60,72 44,96" fill="none" stroke="#000" stroke-width="1.4"/>
+<polyline points="60,72 76,96" fill="none" stroke="#000" stroke-width="1.4"/>
+<text x="60" y="116.8" font-family="Times New Roman" font-size="14" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">User</text>
+<polyline points="60,120 60,1080" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="142" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="220.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">Flutter app</text>
+<text x="220.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">(sign-in screen)</text>
+<polyline points="220,90 220,1080" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="342" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="420.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">server.py</text>
+<text x="420.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">/auth routes</text>
+<polyline points="420,90 420,1080" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="542" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="620.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">session_key</text>
+<text x="620.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">+ db_key</text>
+<polyline points="620,90 620,1080" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="742" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="820.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">profile files</text>
+<text x="820.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">(profiles.json, salt, db)</text>
+<polyline points="820,90 820,1080" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="932" y="40" width="156" height="50" rx="3" fill="#f0f0f0" stroke="#000" stroke-width="1.3"/>
+<text x="1010.0" y="61.5" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">catch-up task</text>
+<text x="1010.0" y="77.4" font-family="Times New Roman" font-size="13" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">(background)</text>
+<polyline points="1010,90 1010,1080" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 5"/>
+<rect x="414" y="140" width="12" height="35" rx="0" fill="#fff" stroke="#000" stroke-width="1.1"/>
+<rect x="414" y="206" width="12" height="34" rx="0" fill="#fff" stroke="#000" stroke-width="1.1"/>
+<rect x="414" y="306" width="12" height="106" rx="0" fill="#fff" stroke="#000" stroke-width="1.1"/>
+<rect x="414" y="480" width="12" height="486" rx="0" fill="#fff" stroke="#000" stroke-width="1.1"/>
+<rect x="614" y="514" width="12" height="350" rx="0" fill="#fff" stroke="#000" stroke-width="1.1"/>
+<polyline points="220,150 412,150" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="271.7" y="131.68" width="90.6" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="317.0" y="144.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">GET /auth/state</text>
+<polyline points="414,175 222,175" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="277.34000000000003" y="156.68" width="79.32" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="317.0" y="169.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">state: locked</text>
+<polyline points="220,215 412,215" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="263.24" y="196.68" width="107.52" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="317.0" y="209.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">GET /auth/profiles</text>
+<polyline points="414,240 222,240" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="237.86" y="221.68" width="158.28" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="317.0" y="234.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">names, last used (no paths)</text>
+<polyline points="60,275 218,275" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="89.06" y="256.68" width="101.88" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="140.0" y="269.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">chooses a profile</text>
+<polyline points="220,315 412,315" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="243.5" y="296.68" width="147.0" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="317.0" y="309.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">POST /auth/profile {slug}</text>
+<polyline points="426,335 460,335 460,351 428,351" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="463" y="334.68" width="209.04" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="466" y="347.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">check nobody is signed in (else 409)</text>
+<polyline points="426,382 818,382" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="529.76" y="363.68" width="186.48" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="623.0" y="376.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">point every path at this profile</text>
+<polyline points="414,412 222,412" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="257.6" y="393.68" width="118.8" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="317.0" y="406.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">that profile&#x27;s state</text>
+<polyline points="60,448 218,448" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="86.24000000000001" y="429.68" width="107.52" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="140.0" y="442.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">types the password</text>
+<polyline points="220,490 412,490" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="209.66000000000003" y="471.68" width="214.67999999999998" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="317.0" y="484.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">POST /auth/unlock {profile, password}</text>
+<polyline points="426,524 612,524" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="471.88" y="505.68" width="96.24" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="520.0" y="518.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">unlock(password)</text>
+<polyline points="626,556 818,556" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="683.34" y="537.68" width="79.32" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="723.0" y="550.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">read salt.bin</text>
+<polyline points="626,576 660,576 660,592 628,592" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="663" y="575.68" width="254.16" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="666" y="588.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">PBKDF2-HMAC-SHA512, 256,000 iterations → key</text>
+<polyline points="626,630 818,630" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="626.94" y="611.68" width="192.11999999999998" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="723.0" y="624.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">open pip.db with the key (verify)</text>
+<rect x="25" y="650" width="1070" height="370" rx="0" fill="none" stroke="#000" stroke-width="1.1"/>
+<path d="M25,650 L65,650 L65,662 L57,670 L25,670 Z" fill="#e2e2e2" stroke="#000" stroke-width="1.1"/>
+<text x="42.0" y="664.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="bold" font-style="normal" fill="#000">alt</text>
+<text x="73" y="665.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">[wrong password]</text>
+<polyline points="626,676 660,676 660,692 628,692" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="663" y="675.68" width="169.56" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="666" y="688.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">wait 0.25 s × failed attempts</text>
+<polyline points="614,730 428,730" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="502.9" y="711.68" width="34.2" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="520.0" y="724.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">False</text>
+<polyline points="414,762 222,762" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="192.74" y="743.68" width="248.51999999999998" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="317.0" y="756.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">401 &quot;That password did not open your data.&quot;</text>
+<polyline points="220,790 62,790" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="94.7" y="771.68" width="90.6" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="140.0" y="784.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">shows the error</text>
+<polyline points="25,808 1095,808" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4"/>
+<text x="33" y="825.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">[the key opens the database]</text>
+<polyline points="626,834 660,834 660,850 628,850" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="663" y="833.68" width="242.88" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="666" y="846.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="normal" fill="#000">keep the key in memory (and in PIP_DB_KEY)</text>
+<polyline points="620,886 428,886" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="508.72" y="867.68" width="28.56" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="523.0" y="880.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">True</text>
+<polyline points="426,916 818,916" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="541.04" y="897.68" width="163.92" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="623.0" y="910.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">record the last used profile</text>
+<polyline points="426,944 1008,944" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="675.52" y="925.68" width="84.96" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="718.0" y="938.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">start catch-up</text>
+<polyline points="414,966 222,966" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="254.78" y="947.68" width="124.44" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="317.0" y="960.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">200 {state: unlocked}</text>
+<polyline points="220,990 62,990" fill="none" stroke="#000" stroke-width="1.1" stroke-dasharray="6 4" marker-end="url(#open)"/>
+<rect x="77.78" y="971.68" width="124.44" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="140.0" y="984.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">opens the home screen</text>
+<polyline points="1010,1000 822,1000" fill="none" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="835.86" y="981.68" width="158.28" height="16.64" rx="0" fill="#fff" stroke="none" stroke-width="0"/>
+<text x="915.0" y="994.1" font-family="Times New Roman" font-size="12" text-anchor="middle" font-weight="normal" font-style="normal" fill="#000">drain the session-end queue</text>
+<text x="130" y="1114.1" font-family="Times New Roman" font-size="12" text-anchor="start" font-weight="normal" font-style="italic" fill="#000">Every request also carries the bearer token from data/api_token.txt.</text>
+</svg>

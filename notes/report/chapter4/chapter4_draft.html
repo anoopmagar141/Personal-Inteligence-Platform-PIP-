@@ -1,0 +1,97 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Chapter 4: System Design (draft)</title>
+<style>
+  body { font-family: "Times New Roman", serif; font-size: 12pt; line-height: 2; margin: 1in 1in 1in 1.5in;
+         background: #fff; color: #000; text-align: left; }
+  h1 { font-size: 12pt; font-weight: bold; text-align: center; margin: 0 0 24pt 0; page-break-before: always; }
+  h1:first-of-type { page-break-before: auto; }
+  h2 { font-size: 12pt; font-weight: bold; margin: 24pt 0 12pt 0; }
+  h3 { font-size: 12pt; font-weight: bold; margin: 18pt 0 12pt 0; }
+  p { margin: 0 0 12pt 0; }
+  ol { margin: 0 0 12pt 0; padding-left: 0.4in; }
+  li { margin: 0 0 6pt 0; }
+  p.cap { margin: 12pt 0 6pt 0; }
+  table { border-collapse: collapse; width: 100%; line-height: 1.3; font-size: 11pt; margin-bottom: 12pt; }
+  th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; text-align: left; }
+  th { background: #d9d9d9; }
+  .check { color: #777; font-style: italic; }
+  p.fig { margin: 12pt 0 0 0; text-align: center; line-height: 1; }
+  p.fig img { max-width: 100%; }
+  p.figcap { margin: 6pt 0 18pt 0; text-align: center; }
+  pre { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; line-height: 1.25; white-space: pre-wrap;
+        border: 1px solid #000; background: #f5f5f5; padding: 6pt 8pt; margin: 0 0 12pt 0; }
+</style></head><body>
+<h1>CHAPTER 4: SYSTEM DESIGN</h1>
+<h2>4.1 USE CASE DIAGRAM AND DESCRIPTION</h2>
+<p>Figure 4.1 shows the use cases of PIP. The main actor is the user. Four secondary actors take part in some use cases: the local language model (Ollama), an optional cloud model, the web search provider (DuckDuckGo), and the end of a session, which acts like a timer and starts the learning step. Table 4.1 describes each use case.</p>
+<p class="fig"><img src="../diagrams/png/fig4-1_use_case.png" alt="Use case diagram"></p>
+<p class="figcap"><b>Figure 4.1:</b> Use case diagram</p>
+<p class="cap"><b>Table 4.1: Use case descriptions</b></p>
+<table><tr><th>ID</th><th>Use case</th><th>Actors</th><th>Description</th></tr>
+<tr><td>UC-01</td><td>Create profile and set password</td><td>User</td><td>Creates a profile and its encrypted database; the password must be at least 8 characters and cannot be recovered.</td></tr>
+<tr><td>UC-02</td><td>Sign in / sign out</td><td>User</td><td>Opens a profile&#x27;s database with its password; signing out first queues the open chats for learning, then forgets the key.</td></tr>
+<tr><td>UC-03</td><td>Chat with PIP</td><td>User</td><td>Sends a message and receives an answer streamed word by word; includes UC-13.</td></tr>
+<tr><td>UC-04</td><td>Review what PIP learned</td><td>User</td><td>Confirms or dismisses each fact PIP has asked about; nothing is stored until the user confirms.</td></tr>
+<tr><td>UC-05</td><td>View and correct memory</td><td>User</td><td>Shows what PIP has stored about the user and lets the user correct or delete it.</td></tr>
+<tr><td>UC-06</td><td>Manage projects</td><td>User</td><td>Creates projects, changes their status and chooses the active one.</td></tr>
+<tr><td>UC-07</td><td>Manage decisions</td><td>User</td><td>Records decisions, changes their state, and accepts or dismisses decisions PIP proposes.</td></tr>
+<tr><td>UC-08</td><td>Upload and search documents</td><td>User</td><td>Adds documents to the profile&#x27;s encrypted index, searches them and deletes them.</td></tr>
+<tr><td>UC-09</td><td>Read or correct a chat record</td><td>User</td><td>Shows the &quot;where we left off&quot; record of a chat; a corrected record is the user&#x27;s and is not overwritten.</td></tr>
+<tr><td>UC-10</td><td>Choose model and grant consent</td><td>User</td><td>Selects the local model and grants or revokes consent, for a chosen scope, for each outside provider; extended by UC-15.</td></tr>
+<tr><td>UC-11</td><td>Back up, restore or import</td><td>User</td><td>Exports a profile to one encrypted file, restores it, or imports it into a new installation.</td></tr>
+<tr><td>UC-12</td><td>View pipeline trace</td><td>User</td><td>Shows which stages a message passed through and how long each took.</td></tr>
+<tr><td>UC-13</td><td>Stream the answer</td><td>Local model, cloud model</td><td>The model writes the answer; a cloud model is used only with recorded consent.</td></tr>
+<tr><td>UC-14</td><td>Search the web (after a click)</td><td>Web search</td><td>Extends UC-03: runs only when the user clicks the offered search, sending exactly the words shown.</td></tr>
+<tr><td>UC-15</td><td>Pull a model</td><td>Local model</td><td>Extends UC-10: downloads a local model; a cloud model offered through Ollama is refused.</td></tr>
+<tr><td>UC-16</td><td>Learn from a finished chat</td><td>Session end, local model</td><td>Runs after 10 idle minutes, a disconnect, sign-out or shutdown, or at the next start for a chat a crash left unfinished; includes UC-17.</td></tr>
+<tr><td>UC-17</td><td>Check evidence and Constitution</td><td>–</td><td>For each proposed fact: grounding, the evidence gate and the Constitution&#x27;s rules, then write, ask or reject, with an audit row.</td></tr>
+</table>
+<h2>4.2 DATA FLOW DIAGRAMS</h2>
+<p>The data flow diagrams use the Gane–Sarson notation: rounded boxes are processes, open-ended boxes are data stores, and grey boxes are external entities. A store or entity marked with an asterisk is drawn a second time only to avoid crossing lines.</p>
+<p>The context diagram (Figure 4.2) shows PIP as one process with four external entities: the user, the local language model, the optional cloud model and the web search provider. The flows to the cloud model and to web search happen only with the user&#x27;s consent, and the web search only after the user&#x27;s click.</p>
+<p class="fig"><img src="../diagrams/png/fig4-2_dfd_level0.png" alt="Context diagram, DFD level 0"></p>
+<p class="figcap"><b>Figure 4.2:</b> Context diagram, DFD level 0</p>
+<p>The level 1 diagram (Figure 4.3) divides PIP into seven processes and eight data stores, plus the backup file. Processes 1.0, 4.0, 5.0, 6.0 and 7.0 serve the user&#x27;s own management of their data: signing in, reviewing and correcting records, documents, models and consent, and backup. Process 2.0 answers chat messages, and process 3.0 learns at the end of a session. Process 3.0 uses six of the stores that 2.0 and 4.0 also use, so it is drawn below the others with copies of those stores.</p>
+<p class="fig"><img src="../diagrams/png/fig4-3_dfd_level1.png" alt="DFD level 1"></p>
+<p class="figcap"><b>Figure 4.3:</b> DFD level 1</p>
+<p>Two level 2 diagrams show the two processes that matter most. Figure 4.4 breaks process 2.0 into the twelve steps of the message pipeline, Stages 0 to 10. After the intent is classified and the route chosen, the answer cache is checked; on a cache hit, the stored answer goes straight to delivery, skipping the look-ups and the model (the dashed line). Otherwise the decisions, memory and documents are looked up, a web search is added only if the user clicked for it, the context is assembled, consent is checked, and the model streams the answer. Only a chat&#x27;s first message is cached, because a follow-up depends on its own chat.</p>
+<p class="fig"><img src="../diagrams/png/fig4-4_dfd_level2_message.png" alt="DFD level 2, process 2.0, answering a chat message"></p>
+<p class="figcap"><b>Figure 4.4:</b> DFD level 2, process 2.0, answering a chat message</p>
+<p>Figure 4.5 breaks process 3.0 into ten steps. The transcript is taken from the session-end queue; if the model is not recorded as local in both of its records, nothing is sent and the chat stays queued. Otherwise the Observer extracts candidate facts, decisions and the chat&#x27;s record. Each candidate then passes grounding (is the quote in the transcript?), and one whose quote is not found is dropped with an audit row. The rest pass the evidence gate (do the user&#x27;s own words support it?). Supported memories have their evidence counted and are checked against the Constitution; supported decisions are routed separately. A candidate the evidence gate refuses goes straight to the final step, which records the refusal (the dashed line).</p>
+<p class="fig"><img src="../diagrams/png/fig4-5_dfd_level2_learning.png" alt="DFD level 2, process 3.0, learning at session end"></p>
+<p class="figcap"><b>Figure 4.5:</b> DFD level 2, process 3.0, learning at session end</p>
+<h2>4.3 ER DIAGRAM AND DATABASE SCHEMA</h2>
+<p>Each profile&#x27;s data is kept in one SQLite database file encrypted with SQLCipher. The schema has 33 tables. Figures 4.6 and 4.7 show the main ones in crow&#x27;s foot notation.</p>
+<p class="fig"><img src="../diagrams/png/fig4-6_er_chats_projects.png" alt="ER diagram, chats, projects, decisions and documents"></p>
+<p class="figcap"><b>Figure 4.6:</b> ER diagram, chats, projects, decisions and documents</p>
+<p>Figure 4.6 shows the user&#x27;s work. A project groups conversations, decisions, documents and chat records; each of these may also exist without a project, so deleting a project sets their link to empty instead of deleting them. A conversation has many messages and at most one chat record, and both are deleted with it. A document&#x27;s bytes are kept in a separate table, deleted with the document. A decision can point to the decision that replaced it. Some columns hold another table&#x27;s identifier without a foreign key (marked with an asterisk), such as the conversation a queued transcript came from; these links are kept by the program, not by the database.</p>
+<p class="fig"><img src="../diagrams/png/fig4-7_er_user_model_governance.png" alt="ER diagram, user model, governance, providers and logs"></p>
+<p class="figcap"><b>Figure 4.7:</b> ER diagram, user model, governance, providers and logs</p>
+<p>Figure 4.7 shows what PIP believes about the user and how each belief got there. The user model tables (identity, skills, preferences, goals, interaction style, topics and tools) are not linked to one another, because they are written only through the learning step and the user&#x27;s own corrections. Identity, the profile&#x27;s metadata and the interaction style each hold a single row. For skills, preferences and the interaction style, the database itself computes a confidence value from how the fact was learned and how many times it has been seen. The governance tables record the learning step: the questions waiting for the user, the observation log that counts evidence across chats, and the audit log, which holds one row per decision with a keyed hash of the fact instead of its text.</p>
+<p>The database enforces a few rules itself, with triggers. A decision&#x27;s text cannot be changed once recorded; the audit log and its salt can be neither changed nor deleted; and every write to a table that answers draw on increases a record version, so that a cached answer is never served after the user&#x27;s record has changed.</p>
+<h2>4.4 CLASS DIAGRAM</h2>
+<p>Figure 4.8 shows the backend&#x27;s packages and the imports between them, counted from the code. The transport package (api) uses all the others. The orchestration package (core) and the stages import each other, because the pipeline in core runs the stages and the stages use core&#x27;s types, evidence gate and trace; core and the persistence package (memory) also depend on each other. The four layers of Figure 3.1 therefore describe roles rather than strict import rules. The one rule that a Git hook enforces is that nothing in the stages or in api imports the database, vector-index or Ollama libraries.</p>
+<p class="fig"><img src="../diagrams/png/fig4-8_package_diagram.png" alt="Package diagram of the backend"></p>
+<p class="figcap"><b>Figure 4.8:</b> Package diagram of the backend</p>
+<p>PIP is written mostly as module-level functions: each stage has one run function, and each store has functions that take the database connection as their first argument. Figure 4.9 shows the classes it does have. The providers form a small hierarchy: an abstract BaseLLMProvider defines chat, is_available and get_model_info, and OllamaProvider and OpenAICompatibleProvider implement it, so the pipeline treats every model the same way. The evidence gate is built from an EvidenceLedger, which holds the transcript&#x27;s turns with who wrote each one, and an EvidenceVerdict, whose state is one of seven fixed values and which can be turned into the same ValidationResult that the ConstitutionEnforcer returns, so that every decision takes one path to the database. A SessionRegistry keeps one PinnedExecutor, a single worker thread, for each open chat, and two frozen data classes hold a profile&#x27;s details and a provider&#x27;s consent record.</p>
+<p class="fig"><img src="../diagrams/png/fig4-9_class_diagram.png" alt="Class diagram"></p>
+<p class="figcap"><b>Figure 4.9:</b> Class diagram</p>
+<h2>4.5 SEQUENCE AND ACTIVITY DIAGRAMS</h2>
+<p>Figure 4.10 follows one chat message. The app connects to the chat WebSocket once, and the server checks the token, that a profile is signed in, and the origin. For each message, the server saves any earlier turns not yet stored and passes the message to the pipeline on the chat&#x27;s own worker thread. The pipeline runs Stages 0 to 2, reads the chat&#x27;s record and checks the answer cache. On a miss it looks up decisions, memory and documents, builds the prompt, checks consent, and streams the answer from Ollama, each token passing through the server to the app as it is written. The server then sends &quot;done&quot;, saves the message and the answer, and, if the message could use the web, sends the search offer.</p>
+<p class="fig"><img src="../diagrams/png/fig4-10_sequence_chat_message.png" alt="Sequence diagram, one chat message"></p>
+<p class="figcap"><b>Figure 4.10:</b> Sequence diagram, one chat message</p>
+<p>Figure 4.11 follows signing in. The app asks for the backend&#x27;s state and the list of profiles, and the user chooses one. When the password is sent, the backend reads the profile&#x27;s salt and derives the key with PBKDF2-HMAC-SHA512 (256,000 iterations), then tries to open the database with it. A wrong password opens nothing, and each further wrong attempt waits a little longer. With the right key, the backend keeps the key in memory, records the profile as last used, and starts catching up in the background on any chats left unlearned.</p>
+<p class="fig"><img src="../diagrams/png/fig4-11_sequence_sign_in.png" alt="Sequence diagram, signing in"></p>
+<p class="figcap"><b>Figure 4.11:</b> Sequence diagram, signing in</p>
+<p>Figure 4.12 shows, as an activity diagram, what happens to each fact the Observer proposes. The diagram makes the order of the checks visible, and shows that every outcome ends with one audit row. A candidate that fails grounding or the evidence gate is dropped or rejected before the Constitution is consulted. A decision is logged or asked about under the decision rules. A memory has its evidence counted and is then given one of three verdicts: written, queued as a question for the user, or rejected. A fact that is supported but has not yet been seen often enough is asked about rather than dropped, at most twice per chat.</p>
+<p class="fig"><img src="../diagrams/png/fig4-12_activity_learning.png" alt="Activity diagram, what happens to a learned fact"></p>
+<p class="figcap"><b>Figure 4.12:</b> Activity diagram, what happens to a learned fact</p>
+<h2>4.6 UI/UX DESIGN</h2>
+<p>The app has a sign-in screen and a main window with nine tabs: Chat, Review, Profile, Decisions, Projects, Documents, Providers, Backup and Trace, and a sign-out button. Five design choices shape the interface.</p>
+<ol><li>The user always sees what PIP is doing. While an answer is written, a strip under the message shows each stage as it finishes (searching documents, checking memory and so on), using the backend&#x27;s own words, and the Trace tab shows the same steps afterwards.</li><li>Nothing is learned or sent without the user&#x27;s knowledge. The Review tab carries a badge with the number of questions waiting; a web search is offered under the answer with the exact words that would be sent; and the consent dialog has no option chosen in advance, so the Grant button stays disabled until the user picks a scope.</li><li>The user can correct what PIP believes. The Profile tab lists the stored facts, each with how it was learned, and each chat&#x27;s record can be read, corrected or cleared from the chat&#x27;s footer.</li><li>Actions that cannot be undone ask for proof. Deleting a profile asks for its password and for its name to be typed, which shows both that the user owns the data and that they have read which profile will be erased. Changing the password asks for the current one, and the app warns that a forgotten password cannot be recovered.</li><li>The interface stays readable. It follows Windows&#x27; light or dark setting unless the user picks one, uses colours checked for contrast, gives every button a name for screen readers, and keeps the window at least 800 by 640 pixels so that no screen is cut off.</li></ol>
+<p>Figures 4.13 and 4.14 show two of these rules in the finished app; Section 5.6 shows each screen.</p>
+<p class="fig"><img src="../screenshots/shot4-13_dark_theme.png" alt="A chat in the dark theme"></p>
+<p class="figcap"><b>Figure 4.13:</b> A chat in the dark theme</p>
+<p class="fig"><img src="../screenshots/shot4-14_delete_profile.png" alt="Deleting a profile asks for its name and its password"></p>
+<p class="figcap"><b>Figure 4.14:</b> Deleting a profile asks for its name and its password</p>
+</body></html>
