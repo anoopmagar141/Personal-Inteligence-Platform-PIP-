@@ -4805,6 +4805,51 @@ Built on branch `fix/d47-reconnect` from 6a51798; two reviewers read it before l
 - **The real window** (V-1's step D again: a backend stopped, started locked) is not re-run; it needs the owner at
   the PC. The `HomeShell` key has no test of its own (AppRoot has no test harness).
 
+### 7.75 D-49: a sign-out or profile delete that fails opens the chat again (authorized 2026-10-22)
+
+The owner's "start" on the open list (2026-10-22): D-49, found reviewing D-47 (§7.73). Flutter only:
+`frontend/flutter/lib/ws_chat_client.dart`, `home_shell.dart`, `screens/profile_view.dart`; no backend file changed.
+Built on branch `fix/d49-reopen-chat` from 52db009; one reviewer read it before landing.
+
+- **Defect (D-49, A, medium):** sign-out and a profile delete close the chat before their call, as they must (the
+  lock persists transcripts; Windows cannot erase a database a chat holds open). When the call failed - a lock the
+  backend refused, a delete with a wrong password - nothing opened the chat again, so it stayed dead until the app was
+  restarted, and with no reconnects a later lock went unnoticed. And a sign-out on a backend already locked got 423
+  (`/auth/lock` is not open while locked), and the app said it could not sign out and stayed.
+- **Mechanism:** `WsChatClient.reopen()` connects again after `disconnect()` (nothing after `dispose()`). `HomeShell`
+  counts the operations that closed the chat and are still running (a sign-out and a delete can overlap: the sidebar
+  stays usable while the delete runs); when one fails it calls `_reopenChat()`, and the chat opens again only once
+  the last of them has failed, so it never talks to the server around a lock still running. A failed lock and a
+  failed delete (through the profile screen's new `onReopenChat`) both reopen it. A 423 on sign-out goes back through
+  the start screen (`onBackendLocked` and `_connect()`, which asks which sign-in the backend needs: the app did not
+  lock it), unless a delete is still running, whose own ending ("Deleting on next start", or sign-in) is left to show.
+- **Tests:** 7 new. `chat_reconnect_test.dart`: `reopen()` connects again and does nothing after `dispose()`; a refused
+  sign-out leaves the chat working and a later lock is noticed; a 423 sign-out goes back to sign-in, and during a
+  delete it leaves the outcome to the delete; through the shell, a failed delete opens the chat again and a later
+  lock is noticed, and a failed delete does not open it while a sign-out still runs. `profile_management_test.dart`:
+  the delete calls `onReopenChat` on failure (the backend's own refusal, 401 "That is not your password.") and not on
+  success.
+  - **Seen failing first:** all 4 of the first round against stubs that only added the new callback; 3 of the 4 of
+    the review round against the first fix. The fourth, the shell's wiring, passed there as it should, and is held by
+    two weakenings.
+- **Break-it:** 10 weakenings, each alone, restored byte for byte, each caught: `reopen()` leaving the client closed
+  (4 tests) or reconnecting after `dispose()` (1); a reopened chat's drops not asked about (2); a refused sign-out
+  leaving the chat closed (2); a 423 reported as a failure (1), sent straight to sign-in as if this app had locked it
+  (1), or ignoring a delete still running (1); a failed close reopening under another still running (1); the shell
+  not wiring the profile screen's reopen (2); a failed delete leaving the chat closed (1). The first version of the
+  `reopen()` unit test counted calls to `connect()`, which a closed client ignores; it was caught only through the
+  shell, and now reads what the client says.
+- **Review** (one reviewer, the reopen paths and their meeting with D-47's hand-back): 3 findings, all fixed here. A
+  sign-out answered 423 while this app's own delete ran went to sign-in early, so a deferred delete's notice could be
+  lost (medium); a failed delete reopened the chat while a sign-out was still running (low); the delete test used a
+  status the backend does not send, and nothing tested the shell's wiring (low).
+- **Suites:** Flutter 372 passed (365 + 7), `flutter analyze` no issues, the generated platform files unchanged. No
+  backend file changed.
+
+**Not covered (still open):**
+- A lock from elsewhere still leaves the open chat socket open (§7.73), so it is noticed only at the next drop.
+- The real window: neither D-47 nor D-49 has been re-run there; it needs the owner at the PC.
+
 ---
 
 ## 8. Status
@@ -4892,7 +4937,7 @@ Built on branch `fix/d47-reconnect` from 6a51798; two reviewers read it before l
 | V-1 real-window check | Run 2026-10-21 (§7.71), report only | In a throwaway copy (05c6523, port 8790, the Release app): the first-run import, the D-45 web-search button and the record dialog worked as expected, and the D-23 turn end too; after a restart the locked backend refused the chat, the window never asked to sign in, and its reconnects multiplied (D-47) |
 | D-47 the chat's reconnects double on every failure | Fixed 2026-10-21 (§7.73) | A, medium: one reconnect at a time (the loss handled once, the timer cancelled, "connected" only after the handshake), and a dropped chat asks /auth/state: a backend no longer unlocked, or refusing the token, sends the app back through the start screen to sign in, closing any dialog. Flutter 365 passed; the real window not re-run |
 | D-48 the first-run import wrote into a folder the registry did not list | Found and fixed 2026-10-21 (§7.72) | A, medium: with an unreadable or older profiles.json, or a profile unregistered by remove(), the import moved a real database aside, and a failed install's clean-up deleted the folder with it. A folder holding anything is now refused |
-| D-49 a failed sign-out or profile delete leaves the chat closed for good | Found 2026-10-21 (§7.73), open | A, medium: the chat is closed before /auth/lock or the delete is sent; when that call fails (a wrong password on delete), nothing reopens it, and a later lock is not noticed until the app restarts. Older than D-47. Not fixed |
+| D-49 a failed sign-out or profile delete leaves the chat closed for good | Fixed 2026-10-22 (§7.75) | A, medium: a sign-out or delete that fails opens the chat again, once the last close still running has failed; a sign-out answered 423 goes back to sign-in, or leaves the outcome to a delete still running. Flutter 372 passed; the real window not re-run |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
