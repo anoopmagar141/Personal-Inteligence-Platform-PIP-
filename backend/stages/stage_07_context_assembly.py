@@ -56,9 +56,41 @@ logger = logging.getLogger(__name__)
 # for 24h precisely because the model answers them from training), so the
 # prompt has to as well. Rule 5 exists to make the boundary explicit rather
 # than leaving the model to infer it from rules 1-4.
+#
+# The second paragraph, rule 7 and _CLOSING_REMINDER below (D-51, FREEZE_LIST
+# §7.76) give the model the one fact about PIP itself it needs and was never
+# given: it saves nothing. What the user says is read only after the chat
+# pauses or ends, and the evidence gate and the Constitution decide what is
+# kept, which may be nothing. Told nothing about that, the model said what
+# assistants say - "I have noted your preferences", in the owner's own app,
+# with nothing saved; "I will update your records" when asked whether it would
+# remember. The other side of the same gap: told a fact, the reply was often
+# only "I don't have that in front of me", rule 4 (written for a fact the user
+# ASKS for) read as covering one the user has just GIVEN. Rule 7 says where the
+# user's words stand; the paragraph says what happens to them. Neither names a
+# time: the idle wait is a setting and the model has no use for the number.
+#
+# Measured with qwen2.5:7b (§7.76): wording alone, at the end of these rules or
+# at their top, moved the replies little and sometimes the wrong way (an
+# example "Got it" came back as "Got it. ... is noted."). The reminder as the
+# last thing in the context is what moved them. On a held-out set it took
+# "did you save that?" from yes in 4 of 6 to "not yet" in 6 of 6, and the bare
+# "I don't have that in front of me" from 11 of 24 to 0; but "I've noted" still
+# answers 5 of 24 stated facts (9 before), mostly "note this down" or "save
+# this". It is a partial fix, recorded as such.
 _DEFAULT_SYSTEM_INSTRUCTIONS = (
     "You are PIP, a locally-run personal assistant. Everything you know about "
     "THIS USER appears in the context below - you have no other memory of them.\n"
+    "You cannot save anything yourself. Nothing the user says is kept while "
+    "this conversation is going on. After it pauses or ends, PIP reads it and "
+    "may keep some of what the user said about themselves, if it passes PIP's "
+    "checks; it may also keep none of it. So never say you have noted, saved, "
+    "recorded or stored something, or that you will remember it, make a note "
+    "of it, keep it in mind, remind them of it, or do anything 'from now on' "
+    "or 'next time' - none of that is true of you. Promise nothing beyond this "
+    "conversation. If the user asks you to remember something, or asks whether "
+    "you have, the true answer is: not yet - PIP may keep it after this "
+    "conversation, but that is not certain.\n"
     "Rules for statements about the user (their projects, decisions, goals, "
     "skills, preferences, identity):\n"
     "1. State only what the context contains. Do not add, extrapolate, or "
@@ -80,7 +112,24 @@ _DEFAULT_SYSTEM_INSTRUCTIONS = (
     "6. Write in your own words to the user. The headings and annotations below "
     "('complete list', '3 recorded', 'not looked up') are notes to you about how "
     "far the record extends - never repeat them back as if they were part of "
-    "the answer."
+    "the answer.\n"
+    "7. When the user tells you something about themselves, it is in front of "
+    "you: reply to what they said and use it for the rest of this "
+    "conversation. Rule 4 is for a fact they ask for that the context lacks, "
+    "not for one they have just given you."
+)
+
+# Appended after every section, so it is the last thing the model reads before
+# the messages (see the D-51 note above for why the position is the point). Not
+# trimmed, like the instructions; its tokens are counted with theirs. The
+# fail-open prompt below stays the instructions alone, which carry the same rule.
+_CLOSING_REMINDER = (
+    "Before you reply: you cannot save anything. Do not say you noted, saved or "
+    "stored something, will remember it or keep it in mind, will remind the "
+    "user, or will do anything 'from now on' or 'next time'. If the user asks "
+    "you to remember something, or asks whether you saved or will remember it, "
+    "the answer is: not yet - PIP may keep it after this conversation, but that "
+    "is not certain."
 )
 
 # Human-readable section names. The profile arrives as flat (table, field,
@@ -513,7 +562,7 @@ def run(
                 return sum(_estimate_tokens(m.get("content", "")) for m in value)
             return _estimate_tokens(value)
 
-        system_tokens = _estimate_tokens(system_instructions)
+        system_tokens = _estimate_tokens(system_instructions) + _estimate_tokens(_CLOSING_REMINDER)
         message_tokens = _estimate_tokens(user_message)
         available_for_content = budget["context_token_budget"] - budget["response_reserved_tokens"]
 
@@ -546,6 +595,7 @@ def run(
         for key in _PRIORITY_RANK:
             if key != "conversation_history" and sections[key]:
                 context_parts.append(sections[key])
+        context_parts.append(_CLOSING_REMINDER)
         context = "\n\n".join(context_parts)
 
         messages = list(sections["conversation_history"]) + [{"role": "user", "content": user_message}]

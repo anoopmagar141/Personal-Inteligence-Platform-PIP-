@@ -119,6 +119,12 @@ whole current one (`pipeline._search_text`); the web query is still the first
 and marks what it read (`observed_prefix`), so the disconnect pass counts only
 the later turns; a failed idle pass marks nothing.
 
+**The model is told it saves nothing (D-51).** Stage 7's instructions say that
+nothing is kept while a chat goes on and that PIP may keep some of it after the
+chat pauses or ends, and `_CLOSING_REMINDER` says it again as the last thing in
+the context, after every section, nearest the reply (where it was measured to
+work). The fail-open prompt is the instructions alone.
+
 **No click, no search (D-45).** Whether a message would be searched (a
 Stage 1 trigger word, not a personal or project question, web search
 consented) is decided before the answer cache. Such a turn sends nothing: it

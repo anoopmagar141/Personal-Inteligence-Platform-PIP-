@@ -40,8 +40,10 @@ def test_profile_truncated_to_its_own_budget():
     # (longer by design - four numbered rules) pushed the total to 522 and
     # failed this, despite the profile block itself still being truncated
     # correctly to its 400-token budget. The prelude's length is not what this
-    # test is about.
-    profile_block = result["context"][len(stage_07._DEFAULT_SYSTEM_INSTRUCTIONS):]
+    # test is about. Nor is the closing reminder's (D-51), which follows the
+    # block and is cut off here for the same reason.
+    context = result["context"]
+    profile_block = context[len(stage_07._DEFAULT_SYSTEM_INSTRUCTIONS):context.rindex(stage_07._CLOSING_REMINDER)]
     # 400-token budget plus the block's own heading words and the "..." marker.
     assert stage_07._estimate_tokens(profile_block) < 450
 

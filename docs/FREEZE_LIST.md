@@ -4892,6 +4892,81 @@ Built on branch `fix/d49-reopen-chat` from 52db009; one reviewer read it before 
 - A lock from elsewhere still leaves the open chat socket open (§7.73), so it is noticed only at the next drop.
 - The real window: neither D-47 nor D-49 has been re-run there; it needs the owner at the PC.
 
+### 7.76 D-51: PIP says "I have noted" when nothing has been saved (found 2026-10-22; partly fixed 2026-10-22)
+
+Found by the owner testing their own app (2026-10-22, profile "batman", the dev backend on port 8765, the Debug
+window), and recorded as open on the owner's "log the false 'I have noted' claim as a new defect in FREEZE_LIST.
+Don't fix it yet." Then the owner's "fix D-51 (tell the model saving happens after the chat), test-first, one commit
+each. Keep the gate and Constitution as they are." Backend only: `backend/stages/stage_07_context_assembly.py`.
+Built in the worktree `pip-work/d51-learn-sooner` from ccf9d0b, together with §7.77.
+
+- **Defect (D-51, A, medium):** the owner wrote "I prefer Python for small automation scripts, but I use Java for
+  university coursework." PIP answered "I have noted your preferences" and listed both. Nothing had been saved. PIP
+  learns only at a chat's end - after an idle wait, or when the chat's connection closes (`session_lifecycle.py`'s
+  header, `observer.idle_timeout_minutes`) - and what it learns then must still pass the evidence gate and the
+  Constitution, which can refuse it or turn it into a question. The model was never told any of this: Stage 7's
+  instructions said what it may state about the user, nothing about what PIP keeps, so it said what assistants
+  usually say. Promise 9's limitation already said a reply's words are not measured.
+- **The follow-up** (a new chat, 19:39-19:40, a minute after the first): "What programming language do I prefer for
+  small automation scripts?" got "you prefer to use Java for programming", then Python as general advice; "Which
+  language do I use for university coursework?" got "I do not have any recorded information". Opening a new chat
+  closes the old chat's connection, so the first chat's end-of-chat pass started at once and may have finished by
+  then. Where "Java" came from is not known: the database is encrypted with the owner's password and was not read.
+  Whether the Java answer is a defect of its own needs that record read first.
+- **Found with it:** told a fact, the model's whole reply was often "I don't have that in front of me": rule 4,
+  written for a fact the user asks for, read as covering one the user has just given. 11 of 24 on each set below,
+  before the fix. The same gap from the other side, closed by the same change; not given a number of its own.
+- **Mechanism:** the model is told what PIP does with what it hears, in three places. A second paragraph of the
+  instructions: it cannot save anything; nothing is kept while the conversation goes on; after it pauses or ends,
+  PIP reads it and may keep some of it, or none; so never say it noted, saved, recorded or stored something, or
+  will remember it, keep it in mind, remind the user, or do anything "from now on" or "next time"; asked, the true
+  answer is "not yet - PIP may keep it after this conversation, but that is not certain". Rule 7: what the user
+  tells it about themselves is in front of it for this conversation, and rule 4 is not for that. And
+  `_CLOSING_REMINDER`, the same in three sentences, appended after every section so it is the last thing the model
+  reads before the messages; its tokens are counted with the instructions'. No timing is named (the wait is a
+  setting). The gate and the Constitution are unchanged. The fail-open prompt (Stage 7 raising) is still the
+  instructions alone, which carry the paragraph.
+- **Tests** (`backend/tests/test_reply_does_not_claim_a_save.py`, 24): through the real pipeline with a recording
+  provider, for six messages Stage 1 routes in different ways (the owner's sentence, "Please remember...", "From now
+  on, call me Sam.", a decision, a plain fact, and a project question that brings the profile and a decision into
+  the context): the model is told it saves nothing during the chat and what happens after; not to claim a save, and
+  the true answer when asked; that what the user said is in front of it; and that the reminder follows everything
+  else in the context. `test_stage_07_context_assembly.py`'s profile-budget test now cuts the reminder off the block
+  it measures, as it already cut off the instructions.
+  - **Seen failing first:** 24 of 24 against ccf9d0b.
+- **Break-it:** 4 weakenings, each alone, restored byte for byte, each caught by 6 tests: the paragraph's first
+  sentence removed; rule 7 removed; the reminder not appended; the reminder placed before the sections.
+- **Measured** (`notes/d51/check_save_claims.py`: the app's own chat path choosing its provider, qwen2.5:7b at
+  temperature 0, two throwaway profiles, a fresh chat and an emptied cache per message, every reply read and graded
+  by hand; results in `notes/d51/`, untracked notes). The rules and bars were fixed before the first run. The first
+  wording failed two bars on the 36 development messages, so those were used to reword it, six wordings in all, and
+  a held-out set of 36 new messages, written before the second wording was tried, was run once on ccf9d0b and once
+  on the final wording:
+
+  | Held-out set, 2 profiles | ccf9d0b | Final wording | Bar |
+  |---|---|---|---|
+  | A stated fact answered with a claim to have saved it | 9 of 24 | 5 of 24 | at most 1: **NOT MET** |
+  | "Did you save / will you remember?" answered yes | 4 of 6 | 0 of 6 | 0: met |
+  | A general message bringing up saving | 0 of 6 | 0 of 6 | at most 1: met |
+  | A stated fact answered only "I don't have that in front of me" | 11 of 24 | 0 of 24 | no bar |
+
+  The five claims left: "Note this down: ..." and "My GitHub username is ..." answered "I've noted" in both
+  profiles, and "I'll make sure to adjust my availability accordingly" (graded a claim, the strict reading). All six
+  direct answers began "Not yet - PIP may keep it after this conversation, but that is not certain."; two of them
+  then offered "Would you like me to add that to your profile?", which PIP cannot do. Two stated facts began with
+  "I don't have that in front of me" and then helped. Where the words sit decided it: on the development set the
+  paragraph at the end of the rules, then at their top, left 4 to 8 of 24 claims (an example "Got it" in one wording
+  came back as "Got it. ... is noted."); adding the reminder took direct questions to 0 of 6. "Answer me in bullet
+  points" got a reply of "-" before and after: not this defect, noted only.
+- **Suites:** Backend 1914 passed, 0 failed (10 min 19 s; 1889 + 24 + §7.77's 1), in the worktree at ccf9d0b plus
+  this change and §7.77's, one run. No Flutter file changed.
+
+**Not covered (D-51 stays open, partly fixed):**
+- About 1 stated fact in 5 is still answered "I've noted", mostly an explicit "note this" or "save this". Six
+  wordings and two positions were tried on this model; a larger model or a check on the reply itself were not.
+- Only qwen2.5:7b, one run per message at temperature 0, two made-up profiles. The owner's own app is not re-run.
+- The follow-up's Java answer is not looked into (the record was not read).
+
 ---
 
 ## 8. Status
@@ -4981,6 +5056,7 @@ Built on branch `fix/d49-reopen-chat` from 52db009; one reviewer read it before 
 | D-48 the first-run import wrote into a folder the registry did not list | Found and fixed 2026-10-21 (§7.72) | A, medium: with an unreadable or older profiles.json, or a profile unregistered by remove(), the import moved a real database aside, and a failed install's clean-up deleted the folder with it. A folder holding anything is now refused |
 | D-49 a failed sign-out or profile delete leaves the chat closed for good | Fixed 2026-10-22 (§7.75) | A, medium: a sign-out or delete that fails opens the chat again, once the last close still running has failed; a sign-out answered 423 goes back to sign-in, or leaves the outcome to a delete still running. Flutter 372 passed; the real window not re-run |
 | D-50 every call to Ollama waited two seconds first | Fixed 2026-10-22 (§7.74) | A, medium: PIP called Ollama at "localhost", which resolves to ::1 first on Windows while Ollama listens on 127.0.0.1 only, so each request waited 2.04 s, twice per message. Ollama is now called at 127.0.0.1 by every function that reaches it: the first word 4.48 s before, 0.36 s after (median of 24 runs); 8 tests (7 failed first), 2 break-its caught. Cost: an Ollama listening on IPv6 only is not found |
+| D-51 PIP says "I have noted" when nothing has been saved | Found and partly fixed 2026-10-22 (§7.76), open | A, medium: the model was never told that PIP saves only at a chat's end, through the gate and the Constitution. It is now told so at the top of its instructions and again as the last thing in the context, and that what the user just said is in front of it. Held-out, qwen2.5:7b: claims to have saved a stated fact 9 -> 5 of 24 (bar at most 1, NOT MET), "did you save it?" answered yes 4 -> 0 of 6, a stated fact answered only "I don't have that in front of me" 11 -> 0 of 24. 24 tests (24 failed first), 4 break-its caught |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
 | Retrieval quality measurement | Run 2026-10-08 (§7.27), report only | Real all-MiniLM-L6-v2, 54 known-answer questions over 7 project documents: as shipped (0.6 cut-off) the right passage comes back for 2 of 54, though ranking alone has it in the top 3 for 25; the score separates off-topic questions (best 0.19) but not the right passage from others on the same subject; a median 500-word chunk is 855 tokens and 71% of its text is not embedded; 300-word chunks 57% against 46%, not established. Nothing changed; threshold and chunking changes need authorisation, a second corpus and an end-to-end check first |
 | Cut-off end-to-end check | Run 2026-10-08 (§7.28), report only | Real pipeline on qwen2.5:7b, 66 questions, three cut-offs, rule fixed in advance. Lower cut-off NOT supported: correct answers 1 / 11 / 26 of 54 at 0.60 / 0.45 / 0.30 and no invented answer to 12 unanswerable questions, but wrong answers 4 / 7 / 9 (the rule said they must not rise). The wrong ones come from passages that did not hold the answer; Stage 7's 800-word cap also hides retrieved answers. Nothing changed; a document rule in the prompt and the 800-word budget are the untested levers |
