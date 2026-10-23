@@ -4994,6 +4994,33 @@ end, never per message. Only the wait after which an open chat counts as ended c
 **Not covered:** the 2-minute wait was not run in real time with the real model, and the delay a user sees after a
 2-minute pause is not measured.
 
+### 7.79 D-47 and D-49 in the real window: both work (run 2026-10-23, report only)
+
+The step both records left open (§7.73, §7.75: "the real window ... needs the owner at the PC"). Driven by Claude
+through screen control, with the owner's OK to type the throwaway copy's test password for this check. Numbered 7.79
+because §7.78 is another session's, not yet committed.
+
+- **The copy:** V-1's throwaway copy (`D:\FINAL YEAR PROJECT\pip-work\v1-window`, §7.71) brought up to cf7e9c7: its
+  backend/, shared/, config/ and scripts/ from `git archive cf7e9c7`, the Release app built from cf7e9c7's client on
+  2026-10-23; its own data folder (V-1's imported BatMan profile) and port 8790; started by the real launch_pip.ps1.
+  The 05c6523 code and app were moved aside, not deleted. No other PIP was running; port 8765 stayed free; `data/` was
+  never opened; screen control was granted for that one executable by its full path. Ollama was already running
+  (`ollama serve`) and was left running.
+- **D-47: as fixed.** While "explain how a hash map works, in detail" was being written, the test backend (only the
+  process on 8790) was stopped: the chat said "The connection to PIP was lost before this reply finished. Send your
+  message again.", gave Send back and showed "disconnected". The backend was started again the way the launcher
+  starts it and came back locked. Its log over the next 30 s: one chat-socket attempt (refused, 403), then two
+  `GET /auth/state`, and no more attempts (V-1 had 30,800 in two minutes). The window went back to the sign-in
+  screen by itself. After signing in, Session 14 was there as before (the interrupted question was not kept, as the
+  message said) and "In one sentence, what is a hash map?" was answered.
+- **D-49: as fixed.** Profile, Delete this profile, the name typed and a deliberately wrong password: the backend
+  refused it ("That is not your password." under the row; its log shows SQLCipher's failed check of that password),
+  nothing was deleted (the profile folder is there), and the backend log shows a new chat connection accepted
+  straight after. "Thanks. One word: is the chat working?" was then answered ("Yes.").
+
+**Not covered:** a failed sign-out (a refused `/auth/lock` cannot be caused from the window); a 423 sign-out; a lock
+from elsewhere, which §7.73 records as still leaving the chat socket open.
+
 ---
 
 ## 8. Status
@@ -5080,9 +5107,9 @@ end, never per message. Only the wait after which an open chat counts as ended c
 | D-45 a message with a trigger word sent to the web without asking | Fixed 2026-10-21 (§7.69) | A, medium (§7.66 first rated it low, for greetings only): with web search consented, "I feel tired today" and any message with a trigger word not about the user or a project went to the search provider at once. Now no click, no search: the turn is answered without the web and ends with an offer of the exact words; only a click sends them, with consent checked again. 14 + 5 backend and 4 app tests, 17 break-it mutations |
 | D-46 a hypothetical first-person sentence raises a topic | Fixed 2026-10-21 (§7.72) | A, low: a first-person sentence carrying one of the gate's existing hedge phrases raises no topic, and a hedge cut out of a quote is read for every table. No new words (the owner's choice of three designs). Replays: trap rows written 1 -> 0; cost, "I might learn Swift someday" (graded supported) refused |
 | V-1 real-window check | Run 2026-10-21 (§7.71), report only | In a throwaway copy (05c6523, port 8790, the Release app): the first-run import, the D-45 web-search button and the record dialog worked as expected, and the D-23 turn end too; after a restart the locked backend refused the chat, the window never asked to sign in, and its reconnects multiplied (D-47) |
-| D-47 the chat's reconnects double on every failure | Fixed 2026-10-21 (§7.73) | A, medium: one reconnect at a time (the loss handled once, the timer cancelled, "connected" only after the handshake), and a dropped chat asks /auth/state: a backend no longer unlocked, or refusing the token, sends the app back through the start screen to sign in, closing any dialog. Flutter 365 passed; the real window not re-run |
+| D-47 the chat's reconnects double on every failure | Fixed 2026-10-21 (§7.73); seen in the real window 2026-10-23 (§7.79) | A, medium: one reconnect at a time (the loss handled once, the timer cancelled, "connected" only after the handshake), and a dropped chat asks /auth/state: a backend no longer unlocked, or refusing the token, sends the app back through the start screen to sign in, closing any dialog. Flutter 365 passed; the real window not re-run |
 | D-48 the first-run import wrote into a folder the registry did not list | Found and fixed 2026-10-21 (§7.72) | A, medium: with an unreadable or older profiles.json, or a profile unregistered by remove(), the import moved a real database aside, and a failed install's clean-up deleted the folder with it. A folder holding anything is now refused |
-| D-49 a failed sign-out or profile delete leaves the chat closed for good | Fixed 2026-10-22 (§7.75) | A, medium: a sign-out or delete that fails opens the chat again, once the last close still running has failed; a sign-out answered 423 goes back to sign-in, or leaves the outcome to a delete still running. Flutter 372 passed; the real window not re-run |
+| D-49 a failed sign-out or profile delete leaves the chat closed for good | Fixed 2026-10-22 (§7.75); seen in the real window 2026-10-23 (§7.79) | A, medium: a sign-out or delete that fails opens the chat again, once the last close still running has failed; a sign-out answered 423 goes back to sign-in, or leaves the outcome to a delete still running. Flutter 372 passed; the real window not re-run |
 | D-50 every call to Ollama waited two seconds first | Fixed 2026-10-22 (§7.74) | A, medium: PIP called Ollama at "localhost", which resolves to ::1 first on Windows while Ollama listens on 127.0.0.1 only, so each request waited 2.04 s, twice per message. Ollama is now called at 127.0.0.1 by every function that reaches it: the first word 4.48 s before, 0.36 s after (median of 24 runs); 8 tests (7 failed first), 2 break-its caught. Cost: an Ollama listening on IPv6 only is not found |
 | D-51 PIP says "I have noted" when nothing has been saved | Found and partly fixed 2026-10-22 (§7.76), open | A, medium: the model was never told that PIP saves only at a chat's end, through the gate and the Constitution. It is now told so at the top of its instructions and again as the last thing in the context, and that what the user just said is in front of it. Held-out, qwen2.5:7b: claims to have saved a stated fact 9 -> 5 of 24 (bar at most 1, NOT MET), "did you save it?" answered yes 4 -> 0 of 6, a stated fact answered only "I don't have that in front of me" 11 -> 0 of 24. 24 tests (24 failed first), 4 break-its caught |
 | Import and export fixes | Landed 2026-10-07 to 2026-10-08 (§7.26) | D-18 empty or part-written backup refused through a completeness mark, D-21 newest backup by modification time, D-11 bad inputs answered with a sentence and no temporary copy left, D-20 and D-07 the backup's documents written back (the swap moves `documents/` and `chroma/` aside), D-17 one snapshot for the export's counts and copy, D-19 a staged restore scoped to its profile, D-09 the backend stopped so closing and reopening applies a restore and the shortcut can run. D-18 also opens the backup read-only. A second round the same day added a crash-safe swap (a restore whose process died between its last two renames is finished by the next start), a restore script that removes its temporary copy when interrupted, and the first-run import from the welcome screen (`POST /backup/import`, profile named after the person in the backup); an older-version backup and a 322 MB backup were tested with no defect found. Not done: the export side and the restore core were not hunted again for unrecorded defects (the helper agents ran out of usage), the shortcut still restores into "Default", and the new first-run import was checked against a real backend but not in a real window |
